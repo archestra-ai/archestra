@@ -47,6 +47,18 @@ export const SelectMcpServerSchema = createSelectSchema(
     })
     .nullable()
     .optional(),
+  /**
+   * Agents (profiles / MCP gateways) with tools explicitly assigned from this
+   * server — statically pinned to it, or unpinned on a tool of its catalog.
+   */
+  assignedAgents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
 });

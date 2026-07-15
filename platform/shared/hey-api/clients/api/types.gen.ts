@@ -51115,6 +51115,10 @@ export type GetMcpServersResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
 };
@@ -51252,6 +51256,10 @@ export type InstallMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -51455,6 +51463,10 @@ export type GetMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -51583,6 +51595,10 @@ export type ReauthenticateMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -51983,6 +51999,10 @@ export type ReinstallMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };

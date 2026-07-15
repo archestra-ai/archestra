@@ -39,6 +39,7 @@ export const E2eTestId = {
   McpServerCard: "mcp-server-card",
   McpServerSettingsButton: "mcp-server-settings-button",
   McpServerToolsCount: "mcp-server-tools-count",
+  McpServerAgentsCount: "mcp-server-agents-count",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",

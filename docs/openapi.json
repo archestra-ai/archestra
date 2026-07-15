@@ -196659,6 +196659,25 @@
                         ],
                         "additionalProperties": false
                       },
+                      "assignedAgents": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "secretStorageType": {
                         "type": "string",
                         "enum": [
@@ -197222,6 +197241,25 @@
                       ],
                       "additionalProperties": false
                     },
+                    "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "secretStorageType": {
                       "type": "string",
                       "enum": [
@@ -197702,6 +197740,25 @@
                         "createdAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "secretStorageType": {
                       "type": "string",
@@ -198492,6 +198549,25 @@
                         "createdAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "secretStorageType": {
                       "type": "string",
@@ -199910,6 +199986,25 @@
                         "createdAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     },
                     "secretStorageType": {
                       "type": "string",

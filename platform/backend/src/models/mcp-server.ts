@@ -26,6 +26,7 @@ import type {
 } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
+import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
@@ -365,7 +366,15 @@ class McpServerModel {
       }
     }
 
-    return Array.from(serversMap.values());
+    const assignedAgentsByServer =
+      await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+        ...serversMap.keys(),
+      ]);
+
+    return Array.from(serversMap.values()).map((server) => ({
+      ...server,
+      assignedAgents: assignedAgentsByServer.get(server.id) ?? [],
+    }));
   }
 
   /**
@@ -828,7 +837,10 @@ class McpServerModel {
       return null;
     }
 
-    const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
+    const [userDetails, assignedAgentsByServer] = await Promise.all([
+      McpServerUserModel.getUserDetailsForMcpServer(id),
+      AgentToolModel.getAssignedAgentDetailsForMcpServers([id]),
+    ]);
 
     // Build teamDetails from the joined team data
     const teamDetails = result.server.teamId
@@ -853,6 +865,7 @@ class McpServerModel {
       userDetails,
       teamDetails,
       secretStorageType,
+      assignedAgents: assignedAgentsByServer.get(id) ?? [],
     };
   }
 

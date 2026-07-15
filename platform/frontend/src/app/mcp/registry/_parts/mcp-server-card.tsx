@@ -9,6 +9,7 @@ import {
 } from "@archestra/shared";
 import {
   AlertTriangle,
+  Bot,
   Copy,
   FileSearch,
   Globe,
@@ -271,6 +272,18 @@ export function McpServerCard({
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
 
+  // Distinct agents with tools explicitly assigned from any install of this
+  // catalog item — the audience affected if those installs go away.
+  const assignedAgents = (() => {
+    const byId = new Map<string, { id: string; name: string }>();
+    for (const server of allServersForCatalog) {
+      for (const agent of server.assignedAgents ?? []) {
+        byId.set(agent.id, agent);
+      }
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
     const install = personalServersForCatalog
@@ -279,7 +292,14 @@ export function McpServerCard({
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       )[0];
-    return install ? [{ server: { id: install.id, name: install.name } }] : [];
+    return install
+      ? [
+          {
+            server: { id: install.id, name: install.name },
+            assignedAgents: install.assignedAgents ?? [],
+          },
+        ]
+      : [];
   })();
 
   const handleUninstallClick = () => {
@@ -539,6 +559,7 @@ export function McpServerCard({
   const hasCompactInfoContent =
     showAuthorAvatar ||
     toolsCount > 0 ||
+    assignedAgents.length > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
     (!isBuiltinVariant &&
       (connectionAvatars.length > 0 ||
@@ -577,6 +598,38 @@ export function McpServerCard({
               {toolsCount}
             </span>
           </div>
+          <div className="h-4 w-px bg-border" />
+        </>
+      )}
+      {assignedAgents.length > 0 && (
+        <>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 cursor-help">
+                  <Bot className="h-3.5 w-3.5" />
+                  <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
+                    {assignedAgents.length}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-medium">
+                  Used by {assignedAgents.length}{" "}
+                  {assignedAgents.length === 1 ? "agent" : "agents"} (assigned
+                  tools)
+                </p>
+                <div className="mt-1 space-y-0.5">
+                  {assignedAgents.slice(0, 8).map((agent) => (
+                    <div key={agent.id}>{agent.name}</div>
+                  ))}
+                  {assignedAgents.length > 8 && (
+                    <div>+{assignedAgents.length - 8} more</div>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="h-4 w-px bg-border" />
         </>
       )}

@@ -133,6 +133,102 @@ describe("AgentToolModel delegation queries", () => {
   });
 });
 
+describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
+  test("returns distinct agents assigned tools from each server's catalog, sorted by name", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const server = await makeMcpServer({ catalogId: catalog.id });
+    const toolA = await makeTool({ catalogId: catalog.id });
+    const toolB = await makeTool({ catalogId: catalog.id });
+
+    const agentZed = await makeAgent({ name: "Zed Agent" });
+    const agentAda = await makeAgent({ name: "Ada Agent" });
+    // Two assignments for the same agent must collapse to one entry
+    await makeAgentTool(agentZed.id, toolA.id);
+    await makeAgentTool(agentZed.id, toolB.id);
+    await makeAgentTool(agentAda.id, toolA.id);
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      server.id,
+    ]);
+
+    expect(result.get(server.id)).toEqual([
+      { id: agentAda.id, name: "Ada Agent" },
+      { id: agentZed.id, name: "Zed Agent" },
+    ]);
+  });
+
+  test("counts pinned assignments only toward the pinned install; unpinned toward every install of the catalog", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const serverOne = await makeMcpServer({ catalogId: catalog.id });
+    const serverTwo = await makeMcpServer({ catalogId: catalog.id });
+    const tool = await makeTool({ catalogId: catalog.id });
+
+    const pinnedAgent = await makeAgent({ name: "Pinned Agent" });
+    const dynamicAgent = await makeAgent({ name: "Dynamic Agent" });
+    await makeAgentTool(pinnedAgent.id, tool.id, {
+      mcpServerId: serverOne.id,
+    });
+    await makeAgentTool(dynamicAgent.id, tool.id);
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      serverOne.id,
+      serverTwo.id,
+    ]);
+
+    expect(result.get(serverOne.id)).toEqual([
+      { id: dynamicAgent.id, name: "Dynamic Agent" },
+      { id: pinnedAgent.id, name: "Pinned Agent" },
+    ]);
+    expect(result.get(serverTwo.id)).toEqual([
+      { id: dynamicAgent.id, name: "Dynamic Agent" },
+    ]);
+  });
+
+  test("excludes soft-deleted agents and returns empty arrays for unused servers", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const server = await makeMcpServer({ catalogId: catalog.id });
+    const unusedServer = await makeMcpServer();
+    const tool = await makeTool({ catalogId: catalog.id });
+
+    const agent = await makeAgent();
+    await makeAgentTool(agent.id, tool.id);
+    await AgentModel.delete(agent.id);
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      server.id,
+      unusedServer.id,
+    ]);
+
+    expect(result.get(server.id)).toEqual([]);
+    expect(result.get(unusedServer.id)).toEqual([]);
+  });
+
+  test("returns an empty map for empty input", async () => {
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers(
+      [],
+    );
+    expect(result.size).toBe(0);
+  });
+});
+
 describe("AgentToolModel.findAll", () => {
   test("excludes assignments for soft-deleted agents", async ({
     makeAgent,

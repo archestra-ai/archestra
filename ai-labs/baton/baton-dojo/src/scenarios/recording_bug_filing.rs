@@ -58,6 +58,7 @@ fn gate() -> Result<BatonGate, DojoError> {
     // No authority is registered: the gate is fully fail-closed, so the public
     // issue's audience breach is terminal — nothing declassifies it.
     BatonGate::builder()
+        .conversation_readers([UserId::new(ALICE), UserId::new(BOB)])
         .contract(ToolContract::source(
             "fetch_recording",
             ValueLabel::trusted_readers([UserId::new(ALICE), UserId::new(BOB)]),

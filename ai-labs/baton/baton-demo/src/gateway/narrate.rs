@@ -29,6 +29,18 @@ pub fn narrate(outcome: &Outcome) {
         Outcome::Executed { tool, result } => {
             eprintln!("{GREEN}✓ {tool} → permitted{RESET} {DIM}{}{RESET}", first_line(result));
         }
+        Outcome::Responded { rendered } => {
+            eprintln!(
+                "{GREEN}✓ response → emitted{RESET} {DIM}{}{RESET}",
+                first_line(rendered)
+            );
+        }
+        Outcome::ResponseBlocked { reason, violations } => {
+            eprintln!("{RED}✗ response → blocked{RESET} ({reason})");
+            for violation in violations {
+                eprintln!("{RED}  · {violation}{RESET}");
+            }
+        }
         Outcome::SoftBlocked {
             tool,
             violations,
@@ -128,6 +140,10 @@ impl DecisionLog {
         let empty = BTreeSet::new();
         let (tool, recipients, kind, reason) = match outcome {
             Outcome::Executed { tool, .. } => (tool.to_string(), &empty, "permitted", String::new()),
+            Outcome::Responded { .. } => ("baton__respond".to_owned(), &empty, "responded", String::new()),
+            Outcome::ResponseBlocked { reason, .. } => {
+                ("baton__respond".to_owned(), &empty, "response_blocked", reason.clone())
+            }
             Outcome::SoftBlocked {
                 tool,
                 violations,

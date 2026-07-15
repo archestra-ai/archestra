@@ -89,12 +89,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = client
         .agent(&args.model)
         .preamble(PREAMBLE)
-        .rmcp_tools(tools, peer)
+        .rmcp_tools(tools, peer.clone())
         .build();
 
     println!("task: {}\n", args.task);
     let answer = agent.prompt(args.task.as_str()).max_turns(12).await?;
-    println!("\nagent: {answer}");
+
+    // The final answer crosses the mediation boundary only through the
+    // gateway's response sink: print exactly what the check returned —
+    // the permitted rendering, or the block explanation — never the raw
+    // model text.
+    let mut respond = rmcp::model::CallToolRequestParams::new(baton_demo::gateway::RESPOND_TOOL);
+    respond.arguments = Some(
+        serde_json::json!({ "text": answer })
+            .as_object()
+            .expect("object literal")
+            .clone(),
+    );
+    let delivered = peer.call_tool(respond).await?;
+    let rendered: String = delivered
+        .content
+        .iter()
+        .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+        .collect::<Vec<_>>()
+        .join("");
+    println!("\nagent: {rendered}");
 
     gateway.cancel().await?;
     Ok(())

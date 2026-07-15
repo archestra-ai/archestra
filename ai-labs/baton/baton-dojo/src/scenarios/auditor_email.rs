@@ -84,6 +84,7 @@ fn seed() -> Invoices {
 
 fn gate() -> Result<BatonGate, DojoError> {
     BatonGate::builder()
+        .conversation_readers([UserId::new(ALICE), UserId::new(BOB)])
         .authority(finance_approver())
         .contract(ToolContract::source(
             "list_invoices",

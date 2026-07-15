@@ -33,10 +33,25 @@ class Call:
 
 @dataclass(frozen=True)
 class BatonDecision:
-    permitted: bool
+    """One oracle answer. `decision` mirrors the wire: "permitted" |
+    "blocked" (a terminal policy outcome) | "refused" (an invalid/stale/
+    conflicting proposal — no policy judgment) | "unresolved" (a
+    continuation the stateless oracle could not settle)."""
+
+    decision: str
     audited: bool = False
     block_kind: str | None = None
+    refusal_kind: str | None = None
+    unresolved_kind: str | None = None
     detail: str = ""
+
+    @property
+    def permitted(self) -> bool:
+        return self.decision == "permitted"
+
+    @property
+    def blocked(self) -> bool:
+        return self.decision == "blocked"
 
 
 def resolve_binary() -> Path:
@@ -101,10 +116,26 @@ class BatonBridge:
                 f"baton-check exited {result.returncode}: {result.stderr.strip()}"
             )
         output = json.loads(result.stdout)
-        if output["decision"] == "permitted":
-            return BatonDecision(permitted=True, audited=output["audited"])
-        return BatonDecision(
-            permitted=False,
-            block_kind=output["block_kind"],
-            detail=output["detail"],
-        )
+        match output["decision"]:
+            case "permitted":
+                return BatonDecision(decision="permitted", audited=output["audited"])
+            case "blocked":
+                return BatonDecision(
+                    decision="blocked",
+                    block_kind=output["block_kind"],
+                    detail=output["detail"],
+                )
+            case "refused":
+                return BatonDecision(
+                    decision="refused",
+                    refusal_kind=output["refusal_kind"],
+                    detail=output["detail"],
+                )
+            case "unresolved":
+                return BatonDecision(
+                    decision="unresolved",
+                    unresolved_kind=output["unresolved_kind"],
+                    detail=output["detail"],
+                )
+            case other:
+                raise BatonProtocolError(f"unknown decision {other!r}")

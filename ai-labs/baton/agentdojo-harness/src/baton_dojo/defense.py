@@ -26,6 +26,20 @@ from baton_dojo.bridge import BatonBridge, Call
 from baton_dojo.contracts import ContractTable
 
 POLICY_BLOCK_SENTINEL = "Blocked by baton policy: "
+# Refused/unresolved oracle answers are NOT policy blocks: the proposal was
+# invalid/stale/conflicting, or the oracle could not settle a continuation.
+# They must never acquire the policy-block sentinel (or its bench count).
+UNSETTLED_PREFIX = "Baton did not settle this call: "
+
+
+def denial_message(decision) -> str:
+    """The tool-error text for a non-permitted oracle answer. Only a genuine
+    policy block carries the POLICY_BLOCK_SENTINEL."""
+    match decision.decision:
+        case "blocked":
+            return f"{POLICY_BLOCK_SENTINEL}{decision.detail}"
+        case _:
+            return f"{UNSETTLED_PREFIX}{decision.detail}"
 
 # agentdojo appends these error messages *instead of* calling
 # runtime.run_function, so calls carrying them never touched the environment.
@@ -192,7 +206,7 @@ class BatonToolsExecutor(ToolsExecutor):
                         content=[text_content_block_from_string("")],
                         tool_call_id=tool_call.id,
                         tool_call=tool_call,
-                        error=f"{POLICY_BLOCK_SENTINEL}{decision.detail}",
+                        error=denial_message(decision),
                     )
                 )
                 continue

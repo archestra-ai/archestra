@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use baton_core::{
-    ArgumentTree, AuthorityName, BlockReason, ExecutionToken, FlowOutcome, FlowPermit, OpaqueValue, Pursuit, Ruling,
-    StallCause, ToolName, ToolRequest, UserId, ValueId, Violation,
+    ArgumentTree, AuthorityName, BlockReason, EmissionPursuit, EmissionRequest, ExecutionToken, FlowOutcome,
+    FlowPermit, OpaqueValue, Pursuit, Ruling, StallCause, ToolName, ToolRequest, UserId, ValueId, Violation,
 };
 
 use crate::gateway::config::{GatewayConfig, ToolSim};
@@ -75,6 +75,12 @@ pub enum Outcome {
     /// A linear capability was refused mid-flow — a gateway bug surfaced
     /// loudly rather than swallowed.
     Refused { tool: ToolName, reason: String },
+    /// The final answer passed the emission check and was emitted: send
+    /// exactly `rendered` — bytes produced from the exact checked tree.
+    Responded { rendered: String },
+    /// The final answer was blocked at the emission sink; nothing was
+    /// emitted.
+    ResponseBlocked { reason: String, violations: Vec<Violation> },
 }
 
 /// The soft-blocked call's wire identity: how a re-issued call is recognized
@@ -389,6 +395,67 @@ impl Session {
     }
 
     /// The audit trail so far — the gateway narrates it at shutdown / on -v.
+    /// Mediate the agent's final answer through the emission sink: the text
+    /// is admitted under the conservative whole-context fold and checked —
+    /// and, when clean, emitted — as an ordinary flow. Only the returned
+    /// `rendered` bytes may reach the user. A leak that would need the
+    /// external human blocks: response escalation is not wired in this demo
+    /// (the follow-up ledger tracks it).
+    pub fn respond(&mut self, text: &str) -> Outcome {
+        let sink = ToolName::new("baton__respond");
+        let body =
+            match self
+                .trajectory
+                .admit_model_output(OpaqueValue::new(text), self.context.clone(), self.context.clone())
+            {
+                Ok(id) => id,
+                Err(unknown) => {
+                    return Outcome::Refused {
+                        tool: sink,
+                        reason: format!("context value vanished: {unknown}"),
+                    };
+                }
+            };
+        let request = EmissionRequest {
+            body: ArgumentTree::Value(body),
+            control: BTreeSet::new(),
+            basis: self.trajectory.revision(),
+        };
+        match self
+            .shared()
+            .engine
+            .pursue_emission(&mut self.trajectory, request, MAX_REMEDY_STEPS)
+        {
+            EmissionPursuit::Emitted(emitted) => Outcome::Responded {
+                rendered: emitted.rendered,
+            },
+            EmissionPursuit::Terminal { violations, reason } => Outcome::ResponseBlocked {
+                reason: reason.to_string(),
+                violations,
+            },
+            EmissionPursuit::NeedsApproval(pending) => {
+                let reason = format!(
+                    "response needs an external ruling from {}; response escalation is not wired in this demo",
+                    pending.authority()
+                );
+                drop(pending);
+                self.trajectory.abandon_pending_emission();
+                Outcome::ResponseBlocked {
+                    reason,
+                    violations: Vec::new(),
+                }
+            }
+            EmissionPursuit::Stalled { violations, cause } => Outcome::ResponseBlocked {
+                reason: format!("emission remedy stalled: {cause:?}"),
+                violations,
+            },
+            EmissionPursuit::Refused(refusal) => Outcome::Refused {
+                tool: sink,
+                reason: refusal.to_string(),
+            },
+        }
+    }
+
     pub fn audit(&self) -> impl Iterator<Item = String> {
         self.trajectory.state().audit().iter().map(|event| event.to_string())
     }

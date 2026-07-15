@@ -195,6 +195,16 @@ impl<'m> Agent<'m> {
             messages.push(Message::from(response.choice));
 
             if calls.is_empty() {
+                // The final text crosses the mediation boundary like any
+                // sink: a gated run checks it as an emission flow and, on a
+                // block, surfaces the block instead of the leaking text.
+                let final_text = match gate.as_deref_mut() {
+                    Some(g) => match g.check_emission(&final_text) {
+                        GateVerdict::Allow => final_text,
+                        GateVerdict::Block { reason } => format!("blocked by policy: {reason}"),
+                    },
+                    None => final_text,
+                };
                 return Ok(AgentRun {
                     final_text,
                     transcript: messages,

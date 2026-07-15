@@ -117,10 +117,26 @@ pub enum Output {
         /// only; callers must never assert on it.
         context: String,
     },
+    /// A terminal *policy* outcome: the flow was well-formed and policy
+    /// proved (or an authority ruled) it cannot proceed.
     Blocked {
         block_kind: BlockKind,
         violation_count: usize,
         /// `Display` of reason + violations — informational only.
+        detail: String,
+    },
+    /// A protocol/state refusal: the proposal was invalid, stale, or
+    /// conflicting — no policy judgment was made.
+    Refused {
+        refusal_kind: RefusalKind,
+        /// `Display` of the refusal — informational only.
+        detail: String,
+    },
+    /// A continuation the stateless oracle could not settle: neither a
+    /// policy outcome nor a refusal.
+    Unresolved {
+        unresolved_kind: UnresolvedKind,
+        /// Informational only.
         detail: String,
     },
 }
@@ -137,14 +153,45 @@ pub enum BlockKind {
     InternalInvariantFailed,
 }
 
-impl From<&BlockReason> for BlockKind {
-    fn from(reason: &BlockReason) -> Self {
-        match reason {
-            BlockReason::DeniedByAuthority { .. } => Self::DeniedByAuthority,
-            BlockReason::RequiresStructuralFix => Self::RequiresStructuralFix,
-            BlockReason::NoRemedy | BlockReason::NoAuthorityRuled => Self::NoCompetentAuthority,
-            BlockReason::PostconditionFailed => Self::InternalInvariantFailed,
-        }
+/// Wire categories for protocol/state refusals.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RefusalKind {
+    ActionAlreadyPending,
+    EmissionAlreadyPending,
+    UnknownValueReferenced,
+    StaleBasis,
+}
+
+/// Wire categories for unsettled continuations.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UnresolvedKind {
+    NeedsApproval,
+    Stalled,
+}
+
+// ── The one wire translation ────────────────────────────────────────────
+// Every core reason, refusal, and continuation maps to its wire category
+// here and nowhere else (the taint/unknown-policy denials below construct
+// their `Blocked` outcomes through `unknown_denied_outcome`/`degrade_outcome`
+// in this section too).
+
+fn block_kind(reason: &BlockReason) -> BlockKind {
+    match reason {
+        BlockReason::DeniedByAuthority { .. } => BlockKind::DeniedByAuthority,
+        BlockReason::RequiresStructuralFix => BlockKind::RequiresStructuralFix,
+        BlockReason::NoRemedy | BlockReason::NoAuthorityRuled => BlockKind::NoCompetentAuthority,
+        BlockReason::PostconditionFailed => BlockKind::InternalInvariantFailed,
+    }
+}
+
+fn refusal_kind(refusal: &FlowRefusal) -> RefusalKind {
+    match refusal {
+        FlowRefusal::ActionAlreadyPending { .. } => RefusalKind::ActionAlreadyPending,
+        FlowRefusal::EmissionAlreadyPending { .. } => RefusalKind::EmissionAlreadyPending,
+        FlowRefusal::UnknownValueReferenced { .. } => RefusalKind::UnknownValueReferenced,
+        FlowRefusal::StaleBasis { .. } => RefusalKind::StaleBasis,
     }
 }
 
@@ -312,6 +359,14 @@ enum CallOutcome {
         violation_count: usize,
         detail: String,
     },
+    Refused {
+        refusal_kind: RefusalKind,
+        detail: String,
+    },
+    Unresolved {
+        unresolved_kind: UnresolvedKind,
+        detail: String,
+    },
 }
 
 #[derive(Debug)]
@@ -398,10 +453,16 @@ fn blocked_violations<P>(blocked: &FlowOutcome<P>) -> &[Violation] {
 /// A protocol/state refusal, kept on the wire where these cases mapped
 /// before the outcome/refusal split (the wire redesign lands separately).
 fn refused_outcome(refusal: &FlowRefusal) -> CallOutcome {
-    CallOutcome::Blocked {
-        block_kind: BlockKind::InternalInvariantFailed,
-        violation_count: 0,
+    CallOutcome::Refused {
+        refusal_kind: refusal_kind(refusal),
         detail: refusal.to_string(),
+    }
+}
+
+fn unresolved_outcome(kind: UnresolvedKind, detail: String) -> CallOutcome {
+    CallOutcome::Unresolved {
+        unresolved_kind: kind,
+        detail,
     }
 }
 
@@ -411,7 +472,7 @@ fn blocked_outcome(reason: &BlockReason, violations: &[Violation]) -> CallOutcom
         .collect::<Vec<_>>()
         .join("; ");
     CallOutcome::Blocked {
-        block_kind: reason.into(),
+        block_kind: block_kind(reason),
         violation_count: violations.len(),
         detail,
     }
@@ -487,16 +548,14 @@ fn evaluate_call(
             match engine.pursue(trajectory, request, max_steps) {
                 Pursuit::Permitted(token) => dispatch(trajectory, token, audited),
                 Pursuit::Terminal { violations, reason } => Ok(blocked_outcome(&reason, &violations)),
-                Pursuit::NeedsApproval(_) => Ok(CallOutcome::Blocked {
-                    block_kind: BlockKind::InternalInvariantFailed,
-                    violation_count: 0,
-                    detail: "internal authority unexpectedly requested external approval".to_owned(),
-                }),
-                Pursuit::Stalled { violations, cause } => Ok(CallOutcome::Blocked {
-                    block_kind: BlockKind::InternalInvariantFailed,
-                    violation_count: violations.len(),
-                    detail: format!("remedy pursuit stalled: {cause:?}"),
-                }),
+                Pursuit::NeedsApproval(pending) => Ok(unresolved_outcome(
+                    UnresolvedKind::NeedsApproval,
+                    format!("needs an external ruling from {}", pending.authority()),
+                )),
+                Pursuit::Stalled { violations, cause } => Ok(unresolved_outcome(
+                    UnresolvedKind::Stalled,
+                    format!("remedy pursuit stalled ({} violations): {cause:?}", violations.len()),
+                )),
                 Pursuit::Refused(refusal) => Ok(refused_outcome(&refusal)),
             }
         }
@@ -541,7 +600,7 @@ pub fn run(input: &Input) -> Result<Output, ProtocolError> {
             CallOutcome::Permitted { value, .. } => {
                 context.insert(value);
             }
-            CallOutcome::Blocked { .. } => {
+            CallOutcome::Blocked { .. } | CallOutcome::Refused { .. } | CallOutcome::Unresolved { .. } => {
                 return Err(ProtocolError::ReplayBlocked {
                     index,
                     tool: call.tool.clone(),
@@ -582,12 +641,76 @@ pub fn run(input: &Input) -> Result<Output, ProtocolError> {
             violation_count,
             detail,
         }),
+        CallOutcome::Refused { refusal_kind, detail } => Ok(Output::Refused { refusal_kind, detail }),
+        CallOutcome::Unresolved {
+            unresolved_kind,
+            detail,
+        } => Ok(Output::Unresolved {
+            unresolved_kind,
+            detail,
+        }),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The wire contract: every decision tag and category string, pinned.
+    /// These strings are the oracle's public API — the Python bridge
+    /// dispatches on them.
+    #[test]
+    fn wire_decisions_and_categories_serialize_stably() {
+        let permitted = serde_json::to_value(Output::Permitted {
+            audited: false,
+            context: "ctx".to_owned(),
+        })
+        .unwrap();
+        assert_eq!(permitted["decision"], "permitted");
+        let blocked = serde_json::to_value(Output::Blocked {
+            block_kind: BlockKind::DeniedByAuthority,
+            violation_count: 0,
+            detail: String::new(),
+        })
+        .unwrap();
+        assert_eq!(blocked["decision"], "blocked");
+        let refused = serde_json::to_value(Output::Refused {
+            refusal_kind: RefusalKind::StaleBasis,
+            detail: String::new(),
+        })
+        .unwrap();
+        assert_eq!(refused["decision"], "refused");
+        let unresolved = serde_json::to_value(Output::Unresolved {
+            unresolved_kind: UnresolvedKind::Stalled,
+            detail: String::new(),
+        })
+        .unwrap();
+        assert_eq!(unresolved["decision"], "unresolved");
+
+        for (kind, wire) in [
+            (BlockKind::DeniedByAuthority, "denied_by_authority"),
+            (BlockKind::UnknownDenied, "unknown_denied"),
+            (BlockKind::RequiresStructuralFix, "requires_structural_fix"),
+            (BlockKind::NoCompetentAuthority, "no_competent_authority"),
+            (BlockKind::InternalInvariantFailed, "internal_invariant_failed"),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), wire);
+        }
+        for (kind, wire) in [
+            (RefusalKind::ActionAlreadyPending, "action_already_pending"),
+            (RefusalKind::EmissionAlreadyPending, "emission_already_pending"),
+            (RefusalKind::UnknownValueReferenced, "unknown_value_referenced"),
+            (RefusalKind::StaleBasis, "stale_basis"),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), wire);
+        }
+        for (kind, wire) in [
+            (UnresolvedKind::NeedsApproval, "needs_approval"),
+            (UnresolvedKind::Stalled, "stalled"),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), wire);
+        }
+    }
 
     fn input(json: serde_json::Value) -> Input {
         serde_json::from_value(json).expect("test input parses")

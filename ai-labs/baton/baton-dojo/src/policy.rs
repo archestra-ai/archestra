@@ -29,10 +29,12 @@
 
 use std::collections::HashMap;
 
+use std::collections::BTreeSet;
+
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, ExecutionToken, OpaqueValue, PolicyEngine,
-    Pursuit, Speaker, StallCause, ToolContract, ToolName, ToolRequest, Trajectory, UserId, ValueId, ValueLabel,
-    Violation,
+    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, EmissionPursuit, EmissionRequest,
+    ExecutionToken, OpaqueValue, PolicyEngine, Pursuit, Requirements, ResponsePolicy, Speaker, StallCause,
+    ToolContract, ToolName, ToolRequest, Trajectory, UserId, ValueId, ValueLabel, Violation,
 };
 
 use crate::error::DojoError;
@@ -77,6 +79,7 @@ impl BatonGate {
             authorities: Vec::new(),
             contracts: Vec::new(),
             recipients: HashMap::new(),
+            conversation_readers: None,
         }
     }
 
@@ -167,6 +170,63 @@ impl BatonGate {
         Ok(())
     }
 
+    /// Check the agent's outward final text through the engine's emission
+    /// sink: the text is admitted as a model output reading the whole
+    /// context (the same over-approximation every call check uses), and the
+    /// emission is driven like any flow — remediable leaks walk their plans
+    /// through the registered inline authorities. Requires
+    /// [`BatonGateBuilder::conversation_readers`]; an unconfigured response
+    /// sink fails closed like any uncontracted tool.
+    pub(crate) fn check_emission(&mut self, text: &str) -> GateVerdict {
+        if self.pending.is_some() {
+            return GateVerdict::Block {
+                reason: "a permitted call is awaiting commit".to_owned(),
+            };
+        }
+        let reads: BTreeSet<ValueId> = self.context.iter().copied().collect();
+        let body = match self
+            .trajectory
+            .admit_model_output(OpaqueValue::new(text), reads, BTreeSet::new())
+        {
+            Ok(id) => id,
+            Err(unknown) => {
+                return GateVerdict::Block {
+                    reason: format!("final text references an unadmitted value: {unknown:?}"),
+                };
+            }
+        };
+        let request = EmissionRequest {
+            body: ArgumentTree::Value(body),
+            control: BTreeSet::new(),
+            basis: self.trajectory.revision(),
+        };
+        let max_steps = self.context.len() + 8;
+        match self.engine.pursue_emission(&mut self.trajectory, request, max_steps) {
+            EmissionPursuit::Emitted(_) => GateVerdict::Allow,
+            EmissionPursuit::Terminal { reason, .. } => GateVerdict::Block {
+                reason: reason.to_string(),
+            },
+            EmissionPursuit::NeedsApproval(pending) => {
+                let reason = format!("needs external ruling from {}", pending.authority());
+                drop(pending);
+                self.trajectory.abandon_pending_emission();
+                GateVerdict::Block { reason }
+            }
+            EmissionPursuit::Stalled { violations, cause } => GateVerdict::Block {
+                reason: match cause {
+                    StallCause::BoundExhausted => "emission remedy did not converge within the step bound".to_owned(),
+                    StallCause::Refused(refused) => {
+                        format!("emission step refused: {refused:?}; {}", block_reason(&violations))
+                    }
+                    StallCause::Failed(failure) => format!("emission remedy step failed: {failure:?}"),
+                },
+            },
+            EmissionPursuit::Refused(refusal) => GateVerdict::Block {
+                reason: format!("emission proposal refused: {refusal}"),
+            },
+        }
+    }
+
     /// Build the value-granular request. The whole read context is folded in as
     /// the call's *body* — argument leaves, not control deps — so an authority
     /// can endorse the tainted data in for a recipient (a control dep could only
@@ -207,6 +267,7 @@ pub struct BatonGateBuilder {
     authorities: Vec<Authority>,
     contracts: Vec<ToolContract>,
     recipients: HashMap<String, RecipientFn>,
+    conversation_readers: Option<BTreeSet<UserId>>,
 }
 
 impl BatonGateBuilder {
@@ -214,6 +275,14 @@ impl BatonGateBuilder {
     /// boundary-crossing flow it vouches for (e.g. endorsing a send to a specific
     /// external recipient, or accepting an effect's first egress) instead of
     /// blocking. With none registered the gate is fully fail-closed.
+    /// Who reads the conversation: registers the response-sink policy so the
+    /// agent's outward final text is checked as an emission flow. Without
+    /// this the emission check fails closed (no registered response policy).
+    pub fn conversation_readers(mut self, readers: impl IntoIterator<Item = UserId>) -> Self {
+        self.conversation_readers = Some(readers.into_iter().collect());
+        self
+    }
+
     pub fn authority(mut self, authority: Authority) -> Self {
         self.authorities.push(authority);
         self
@@ -269,6 +338,15 @@ impl BatonGateBuilder {
             engine
                 .register(contract)
                 .map_err(|_| DojoError::DuplicateContract { tool })?;
+        }
+        if let Some(readers) = self.conversation_readers {
+            engine = engine.with_response_policy(ResponsePolicy {
+                requires: Requirements {
+                    audience: baton_core::AudienceRule::FromRecipients,
+                    ..Requirements::default()
+                },
+                readers,
+            });
         }
         Ok(BatonGate {
             engine,
@@ -337,6 +415,30 @@ mod tests {
         AuthorityMandate::none()
             .vouch_audience([UserId::new(AUDITOR)])
             .acquire_effects()
+    }
+
+    /// The final text is an emission flow: readable context emits; a gate
+    /// with no declared conversation readers fails closed.
+    #[test]
+    fn final_text_is_checked_as_an_emission() {
+        let mut gate = BatonGate::builder()
+            .conversation_readers([UserId::new(ALICE), UserId::new(BOB)])
+            .contract(read_contract("get_doc"))
+            .build()
+            .unwrap();
+        gate.begin("summarize the doc");
+        allow(gate.check("get_doc", &json!({})));
+        gate.commit("the internal doc").unwrap();
+        // The summary derives from values readable by the conversation
+        // readers, so the emission is allowed.
+        allow(gate.check_emission("summary of the internal doc"));
+
+        let mut unconfigured = BatonGate::builder().contract(read_contract("get_doc")).build().unwrap();
+        unconfigured.begin("hi");
+        assert!(matches!(
+            unconfigured.check_emission("anything"),
+            GateVerdict::Block { .. }
+        ));
     }
 
     fn auditor_authority() -> Authority {

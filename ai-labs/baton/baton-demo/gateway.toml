@@ -5,6 +5,12 @@
 # send breaches the invoices' audience, so the gateway soft-blocks it and the
 # agent must escalate to the human-in-the-loop authority.
 
+# Who reads this conversation: the agent's final answer is checked at the
+# response sink against this audience, and only the permitted rendering is
+# delivered (via the reserved `baton__respond` tool).
+[response]
+readers = ["alice@archestra.ai", "bob@archestra.ai"]
+
 [[authority]]
 name = "human-in-the-loop"
 # Whom this authority may endorse data for — explicit, no wildcards.

@@ -22,6 +22,23 @@ def test_clean_context_permits_sink():
     assert not decision.audited
 
 
+def test_blocked_decisions_are_policy_blocks_and_refusals_are_not():
+    """Only a genuine `blocked` decision acquires the policy-block sentinel;
+    refused/unresolved oracle answers must never count as policy blocks."""
+    from baton_dojo.bridge import BatonDecision
+    from baton_dojo.defense import POLICY_BLOCK_SENTINEL, denial_message
+
+    blocked = BatonDecision(decision="blocked", block_kind="denied_by_authority", detail="d")
+    assert denial_message(blocked).startswith(POLICY_BLOCK_SENTINEL)
+    assert blocked.blocked and not blocked.permitted
+
+    refused = BatonDecision(decision="refused", refusal_kind="stale_basis", detail="d")
+    unresolved = BatonDecision(decision="unresolved", unresolved_kind="stalled", detail="d")
+    for decision in (refused, unresolved):
+        assert not decision.permitted and not decision.blocked
+        assert not denial_message(decision).startswith(POLICY_BLOCK_SENTINEL)
+
+
 def test_tainted_context_blocks_sink():
     decision = bridge().check(
         "summarize my emails",

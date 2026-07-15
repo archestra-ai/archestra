@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use baton_demo::gateway::narrate::{DecisionLog, narrate};
-use baton_demo::gateway::{ESCALATE_TOOL, GatewayConfig, Outcome, Session};
+use baton_demo::gateway::{ESCALATE_TOOL, GatewayConfig, Outcome, RESPOND_TOOL, Session};
 use clap::Parser;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, Content, CreateElicitationRequestParams, ElicitationAction,
@@ -120,6 +120,13 @@ impl Gateway {
             .map(|sim| Tool::new(sim.name.to_string(), sim.description.clone(), sim.input_schema()))
             .collect();
         tools.push(Tool::new(
+            RESPOND_TOOL,
+            "Deliver your final answer to the user. Every final answer MUST go through this tool: pass the full \
+             text as `text`. The result is the exact text the user will see — if it says the response was \
+             blocked, revise your answer to use only information the conversation readers may see.",
+            respond_schema(),
+        ));
+        tools.push(Tool::new(
             ESCALATE_TOOL,
             "Ask a human operator to approve your most recent policy-blocked tool call. Call this only after a \
              tool result says the call was blocked but can be escalated. Pass a short `reason` explaining why the \
@@ -165,6 +172,13 @@ impl ServerHandler for Gateway {
             let args = request.arguments.unwrap_or_default();
             let mut session = self.session.lock().await;
             let outcome = match request.name.as_ref() {
+                RESPOND_TOOL => match respond_text(&args) {
+                    Ok(text) => session.respond(&text),
+                    Err(reason) => Outcome::BadArguments {
+                        tool: baton_core::ToolName::new(RESPOND_TOOL),
+                        reason,
+                    },
+                },
                 ESCALATE_TOOL => match escalate_reason(&args) {
                     Ok(reason) => {
                         let peer = context.peer.clone();
@@ -244,6 +258,14 @@ fn render(outcome: Outcome) -> CallToolResult {
     let text = |s: String| vec![Content::text(s)];
     match outcome {
         Outcome::Executed { result, .. } => CallToolResult::success(text(result)),
+        // The exact permitted bytes, undecorated: what the model relays is
+        // what the engine emitted.
+        Outcome::Responded { rendered } => CallToolResult::success(text(rendered)),
+        Outcome::ResponseBlocked { reason, violations } => CallToolResult::success(text(format!(
+            "⛔ RESPONSE BLOCKED by policy ({reason}) — this answer was NOT delivered.\n{}\nRevise your answer to \
+             use only information the conversation readers may see, then call `{RESPOND_TOOL}` again.",
+            bullet_violations(&violations),
+        ))),
         Outcome::SoftBlocked { violations, .. } => CallToolResult::success(text(format!(
             "⛔ BLOCKED by policy — this call was NOT executed.\n{}\nThis block can be escalated: call \
              `{ESCALATE_TOOL}` with a short `reason` to ask a human operator for approval. If escalation is not \
@@ -291,6 +313,26 @@ fn bullet_violations(violations: &[baton_core::Violation]) -> String {
         .map(|v| format!("  · {v}"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn respond_schema() -> serde_json::Map<String, serde_json::Value> {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "The full final answer to deliver to the user."}
+        },
+        "required": ["text"]
+    })
+    .as_object()
+    .expect("schema is an object")
+    .clone()
+}
+
+fn respond_text(args: &serde_json::Map<String, serde_json::Value>) -> Result<String, String> {
+    match args.get("text").and_then(|v| v.as_str()) {
+        Some(text) if !text.trim().is_empty() => Ok(text.to_owned()),
+        _ => Err("`text` (non-empty string) is required".to_owned()),
+    }
 }
 
 fn escalate_schema() -> serde_json::Map<String, serde_json::Value> {

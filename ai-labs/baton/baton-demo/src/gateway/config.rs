@@ -15,6 +15,10 @@ use serde::Deserialize;
 /// The escalation tool the gateway itself serves; a scenario tool cannot
 /// shadow it.
 pub const ESCALATE_TOOL: &str = "baton__escalate";
+/// The reserved MCP tool the agent's final answer must flow through: the
+/// gateway checks it at the engine's emission sink and returns only the
+/// permitted rendering.
+pub const RESPOND_TOOL: &str = "baton__respond";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -83,6 +87,18 @@ struct RawConfig {
     authorities: Vec<AuthorityConfig>,
     #[serde(default, rename = "tool")]
     tools: Vec<ToolConfig>,
+    /// Who reads the conversation. When present the engine registers the
+    /// response-sink policy, and the agent's final answer is checked as an
+    /// emission flow through `baton__respond`. Absent, the emission check
+    /// fails closed (no registered response policy).
+    #[serde(default)]
+    response: Option<ResponseConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResponseConfig {
+    readers: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -253,7 +269,7 @@ impl RawConfig {
         let mut tools = BTreeMap::new();
 
         for tool in self.tools {
-            if tool.name == ESCALATE_TOOL {
+            if tool.name == ESCALATE_TOOL || tool.name == RESPOND_TOOL {
                 return Err(ConfigError::ReservedToolName);
             }
             let name = ToolName::new(&tool.name);
@@ -295,6 +311,15 @@ impl RawConfig {
             ))?;
         }
 
+        if let Some(response) = &self.response {
+            engine = engine.with_response_policy(baton_core::ResponsePolicy {
+                requires: baton_core::Requirements {
+                    audience: AudienceRule::FromRecipients,
+                    ..baton_core::Requirements::default()
+                },
+                readers: response.readers.iter().map(UserId::new).collect(),
+            });
+        }
         Ok(GatewayConfig { engine, tools })
     }
 }

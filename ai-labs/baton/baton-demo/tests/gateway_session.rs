@@ -7,6 +7,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use baton_demo::gateway::{GatewayConfig, Outcome, Session};
 
 const SCENARIO: &str = r#"
+[response]
+readers = ["alice@archestra.ai", "bob@archestra.ai"]
+
 [[authority]]
 name = "human-in-the-loop"
 audience = ["alice@archestra.ai", "bob@archestra.ai", "alex@finance-audit.com"]
@@ -383,4 +386,45 @@ result = "Hello {name."
 name = "name"
 "#;
     assert!(GatewayConfig::from_toml(unclosed).is_err());
+}
+
+/// The final answer flows through the emission sink: a clean response is
+/// emitted as exactly the checked bytes, and a session with the tainted
+/// context blocked from the readers is refused — the raw text is never
+/// delivered.
+#[test]
+fn respond_emits_exactly_the_permitted_bytes() {
+    let mut session = session();
+    // Read the invoices (readable by alice+bob — the conversation readers).
+    let Outcome::Executed { .. } = session.call_tool("invoices_list", &args(&[])) else {
+        panic!("the read should execute");
+    };
+    let answer = "47 invoices this quarter.";
+    let Outcome::Responded { rendered } = session.respond(answer) else {
+        panic!("a readable answer should emit");
+    };
+    // The delivered bytes are the engine's rendering of the exact checked
+    // tree — the JSON string of the answer.
+    assert_eq!(rendered, format!("{answer:?}"));
+}
+
+#[test]
+fn respond_blocks_a_leak_and_delivers_nothing() {
+    let scenario_with_narrow_readers = SCENARIO.replace(
+        r#"readers = ["alice@archestra.ai", "bob@archestra.ai"]"#,
+        r#"readers = ["mallory@example.com"]"#,
+    );
+    let config = GatewayConfig::from_toml(&scenario_with_narrow_readers).expect("scenario parses");
+    let mut session = Session::new(Arc::new(config));
+    let Outcome::Executed { .. } = session.call_tool("invoices_list", &args(&[])) else {
+        panic!("the read should execute");
+    };
+    // The answer derives from finance-team data; mallory is not a reader.
+    // The external human could vouch, but response escalation is not wired:
+    // the response blocks and nothing is delivered.
+    let outcome = session.respond("the totals are $1,248,000");
+    assert!(
+        matches!(outcome, Outcome::ResponseBlocked { .. }),
+        "expected a blocked response, got {outcome:?}"
+    );
 }

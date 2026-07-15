@@ -13,6 +13,18 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServersGroupedByCatalog: useMcpServersGroupedByCatalogMock,
 }));
 
+// TokenSelect reads the current user to label the selector's own connection in
+// the personal-pin confirmation.
+vi.mock("@/lib/auth/auth.query", () => ({
+  useSession: () => ({ data: undefined }),
+}));
+
+// The confirmation dialog is exercised via e2e/QA; stub it here so its own
+// hooks (app name, dialog portal) don't pull a QueryClient into this unit test.
+vi.mock("@/components/static-credential-confirm-dialog", () => ({
+  StaticCredentialConfirmDialog: () => null,
+}));
+
 vi.mock("@/lib/utils", () => ({
   cn: (...classes: Array<string | false | null | undefined>) =>
     classes.filter(Boolean).join(" "),

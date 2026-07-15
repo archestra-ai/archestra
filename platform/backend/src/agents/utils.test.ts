@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import { beforeEach, describe, expect, test } from "@/test";
-import { isRateLimited, type RateLimitEntry } from "./rate-limit";
+import { isRateLimited, type RateLimitEntry } from "./utils";
 
 // The canonical Map-backed fake from src/__mocks__/cache-manager.ts; reads
 // and seeds below go through the fake's own get/set.

@@ -65,7 +65,7 @@ vi.mock("@/agents/chatops/chatops-manager", async () => {
   };
 });
 
-vi.mock("@/utils/rate-limit", () => ({
+vi.mock("@/agents/utils", () => ({
   isRateLimited: vi.fn(() => false),
 }));
 

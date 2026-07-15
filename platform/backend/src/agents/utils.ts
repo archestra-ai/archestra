@@ -20,23 +20,6 @@ interface RateLimitConfig {
 }
 
 /**
- * Read-only check of whether an identifier is currently over its rate limit,
- * WITHOUT counting the check as a request. Use this to short-circuit expensive
- * work (e.g. token validation) for an already-blocked caller when the counter
- * is incremented elsewhere — for example, only on failed attempts.
- */
-export async function isRateLimitExceeded(
-  cacheKey: AllowedCacheKey,
-  config: RateLimitConfig,
-): Promise<boolean> {
-  const entry = await cacheManager.get<RateLimitEntry>(cacheKey);
-  if (!entry || Date.now() - entry.windowStart > config.windowMs) {
-    return false;
-  }
-  return entry.count >= config.maxRequests;
-}
-
-/**
  * Check if an identifier (e.g., IP address) is rate limited using the shared CacheManager.
  * Uses a sliding window algorithm with configurable window size and max requests.
  *

@@ -149,6 +149,9 @@ export function extractChatgptAccountId(jwt: string): string | undefined {
  * `/models` endpoint and availability is governed by the account's plan, so
  * (like Perplexity/MiniMax) the list is maintained here rather than synced.
  * These are subscription-billed, so their token price is treated as zero.
+ *
+ * Manually curated — update when OpenAI adds or removes Codex models.
+ * Last synchronized: 2026-07 (Codex CLI model set).
  */
 export const OPENAI_CODEX_MODELS = [
   { id: "gpt-5.5-codex", displayName: "GPT-5.5 Codex" },

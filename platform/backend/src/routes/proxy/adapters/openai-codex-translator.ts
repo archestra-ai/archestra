@@ -283,6 +283,12 @@ function chatMessagesToResponsesInput(
     }
 
     if (role === "assistant") {
+      // An assistant turn may carry both tool calls and text. We emit the
+      // `function_call` items first, then the text as a separate `message` item.
+      // Chat-completions models the two as parallel fields on one message (no
+      // inherent order between them), so this fixed ordering is a faithful,
+      // lossless mapping — the Codex backend consumes them as a set, not a
+      // sequence.
       const toolCalls =
         "tool_calls" in message && Array.isArray(message.tool_calls)
           ? message.tool_calls

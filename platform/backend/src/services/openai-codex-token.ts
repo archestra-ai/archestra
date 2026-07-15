@@ -145,6 +145,13 @@ class OpenAiCodexTokenManager {
       knownRefreshTokenDigests,
     } = params;
 
+    // Prefer the most recently rotated refresh token; fall back to the stored
+    // one only when we have never rotated in this process. If an in-memory
+    // `latestRefreshToken` is itself rejected, we intentionally do NOT retry with
+    // the stored `refreshToken`: OpenAI rotates the refresh token on every
+    // redemption and invalidates its predecessor, so the older stored token is
+    // necessarily already dead. Surfacing the 401 (which prompts a reconnect) is
+    // correct rather than masking it with a guaranteed-stale retry.
     const { accessToken, expiresAtMs, rotatedRefreshToken } =
       await redeemWithOpenAi(latestRefreshToken ?? refreshToken);
 

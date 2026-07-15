@@ -75,6 +75,12 @@ const openaiCodexAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // The device endpoint takes ONLY the client id — matching the first-party
       // Codex CLI (codex-rs `UserCodeReq { client_id }`). Sending extra fields
       // such as `scope` is not part of the contract.
+      //
+      // NOTE: this deliberately sends JSON, not the `application/x-www-form-
+      // urlencoded` body RFC 8628 device authorization specifies. OpenAI's
+      // deviceauth endpoints expect JSON (this mirrors the first-party CLI); the
+      // later OAuth token exchange (`exchangeOpenAiCodexAuthCode`) does use the
+      // standard form encoding.
       const response = await fetch(`${issuer}${DEVICE_USERCODE_PATH}`, {
         method: "POST",
         headers: {

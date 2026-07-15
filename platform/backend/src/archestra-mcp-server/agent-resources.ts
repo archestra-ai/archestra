@@ -318,10 +318,7 @@ export async function handleCreateResource<
       if (args.icon) createParams.icon = args.icon;
     }
 
-    const created = await AgentModel.create(
-      createParams,
-      scope === "personal" ? context.userId : undefined,
-    );
+    const created = await AgentModel.create(createParams, context.userId);
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0

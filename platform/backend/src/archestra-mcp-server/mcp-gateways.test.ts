@@ -40,6 +40,24 @@ describe("mcp gateway tool execution", () => {
     );
   });
 
+  test("create_mcp_gateway attributes the calling user as author", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_gateway`,
+      { name: "Attributed Gateway" },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const created = await AgentModel.findById(
+      extractCreatedId(result),
+      mockContext.userId,
+      true,
+    );
+    expect(created?.scope).toBe("org");
+    expect(created?.authorId).toBe(mockContext.userId);
+  });
+
   test("create_mcp_gateway assigns knowledge bases and connectors", async ({
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,

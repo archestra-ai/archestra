@@ -55,6 +55,8 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   minimax: getMinimaxUsage,
   deepseek: getOpenAIUsage,
   "github-copilot": getOpenAIUsage,
+  // Responses are OpenAI-shaped by our own Graph translation (usage estimated)
+  "microsoft-365-copilot": getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };
@@ -149,13 +151,13 @@ export function initializeMetrics(labelKeys: string[]): void {
   }
 
   // Create new metrics with updated label names
-  // external_agent_id: External agent ID from X-Archestra-Agent-Id header (client-provided identifier)
   // agent_id/agent_name: Internal Archestra agent ID and name
   // agent_type: The agent type (mcp_gateway, llm_proxy, profile, agent)
+  // Note: no external_agent_id label — it is client-supplied (X-Archestra-Agent-Id)
+  // and unbounded, which would explode Prometheus series cardinality.
   const baseLabelNames = [
     "provider",
     "model",
-    "external_agent_id",
     "agent_id",
     "agent_name",
     "agent_type",
@@ -260,7 +262,6 @@ export function initializeMetrics(labelKeys: string[]): void {
  * @param profile The Archestra profile
  * @param additionalLabels Additional labels to include
  * @param model The model name
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  */
 function buildMetricLabels(
@@ -268,12 +269,9 @@ function buildMetricLabels(
   additionalLabels: Record<string, string>,
   model: string | undefined,
   source: InteractionSource,
-  externalAgentId?: string,
 ): Record<string, string> {
-  // external_agent_id: External agent ID from X-Archestra-Agent-Id header (or empty if not provided)
   // agent_id/agent_name: Internal Archestra agent ID and name
   const labels: Record<string, string> = {
-    external_agent_id: externalAgentId ?? "",
     agent_id: profile.id,
     agent_name: profile.name,
     agent_type: profile.agentType ?? "",
@@ -301,7 +299,6 @@ function buildMetricLabels(
  * @param usage Token usage object with input/output counts
  * @param model The model name
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportLLMTokens(
   provider: SupportedProvider,
@@ -314,7 +311,6 @@ export function reportLLMTokens(
   },
   model: string,
   source: InteractionSource,
-  externalAgentId?: string,
 ): void {
   if (!llmTokensCounter) {
     logger.warn("LLM metrics not initialized, skipping token reporting");
@@ -322,29 +318,20 @@ export function reportLLMTokens(
   }
 
   const exemplarLabels = getExemplarLabels();
+  // Built once and shared across the up-to-5 emissions below; per-metric
+  // extras (type/cache_type) are spread on top.
+  const baseLabels = buildMetricLabels(profile, { provider }, model, source);
 
   if (usage.input && usage.input > 0) {
     llmTokensCounter.inc({
-      labels: buildMetricLabels(
-        profile,
-        { provider, type: "input" },
-        model,
-        source,
-        externalAgentId,
-      ),
+      labels: { ...baseLabels, type: "input" },
       value: usage.input,
       exemplarLabels,
     });
   }
   if (usage.output && usage.output > 0) {
     llmTokensCounter.inc({
-      labels: buildMetricLabels(
-        profile,
-        { provider, type: "output" },
-        model,
-        source,
-        externalAgentId,
-      ),
+      labels: { ...baseLabels, type: "output" },
       value: usage.output,
       exemplarLabels,
     });
@@ -352,26 +339,14 @@ export function reportLLMTokens(
 
   if (usage.cacheRead && usage.cacheRead > 0) {
     llmCacheTokensCounter.inc({
-      labels: buildMetricLabels(
-        profile,
-        { provider, cache_type: "read" },
-        model,
-        source,
-        externalAgentId,
-      ),
+      labels: { ...baseLabels, cache_type: "read" },
       value: usage.cacheRead,
       exemplarLabels,
     });
   }
   if (usage.cacheWrite && usage.cacheWrite > 0) {
     llmCacheTokensCounter.inc({
-      labels: buildMetricLabels(
-        profile,
-        { provider, cache_type: "write" },
-        model,
-        source,
-        externalAgentId,
-      ),
+      labels: { ...baseLabels, cache_type: "write" },
       value: usage.cacheWrite,
       exemplarLabels,
     });
@@ -380,13 +355,7 @@ export function reportLLMTokens(
   const totalTokens = (usage.input ?? 0) + (usage.output ?? 0);
   if (totalTokens > 0 && llmTokenUsage) {
     llmTokenUsage.observe({
-      labels: buildMetricLabels(
-        profile,
-        { provider },
-        model,
-        source,
-        externalAgentId,
-      ),
+      labels: baseLabels,
       value: totalTokens,
       exemplarLabels,
     });
@@ -402,7 +371,6 @@ export function reportLLMTokens(
  * @param count Number of blocked tools
  * @param model The model name
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportBlockedTools(
   provider: SupportedProvider,
@@ -410,7 +378,6 @@ export function reportBlockedTools(
   count: number,
   model: string,
   source: InteractionSource,
-  externalAgentId?: string,
 ) {
   if (!llmBlockedToolCounter) {
     logger.warn(
@@ -419,13 +386,7 @@ export function reportBlockedTools(
     return;
   }
   llmBlockedToolCounter.inc({
-    labels: buildMetricLabels(
-      profile,
-      { provider },
-      model,
-      source,
-      externalAgentId,
-    ),
+    labels: buildMetricLabels(profile, { provider }, model, source),
     value: count,
     exemplarLabels: getExemplarLabels(),
   });
@@ -438,7 +399,6 @@ export function reportBlockedTools(
  * @param model The model name
  * @param cost The cost in USD
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportLLMCost(
   provider: SupportedProvider,
@@ -446,7 +406,6 @@ export function reportLLMCost(
   model: string,
   cost: number | null | undefined,
   source: InteractionSource,
-  externalAgentId?: string,
 ): void {
   if (!llmCostTotal) {
     logger.warn("LLM metrics not initialized, skipping cost reporting");
@@ -456,13 +415,7 @@ export function reportLLMCost(
     return;
   }
   llmCostTotal.inc({
-    labels: buildMetricLabels(
-      profile,
-      { provider },
-      model,
-      source,
-      externalAgentId,
-    ),
+    labels: buildMetricLabels(profile, { provider }, model, source),
     value: cost,
     exemplarLabels: getExemplarLabels(),
   });
@@ -478,7 +431,6 @@ export function reportLLMCost(
  * @param model The model name
  * @param cache Cache cost breakdown in USD
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportLLMCacheCost(
   provider: SupportedProvider,
@@ -486,20 +438,13 @@ export function reportLLMCacheCost(
   model: string,
   cache: { cacheCost?: number | null; cacheReadSavings?: number | null },
   source: InteractionSource,
-  externalAgentId?: string,
 ): void {
   if (!llmCacheCostTotal || !llmCacheSavingsTotal) {
     logger.warn("LLM metrics not initialized, skipping cache cost reporting");
     return;
   }
 
-  const labels = buildMetricLabels(
-    profile,
-    { provider },
-    model,
-    source,
-    externalAgentId,
-  );
+  const labels = buildMetricLabels(profile, { provider }, model, source);
   const exemplarLabels = getExemplarLabels();
 
   if (cache.cacheCost && cache.cacheCost > 0) {
@@ -523,7 +468,6 @@ export function reportLLMCacheCost(
  * @param model The model name
  * @param ttftSeconds Time to first token in seconds
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportTimeToFirstToken(
   provider: SupportedProvider,
@@ -531,7 +475,6 @@ export function reportTimeToFirstToken(
   model: string,
   ttftSeconds: number,
   source: InteractionSource,
-  externalAgentId?: string,
 ): void {
   if (!llmTimeToFirstToken) {
     logger.warn("LLM metrics not initialized, skipping TTFT reporting");
@@ -542,13 +485,7 @@ export function reportTimeToFirstToken(
     return;
   }
   llmTimeToFirstToken.observe({
-    labels: buildMetricLabels(
-      profile,
-      { provider },
-      model,
-      source,
-      externalAgentId,
-    ),
+    labels: buildMetricLabels(profile, { provider }, model, source),
     value: ttftSeconds,
     exemplarLabels: getExemplarLabels(),
   });
@@ -564,7 +501,6 @@ export function reportTimeToFirstToken(
  * @param outputTokens Number of output tokens generated
  * @param durationSeconds Total request duration in seconds
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function reportTokensPerSecond(
   provider: SupportedProvider,
@@ -573,7 +509,6 @@ export function reportTokensPerSecond(
   outputTokens: number,
   durationSeconds: number,
   source: InteractionSource,
-  externalAgentId?: string,
 ): void {
   if (!llmTokensPerSecond) {
     logger.warn("LLM metrics not initialized, skipping tokens/sec reporting");
@@ -585,14 +520,50 @@ export function reportTokensPerSecond(
   }
   const tokensPerSecond = outputTokens / durationSeconds;
   llmTokensPerSecond.observe({
+    labels: buildMetricLabels(profile, { provider }, model, source),
+    value: tokensPerSecond,
+    exemplarLabels: getExemplarLabels(),
+  });
+}
+
+/**
+ * Records the `llm_request_duration_seconds` histogram for a single request.
+ *
+ * Most providers instrument duration inside their transport wrapper
+ * (fetch-based providers via getObservableFetch, Gemini via getObservableGenAI),
+ * so they must NOT call this or the observation would be double-counted. It
+ * exists for providers whose transport can't self-instrument — notably Bedrock,
+ * which uses a custom SigV4 client that has no access to the profile/source
+ * needed for metric labels. For those, the LLM proxy handler records duration
+ * on the provider's behalf (gated by `LLMProvider.recordRequestDurationInHandler`).
+ * @param provider The LLM provider
+ * @param profile The Archestra profile
+ * @param model The model name
+ * @param durationSeconds Request duration in seconds
+ * @param statusCode HTTP-like status code label ("200" on success, upstream
+ *   status or "0" on error) — mirrors getObservableFetch's status labeling
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
+ */
+export function reportRequestDuration(
+  provider: SupportedProvider,
+  profile: Agent,
+  model: string,
+  durationSeconds: number,
+  statusCode: string,
+  source: InteractionSource,
+): void {
+  if (!llmRequestDuration) {
+    logger.warn("LLM metrics not initialized, skipping duration reporting");
+    return;
+  }
+  llmRequestDuration.observe({
     labels: buildMetricLabels(
       profile,
-      { provider },
+      { provider, status_code: statusCode },
       model,
       source,
-      externalAgentId,
     ),
-    value: tokensPerSecond,
+    value: durationSeconds,
     exemplarLabels: getExemplarLabels(),
   });
 }
@@ -602,13 +573,11 @@ export function reportTokensPerSecond(
  * @param provider The LLM provider
  * @param profile The Archestra profile
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function getObservableFetch(
   provider: SupportedProvider,
   profile: Agent,
   source: InteractionSource,
-  externalAgentId?: string,
 ): Fetch {
   return async function observableFetch(
     url: string | URL | Request,
@@ -658,7 +627,6 @@ export function getObservableFetch(
           { provider, status_code: status },
           model,
           source,
-          externalAgentId,
         ),
         value: duration,
         exemplarLabels: getExemplarLabels(),
@@ -672,7 +640,6 @@ export function getObservableFetch(
           { provider, status_code: "0" },
           model,
           source,
-          externalAgentId,
         ),
         value: duration,
         exemplarLabels: getExemplarLabels(),
@@ -732,7 +699,6 @@ export function getObservableFetch(
             { input, output, cacheRead, cacheWrite },
             model ?? "unknown",
             source,
-            externalAgentId,
           );
         }
       } catch (_parseError) {
@@ -749,13 +715,11 @@ export function getObservableFetch(
  * @param genAI The GoogleGenAI instance
  * @param profile The Archestra profile
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
- * @param externalAgentId Optional external agent ID from X-Archestra-Agent-Id header
  */
 export function getObservableGenAI(
   genAI: GoogleGenAI,
   profile: Agent,
   source: InteractionSource,
-  externalAgentId?: string,
 ) {
   const originalGenerateContent = genAI.models.generateContent;
   const originalGenerateContentStream = genAI.models.generateContentStream;
@@ -781,7 +745,6 @@ export function getObservableGenAI(
           { provider, status_code: "200" },
           model,
           source,
-          externalAgentId,
         ),
         value: duration,
         exemplarLabels: getExemplarLabels(),
@@ -797,20 +760,12 @@ export function getObservableGenAI(
           { input, output, cacheRead, cacheWrite },
           model ?? "unknown",
           source,
-          externalAgentId,
         );
       }
 
       return result;
     } catch (error) {
-      observeGeminiError(
-        error,
-        startTime,
-        profile,
-        model,
-        source,
-        externalAgentId,
-      );
+      observeGeminiError(error, startTime, profile, model, source);
       throw error;
     }
   };
@@ -840,7 +795,6 @@ export function getObservableGenAI(
           { provider, status_code: "200" },
           model,
           source,
-          externalAgentId,
         ),
         value: duration,
         exemplarLabels: getExemplarLabels(),
@@ -848,14 +802,7 @@ export function getObservableGenAI(
 
       return result;
     } catch (error) {
-      observeGeminiError(
-        error,
-        startTime,
-        profile,
-        model,
-        source,
-        externalAgentId,
-      );
+      observeGeminiError(error, startTime, profile, model, source);
       throw error;
     }
   };
@@ -880,7 +827,6 @@ export function reportKbLlmCall(params: {
   const labels: Record<string, string> = {
     provider: params.provider,
     model: params.model,
-    external_agent_id: "",
     agent_id: "",
     agent_name: "Knowledge Base",
     agent_type: "",
@@ -976,7 +922,6 @@ function observeGeminiError(
   profile: Agent,
   model: string | undefined,
   source: InteractionSource,
-  externalAgentId?: string,
 ): void {
   const duration = (Date.now() - startTime) / 1000;
   const statusCode =
@@ -992,7 +937,6 @@ function observeGeminiError(
       { provider: "gemini", status_code: statusCode },
       model,
       source,
-      externalAgentId,
     ),
     value: duration,
     exemplarLabels: getExemplarLabels(),

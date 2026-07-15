@@ -20,6 +20,12 @@ export interface TeamToken {
     id: string;
     name: string;
   } | null;
+  /**
+   * Only present when the tokens were fetched with a profileId: whether this
+   * token can authenticate against that profile. Tokens that can't are shown
+   * greyed out in connection instructions.
+   */
+  worksWithProfile?: boolean;
 }
 
 /**

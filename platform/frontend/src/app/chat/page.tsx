@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import type { ChatSkillMetadata } from "@archestra/shared";
+import type { ChatMessageFeedback, ChatSkillMetadata } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -25,7 +26,6 @@ import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
-import { getScheduledRunChatState } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
@@ -37,6 +37,7 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils";
+import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -52,11 +53,13 @@ import {
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
+import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
+import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -77,6 +80,7 @@ import {
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import { trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   clearOAuthPendingChatResume,
@@ -91,9 +95,9 @@ import {
   drainAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
 import {
+  fetchAgentMcpTools,
   fetchConversationEnabledTools,
   invalidateConversationFileQueries,
-  useClearChatErrors,
   useCompactConversation,
   useConversation,
   useConversationFiles,
@@ -107,17 +111,23 @@ import {
   useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import { useSetChatMessageFeedback } from "@/lib/chat/chat-message.query";
+import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import {
   useConversationShare,
   useForkConversation,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
+import { classifyChatSubmitAction } from "@/lib/chat/chat-submit-action";
 import {
+  applyFeedbackToMessages,
   conversationStorageKeys,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
+  getMessageFeedback,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
@@ -126,12 +136,12 @@ import {
 } from "@/lib/chat/pending-chat-handoff-files";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import {
-  applyPendingActions,
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
 import {
   agentRequiresPerUserConnect,
+  agentToolsUnavailableForModel,
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
@@ -151,8 +161,10 @@ import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
+import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
+import { ViewTransition } from "@/lib/view-transition";
 import {
   buildCreateConversationInput,
   isAutoSendHandoffInProgress,
@@ -161,8 +173,10 @@ import {
 } from "./chat-initial-state";
 import ArchestraPromptInput, {
   type ArchestraPromptInputProps,
+  type ChatSubmitOptions,
 } from "./prompt-input";
 import { resolveSharedConversationForkState } from "./shared-conversation-fork";
+import { buildSkillCommands, resolveUrlSkillAction } from "./skill-commands";
 
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "runs",
@@ -233,6 +247,13 @@ export function ChatPageContent({
   // Skill invoked via slash command on the first message of a new chat,
   // held until the conversation exists and the message can be sent.
   const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
+  // Sandbox-command marker (`!` prefix) on the first message of a new chat,
+  // held the same way so the deferred send stamps metadata.sandboxCommand.
+  const pendingSandboxCommandRef = useRef<true | undefined>(undefined);
+  // Composer prefill from a `?skillId=` deep link; handed to the composer
+  // once and cleared via onPrefillApplied.
+  const [composerPrefill, setComposerPrefill] = useState<string | null>(null);
+  const urlSkillProcessedRef = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
     undefined,
   );
@@ -294,7 +315,6 @@ export function ChatPageContent({
   const { data: canCreateProjectPerm } = useHasPermissions({
     project: ["create"],
   });
-  const projectsEnabled = useFeature("projectsEnabled") === true;
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
 
   // Non-admin users with no teams cannot create agents
@@ -449,12 +469,13 @@ export function ChatPageContent({
     return searchParams.get("user_prompt") || undefined;
   }, [searchParams]);
 
-  // A chat started from a project is created up front by the project composer,
-  // which stashes its opening prompt and navigates straight here. Drain that
-  // prompt (and any attachments the composer stashed) into the
-  // pending-initial-message refs so the shared send effect delivers them as the
-  // conversation's first message. Gated on the conversation id, so an ordinary
-  // /chat/<id> open never consumes it.
+  // A chat whose conversation was created up front (by the project composer, or
+  // by the apps page for an external app whose tool needs inputs) stashes its
+  // opening prompt and navigates straight here. Drain that prompt (and any
+  // attachments the composer stashed) into the pending-initial-message refs so
+  // the shared send effect delivers them as the conversation's first message.
+  // Gated on the conversation id, so an ordinary /chat/<id> open never
+  // consumes it.
   useEffect(() => {
     if (!conversationId) return;
     const handoff = takePendingProjectChatHandoff(conversationId);
@@ -463,18 +484,115 @@ export function ChatPageContent({
     pendingFilesRef.current = drainPendingChatHandoffFiles();
   }, [conversationId]);
 
+  // Resolve a `?skillId=` deep link (from /chat/new) into a composer prefill
+  // with the skill's slash command. The param is transient, same posture as
+  // user_prompt: stripped once processed so a refresh or remount cannot
+  // re-apply it. A combined skillId + user_prompt link is unsupported (no UI
+  // produces it): the auto-send would orphan the prefill, so the skill is
+  // skipped and only the prompt is sent.
+  const urlSkillId = searchParams.get("skillId");
+  const urlSkillWanted = !!urlSkillId && !initialUserPrompt;
+  const urlSkillQuery = useSkill(urlSkillWanted ? urlSkillId : null);
+  const skillToolsEnabled = organization?.skillToolsEnabled ?? false;
+  // Same query the composer's slash-command table is built from (identical
+  // input → shared TanStack cache entry). The prefill token must come from
+  // that table, not be re-derived from the skill name, so slug collisions
+  // resolve to the right skill.
+  const urlSkillCommandsQuery = useSkillsPaginated(
+    { limit: 100 },
+    { enabled: urlSkillWanted && skillToolsEnabled },
+  );
+  useEffect(() => {
+    if (urlSkillProcessedRef.current || !urlSkillId) return;
+    if (!urlSkillWanted) {
+      urlSkillProcessedRef.current = true;
+      clearSkillIdQueryParam({ pathname, router, searchParams });
+      return;
+    }
+    // Wait for the org flag, the skill fetch, and the command table. useSkill
+    // treats a 404 as success with null data (allowNotFound), and a non-404
+    // lands the query in its error state — both settle this effect. An errored
+    // list query settles with no commands, which resolves to "unavailable".
+    if (isOrgLoading) return;
+    if (!urlSkillQuery.isSuccess && !urlSkillQuery.isError) return;
+    if (
+      skillToolsEnabled &&
+      !urlSkillCommandsQuery.isSuccess &&
+      !urlSkillCommandsQuery.isError
+    ) {
+      return;
+    }
+
+    urlSkillProcessedRef.current = true;
+    clearSkillIdQueryParam({ pathname, router, searchParams });
+
+    const action = resolveUrlSkillAction({
+      skill: urlSkillQuery.data ?? null,
+      isError: urlSkillQuery.isError,
+      skillCommands: urlSkillCommandsQuery.data?.data
+        ? buildSkillCommands(urlSkillCommandsQuery.data.data)
+        : [],
+    });
+    if (action.kind === "prefill") {
+      setComposerPrefill(action.text);
+    } else if (action.reason === "unavailable") {
+      toast.error("This skill is not available in chat");
+    } else {
+      toast.error("Skill not found");
+    }
+  }, [
+    urlSkillId,
+    urlSkillWanted,
+    urlSkillQuery.isSuccess,
+    urlSkillQuery.isError,
+    urlSkillQuery.data,
+    urlSkillCommandsQuery.isSuccess,
+    urlSkillCommandsQuery.isError,
+    urlSkillCommandsQuery.data,
+    isOrgLoading,
+    skillToolsEnabled,
+    pathname,
+    router,
+    searchParams,
+  ]);
+
+  const handleComposerPrefillApplied = useCallback(() => {
+    setComposerPrefill(null);
+  }, []);
+
   // Update URL when conversation changes
   const selectConversation = useCallback(
     (id: string | undefined) => {
-      setConversationId(id);
+      // A React Transition so the <ViewTransition> boundaries below animate
+      // the splash → conversation swap (plain setState swaps instantly).
+      startTransition(() => setConversationId(id));
       if (id) {
-        router.push(`/chat/${id}`);
+        // Shallow-route to the canonical URL: history.pushState syncs
+        // usePathname/useSearchParams without an RSC navigation, so this
+        // instance keeps rendering the conversation it just started. A real
+        // router.push to /chat/[conversationId] would mount that segment's
+        // keyed page and remount everything mid-stream (visible flicker).
+        // Refresh, deep links, and back/forward still resolve through the
+        // /chat/[conversationId] route.
+        window.history.pushState(null, "", `/chat/${id}`);
       } else {
         router.push("/chat");
       }
     },
     [router],
   );
+
+  // After the shallow pushState above, this /chat instance stays mounted while
+  // the URL reads /chat/<id> — so navigating back to /chat (sidebar "New
+  // Chat", browser back) can land on this same instance instead of a fresh
+  // mount. Derive the reset from the URL: when the pathname returns to /chat,
+  // clear the selection so the New Chat splash renders again.
+  const isNewChatUrl = !routeConversationId && pathname === "/chat";
+  useEffect(() => {
+    if (isNewChatUrl) {
+      startTransition(() => setConversationId(undefined));
+    }
+  }, [isNewChatUrl]);
 
   // App render diagnostics are conversation-scoped: drop any leftovers when
   // switching conversations so they never attach to an unrelated send.
@@ -498,7 +616,6 @@ export function ChatPageContent({
     canManageShare &&
     !!conversation &&
     canCreateProjectFromChat({
-      projectsEnabled,
       hasCreatePermission: canCreateProjectPerm === true,
       conversation,
     });
@@ -664,6 +781,29 @@ export function ChatPageContent({
     conversation?.modelId,
     chatModels,
   ]);
+
+  // A no-tools model (e.g. Microsoft 365 Copilot) paired with a tooled agent
+  // runs tool-less — the backend omits the tools — so an up-front notice
+  // above the composer replaces tools silently never firing.
+  const initialToolsUnavailable = useMemo(
+    () =>
+      agentToolsUnavailableForModel({
+        agent: internalAgents.find((a) => a.id === initialAgentId),
+        selectedModelId: initialModel,
+        models: chatModels,
+      }),
+    [internalAgents, initialAgentId, initialModel, chatModels],
+  );
+
+  const conversationToolsUnavailable = useMemo(
+    () =>
+      agentToolsUnavailableForModel({
+        agent: internalAgents.find((a) => a.id === conversation?.agentId),
+        selectedModelId: conversation?.modelId,
+        models: chatModels,
+      }),
+    [internalAgents, conversation?.agentId, conversation?.modelId, chatModels],
+  );
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
@@ -900,6 +1040,76 @@ export function ChatPageContent({
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
 
+  // `status` here is read from the shared session map, which each
+  // ChatSessionHook updates a render behind the real SDK status (via a
+  // post-render sync effect + notifySessionUpdate). Right after handleSubmit
+  // fires a direct send, the SDK is already busy but this `status` can still
+  // read "ready" for a tick or two. Without a synchronous guard, rapid
+  // follow-up submits take the direct-send path again and race each other
+  // inside the single useChat instance — every message reaches the model, but
+  // the concurrent sends clobber each other's optimistic user bubble, so most
+  // never render. This latch makes only the first submit of a turn direct-send;
+  // the rest enqueue and drain in order. Only meaningful with queueing on,
+  // which is the sole path able to absorb the extra submits.
+  const directSendPendingRef = useRef(false);
+  // The real SDK status leaving "ready" means the direct send has landed and
+  // this `status` snapshot will now gate follow-ups on its own; a conversation
+  // switch retargets everything. Either way the latch has done its job.
+  useEffect(() => {
+    if (status !== "ready") {
+      directSendPendingRef.current = false;
+    }
+  }, [status]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on conversation switch — the body writes a ref, so conversationId is a trigger, not a read
+  useEffect(() => {
+    directSendPendingRef.current = false;
+  }, [conversationId]);
+
+  // Thumbs feedback on assistant messages: optimistic apply + rollback against
+  // the originating session's setter, captured here so a conversation switch
+  // mid-request cannot retarget the rollback (or the invalidation, which the
+  // mutation keys off its per-call variables). The rollback rides this
+  // closure's own promise chain, NOT a mutation callback: switching
+  // conversations remounts the page and unmounts the mutation observer, which
+  // makes TanStack skip per-call callbacks — while the originating session
+  // (and this closure's setter into it) lives on in the global chat context.
+  const setChatMessageFeedback = useSetChatMessageFeedback();
+  const handleMessageFeedback = useCallback(
+    (messageId: string, feedback: ChatMessageFeedback | null) => {
+      const applyMessages = setMessages;
+      if (!applyMessages || !conversationId) {
+        return;
+      }
+      const previousFeedback = getMessageFeedback(
+        messages.find((message) => message.id === messageId),
+      );
+      applyMessages((current) =>
+        applyFeedbackToMessages({ messages: current, messageId, feedback }),
+      );
+      setChatMessageFeedback
+        .mutateAsync({ messageId, conversationId, feedback })
+        .catch(() => {
+          // Error toast already handled inside the mutation; only roll back —
+          // and only while the message still shows THIS request's value, so a
+          // slow failure can't overwrite a newer rating made in the meantime.
+          applyMessages((current) => {
+            const target = current.find((message) => message.id === messageId);
+            if (getMessageFeedback(target) !== feedback) {
+              return current;
+            }
+            return applyFeedbackToMessages({
+              messages: current,
+              messageId,
+              feedback: previousFeedback,
+            });
+          });
+        });
+    },
+    [setMessages, conversationId, messages, setChatMessageFeedback],
+  );
+  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
+  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
+
   // A scheduled run's transcript is persisted only when it completes, so a run
   // opened while still running seeds the live chat session empty. When the run
   // finishes, the completion effect refetches the conversation; hydrate the
@@ -956,25 +1166,20 @@ export function ChatPageContent({
     });
   }, [resendLastUserMessage]);
 
-  // "Try again" on a retryable chat error: resend the last user turn, and only
-  // once the resend is genuinely issued clear the persisted error so the card
-  // disappears. Ordering matters — clearing first would wipe the error card even
-  // if the resend never started. If the resend itself fails, keep the card so the
-  // user still sees the error. Owner-editable chats only (read-only viewers render
+  // "Try again" on a retryable chat error: resend the last user turn. The
+  // session's regenerateUserMessage clears the persisted error rows once the
+  // resend is genuinely issued (so the card disappears without wiping the
+  // error when the resend never starts) — same as the regenerate action on a
+  // message. If the resend itself fails, the card stays so the user still sees
+  // the error. Owner-editable chats only (read-only viewers render
   // MessageThread instead of this).
-  const clearChatErrors = useClearChatErrors();
   const handleChatErrorRetry = useCallback(async () => {
-    if (!conversationId) return;
-    let resent: boolean;
     try {
-      resent = await resendLastUserMessage();
+      await resendLastUserMessage();
     } catch (error) {
       console.error("[Chat] Retry failed to resend the last message", error);
-      return;
     }
-    if (!resent) return;
-    await clearChatErrors.mutateAsync({ id: conversationId });
-  }, [conversationId, clearChatErrors, resendLastUserMessage]);
+  }, [resendLastUserMessage]);
   // Hide the error while the session is auto-recovering (retry scheduled or
   // reattaching to the still-running response) — flashing a "connection
   // error" card for a turn that restores itself a second later reads as
@@ -1008,22 +1213,28 @@ export function ChatPageContent({
 
   const syncPersistedMessageMetadata = useCallback(
     (persistedMessages: UIMessage[]) => {
-      if (!chatSession?.messages || !setMessages) {
+      if (!setMessages) {
         return;
       }
 
-      const mergedMessages = mergePersistedMessageMetadata({
-        liveMessages: chatSession.messages,
-        persistedMessages,
-      });
-
-      if (mergedMessages === chatSession.messages) {
-        return;
-      }
-
-      setMessages(mergedMessages);
+      // Merge against the SDK's CURRENT thread via the functional updater — NOT
+      // the `chatSession.messages` session snapshot, which trails the live SDK
+      // thread by a render (it is published through a post-render sync effect;
+      // see ChatSessionHook). During rapid queue drain that snapshot can be
+      // missing the just-sent user message; folding a stale, shorter snapshot
+      // and writing it back here would shrink the SDK thread and drop that
+      // in-flight user message, while the ongoing stream only re-adds the
+      // assistant reply — the user bubble then vanishes until a reload (the
+      // backend persisted it fine). mergePersistedMessageMetadata returns the
+      // same array reference when nothing changed, so React bails out.
+      setMessages((current) =>
+        mergePersistedMessageMetadata({
+          liveMessages: current,
+          persistedMessages,
+        }),
+      );
     },
-    [chatSession?.messages, setMessages],
+    [setMessages],
   );
 
   useEffect(() => {
@@ -1288,9 +1499,11 @@ export function ChatPageContent({
     const promptToSend = pendingPromptRef.current;
     const filesToSend = pendingFilesRef.current;
     const skillToSend = pendingSkillRef.current;
+    const sandboxCommandToSend = pendingSandboxCommandRef.current;
     pendingPromptRef.current = undefined;
     pendingFilesRef.current = [];
     pendingSkillRef.current = undefined;
+    pendingSandboxCommandRef.current = undefined;
 
     const parts: ChatMessagePart[] = [];
 
@@ -1308,17 +1521,39 @@ export function ChatPageContent({
     }
 
     const initialAppDiagnostics = drainAppDiagnostics();
-    sendMessage({
-      role: "user",
-      parts: ensureNonEmptyParts(parts),
-      metadata: {
-        createdAt: new Date().toISOString(),
-        ...(skillToSend ? { skill: skillToSend } : {}),
-        ...(initialAppDiagnostics.length > 0
-          ? { appDiagnostics: initialAppDiagnostics }
-          : {}),
-      },
+    // This effect fires right after the splash → conversation swap commits,
+    // while its view transition (the composer morph) is still animating. An
+    // urgent update here would make React skip that animation mid-flight, so
+    // schedule the optimistic user-message append as a transition too — it
+    // joins the running animation instead of snapping it to the end.
+    startTransition(() => {
+      sendMessage({
+        role: "user",
+        parts: ensureNonEmptyParts(parts),
+        metadata: {
+          createdAt: new Date().toISOString(),
+          ...(skillToSend ? { skill: skillToSend } : {}),
+          ...(sandboxCommandToSend ? { sandboxCommand: true as const } : {}),
+          ...(initialAppDiagnostics.length > 0
+            ? { appDiagnostics: initialAppDiagnostics }
+            : {}),
+        },
+      });
     });
+
+    trackEvent("message_sent", {
+      conversationId,
+      agentId: conversation.agentId ?? undefined,
+      messageLength: promptToSend?.length ?? 0,
+      fileCount: filesToSend.length,
+      hasSkill: !!skillToSend,
+    });
+    for (const file of filesToSend) {
+      trackEvent("file_uploaded", {
+        mediaType: file.mediaType,
+        conversationId,
+      });
+    }
   }, [
     conversation,
     conversationId,
@@ -1387,6 +1622,20 @@ export function ChatPageContent({
     });
   }, []);
 
+  // Stop the in-flight response. Wired to the submit button's Stop face in
+  // the prompt input; also pauses queue auto-drain (see ChatSessionHook).
+  const handleStopStreaming = () => {
+    if (conversationId) {
+      // Set the cache flag first, THEN close the connection so the
+      // connection-close handler on the backend finds the flag.
+      stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
+        stop?.();
+      });
+    } else {
+      stop?.();
+    }
+  };
+
   const handleSubmit: ArchestraPromptInputProps["onSubmit"] = (
     message,
     e,
@@ -1394,21 +1643,58 @@ export function ChatPageContent({
   ) => {
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
-    if (status === "submitted" || status === "streaming") {
-      if (conversationId) {
-        // Set the cache flag first, THEN close the connection so the
-        // connection-close handler on the backend finds the flag.
-        stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
-          stop?.();
-        });
-      } else {
-        stop?.();
+
+    // Enqueue this submission instead of sending it now (throws on inputs that
+    // can't be queued, keeping the composer intact per the onSubmit contract).
+    // Only reached when queueing is on and a conversation exists.
+    const enqueueSubmission = () => {
+      if (!conversationId) return;
+      if (message.files && message.files.length > 0) {
+        toast.error(
+          "Attachments can't be queued. Wait for the current response to finish, then send.",
+        );
+        // Keep the typed text, draft, and attachments for a later submit.
+        throw new Error("attachments-not-queueable");
       }
-      // Throw to keep the textarea and draft intact — see onSubmit contract
-      // in ArchestraPromptInputProps. The submit button doubles as Stop while
-      // streaming; treating that click as an accepted submit would clear any
-      // follow-up the user had already started typing.
+      const queueText = message.text?.trim();
+      if (!queueText && !options?.skill) {
+        // Nothing to queue (Enter on an empty composer while streaming).
+        throw new Error("empty-queue-submit");
+      }
+      chatMessageQueue.enqueue(conversationId, {
+        text: message.text ?? "",
+        ...(options?.skill ? { skill: options.skill } : {}),
+        ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
+      });
+      trackEvent("message_queued", {
+        conversationId,
+        agentId: conversation?.agentId ?? undefined,
+        messageLength: message.text?.length ?? 0,
+      });
+    };
+
+    const queueEnabled = isMessageQueueEnabled && !!conversationId;
+    const submitAction = classifyChatSubmitAction({
+      status,
+      queueEnabled,
+      directSendPending: directSendPendingRef.current,
+    });
+
+    if (submitAction === "stop") {
+      // Queueing off: the submit button doubles as Stop while a turn streams.
+      // (Stopping is the submit button's onClick, not a form submit.) Throw to
+      // keep the textarea and draft intact — see onSubmit contract in
+      // ArchestraPromptInputProps.
+      handleStopStreaming();
       throw new Error("stop-not-submit");
+    }
+
+    if (submitAction === "queue") {
+      // Streaming (or a direct send is still settling): queue the message; the
+      // conversation's ChatSessionHook sends it once the turn settles.
+      // Returning normally clears the textarea and draft, like a send.
+      enqueueSubmission();
+      return;
     }
 
     const { kind: connectivityKind } = connectivity.state;
@@ -1475,6 +1761,8 @@ export function ChatPageContent({
       }
     }
 
+    const skillToAttach = options?.skill;
+
     // Attach-once: captured app render diagnostics ride this message's
     // metadata and the store is drained — a regenerate never re-attaches.
     const appDiagnostics = drainAppDiagnostics();
@@ -1483,10 +1771,33 @@ export function ChatPageContent({
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
-        ...(options?.skill ? { skill: options.skill } : {}),
+        ...(skillToAttach ? { skill: skillToAttach } : {}),
+        ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
+    // Mark the turn as in flight synchronously so follow-up submits queue
+    // instead of racing this send while the page's `status` catches up. Cleared
+    // by the status/conversation effects above. Only latch when queueing can
+    // absorb the overflow; otherwise leave the pre-existing (queue-off)
+    // behavior untouched.
+    if (queueEnabled) {
+      directSendPendingRef.current = true;
+    }
+
+    trackEvent("message_sent", {
+      conversationId,
+      agentId: conversation?.agentId ?? undefined,
+      messageLength: message.text?.length ?? 0,
+      fileCount: message.files?.length ?? 0,
+      hasSkill: !!skillToAttach,
+    });
+    for (const file of message.files ?? []) {
+      trackEvent("file_uploaded", {
+        mediaType: file.mediaType ?? "unknown",
+        conversationId,
+      });
+    }
   };
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
@@ -1571,24 +1882,6 @@ export function ChatPageContent({
     conversationId,
     isLoadingConversation,
     mcpApps.length,
-    openRightPanelTab,
-  ]);
-
-  const toggleRightPanel = useCallback(() => {
-    if (isRightPanelOpen) {
-      closeRightPanel();
-    } else {
-      const target =
-        activeRightTab === "browser" && !showBrowserButton
-          ? "files"
-          : activeRightTab;
-      openRightPanelTab(target);
-    }
-  }, [
-    isRightPanelOpen,
-    activeRightTab,
-    showBrowserButton,
-    closeRightPanel,
     openRightPanelTab,
   ]);
 
@@ -1738,23 +2031,25 @@ export function ChatPageContent({
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
-    (message: Partial<PromptInputMessage>, skill?: ChatSkillMetadata) => {
+    (message: Partial<PromptInputMessage>, options?: ChatSubmitOptions) => {
       if (isPlaywrightSetupVisible) return;
       const hasText = message.text?.trim();
       const hasFiles = message.files && message.files.length > 0;
 
       if (
-        (!hasText && !hasFiles && !skill) ||
+        (!hasText && !hasFiles && !options?.skill) ||
         !initialAgentId ||
         createConversationMutation.isPending
       ) {
         return;
       }
 
-      // Store the message (text, files, skill) to send after conversation is created
+      // Store the message (text, files, submit options) to send after the
+      // conversation is created
       pendingPromptRef.current = message.text || "";
       pendingFilesRef.current = message.files || [];
-      pendingSkillRef.current = skill;
+      pendingSkillRef.current = options?.skill;
+      pendingSandboxCommandRef.current = options?.sandboxCommand;
 
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(initialAgentId);
@@ -1765,18 +2060,31 @@ export function ChatPageContent({
           // Get the default enabled tools from the conversation (backend sets these)
           // We need to fetch them first to apply our pending actions on top
           try {
-            // The backend creates conversation with default enabled tools
-            // We need to apply pending actions to modify that default
-            const enabledToolsResult = await fetchConversationEnabledTools(
-              newConversation.id,
-            );
-            if (enabledToolsResult?.data) {
-              const baseEnabledToolIds =
-                enabledToolsResult.data.enabledToolIds || [];
-              const newEnabledToolIds = applyPendingActions(
-                baseEnabledToolIds,
+            // Fetch the conversation's default enabled-tools and the CURRENT
+            // agent's tool set fresh — fetching the agent's tools here (rather
+            // than reading a keepPreviousData hook) avoids persisting a previous
+            // agent's tool IDs right after an agent switch.
+            const [enabledToolsResult, agentTools] = await Promise.all([
+              fetchConversationEnabledTools(newConversation.id),
+              fetchAgentMcpTools(initialAgentId),
+            ]);
+            const allToolIds = agentTools.map((t) => t.id);
+            // A fresh conversation carries no custom selection, so the pending
+            // actions must apply on top of the agent's full tool set — not the
+            // GET's empty array, which would turn "disable a subset" into
+            // "enable nothing" and drop every tool. Without that set (agent has
+            // no tools, or the fetch failed) the base is unknown, so leave the
+            // conversation on its default rather than persist an empty allowlist.
+            const canResolveBase =
+              enabledToolsResult?.data?.hasCustomSelection ||
+              allToolIds.length > 0;
+            if (enabledToolsResult?.data && canResolveBase) {
+              const newEnabledToolIds = resolveEnabledToolIds({
+                hasCustomSelection: enabledToolsResult.data.hasCustomSelection,
+                enabledToolIds: enabledToolsResult.data.enabledToolIds || [],
+                allToolIds,
                 pendingActions,
-              );
+              });
 
               // Pre-populate the query cache so useConversationEnabledTools
               // immediately sees the correct state when conversationId is set.
@@ -1790,17 +2098,36 @@ export function ChatPageContent({
                 },
               );
 
-              // Update the enabled tools
-              updateEnabledToolsMutation.mutate({
+              // Await the persist before the first message sends below: the
+              // backend rebuilds the tool set from the DB, so a fire-and-forget
+              // PUT could lose the race and run turn one with the just-declined
+              // tool still enabled. This mutation resolves with null (it does not
+              // throw) on API failure, so branch on the result rather than a
+              // catch.
+              const persisted = await updateEnabledToolsMutation.mutateAsync({
                 conversationId: newConversation.id,
                 toolIds: newEnabledToolIds,
               });
+              if (persisted) {
+                // Clear the pending action only once the selection is durable.
+                clearPendingActions();
+              } else {
+                // Persist failed: undo the optimistic cache so it matches the DB,
+                // and keep the pending action to retry on the next new
+                // conversation rather than silently dropping the decline.
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    "conversation",
+                    newConversation.id,
+                    "enabled-tools",
+                  ],
+                });
+              }
             }
           } catch {
-            // Silently fail - the default tools will be used
+            // Leave pending actions intact on failure; the first turn falls back
+            // to the agent's default tools.
           }
-          // Clear pending actions regardless of success
-          clearPendingActions();
         }
 
         selectConversation(newConversation.id);
@@ -1828,7 +2155,7 @@ export function ChatPageContent({
           // Throw to keep the textarea and draft intact (onSubmit contract).
           throw new Error("offline-not-submit");
         }
-        submitInitialMessage(message, options?.skill);
+        submitInitialMessage(message, options);
       },
       [submitInitialMessage, connectivity.state],
     );
@@ -1860,6 +2187,11 @@ export function ChatPageContent({
     const handoffFilesReady =
       handoffHasAttachments && hasPendingChatHandoffFiles();
     if (!initialUserPrompt && !handoffFilesReady) return;
+
+    // A skill deep link must finish staging before the auto-send fires, else
+    // the first message would miss it. Processing strips skillId from the URL
+    // (success, not-found, and error alike), which re-runs this effect.
+    if (searchParams.get("skillId")) return;
 
     // Skip if conversation already exists
     if (conversationId) return;
@@ -1965,6 +2297,42 @@ export function ChatPageContent({
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
 
+  // First-run onboarding: after the org's first provider key is added, offer to
+  // set the org default model — which built-in background subagents inherit —
+  // before the chat composer opens.
+  //
+  // This is a one-shot nudge, intentionally NOT a persistent gate: it fires only
+  // in the same session, right after the first key is added (`firstKeyAdded`).
+  // If the admin skips it or navigates away mid-onboarding, they are not
+  // re-prompted on later visits — they set the default anytime in Settings →
+  // Agents (which links here from its "Default Model" copy). Deriving it purely
+  // from server state (keys exist && no org default) would re-show it on every
+  // /chat visit until a default is set, which nags.
+  //
+  // Whether to show the step is derived from live org/permission state at render
+  // (not captured in the callback closure), and `Boolean(organization)`
+  // suppresses it while the org record is still loading — so a returning admin
+  // who already has a default never flashes the step during that window.
+  const { data: canSetDefaultModel } = useHasPermissions({
+    agentSettings: ["update"],
+  });
+  const [firstKeyAdded, setFirstKeyAdded] = useState(false);
+  const showDefaultModelStep =
+    firstKeyAdded &&
+    canSetDefaultModel === true &&
+    Boolean(organization) &&
+    !organization?.defaultModelId;
+  const handleFirstKeyAdded = useCallback(() => {
+    setFirstKeyAdded(true);
+    // Reset to a clean /chat URL after a key is added so no stale conversation
+    // param lingers; the keys query refetch reveals the composer.
+    router.push("/chat");
+  }, [router]);
+  const finishFirstRunOnboarding = useCallback(() => {
+    setFirstKeyAdded(false);
+    router.push("/chat");
+  }, [router]);
+
   // If user lacks permission to read agents, show access denied
   // Must check before loading state since disabled queries stay in pending state
   if (!conversationId && canReadAgent === false) {
@@ -2007,11 +2375,17 @@ export function ChatPageContent({
     return <ApiKeyLoadError onRetry={() => refetchApiKeys()} />;
   }
 
+  // First-run step 2: after the first key exists, set the org default model on
+  // the same onboarding backdrop before the composer opens. Checked before the
+  // no-key branch so it wins the moment a key is added (before the keys query
+  // has refetched), rather than flashing the add-key screen again.
+  if (showDefaultModelStep) {
+    return <DefaultModelOnboardingStep onDone={finishFirstRunOnboarding} />;
+  }
+
   // If API key is not configured, show setup prompt with inline creation dialog
   if (!hasAnyApiKey) {
-    // Reset to a clean /chat URL after a key is added so no stale conversation
-    // param lingers; the keys query refetch then reveals the composer.
-    return <NoApiKeySetup onKeyAdded={() => router.push("/chat")} />;
+    return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
   // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state
@@ -2090,412 +2464,484 @@ export function ChatPageContent({
     hasAttachmentsMarker: searchParams.get("attachments") === "1",
     hasPendingHandoffFiles: hasPendingChatHandoffFiles(),
     autoSendTriggered: autoSendTriggeredRef.current,
-    isCreatingConversation: createConversationMutation.isPending,
   });
 
   return (
     <AppsProvider
+      key={conversationId ?? "new"}
       apps={mcpApps}
       onShowInPanel={() => openRightPanelTab("apps" as RightPanelTab)}
       onClosePanel={closeRightPanel}
     >
-      <div className="flex h-full w-full min-h-0">
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div className="flex flex-col h-full min-h-0">
-            <StreamTimeoutWarning status={status} messages={messages} />
+      <div className="flex flex-col h-full w-full min-h-0">
+        <ChatStatusAnnouncer status={status} />
+        {/* Full-width top bar: title + the Files/Browser/Apps tab strip. It
+            sits above the [chat | panel] split so the panel's resize divider
+            only spans the content area below it. */}
+        <ConversationHeader
+          conversationId={conversationId}
+          conversation={conversation}
+          messageCount={messages.length}
+          isTitleAnimating={
+            !!conversation && headerAnimatingTitles.has(conversation.id)
+          }
+          canManageShare={canManageShare}
+          isShared={isShared}
+          canCreateProject={canCreateProjectFromThisChat}
+          scheduleTriggerId={scheduledRunTriggerId}
+          onShare={() => setIsShareDialogOpen(true)}
+          onExportMarkdown={handleExportMarkdown}
+          onCreateProject={() => setIsCreateProjectOpen(true)}
+          panel={{
+            isOpen: isRightPanelOpen,
+            activeTab: activeRightTab,
+            scheduledRun,
+            isArtifactOpen,
+            isBrowserVisible: isBrowserPanelVisible,
+            showBrowserButton,
+            isPlaywrightSetupVisible,
+            onClose: closeRightPanel,
+            onOpenTab: openRightPanelTab,
+          }}
+        />
+        <div className="flex flex-1 min-h-0">
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
+            <div className="flex flex-col h-full min-h-0">
+              <StreamTimeoutWarning
+                status={status}
+                transportActivitySequence={
+                  chatSession?.transportActivitySequence ?? 0
+                }
+                responseProgressSequence={
+                  chatSession?.responseProgressSequence ?? 0
+                }
+              />
 
-            <ConversationHeader
-              conversationId={conversationId}
-              conversation={conversation}
-              messageCount={messages.length}
-              isTitleAnimating={
-                !!conversation && headerAnimatingTitles.has(conversation.id)
-              }
-              canManageShare={canManageShare}
-              isShared={isShared}
-              canCreateProject={canCreateProjectFromThisChat}
-              scheduleTriggerId={scheduledRunTriggerId}
-              onShare={() => setIsShareDialogOpen(true)}
-              onExportMarkdown={handleExportMarkdown}
-              onCreateProject={() => setIsCreateProjectOpen(true)}
-              panel={{
-                isOpen: isRightPanelOpen,
-                isArtifactOpen,
-                isBrowserVisible: isBrowserPanelVisible,
-                showBrowserButton,
-                isPlaywrightSetupVisible,
-                onToggle: toggleRightPanel,
-                onClose: closeRightPanel,
-                onOpenTab: openRightPanelTab,
-              }}
-            />
-
-            {/* Mobile: Inline artifact/browser panel below header */}
-            {isRightPanelOpen && (
-              <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
-                {activeRightTab === "files" && (
-                  <div className="flex-1 min-h-0 overflow-auto">
-                    <ConversationFilesPanel
-                      key={conversationId ?? "none"}
-                      conversationId={conversationId}
-                      artifact={conversation?.artifact}
-                      projectId={conversation?.projectId}
-                      onClose={closeRightPanel}
-                    />
-                  </div>
-                )}
-                {activeRightTab === "browser" && isBrowserPanelVisible && (
-                  <div className="flex-1 min-h-0 overflow-auto">
-                    <BrowserPanel
-                      isOpen
-                      onClose={closeRightPanel}
-                      conversationId={conversationId}
-                      agentId={browserToolsAgentId}
-                      onCreateConversationWithUrl={
-                        handleCreateConversationWithUrl
-                      }
-                      isCreatingConversation={
-                        createConversationMutation.isPending
-                      }
-                      initialNavigateUrl={pendingBrowserUrl}
-                      onInitialNavigateComplete={handleInitialNavigateComplete}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {conversationId ? (
-              <>
-                {/* Chat content - hidden on mobile when panels are open */}
-                <div
-                  className={cn(
-                    "flex-1 min-h-0 relative",
-                    isRightPanelOpen && "hidden md:block",
+              {/* Mobile: Inline artifact/browser panel below header */}
+              {isRightPanelOpen && (
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
+                  {activeRightTab === "files" && (
+                    <div className="flex-1 min-h-0 overflow-auto">
+                      <ConversationFilesPanel
+                        key={conversationId ?? "none"}
+                        conversationId={conversationId}
+                        artifact={conversation?.artifact}
+                        projectId={conversation?.projectId}
+                        onClose={closeRightPanel}
+                      />
+                    </div>
                   )}
-                >
-                  {isScheduledRunInProgress ? (
-                    <ScheduledRunInProgress />
-                  ) : isReadOnlyConversation ? (
-                    <MessageThread
-                      messages={sharedConversationMessages}
-                      chatErrors={conversation?.chatErrors ?? []}
-                      conversationId={conversationId}
-                      containerClassName="h-full"
-                      hideDivider
-                      profileId={conversation?.agent?.id}
-                      agentName={conversation?.agent?.name}
-                      selectedModel={conversation?.modelId ?? undefined}
-                    />
-                  ) : (
-                    <ChatMessages
-                      conversationId={conversationId}
-                      agentId={currentProfileId || initialAgentId || undefined}
-                      messages={messages}
-                      status={status}
-                      isContextCompacting={isContextCompacting}
-                      contextCompactionFeedback={manualCompactionFeedback}
-                      optimisticToolCalls={optimisticToolCalls}
-                      isLoadingConversation={isLoadingConversation}
-                      onMessagesUpdate={setMessages}
-                      agentName={
-                        (currentProfileId
-                          ? internalAgents.find(
-                              (a) => a.id === currentProfileId,
-                            )
-                          : internalAgents.find((a) => a.id === initialAgentId)
-                        )?.name
-                      }
-                      selectedModel={conversation?.modelId ?? initialModel}
-                      modelSource={
-                        conversationModelSource ?? initialModelSource
-                      }
-                      chatErrors={conversation?.chatErrors ?? []}
-                      compactions={conversation?.compactions ?? []}
-                      onRegenerateUserMessage={regenerateUserMessage}
-                      onProviderConnected={handleProviderConnected}
-                      onChatErrorRetry={handleChatErrorRetry}
-                      error={error}
-                      onToolApprovalResponse={
-                        addToolApprovalResponse
-                          ? ({ id, approved, reason }) => {
-                              addToolApprovalResponse({ id, approved, reason });
-                            }
-                          : undefined
-                      }
-                    />
+                  {activeRightTab === "browser" && isBrowserPanelVisible && (
+                    <div className="flex-1 min-h-0 overflow-auto">
+                      <BrowserPanel
+                        isOpen
+                        onClose={closeRightPanel}
+                        conversationId={conversationId}
+                        agentId={browserToolsAgentId}
+                        onCreateConversationWithUrl={
+                          handleCreateConversationWithUrl
+                        }
+                        isCreatingConversation={
+                          createConversationMutation.isPending
+                        }
+                        initialNavigateUrl={pendingBrowserUrl}
+                        onInitialNavigateComplete={
+                          handleInitialNavigateComplete
+                        }
+                      />
+                    </div>
                   )}
                 </div>
+              )}
 
-                {isScheduledRunInProgress ? null : isReadOnlyConversation ? (
-                  <div className="sticky bottom-0 bg-background border-t p-4">
-                    <div className="max-w-4xl mx-auto space-y-3">
-                      <div className="relative">
-                        <div className="border-input dark:bg-input/30 relative flex w-full flex-col rounded-md border shadow-xs opacity-30 blur-[3px] pointer-events-none select-none">
-                          <div className="px-4 py-5 min-h-[120px]">
-                            <span className="text-sm text-muted-foreground">
-                              Type a message...
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between w-full px-3 pb-3">
-                            <div className="flex items-center gap-1">
-                              <div className="size-8 flex items-center justify-center">
-                                <PaperclipIcon className="size-4 text-muted-foreground" />
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="size-8 flex items-center justify-center">
-                                <MicIcon className="size-4 text-muted-foreground" />
-                              </div>
-                              <div className="size-8 flex items-center justify-center rounded-md bg-primary">
-                                <CornerDownLeftIcon className="size-4 text-primary-foreground" />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
-                          <Button
-                            onClick={() => {
-                              if (shouldPromptForForkAgentSelection) {
-                                setIsForkDialogOpen(true);
-                                return;
-                              }
-
-                              void handleForkConversation();
-                            }}
-                          >
-                            <Plus className="h-4 w-4" />
-                            Start New Chat from here
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <Version inline />
-                      </div>
-                    </div>
-                  </div>
-                ) : isAgentDeleted ? (
-                  <div className="sticky bottom-0 bg-background border-t p-4">
-                    <div className="max-w-4xl mx-auto">
-                      <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
-                        <div className="flex items-center gap-3 text-muted-foreground">
-                          <AlertTriangle className="h-5 w-5 text-amber-500" />
-                          <span>
-                            The agent associated with this conversation has been
-                            deleted.
-                          </span>
-                        </div>
-                        <Button onClick={() => router.push("/chat")}>
-                          <Plus className="h-4 w-4" />
-                          New Conversation
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  activeAgentId && (
-                    <div className="sticky bottom-0 bg-background border-t p-4">
-                      <div className="max-w-4xl mx-auto space-y-3">
-                        <ArchestraPromptInput
-                          onSubmit={handleSubmit}
-                          status={status}
-                          selectedModel={conversation?.modelId ?? ""}
-                          onModelChange={handleModelChange}
-                          agentId={promptAgentId ?? activeAgentId}
+              {conversationId ? (
+                <>
+                  {/* Chat content - hidden on mobile when panels are open.
+                      The ViewTransition eases the thread in when the splash
+                      (or another page) hands off to a conversation. */}
+                  <ViewTransition enter="chat-thread-enter" default="none">
+                    <div
+                      className={cn(
+                        "flex-1 min-h-0 relative",
+                        isRightPanelOpen && "hidden md:block",
+                      )}
+                    >
+                      {isScheduledRunInProgress ? (
+                        <ScheduledRunInProgress />
+                      ) : isReadOnlyConversation ? (
+                        <MessageThread
+                          messages={sharedConversationMessages}
+                          chatErrors={conversation?.chatErrors ?? []}
                           conversationId={conversationId}
-                          currentConversationChatApiKeyId={
-                            conversation?.chatApiKeyId
+                          containerClassName="h-full"
+                          hideDivider
+                          profileId={conversation?.agent?.id}
+                          agentName={conversation?.agent?.name}
+                          selectedModel={conversation?.modelId ?? undefined}
+                        />
+                      ) : (
+                        <ChatMessages
+                          conversationId={conversationId}
+                          agentId={
+                            currentProfileId || initialAgentId || undefined
                           }
-                          currentProvider={currentProvider}
-                          textareaRef={textareaRef}
-                          onProviderChange={handleProviderChange}
-                          allowFileUploads={
-                            organization?.allowChatFileUploads ?? false
-                          }
-                          isModelsLoading={isModelsLoading}
-                          tokensUsed={tokensUsed}
-                          cachedTokens={tokenUsage?.cacheReadTokens}
-                          maxContextLength={selectedModelContextLength}
-                          contextWindow={contextWindow}
-                          lastCompaction={contextCompaction?.lastCompaction}
-                          inputModalities={selectedModelInputModalities}
-                          agentLlmApiKeyId={
-                            conversation?.agent?.llmApiKeyId ?? null
-                          }
-                          submitDisabled={isPlaywrightSetupVisible}
+                          messages={messages}
+                          status={status}
                           isContextCompacting={isContextCompacting}
-                          onCompactConversation={handleCompactConversation}
-                          isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                          selectorAgentId={activeAgentId}
-                          selectorAgentName={swappedAgentName ?? undefined}
-                          onAgentChange={handleConversationAgentChange}
-                          modelSource={conversationModelSource}
-                          onResetModelOverride={
-                            handleConversationResetModelOverride
+                          contextCompactionFeedback={manualCompactionFeedback}
+                          optimisticToolCalls={optimisticToolCalls}
+                          isLoadingConversation={isLoadingConversation}
+                          onMessagesUpdate={setMessages}
+                          onMessageFeedback={
+                            // No thumbs until the live session's setter exists —
+                            // a click before then could not apply or roll back.
+                            setMessages ? handleMessageFeedback : undefined
                           }
-                          agentRequiresPerUserConnect={
-                            conversationPerUserConnect.needsConnect
+                          feedbackDisabled={setChatMessageFeedback.isPending}
+                          agentName={
+                            (currentProfileId
+                              ? internalAgents.find(
+                                  (a) => a.id === currentProfileId,
+                                )
+                              : internalAgents.find(
+                                  (a) => a.id === initialAgentId,
+                                )
+                            )?.name
                           }
-                          agentModelDisplayName={
-                            conversationPerUserConnect.needsConnect
-                              ? conversationPerUserConnect.modelName
+                          selectedModel={conversation?.modelId ?? initialModel}
+                          modelSource={
+                            conversationModelSource ?? initialModelSource
+                          }
+                          chatErrors={conversation?.chatErrors ?? []}
+                          compactions={conversation?.compactions ?? []}
+                          onRegenerateUserMessage={regenerateUserMessage}
+                          onProviderConnected={handleProviderConnected}
+                          onChatErrorRetry={handleChatErrorRetry}
+                          error={error}
+                          onToolApprovalResponse={
+                            addToolApprovalResponse
+                              ? ({ id, approved, reason }) => {
+                                  addToolApprovalResponse({
+                                    id,
+                                    approved,
+                                    reason,
+                                  });
+                                }
                               : undefined
                           }
                         />
+                      )}
+                    </div>
+                  </ViewTransition>
+
+                  {isScheduledRunInProgress ? null : isReadOnlyConversation ? (
+                    <div className="sticky bottom-0 bg-background border-t p-4">
+                      <div className="max-w-4xl mx-auto space-y-3">
+                        <div className="relative">
+                          <div className="border-input dark:bg-input/30 relative flex w-full flex-col rounded-md border shadow-xs opacity-30 blur-[3px] pointer-events-none select-none">
+                            <div className="px-4 py-5 min-h-[120px]">
+                              <span className="text-sm text-muted-foreground">
+                                Type a message...
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between w-full px-3 pb-3">
+                              <div className="flex items-center gap-1">
+                                <div className="size-8 flex items-center justify-center">
+                                  <PaperclipIcon className="size-4 text-muted-foreground" />
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="size-8 flex items-center justify-center">
+                                  <MicIcon className="size-4 text-muted-foreground" />
+                                </div>
+                                <div className="size-8 flex items-center justify-center rounded-md bg-primary">
+                                  <CornerDownLeftIcon className="size-4 text-primary-foreground" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+                            <Button
+                              onClick={() => {
+                                if (shouldPromptForForkAgentSelection) {
+                                  setIsForkDialogOpen(true);
+                                  return;
+                                }
+
+                                void handleForkConversation();
+                              }}
+                            >
+                              <Plus className="h-4 w-4" />
+                              Start New Chat from here
+                            </Button>
+                          </div>
+                        </div>
                         <div className="text-center">
                           <Version inline />
                         </div>
                       </div>
                     </div>
-                  )
-                )}
-              </>
-            ) : isAutoSendHandoffPending ? (
-              /* Handoff auto-send in progress: render an empty pane instead of
+                  ) : isAgentDeleted ? (
+                    <div className="sticky bottom-0 bg-background border-t p-4">
+                      <div className="max-w-4xl mx-auto">
+                        <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
+                          <div className="flex items-center gap-3 text-muted-foreground">
+                            <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            <span>
+                              The agent associated with this conversation has
+                              been deleted.
+                            </span>
+                          </div>
+                          <Button onClick={() => router.push("/chat")}>
+                            <Plus className="h-4 w-4" />
+                            New Conversation
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    activeAgentId && (
+                      <div className="sticky bottom-0 bg-background border-t p-4">
+                        {/* Shared-element pair with the centered New Chat
+                            composer (and the project-page composer): on the
+                            splash → conversation swap the box morphs from
+                            center screen to its bottom anchor. */}
+                        <ViewTransition
+                          name="chat-composer"
+                          share="chat-composer-morph"
+                          default="none"
+                        >
+                          <div className="max-w-4xl mx-auto space-y-3">
+                            <ArchestraPromptInput
+                              onSubmit={handleSubmit}
+                              toolsUnavailable={conversationToolsUnavailable}
+                              onStop={handleStopStreaming}
+                              status={status}
+                              selectedModel={conversation?.modelId ?? ""}
+                              onModelChange={handleModelChange}
+                              agentId={promptAgentId ?? activeAgentId}
+                              conversationId={conversationId}
+                              currentConversationChatApiKeyId={
+                                conversation?.chatApiKeyId
+                              }
+                              currentProvider={currentProvider}
+                              textareaRef={textareaRef}
+                              onProviderChange={handleProviderChange}
+                              allowFileUploads={
+                                organization?.allowChatFileUploads ?? false
+                              }
+                              isModelsLoading={isModelsLoading}
+                              tokensUsed={tokensUsed}
+                              cachedTokens={tokenUsage?.cacheReadTokens}
+                              maxContextLength={selectedModelContextLength}
+                              contextWindow={contextWindow}
+                              lastCompaction={contextCompaction?.lastCompaction}
+                              inputModalities={selectedModelInputModalities}
+                              agentLlmApiKeyId={
+                                conversation?.agent?.llmApiKeyId ?? null
+                              }
+                              submitDisabled={isPlaywrightSetupVisible}
+                              isContextCompacting={isContextCompacting}
+                              onCompactConversation={handleCompactConversation}
+                              isPlaywrightSetupVisible={
+                                isPlaywrightSetupVisible
+                              }
+                              selectorAgentId={activeAgentId}
+                              selectorAgentName={swappedAgentName ?? undefined}
+                              onAgentChange={handleConversationAgentChange}
+                              modelSource={conversationModelSource}
+                              onResetModelOverride={
+                                handleConversationResetModelOverride
+                              }
+                              agentRequiresPerUserConnect={
+                                conversationPerUserConnect.needsConnect
+                              }
+                              agentModelDisplayName={
+                                conversationPerUserConnect.needsConnect
+                                  ? conversationPerUserConnect.modelName
+                                  : undefined
+                              }
+                              prefillText={composerPrefill}
+                              onPrefillApplied={handleComposerPrefillApplied}
+                            />
+                            <div className="text-center">
+                              <Version inline />
+                            </div>
+                          </div>
+                        </ViewTransition>
+                      </div>
+                    )
+                  )}
+                </>
+              ) : isAutoSendHandoffPending ? (
+                /* Handoff auto-send in progress: render an empty pane instead of
                  the centered New Chat splash, so the empty home never flashes
                  before we navigate to /chat/<id>. */
-              <div className="flex-1 min-h-0" />
-            ) : (
-              /* No active chat: centered prompt input */
-              newChatAgentId && (
-                // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
-                // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
-                <div
-                  className="relative flex-1 flex flex-col min-h-0"
-                  onClick={(e) => {
-                    // Focus textarea when clicking empty space outside interactive elements
-                    if (
-                      e.target === e.currentTarget ||
-                      !(e.target as HTMLElement).closest(
-                        "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
-                      )
-                    ) {
-                      textareaRef.current?.focus();
-                    }
-                  }}
-                >
-                  {((organization?.chatLinks?.length ?? 0) > 0 ||
-                    organization?.onboardingWizard) && (
-                    <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
-                      {organization?.chatLinks?.map((link) => (
-                        <ChatLinkButton
-                          key={`link-${link.label}-${link.url}`}
-                          url={link.url}
-                          label={link.label}
-                        />
-                      ))}
-                      {organization?.onboardingWizard && (
-                        <OnboardingWizardButton
-                          wizard={organization.onboardingWizard}
-                        />
-                      )}
-                    </div>
-                  )}
-                  {isPlaywrightSetupRequired && canUpdateAgent && (
-                    <PlaywrightInstallDialog
-                      agentId={playwrightSetupAgentId}
-                      conversationId={conversationId}
-                    />
-                  )}
-                  <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
-                    <div className="scale-150">
-                      <AppLogo />
-                    </div>
-                    {(() => {
-                      const currentAgent = internalAgents.find(
-                        (a) => a.id === initialAgentId,
-                      );
-                      const prompts = currentAgent?.suggestedPrompts;
-                      if (!prompts || prompts.length === 0) return null;
-                      return (
-                        <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
-                          {prompts.map((sp) => (
-                            <Suggestion
-                              key={`${sp.summaryTitle}-${sp.prompt}`}
-                              suggestion={sp.summaryTitle}
-                              onClick={() =>
-                                submitInitialMessage({
-                                  text: sp.prompt,
-                                  files: [],
-                                })
-                              }
+                <div className="flex-1 min-h-0" />
+              ) : (
+                /* No active chat: centered prompt input */
+                newChatAgentId && (
+                  /* The exit fade covers the splash decoration (logo,
+                     suggestions) when a conversation takes over; the composer
+                     below is excluded — it carries its own shared name and
+                     morphs to the bottom-anchored composer instead. */
+                  <ViewTransition exit="chat-splash-exit" default="none">
+                    {/* biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container */}
+                    {/* biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container */}
+                    <div
+                      className="relative flex-1 flex flex-col min-h-0"
+                      onClick={(e) => {
+                        // Focus textarea when clicking empty space outside interactive elements
+                        if (
+                          e.target === e.currentTarget ||
+                          !(e.target as HTMLElement).closest(
+                            "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
+                          )
+                        ) {
+                          textareaRef.current?.focus();
+                        }
+                      }}
+                    >
+                      {((organization?.chatLinks?.length ?? 0) > 0 ||
+                        organization?.onboardingWizard) && (
+                        <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                          {organization?.chatLinks?.map((link) => (
+                            <ChatLinkButton
+                              key={`link-${link.label}-${link.url}`}
+                              url={link.url}
+                              label={link.label}
                             />
                           ))}
+                          {organization?.onboardingWizard && (
+                            <OnboardingWizardButton
+                              wizard={organization.onboardingWizard}
+                            />
+                          )}
                         </div>
-                      );
-                    })()}
-                    <div className="w-full max-w-4xl">
-                      <ArchestraPromptInput
-                        onSubmit={handleInitialSubmit}
-                        status={
-                          createConversationMutation.isPending
-                            ? "submitted"
-                            : "ready"
-                        }
-                        selectedModel={initialModel}
-                        onModelChange={handleInitialModelChange}
-                        agentId={newChatAgentId}
-                        currentProvider={initialProvider}
-                        textareaRef={textareaRef}
-                        initialApiKeyId={initialApiKeyId}
-                        onApiKeyChange={setInitialApiKeyId}
-                        onProviderChange={handleInitialProviderChange}
-                        allowFileUploads={
-                          organization?.allowChatFileUploads ?? false
-                        }
-                        isModelsLoading={isModelsLoading}
-                        inputModalities={selectedModelInputModalities}
-                        agentLlmApiKeyId={
-                          (
-                            internalAgents.find(
-                              (a) => a.id === initialAgentId,
-                            ) as Record<string, unknown> | undefined
-                          )?.llmApiKeyId as string | null
-                        }
-                        submitDisabled={isPlaywrightSetupVisible}
-                        isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                        selectorAgentId={initialAgentId}
-                        onAgentChange={handleInitialAgentChange}
-                        modelSource={initialModelSource}
-                        onResetModelOverride={handleResetModelOverride}
-                        agentRequiresPerUserConnect={
-                          initialPerUserConnect.needsConnect
-                        }
-                        agentModelDisplayName={
-                          initialPerUserConnect.needsConnect
-                            ? initialPerUserConnect.modelName
-                            : undefined
-                        }
-                      />
+                      )}
+                      {isPlaywrightSetupRequired && canUpdateAgent && (
+                        <PlaywrightInstallDialog
+                          agentId={playwrightSetupAgentId}
+                          conversationId={conversationId}
+                        />
+                      )}
+                      <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                        <div className="scale-150">
+                          <AppLogo />
+                        </div>
+                        {(() => {
+                          const currentAgent = internalAgents.find(
+                            (a) => a.id === initialAgentId,
+                          );
+                          const prompts = currentAgent?.suggestedPrompts;
+                          if (!prompts || prompts.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                              {prompts.map((sp) => (
+                                <Suggestion
+                                  key={`${sp.summaryTitle}-${sp.prompt}`}
+                                  suggestion={sp.summaryTitle}
+                                  onClick={() => {
+                                    trackEvent("prompt_selected", {
+                                      agentId: initialAgentId ?? undefined,
+                                      promptLength: sp.prompt.length,
+                                    });
+                                    submitInitialMessage({
+                                      text: sp.prompt,
+                                      files: [],
+                                    });
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          );
+                        })()}
+                        {/* Shared-element pair with the conversation composer —
+                          see the bottom-anchored ViewTransition above. */}
+                        <ViewTransition
+                          name="chat-composer"
+                          share="chat-composer-morph"
+                          default="none"
+                        >
+                          <div className="w-full max-w-4xl">
+                            <ArchestraPromptInput
+                              onSubmit={handleInitialSubmit}
+                              toolsUnavailable={initialToolsUnavailable}
+                              status={
+                                createConversationMutation.isPending
+                                  ? "submitted"
+                                  : "ready"
+                              }
+                              selectedModel={initialModel}
+                              onModelChange={handleInitialModelChange}
+                              agentId={newChatAgentId}
+                              currentProvider={initialProvider}
+                              textareaRef={textareaRef}
+                              initialApiKeyId={initialApiKeyId}
+                              onApiKeyChange={setInitialApiKeyId}
+                              onProviderChange={handleInitialProviderChange}
+                              allowFileUploads={
+                                organization?.allowChatFileUploads ?? false
+                              }
+                              isModelsLoading={isModelsLoading}
+                              inputModalities={selectedModelInputModalities}
+                              agentLlmApiKeyId={
+                                (
+                                  internalAgents.find(
+                                    (a) => a.id === initialAgentId,
+                                  ) as Record<string, unknown> | undefined
+                                )?.llmApiKeyId as string | null
+                              }
+                              submitDisabled={isPlaywrightSetupVisible}
+                              isPlaywrightSetupVisible={
+                                isPlaywrightSetupVisible
+                              }
+                              selectorAgentId={initialAgentId}
+                              onAgentChange={handleInitialAgentChange}
+                              modelSource={initialModelSource}
+                              onResetModelOverride={handleResetModelOverride}
+                              agentRequiresPerUserConnect={
+                                initialPerUserConnect.needsConnect
+                              }
+                              agentModelDisplayName={
+                                initialPerUserConnect.needsConnect
+                                  ? initialPerUserConnect.modelName
+                                  : undefined
+                              }
+                              prefillText={composerPrefill}
+                              onPrefillApplied={handleComposerPrefillApplied}
+                            />
+                          </div>
+                        </ViewTransition>
+                      </div>
+                      <div className="p-4 text-center">
+                        <Version inline />
+                      </div>
                     </div>
-                  </div>
-                  <div className="p-4 text-center">
-                    <Version inline />
-                  </div>
-                </div>
-              )
-            )}
+                  </ViewTransition>
+                )
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Right-side panel - desktop only */}
-        <div className="hidden md:flex h-full min-h-0">
-          <RightSidePanel
-            isOpen={isRightPanelOpen}
-            activeTab={activeRightTab}
-            onTabChange={openRightPanelTab}
-            onClose={closeRightPanel}
-            canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
-            scheduledRun={scheduledRun}
-            artifact={conversation?.artifact}
-            projectId={conversation?.projectId}
-            conversationId={conversationId}
-            agentId={browserToolsAgentId}
-            onCreateConversationWithUrl={handleCreateConversationWithUrl}
-            isCreatingConversation={createConversationMutation.isPending}
-            initialNavigateUrl={pendingBrowserUrl}
-            onInitialNavigateComplete={handleInitialNavigateComplete}
-          />
+          {/* Right-side panel - desktop only */}
+          <div className="hidden md:flex h-full min-h-0">
+            <RightSidePanel
+              isOpen={isRightPanelOpen}
+              activeTab={activeRightTab}
+              onClose={closeRightPanel}
+              canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
+              scheduledRun={scheduledRun}
+              artifact={conversation?.artifact}
+              projectId={conversation?.projectId}
+              conversationId={conversationId}
+              agentId={browserToolsAgentId}
+              onCreateConversationWithUrl={handleCreateConversationWithUrl}
+              isCreatingConversation={createConversationMutation.isPending}
+              initialNavigateUrl={pendingBrowserUrl}
+              onInitialNavigateComplete={handleInitialNavigateComplete}
+            />
+          </div>
         </div>
 
         <CustomServerRequestDialog
@@ -2598,6 +3044,21 @@ function clearUserPromptQueryParam(params: {
   // The attachments marker is one-shot too: drop it once consumed so a remount
   // can't re-trigger a drain (which would now find an empty store).
   nextSearchParams.delete("attachments");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
+}
+
+// skillId is a one-shot deep-link param (same posture as user_prompt): drop it
+// once the skill has been resolved and staged so it is never processed twice.
+function clearSkillIdQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("skillId");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

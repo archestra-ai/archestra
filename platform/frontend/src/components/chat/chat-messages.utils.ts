@@ -5,6 +5,7 @@ import {
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
+  parseArchestraAppResourceUri,
   parseFullToolName,
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
@@ -18,6 +19,7 @@ import {
 import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
+import type { McpToolOutput } from "./mcp-app-container";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -28,6 +30,19 @@ export type OptimisticToolCall = {
 export type CompactToolGroupEntry =
   | {
       kind: "tool";
+      partIndex: number;
+      toolName: string;
+      part: DynamicToolUIPart | ToolUIPart;
+      toolResultPart: DynamicToolUIPart | ToolUIPart | null;
+      errorText: string | undefined;
+    }
+  | {
+      /**
+       * An MCP-App-rendering tool call (UI-resource result, early UI start, or
+       * owned-app management tool). Renders as an app pill in the circle row
+       * with its app content below the row.
+       */
+      kind: "app";
       partIndex: number;
       toolName: string;
       part: DynamicToolUIPart | ToolUIPart;
@@ -92,6 +107,23 @@ export function isBlankAssistantTextPart(
   return role === "assistant" && part.type === "text" && !part.text.trim();
 }
 
+/**
+ * Anthropic `redacted_thinking` blocks (encrypted, no visible text) and
+ * signature-only `thinking` blocks arrive as `reasoning` parts with empty text.
+ * They are load-bearing — the thinking signature must be replayed to the
+ * provider on the next turn — so they are persisted and reload verbatim, but
+ * rendered they show as empty "Thinking…" accordions. Suppress those; a
+ * reasoning part only renders when it carries readable text. Structurally typed
+ * so both the live-chat (`UIMessage`) and read-only (`PartialUIMessage`) part
+ * shapes qualify.
+ */
+export function isBlankReasoningPart(part: {
+  type: string;
+  text?: string;
+}): boolean {
+  return part.type === "reasoning" && !part.text?.trim();
+}
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -150,35 +182,6 @@ export function extractOwnedAppRender(params: {
 }
 
 /**
- * Collapse the render registry to one entry per distinct app, for display
- * surfaces that must not repeat an app (the right-panel app switcher). Owned
- * apps collapse by `appId` keeping the latest render (max `createdAt`); external
- * MCP-UI renders each stand alone (no `appId`), so they are kept per tool call.
- * The full registry keeps every render so each inline pill stays independently
- * openable — only display consumers dedup.
- */
-export function distinctPanelApps(apps: PanelApp[]): PanelApp[] {
-  const result: PanelApp[] = [];
-  const ownedIndex = new Map<string, number>();
-
-  for (const app of apps) {
-    if (!app.appId) {
-      result.push(app);
-      continue;
-    }
-    const existing = ownedIndex.get(app.appId);
-    if (existing === undefined) {
-      ownedIndex.set(app.appId, result.length);
-      result.push(app);
-    } else if (app.createdAt >= result[existing].createdAt) {
-      result[existing] = app;
-    }
-  }
-
-  return result;
-}
-
-/**
  * Derive the list of MCP Apps for a conversation directly from its messages
  * (plus any early UI-start data from the active stream).
  *
@@ -196,8 +199,8 @@ export function distinctPanelApps(apps: PanelApp[]): PanelApp[] {
  * openable and expands its app under itself. Owned apps always resolve to the
  * latest version at render time (their runtime endpoint is keyed by `appId`), so
  * a stale render still shows current content. Display surfaces that must not
- * repeat an app (the right-panel switcher) collapse the registry via
- * {@link distinctPanelApps} instead of the registry deduping here.
+ * repeat an app fold the registry into per-app groups (see `buildAppGroups`)
+ * instead of the registry deduping here.
  */
 
 /**
@@ -233,6 +236,31 @@ export function deriveAppsFromMessages(
         earlyToolUiStarts[part.toolCallId],
       );
 
+      // An owned app rendered by its own render (e.g. its `__open` launch tool)
+      // carries a `ui://archestra-app/<appId>` URI. Route it by `appId` to the
+      // app-bound endpoint so its SDK storage and app-scoped tool calls reach
+      // `/api/mcp/app/:appId`, not the generic agent gateway. Its head version
+      // is served from that endpoint, so the inline result isn't seeded.
+      const uriAppId = outputUri
+        ? parseArchestraAppResourceUri(outputUri)
+        : null;
+      if (uriAppId) {
+        seen.add(part.toolCallId);
+        apps.push({
+          toolCallId: part.toolCallId,
+          label: mcpToolLabel(fullToolName),
+          uiResourceUri: outputUri as string,
+          appId: uriAppId,
+          toolName: resolveRunToolTargetName(part, fullToolName, {
+            getToolShortName,
+          }),
+          version: null,
+          createdAt: createdAt ?? 0,
+        });
+
+        continue;
+      }
+
       // An external MCP-UI render carries its own URI in the result. It never
       // dedups: the same URI can represent entirely different content across
       // calls (e.g. Excalidraw drawing different pictures), so each tool call is
@@ -245,7 +273,22 @@ export function deriveAppsFromMessages(
           uiResourceUri: outputUri,
           appId: null,
           mcpServerId,
-          toolName: fullToolName,
+          // Unwrap run_tool so the server prefix matches the inline render.
+          toolName: resolveRunToolTargetName(part, fullToolName, {
+            getToolShortName,
+          }),
+          // Seed the panel-hosted iframe with the tool result exactly like the
+          // inline render, so it doesn't re-call its source tool on mount.
+          rawOutput: part.output as McpToolOutput,
+          // Unwrap run_tool's tool_args so the seeded input matches inline.
+          toolInput:
+            getToolShortName(fullToolName) === TOOL_RUN_TOOL_SHORT_NAME
+              ? ((
+                  part.input as
+                    | { tool_args?: Record<string, unknown> }
+                    | undefined
+                )?.tool_args ?? null)
+              : ((part.input as Record<string, unknown> | undefined) ?? null),
           version: null,
           createdAt: createdAt ?? 0,
         });
@@ -283,6 +326,88 @@ export function deriveAppsFromMessages(
   }
 
   return apps;
+}
+
+/**
+ * Everything an app group entry needs to mount its runtime, resolved from the
+ * tool part the same way the full-card path resolves it: an external MCP-UI
+ * result (or early UI start) yields the URI-bound render; an owned-app
+ * management result yields the app-bound render. `null` means the call is an
+ * app-rendering tool with nothing to mount yet (e.g. a still-streaming
+ * scaffold/edit call) — render it as a plain tool circle until the result lands.
+ */
+export type AppEntryRender = {
+  uiResourceUri: string;
+  appId?: string;
+  mcpServerId?: string | null;
+  appName?: string | null;
+  appVersion?: number | null;
+  /** Full tool name with any run_tool wrapper already unwrapped. */
+  mcpAppToolName: string;
+  toolInput?: Record<string, unknown>;
+  rawOutput?: McpToolOutput;
+};
+
+export function resolveAppEntryRender(params: {
+  part: DynamicToolUIPart | ToolUIPart;
+  toolResultPart: DynamicToolUIPart | ToolUIPart | null;
+  early?: { uiResourceUri?: string; toolName?: string };
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null;
+}): AppEntryRender | null {
+  const { part, toolResultPart, early, getToolShortName } = params;
+  const output = (toolResultPart?.output ?? part.output) as
+    | McpToolOutput
+    | undefined;
+  const fullToolName = getToolName(part) ?? early?.toolName ?? "";
+  const mcpAppToolName = resolveRunToolTargetName(part, fullToolName, {
+    getToolShortName,
+  });
+
+  const ui = output?._meta?.ui as
+    | { resourceUri?: string; mcpServerId?: string }
+    | undefined;
+  const outputUri = ui?.resourceUri ?? early?.uiResourceUri ?? null;
+  if (outputUri) {
+    // An owned app's own render (e.g. its `__open` launch tool) carries a
+    // `ui://archestra-app/<appId>` URI; bind it so the app runs against the
+    // app-bound endpoint (/api/mcp/app/:appId), not the agent gateway.
+    const uriAppId = parseArchestraAppResourceUri(outputUri);
+    // When the model dispatched through run_tool, the app belongs to the
+    // *target* tool: forward its real arguments, not the run_tool wrapper's.
+    const runToolInput =
+      getToolShortName(fullToolName) === TOOL_RUN_TOOL_SHORT_NAME
+        ? (part.input as { tool_args?: Record<string, unknown> } | null)
+            ?.tool_args
+        : undefined;
+    return {
+      uiResourceUri: outputUri,
+      appId: uriAppId ?? undefined,
+      mcpServerId: ui?.mcpServerId ?? null,
+      mcpAppToolName,
+      toolInput: runToolInput ?? (part.input as Record<string, unknown>),
+      rawOutput: output,
+    };
+  }
+
+  // Owned-app management result (scaffold/edit/render_app): mount the
+  // app-bound runtime from structuredContent.id. The management tool's
+  // input/result are not forwarded into the iframe (they are not app data).
+  const ownedApp = extractOwnedAppRender({
+    toolName: mcpAppToolName,
+    output,
+    getToolShortName,
+  });
+  if (ownedApp) {
+    return {
+      uiResourceUri: getArchestraAppResourceUri(ownedApp.appId),
+      appId: ownedApp.appId,
+      appName: ownedApp.appName,
+      appVersion: ownedApp.latestVersion,
+      mcpAppToolName,
+    };
+  }
+
+  return null;
 }
 
 /** Unwrap a run_tool dispatch to the target tool name (no-op for other tools). */
@@ -464,27 +589,7 @@ export function identifyCompactToolGroups(
       invocationIndices.push(i);
       continue;
     }
-    // Skip non-tool parts and MCP App tools (they render their own UI)
-    // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
-    if (!isToolPart(part) || (part.output as any)?._meta?.ui?.resourceUri)
-      continue;
-    // Also skip tools identified as MCP Apps via early UI start or earlyToolUiStarts
-    if (part.toolCallId && mcpAppCallIds.has(part.toolCallId)) continue;
-    // Owned-app renders escape compaction by OUTPUT, not name, so a run_tool
-    // dispatch targeting create/update/render_app is covered too (its raw name
-    // is run_tool, which nonCompactToolNames deliberately does not contain).
-    if (
-      options?.getToolShortName &&
-      extractOwnedAppRender({
-        toolName: resolveRunToolTargetName(part, getToolName(part) ?? "", {
-          getToolShortName: options.getToolShortName,
-        }),
-        output: part.output,
-        getToolShortName: options.getToolShortName,
-      })
-    ) {
-      continue;
-    }
+    if (!isToolPart(part)) continue;
 
     const callId = part.toolCallId;
     if (callId && seenToolCallIds.has(callId)) {
@@ -539,6 +644,46 @@ export function identifyCompactToolGroups(
       part: rawPart as never,
       toolResultPart: toolResultPart as never,
     });
+
+    // MCP-App-rendering calls join the row as app pills (their app content
+    // renders below the row). Errors, approvals, and denials keep the full
+    // tool card, exactly like non-compact tools.
+    if (
+      isAppRenderPart({
+        part: rawPart,
+        toolResultPart,
+        mcpAppCallIds,
+        getToolShortName: options?.getToolShortName,
+      })
+    ) {
+      const state = (toolResultPart ?? rawPart).state;
+      const appEligible =
+        !errorText &&
+        state !== "approval-requested" &&
+        state !== "output-denied";
+      if (appEligible) {
+        if (!currentGroup) {
+          currentGroup = { startIndex: idx, entries: [] };
+        }
+        currentGroup.entries.push({
+          kind: "app",
+          partIndex: idx,
+          toolName,
+          part: rawPart,
+          toolResultPart,
+          errorText,
+        });
+        consumedIndices.add(idx);
+        if (resultIdx !== undefined) {
+          consumedIndices.add(resultIdx);
+        }
+      } else {
+        finalizeCurrentGroup({ currentGroup, groupMap });
+        currentGroup = null;
+      }
+      continue;
+    }
+
     const isEligible =
       !options?.nonCompactToolNames?.has(toolName) &&
       isCompactEligible({
@@ -572,6 +717,36 @@ export function identifyCompactToolGroups(
 
   finalizeCurrentGroup({ currentGroup, groupMap });
   return { groupMap, consumedIndices };
+}
+
+/**
+ * Detect an MCP-App-rendering tool call: a UI-resource result (on the
+ * invocation or its result part), an early `data-tool-ui-start` announcement,
+ * or an owned-app management tool (scaffold/edit/render_app — matched by name
+ * so a still-pending call renders compact from the moment it streams).
+ */
+function isAppRenderPart(params: {
+  part: DynamicToolUIPart | ToolUIPart;
+  toolResultPart: DynamicToolUIPart | ToolUIPart | null;
+  mcpAppCallIds: Set<string>;
+  getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
+}): boolean {
+  const { part, toolResultPart, mcpAppCallIds, getToolShortName } = params;
+  const output = toolResultPart?.output ?? part.output;
+  // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
+  if ((output as any)?._meta?.ui?.resourceUri) return true;
+  if (part.toolCallId && mcpAppCallIds.has(part.toolCallId)) return true;
+  if (!getToolShortName) return false;
+  // Owned-app management tools, unwrapping run_tool so a dispatch targeting
+  // scaffold/edit/render_app is covered too (its raw name is run_tool, which
+  // nonCompactToolNames deliberately does not contain).
+  const targetName = resolveRunToolTargetName(part, getToolName(part) ?? "", {
+    getToolShortName,
+  });
+  const shortName = getToolShortName(targetName);
+  return shortName !== null
+    ? isAppRenderingArchestraToolShortName(shortName)
+    : isAppRenderingArchestraToolShortName(targetName);
 }
 
 function isHookRunPart(

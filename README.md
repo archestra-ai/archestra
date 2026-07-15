@@ -62,8 +62,8 @@ Point your users — or your agents, or Claude / Codex / Cursor — at one URL. 
   your existing stack.
 - 🧩 **Mini app builder** — see [apps](https://archestra.ai/docs/platform-apps).
 - 🛡️ **Deterministic guardrails** for [tool calls](https://archestra.ai/docs/platform-ai-tool-guardrails),
-  [Dual-LLM](https://archestra.ai/docs/platform-dual-llm) verification, and
-  [Lethal Trifecta](https://archestra.ai/docs/platform-lethal-trifecta) protections.
+  [Dual-LLM](https://archestra.ai/docs/platform-built-in-subagents#dual-llm-agent) verification, and
+  [Lethal Trifecta](https://archestra.ai/docs/platform-ai-tool-guardrails#the-lethal-trifecta) protections.
 - 🪪 **Identity & access** with [SSO](https://archestra.ai/docs/platform-sso)
   (OIDC, SAML, Okta, Entra), [RBAC with role mapping & team sync](https://archestra.ai/docs/platform-access-control),
   and [secrets management](https://archestra.ai/docs/platform-secrets-management).
@@ -117,16 +117,6 @@ Thank you for continuously making **Archestra** better — you're awesome 🫶
 
 <a href="https://github.com/archestra-ai/archestra/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=archestra-ai/archestra" alt="Contributors" />
-</a>
-
-## Star history
-
-<a href="https://star-history.com/#archestra-ai/archestra&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=archestra-ai/archestra&type=Date" />
-  </picture>
 </a>
 
 ---

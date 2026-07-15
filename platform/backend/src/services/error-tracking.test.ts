@@ -20,6 +20,7 @@ describe("PostHogErrorTrackingService", () => {
     const service = new PostHogErrorTrackingService({
       analyticsConfig: enabledAnalyticsConfig,
       appVersion: "1.2.3",
+      environment: "production",
       createClient: () => client,
       loadInstanceId: async () => "instance-1",
       getRecentLogs: () => [],
@@ -43,6 +44,7 @@ describe("PostHogErrorTrackingService", () => {
     expect(properties).toMatchObject({
       source: "backend",
       app_version: "1.2.3",
+      environment: "production",
       instance_id: "instance-1",
       $groups: { instance: "instance-1" },
       $session_id: "session-abc",

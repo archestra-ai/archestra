@@ -29,16 +29,23 @@ archestra:
   env:
     ARCHESTRA_ANALYTICS: disabled
     ARCHESTRA_BETA: "true"
-    ARCHESTRA_AGENTS_SKILLS_ENABLED: "true"
-    ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED: "true"
-    ARCHESTRA_AGENT_HOOKS_ENABLED: "true"
-    ARCHESTRA_APPS_ENABLED: "true"
-    ARCHESTRA_PROJECTS_ENABLED: "true"
     ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
+    # BETA: auto-sync-permissions connectors (off by default everywhere else).
+    # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
+    # flipped off.
+    ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
+    # Dedicated origin for MCP App sandboxes so browser device permissions
+    # (camera/mic/geolocation/clipboard) can be delegated to app iframes. Each
+    # app renders at <hash>.sandbox.archestra.dev (a real cross-origin); without
+    # this, sandboxes fall back to the frontend's opaque origin and browsers
+    # block those features. Wildcard DNS + the cert-manager-issued wildcard TLS
+    # secret come from archestra-ai/infra (gke/dns.tf, gke-apps/cert-manager);
+    # the ingress rule + tls entry below route the sandbox hosts to the frontend.
+    ARCHESTRA_MCP_SANDBOX_DOMAIN: "sandbox.archestra.dev"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"
@@ -123,37 +130,31 @@ archestra:
           - path: /
             port: 9000
             pathType: Prefix
+      # MCP App sandbox origins (<hash>.sandbox.archestra.dev) go straight to
+      # the backend, which serves /_sandbox/* itself and validates the Host
+      # header (routing via the frontend rewrites the Host header -> 403).
+      - host: "*.sandbox.archestra.dev"
+        paths:
+          - path: /
+            port: 9000
+            pathType: Prefix
+
+    # Wildcard cert for the sandbox hosts, issued and renewed by cert-manager
+    # (archestra-ai/infra, gke-apps/cert-manager). GKE combines spec.tls
+    # secrets with the ManagedCertificate annotation above. The secret must
+    # exist before this deploys, or ingress-gce fails to sync the Ingress.
+    tls:
+      - hosts:
+          - "*.sandbox.archestra.dev"
+        secretName: archestra-sandbox-wildcard-tls
 
 postgresql:
-  # Staging still uses the bundled PostgreSQL chart. This is not HA, but these
-  # settings keep routine app deploys and voluntary node disruptions from
-  # bouncing the only database pod.
-  primary:
-    priorityClassName: platform-default
-    terminationGracePeriodSeconds: 120
-    pdb:
-      create: true
-      maxUnavailable: 0
-    startupProbe:
-      enabled: true
-      initialDelaySeconds: 10
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 30
-    livenessProbe:
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 12
-    readinessProbe:
-      initialDelaySeconds: 5
-      periodSeconds: 5
-      timeoutSeconds: 5
-      failureThreshold: 12
-    resources:
-      requests:
-        cpu: "1000m"
-        memory: "1Gi"
-      limits:
-        cpu: "1000m"
-        memory: "2Gi"
+  # Staging's database is Cloud SQL for PostgreSQL 18 (private IP, no public
+  # endpoint), not the bundled chart, so the database's durability no longer
+  # depends on the GKE node lifecycle — replacing a node used to take the only
+  # database pod down with it, which is what kept staging dying at random.
+  #
+  # The connection string is injected by the deploy workflow from the
+  # ARCHESTRA_STAGING_DATABASE_URL repo secret, so it is not in this file.
+  # The chart hard-fails if external_database_url is set while this is true.
+  enabled: false

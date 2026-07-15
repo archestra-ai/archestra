@@ -7,7 +7,7 @@ import {
   runChatHref,
   runRowKind,
 } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
-import { isScheduleTriggerRunActive } from "@/app/scheduled-tasks/schedule-trigger.utils";
+import { isScheduleTriggerRunActive } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { StatusBadge } from "@/components/scheduled-tasks/status-badge";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import {

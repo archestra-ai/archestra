@@ -194,6 +194,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "per-user pin on a project; personal preference, not an access change",
   },
+  userOnboardingSeenItemsTable: {
+    audited: false,
+    reason:
+      "per-user onboarding red-dot dismissals; personal preference, not an access change",
+  },
   conversationShareTeamsTable: {
     audited: false,
     reason: "join: conversation share × team",
@@ -289,6 +294,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × connector; parent (agent) audited",
   },
+  agentExcludedToolsTable: {
+    audited: false,
+    reason: "join: agent × tool exclusion; parent (agent) audited",
+  },
   agentKnowledgeBasesTable: {
     audited: false,
     reason: "join: agent × knowledge base; parent (agent) audited",
@@ -319,6 +328,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "app-scoped runtime data store; written by app HTML, no admin signal",
+  },
+  appPinsTable: {
+    audited: false,
+    reason: "per-user pin on an app; personal preference, not an access change",
   },
   appRenderDiagnosticsTable: {
     audited: false,
@@ -351,6 +364,10 @@ export const AUDIT_DECISIONS = {
   mcpCatalogTeamsTable: {
     audited: false,
     reason: "join: catalog × team; parent (catalog) audited",
+  },
+  oauthClientTeamsTable: {
+    audited: false,
+    reason: "join: oauth client × team; parent (oauth client) audited",
   },
   mcpServerUsersTable: {
     audited: false,
@@ -462,9 +479,24 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
+  kbContainerAclsTable: {
+    audited: false,
+    reason:
+      "permission-sync container-audience snapshot; derived upstream data, not config",
+  },
   kbDocumentsTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",
+  },
+  kbExternalUserGroupsTable: {
+    audited: false,
+    reason:
+      "permission-sync group-membership snapshot; derived upstream data, not config",
+  },
+  kbMemberOverridesTable: {
+    audited: false,
+    reason:
+      "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated",
   },
   llmProviderApiKeyModelsTable: {
     audited: false,

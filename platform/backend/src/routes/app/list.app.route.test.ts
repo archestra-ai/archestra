@@ -1,30 +1,18 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
-import type { User } from "@/types";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { AppListItem, User } from "@/types";
+
+type AppListResponse = {
+  data: AppListItem[];
+  pagination: { total: number };
+};
 
 describe("GET /api/apps", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
@@ -51,13 +39,6 @@ describe("GET /api/apps", () => {
     await app.close();
   });
 
-  test("the whole surface 404s when the feature is disabled", async () => {
-    (config.apps as { enabled: boolean }).enabled = false;
-    const response = await app.inject({ method: "GET", url: "/api/apps" });
-    (config.apps as { enabled: boolean }).enabled = true;
-    expect(response.statusCode).toBe(404);
-  });
-
   test("returns owned apps with pagination metadata", async ({ makeApp }) => {
     const owned = await makeApp({
       organizationId,
@@ -71,6 +52,169 @@ describe("GET /api/apps", () => {
       owned.id,
     );
     expect(response.json().pagination.total).toBeGreaterThanOrEqual(1);
+  });
+
+  test("treats wildcard characters literally in owned app search", async ({
+    makeApp,
+  }) => {
+    const percentName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "100% Ready",
+    });
+    const percentDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Percent Description",
+      description: "Contains a % marker",
+    });
+    const underscoreName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Under_score Name",
+    });
+    const underscoreDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Underscore Description",
+      description: "Contains an _ marker",
+    });
+    const backslashName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Back\\slash Name",
+    });
+    const backslashDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Backslash Description",
+      description: "Contains a \\ marker",
+    });
+    await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Plain App",
+      description: "Contains no special marker",
+    });
+
+    const searchOwned = async (search: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/apps?limit=100&offset=0&search=${encodeURIComponent(search)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json<AppListResponse>();
+      const ids = body.data
+        .filter((item) => item.source === "owned")
+        .map((item) => item.id)
+        .sort();
+      return { ids, total: body.pagination.total };
+    };
+
+    expect(await searchOwned("%")).toEqual({
+      ids: [percentName.id, percentDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("_")).toEqual({
+      ids: [underscoreName.id, underscoreDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("\\")).toEqual({
+      ids: [backslashName.id, backslashDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("READY")).toEqual({
+      ids: [percentName.id],
+      total: 1,
+    });
+  });
+
+  test("treats wildcard characters literally in external app search", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const makeExternalApp = async (params: {
+      catalogName: string;
+      catalogDescription: string;
+      toolName: string;
+      toolDescription: string;
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        name: params.catalogName,
+        description: params.catalogDescription,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeTool({
+        catalogId: catalog.id,
+        name: params.toolName,
+        description: params.toolDescription,
+        meta: {
+          _meta: { ui: { resourceUri: `ui://${catalog.id}/app.html` } },
+        },
+      });
+      return catalog;
+    };
+
+    const percentName = await makeExternalApp({
+      catalogName: "100% External",
+      catalogDescription: "Catalog name marker",
+      toolName: "percentname",
+      toolDescription: "Ordinary description",
+    });
+    const underscoreDescription = await makeExternalApp({
+      catalogName: "Underscore Description",
+      catalogDescription: "Contains an _ marker",
+      toolName: "underscoredescription",
+      toolDescription: "Ordinary description",
+    });
+    const backslashToolName = await makeExternalApp({
+      catalogName: "Backslash Tool Name",
+      catalogDescription: "Tool name marker",
+      toolName: "back\\slash",
+      toolDescription: "Ordinary description",
+    });
+    const percentToolDescription = await makeExternalApp({
+      catalogName: "Tool Description Marker",
+      catalogDescription: "Ordinary catalog description",
+      toolName: "percentdescription",
+      toolDescription: "MiXeD needle with a % marker",
+    });
+
+    const searchExternal = async (search: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/apps?limit=100&offset=0&search=${encodeURIComponent(search)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json<AppListResponse>();
+      const catalogIds = body.data
+        .filter((item) => item.source === "external")
+        .map((item) => item.catalogId)
+        .sort();
+      return { catalogIds, total: body.pagination.total };
+    };
+
+    expect(await searchExternal("%")).toEqual({
+      catalogIds: [percentName.id, percentToolDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchExternal("_")).toEqual({
+      catalogIds: [underscoreDescription.id],
+      total: 1,
+    });
+    expect(await searchExternal("\\")).toEqual({
+      catalogIds: [backslashToolName.id],
+      total: 1,
+    });
+    expect(await searchExternal("mixed NEEDLE")).toEqual({
+      catalogIds: [percentToolDescription.id],
+      total: 1,
+    });
   });
 
   test("includes assigned team names for a team-scoped owned app", async ({
@@ -112,6 +256,7 @@ describe("GET /api/apps", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "Get Time",
+      icon: "🕒",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
       scope: "org",
@@ -144,12 +289,67 @@ describe("GET /api/apps", () => {
       source: "external",
       catalogId: catalog.id,
       scope: "org",
-      // "<server> / <tool>" title, tool description as subtitle.
-      name: "Get Time / get-time",
+      // A single-UI-tool server titles as just the server name (no "/ <tool>"
+      // suffix), tool description as subtitle.
+      name: "Get Time",
       description: "Tells the current time",
       resourceUri: "ui://get-time/app.html",
       executionModel: "server-scoped",
       cspOrigin: "author-declared",
+      // The catalog's registry icon rides along so the card can show it.
+      icon: "🕒",
+      // No required inputs → runnable standalone.
+      requiresInput: false,
+    });
+  });
+
+  test("flags external apps whose tool has required inputs (requiresInput)", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Archestra PM",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      parameters: {
+        type: "object",
+        properties: { boardId: { type: "string" } },
+        required: ["boardId"],
+      },
+      meta: { _meta: { ui: { resourceUri: "ui://pm/board.html" } } },
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_backlog",
+      parameters: {
+        type: "object",
+        properties: { boardId: { type: "string" } },
+      },
+      meta: { _meta: { ui: { resourceUri: "ui://pm/backlog.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0",
+    });
+    const items = res.json().data as Array<Record<string, unknown>>;
+    const byResource = (uri: string) =>
+      items.find((i) => i.source === "external" && i.resourceUri === uri);
+    // Required inputs → prompt-mode only, no standalone render.
+    expect(byResource("ui://pm/board.html")).toMatchObject({
+      requiresInput: true,
+    });
+    // Optional-only inputs render fine with `{}`.
+    expect(byResource("ui://pm/backlog.html")).toMatchObject({
+      requiresInput: false,
     });
   });
 
@@ -219,11 +419,50 @@ describe("GET /api/apps", () => {
     const external = items.filter(
       (i) => i.source === "external" && i.catalogId === catalog.id,
     );
-    // Each tool is its own card, titled "<server> / <tool>".
+    // Each tool is its own card; with several UI tools on one server the
+    // titles carry the "/ <tool>" suffix to disambiguate.
     expect(external.map((i) => i.name).sort()).toEqual([
       "Archestra PM / show_backlog",
       "Archestra PM / show_board",
     ]);
+  });
+
+  test("a search matching one of a multi-tool server's tools keeps the suffixed title", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Archestra PM",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/board.html" } } },
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_backlog",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/backlog.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0&search=show_board",
+    });
+    const items = res.json().data as Array<Record<string, unknown>>;
+    const external = items.filter(
+      (i) => i.source === "external" && i.catalogId === catalog.id,
+    );
+    // The search narrowed the server's cards down to one, but the server still
+    // exposes two UI tools — the surviving card must not be retitled as if the
+    // server were single-tool.
+    expect(external.map((i) => i.name)).toEqual(["Archestra PM / show_board"]);
   });
 
   test("excludes catalogs without a ui:// tool from the unified listing", async ({
@@ -283,5 +522,13 @@ describe("GET /api/apps", () => {
     // a personal app appears only in its own author's listing.
     expect(ids).toContain(ownPersonal.id);
     expect(ids).not.toContain(foreignPersonal.id);
+  });
+
+  test("responds with Cache-Control: no-store so intermediaries never cache per-user data", async () => {
+    // The list carries the caller's own pins; a CDN/reverse proxy caching it
+    // would replay stale pin state after a pin/unpin until a hard refresh.
+    const res = await app.inject({ method: "GET", url: "/api/apps" });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
   });
 });

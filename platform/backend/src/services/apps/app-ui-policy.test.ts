@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
 import { getAppTemplates } from "@/app-templates";
+import OrganizationModel from "@/models/organization";
+import { describe, expect, test } from "@/test";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import {
   APP_PLATFORM_CSP,
@@ -63,6 +64,16 @@ describe("buildValidatedVersionPayload", () => {
     ).rejects.toThrow(/must not bootstrap the MCP App SDK/);
   });
 
+  test("a bare < before the marker cannot evade the bootstrap rejection", async () => {
+    // Script text is raw text to the browser; a comparison operator before the
+    // marker must not hide it from the gate.
+    await expect(
+      buildValidatedVersionPayload({
+        html: "<html><head><script>if (a < b) { const u = window.__ARCHESTRA_APP_SDK_URL__; }</script></head><body/></html>",
+      }),
+    ).rejects.toThrow(/must not bootstrap the MCP App SDK/);
+  });
+
   test("a marker mentioned outside <script> does not reject", async () => {
     const { warnings } = await buildValidatedVersionPayload({
       html: "<html><head></head><body><p>Docs about PostMessageTransport and __ARCHESTRA_APP_SDK_URL__.</p><!-- PostMessageTransport --></body></html>",
@@ -96,7 +107,7 @@ describe("buildValidatedVersionPayload", () => {
   test("a whitespace-spliced href cannot slip the self-link past", async () => {
     await expect(
       buildValidatedVersionPayload({
-        html: '<html><head><link rel="stylesheet" href="/_sandbox/archestra-app-\n base.css"></head><body/></html>',
+        html: '<html><head><link rel="stylesheet" href="/_sandbox/archestra-app-\n\tbase.css"></head><body/></html>',
       }),
     ).rejects.toThrow(/must not load the platform stylesheet/);
   });
@@ -165,6 +176,15 @@ describe("validateAppHtmlStatic", () => {
     expect(hostWarnings).toHaveLength(1);
   });
 
+  test("a resource ref inside an HTML comment does not warn", async () => {
+    // The lint reads real DOM attributes (Rust `tl` walk), so a commented-out
+    // tag — which the browser never loads — no longer counts as a reference.
+    const findings = await validateAppHtmlStatic(
+      '<html><head><!-- <script src="https://evil.example.com/a.js"></script> --></head><body/></html>',
+    );
+    expect(findings).toEqual([]);
+  });
+
   test("allowlisted CDN hosts and relative refs are not flagged", async () => {
     const findings = await validateAppHtmlStatic(
       '<html><head><script src="https://cdn.jsdelivr.net/npm/x.js"></script><link rel="stylesheet" href="https://fonts.googleapis.com/css"><script src="/local.js"></script></head><body/></html>',
@@ -192,6 +212,18 @@ describe("validateAppHtmlStatic", () => {
       "<html><head><!-- avoid localStorage --></head><body><p>This app does not use localStorage.</p></body></html>",
     );
     expect(findings).toEqual([]);
+  });
+
+  test("a bare < in ordinary script code does not hide the script from the lint", async () => {
+    // Script text is raw text to the browser; a comparison operator must not
+    // splinter the block and swallow what follows it.
+    const findings = await validateAppHtmlStatic(
+      '<html><head><script>if (items.length < 5) { localStorage.setItem("k", "1"); }</script></head><body/></html>',
+    );
+    expect(findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("Uses browser storage (localStorage)"),
+    });
   });
 
   test("multiple browser storage APIs are reported once, deduplicated", async () => {
@@ -294,20 +326,37 @@ describe("validateAppHtmlStatic", () => {
 });
 
 describe("starter templates pass the save gate", () => {
-  test.each(
-    getAppTemplates().map((t) => [t.id, t.html] as const),
-  )("%s validates with no warnings (vars resolve against the base sheet)", async (_id, html) => {
-    const { warnings } = await buildValidatedVersionPayload({ html });
-    expect(warnings).toEqual([]);
+  test("every template validates with no warnings (vars resolve against the base sheet)", async () => {
+    for (const { id, html } of await getAppTemplates()) {
+      const { warnings } = await buildValidatedVersionPayload({ html });
+      expect(warnings, `${id} should validate with no warnings`).toEqual([]);
+    }
   });
 
-  test("every CSS variable a template references is defined in the base sheet", () => {
+  test("a template seeded with a white-label logo still validates cleanly", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      iconLogo:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==",
+    });
+    for (const { id, html } of await getAppTemplates()) {
+      expect(html, `${id} should embed the configured logo`).toContain(
+        '<img src="data:image/png;base64,',
+      );
+      const { warnings } = await buildValidatedVersionPayload({ html });
+      expect(warnings, `${id} should validate with no warnings`).toEqual([]);
+    }
+  });
+
+  test("every CSS variable a template references is defined in the base sheet", async () => {
     const baseCss = readFileSync(
       join(__dirname, "../../static/archestra-app-base.css"),
       "utf-8",
     );
     const defined = new Set(baseCss.match(/--[\w-]+(?=\s*:)/g) ?? []);
-    for (const { id, html } of getAppTemplates()) {
+    for (const { id, html } of await getAppTemplates()) {
       for (const ref of html.match(/var\(\s*(--[\w-]+)/g) ?? []) {
         const name = ref.replace(/var\(\s*/, "");
         expect(defined, `${id} references undefined ${name}`).toContain(name);

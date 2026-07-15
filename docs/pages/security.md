@@ -5,11 +5,7 @@ order: 4
 description: Security policies and contact information for Archestra.ai
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 For all security-related matters, please email: **security@archestra.ai**
 

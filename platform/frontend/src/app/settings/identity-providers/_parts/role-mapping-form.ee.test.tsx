@@ -106,9 +106,7 @@ function getAddRuleButton() {
 }
 
 function getDeleteButtons() {
-  return screen
-    .getAllByRole("button", { name: "" })
-    .filter((btn) => btn.querySelector("svg.lucide-trash-2") !== null);
+  return screen.getAllByRole("button", { name: "Remove role mapping" });
 }
 
 beforeEach(() => {

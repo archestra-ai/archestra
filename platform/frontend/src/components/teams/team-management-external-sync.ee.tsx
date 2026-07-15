@@ -4,6 +4,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   DocsPage,
+  E2eTestId,
   getDocsUrl,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -189,6 +190,11 @@ export function TeamManagementExternalSyncSection({
                   : "Group Extraction Source"}
               </Label>
               <Input
+                aria-label={
+                  selectedGroupsExpression
+                    ? "Group Extraction Template"
+                    : "Group Extraction Source"
+                }
                 readOnly
                 className="font-mono text-sm"
                 value={
@@ -234,6 +240,7 @@ export function TeamManagementExternalSyncSection({
           <Label>Add External Group Mapping</Label>
           <div className="flex gap-2">
             <Input
+              aria-label="Group identifier"
               placeholder="e.g., archestra-admins, cn=engineering,ou=groups,dc=example,dc=com"
               value={newGroupIdentifier}
               onChange={(event) => setNewGroupIdentifier(event.target.value)}
@@ -339,7 +346,10 @@ function ExternalGroupRow({
   onRemove: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border p-3">
+    <div
+      className="flex items-center justify-between rounded-lg border p-3"
+      data-testid={E2eTestId.TeamExternalGroupMappingRow}
+    >
       <div className="flex-1 min-w-0">
         <p className="text-sm font-mono truncate">{group.groupIdentifier}</p>
         <p className="text-xs text-muted-foreground">

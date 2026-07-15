@@ -8,7 +8,7 @@ import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
 import { PROJECT_INSTRUCTIONS_PREFIX } from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { MessageModel, ProjectModel, SkillModel } from "@/models";
+import { MessageModel, ModelModel, ProjectModel, SkillModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
@@ -690,6 +690,29 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText.mock.calls[0]?.[0].temperature).toBe(0);
   });
 
+  test("caps output tokens at the unknown-model budget when the model is unsynced", async () => {
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    // No models row is seeded, so the model's real cap is unknown and the turn
+    // falls back to the unknown-model budget (still clamped by the ceiling).
+    expect(mockStreamText.mock.calls[0]?.[0].maxOutputTokens).toBe(8192);
+  });
+
   test("omits temperature from streamText when none is provided", async () => {
     mockStreamText.mockClear();
 
@@ -884,6 +907,58 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(Object.keys(call.tools ?? {})).toEqual(
       expect.arrayContaining([searchToolsName, runToolName]),
     );
+  });
+
+  test("omits tools from streamText when the conversation model doesn't support tool calling", async ({
+    makeConversation,
+  }) => {
+    // Mirrors Microsoft 365 Copilot: its model row is synced with
+    // supportsToolCalling=false, so the turn must run tool-less instead of
+    // letting the provider reject the declared tools.
+    const noToolsModel = await ModelModel.create({
+      externalId: "microsoft-365-copilot/microsoft-365-copilot",
+      provider: "microsoft-365-copilot",
+      modelId: "microsoft-365-copilot",
+      description: "Microsoft 365 Copilot",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const noToolsConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: noToolsModel.id,
+    });
+    mockStreamText.mockClear();
+    mockGetChatMcpTools.mockResolvedValueOnce({
+      some_tool: { description: "A tool the model can't take" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: noToolsConversation.id,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].tools).toBeUndefined();
   });
 
   test("adds load-tools guidance when the agent has no authored prompt", async () => {
@@ -1392,7 +1467,7 @@ async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]> {
 }
 
 // streamText result whose fullStream throws a context-length error on first read,
-// matching parseMaxInputTokens. Used to exercise the bounded context-trim retry.
+// matching parseContextLengthError. Used to exercise the bounded context-trim retry.
 function fakeContextLengthErrorResult() {
   return {
     fullStream: {
@@ -1439,6 +1514,16 @@ const ABORTIVE_TOOL_CALL_STREAM_EVENTS = [
   { type: "tool-input-delta" },
   { type: "finish-step", finishReason: "tool-calls" },
   { type: "finish", finishReason: "tool-calls" },
+];
+// Like ABORTIVE_TOOL_CALL_STREAM_EVENTS but truncated by the output-token cap
+// (finishReason "length") — deterministic, so it is surfaced without a retry.
+const ABORTIVE_LENGTH_TOOL_CALL_STREAM_EVENTS = [
+  { type: "start" },
+  { type: "start-step" },
+  { type: "tool-input-start" },
+  { type: "tool-input-delta" },
+  { type: "finish-step", finishReason: "length" },
+  { type: "finish", finishReason: "length" },
 ];
 
 // Like fakeStreamResult, but fires the config's onStepFinish as the step
@@ -1787,6 +1872,34 @@ describe("POST /api/chat handler composition", () => {
     expect(errorChunk?.errorText).toContain("incomplete_tool_call");
   });
 
+  test("surfaces a non-retryable ToolCallOutputTruncated for a length-truncated tool call", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(ABORTIVE_LENGTH_TOOL_CALL_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "tool-input-start", toolCallId: "t1", toolName: "x" },
+        ],
+      }),
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // Deterministic truncation: surfaced on the first attempt, never retried.
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    const merged = mergedStreams.at(-1);
+    const chunks = (await readAll(merged as ReadableStream<unknown>)) as Array<{
+      type?: string;
+      errorText?: string;
+    }>;
+    const errorChunk = chunks.find((c) => c.type === "error");
+    const payload = JSON.parse(errorChunk?.errorText ?? "{}");
+    expect(payload.code).toBe("tool_call_output_truncated");
+    expect(payload.isRetryable).toBe(false);
+  });
+
   test("does not emit token-usage from a discarded abortive retry attempt", async ({
     expect,
   }) => {
@@ -1821,7 +1934,6 @@ describe("POST /api/chat handler composition", () => {
       "@/models/organization"
     );
     await OrganizationModel.patch(organizationId, {
-      skillSlashCommandsEnabled: true,
       skillToolsEnabled: true,
     });
     const skill = await SkillModel.createWithFiles({

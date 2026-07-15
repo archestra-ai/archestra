@@ -7,6 +7,10 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
+import {
+  getCatalogWriteMembershipTeamIds,
+  requireMcpCatalogModifyPermission,
+} from "@/auth/mcp-catalog-permissions";
 import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
@@ -33,7 +37,10 @@ import {
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
-import { autoReinstallServer } from "@/services/mcp-reinstall";
+import {
+  autoReinstallServer,
+  reloadToolsForServer,
+} from "@/services/mcp-reinstall";
 import {
   type Account,
   AgentScopeSchema,
@@ -191,8 +198,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
       if (serverData.catalogId) {
+        const { success: isCatalogAdmin } = await hasPermission(
+          { mcpServerInstallation: ["admin"] },
+          headers,
+        );
+
+        // Installing requires `use` on the item. Scoping the lookup denies a
+        // caller the item's scope does not admit before any secret is resolved,
+        // and answers exactly as it does for an item that does not exist — so an
+        // install attempt never reveals another user's personal-scope item.
         catalogItem = await InternalMcpCatalogModel.findById(
           serverData.catalogId,
+          {
+            userId: user.id,
+            isAdmin: isCatalogAdmin,
+            organizationId,
+          },
         );
 
         if (!catalogItem) {
@@ -234,6 +255,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           headers,
         });
+
+        // A shared install of a team-scoped item becomes the connection other
+        // members resolve through, so creating one is a write on the item —
+        // `use` alone installs only for oneself.
+        if (catalogItem.scope === "team" && serverData.scope !== "personal") {
+          requireMcpCatalogModifyPermission({
+            checker: { isAdmin: isCatalogAdmin },
+            scope: catalogItem.scope,
+            authorId: catalogItem.authorId,
+            catalogTeams: catalogItem.teams,
+            writeMembershipTeamIds: isCatalogAdmin
+              ? []
+              : await getCatalogWriteMembershipTeamIds(user.id),
+            userId: user.id,
+          });
+        }
 
         // Enforce the governing environment's allowlist regex against the
         // non-secret, free-text config values the user supplied.
@@ -768,6 +805,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const toolNamePrefix = capturedCatalogName || mcpServer.name;
                 const toolsToCreate = tools.map((tool) => ({
                   name: ToolModel.slugifyName(toolNamePrefix, tool.name),
+                  rawToolName: tool.name,
                   description: tool.description ?? null,
                   parameters: tool.inputSchema,
                   meta: { _meta: tool._meta, annotations: tool.annotations },
@@ -930,6 +968,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Note: For remote servers, mcpServer.name doesn't include userId, so we can use it directly
         const toolsToCreate = tools.map((tool) => ({
           name: ToolModel.slugifyName(mcpServer.name, tool.name),
+          rawToolName: tool.name,
           description: tool.description ?? null,
           parameters: tool.inputSchema,
           meta: { _meta: tool._meta, annotations: tool.annotations },
@@ -1313,6 +1352,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         secretId: newSecretId,
         oauthRefreshError: null,
         oauthRefreshErrorMessage: null,
+        oauthRefreshErrorDescription: null,
         oauthRefreshFailedAt: null,
       });
 
@@ -2043,6 +2083,66 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(updatedServer);
     },
   );
+
+  /**
+   * Re-discover an MCP server's tools from the LIVE upstream server and
+   * reconcile the stored tool snapshot — no pod restart, no reinstall.
+   * Adds newly-advertised tools, updates changed descriptions/input schemas,
+   * and removes tools the server no longer exposes, preserving policies and
+   * agent assignments. Tools are shared per catalog item, so the refresh
+   * applies to every install of the same server.
+   */
+  fastify.post(
+    "/api/mcp_server/:id/reload-tools",
+    {
+      schema: {
+        operationId: RouteId.ReloadMcpServerTools,
+        description:
+          "Re-discover an MCP server's tools from the live server and refresh the stored tool catalog without reinstalling",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            created: z.number(),
+            updated: z.number(),
+            unchanged: z.number(),
+            deleted: z.number(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, user, headers }) => {
+      const mcpServer = await McpServerModel.findById(id);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Only local/remote servers have a live upstream to re-discover from;
+      // app and builtin servers manage their tools in-process (mirrors the
+      // periodic refresher's findOnePerCatalogForToolsRefresh filter).
+      if (
+        mcpServer.serverType === "app" ||
+        mcpServer.serverType === "builtin"
+      ) {
+        throw new ApiError(
+          400,
+          "This server manages its tools in-process; there is nothing to reload.",
+        );
+      }
+
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        headers,
+        action: "reload tools for",
+      });
+
+      return reloadToolsForServer(mcpServer);
+    },
+  );
 };
 
 export default mcpServerRoutes;
@@ -2086,7 +2186,7 @@ async function assertScopedLifecycleAuthorization(params: {
   };
   userId: string;
   headers: IncomingHttpHeaders;
-  action: "revoke" | "re-authenticate" | "reinstall";
+  action: "revoke" | "re-authenticate" | "reinstall" | "reload tools for";
 }): Promise<void> {
   const { mcpServer, userId, headers, action } = params;
 

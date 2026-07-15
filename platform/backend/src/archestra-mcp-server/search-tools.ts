@@ -13,9 +13,14 @@ import {
   ConversationEnabledToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
-  ToolModel,
 } from "@/models";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import {
+  appLaunchToolDescription,
+  sanitizeAppNameForToolMetadata,
+} from "@/services/apps/app-run-link";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getAgentTools } from "./delegation";
@@ -318,7 +323,11 @@ async function getSearchableTools(params: {
   conversationId?: string;
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
-  const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
+  // Per-agent exclusions (Auto-tool mode): loaded once per search and applied
+  // to BOTH the assigned contribution and the discoverable widening below.
+  // Empty (no-op) unless the agent's accessAllTools setting is on.
+  const { tools: assignedTools, exclusionSets } =
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
   const assignedNames = new Set(assignedTools.map((tool) => tool.name));
   // Dynamic tool access: when the agent's "access all tools" setting is on,
   // discovery also spans third-party tools from every catalog the user can
@@ -331,6 +340,7 @@ async function getSearchableTools(params: {
     agentId,
     userId,
     organizationId,
+    exclusionSets,
   });
   const searchSpace = [...assignedTools, ...discoverableTools];
   const permittedNames = await filterToolNamesByPermission(
@@ -355,7 +365,7 @@ async function getSearchableTools(params: {
         })
       : [];
 
-  const catalogNamesById = await getCatalogNamesById(filteredTools);
+  const catalogsById = await getCatalogsById(filteredTools);
   const catalogsWithInstalls = await getCatalogIdsWithInstalls(filteredTools);
   const candidates = new Map<string, SearchCandidate>();
   // First occurrence wins on duplicate names: assigned tools come before the
@@ -370,9 +380,9 @@ async function getSearchableTools(params: {
       tool.name,
       toAssignedToolCandidate({
         tool,
-        catalogName:
+        catalog:
           tool.catalogId != null
-            ? (catalogNamesById.get(tool.catalogId) ?? null)
+            ? (catalogsById.get(tool.catalogId) ?? null)
             : null,
         catalogsWithInstalls,
       }),
@@ -403,10 +413,10 @@ function toAssignedToolCandidate(params: {
     parameters?: Record<string, unknown>;
     catalogId: string | null;
   };
-  catalogName: string | null;
+  catalog: SearchCatalogMeta | null;
   catalogsWithInstalls: Set<string>;
 }): SearchCandidate {
-  const { catalogsWithInstalls, catalogName, tool } = params;
+  const { catalog, catalogsWithInstalls, tool } = params;
   const source = archestraMcpBranding.isToolName(tool.name)
     ? "archestra"
     : "mcp";
@@ -418,25 +428,36 @@ function toAssignedToolCandidate(params: {
       ? true
       : catalogsWithInstalls.has(tool.catalogId);
   const parsedToolName =
-    source === "mcp" ? parseFullToolName(tool.name) : { serverName: null };
+    source === "mcp"
+      ? parseFullToolName(tool.name)
+      : { serverName: null, toolName: null };
   const parameters = tool.parameters ?? {};
   const inputParameters = summarizeInputParameters(parameters);
   const title =
     source === "archestra" ? formatArchestraToolTitle(tool.name) : null;
 
+  // An app's launch tool carries the raw, possibly stale/unsafe stored
+  // description; derive it from the (sanitized) backing catalog name instead so
+  // the model never sees an injected name, mirroring the gateway serve path.
+  const description =
+    catalog?.serverType === "app" &&
+    parsedToolName.toolName === APP_LAUNCH_TOOL_NAME
+      ? appLaunchToolDescription(catalog.name)
+      : tool.description;
+
   return {
     toolName: tool.name,
     title,
-    description: tool.description,
+    description,
     source,
     server: parsedToolName.serverName ?? null,
-    catalogName: source === "mcp" ? catalogName : null,
+    catalogName: source === "mcp" ? (catalog?.name ?? null) : null,
     available,
     inputParameters,
     searchText: buildSearchText({
       name: tool.name,
       title: title ?? "",
-      description: tool.description,
+      description,
       schema: parameters,
     }),
   };
@@ -465,9 +486,11 @@ function toDelegationToolCandidate(tool: Tool): SearchCandidate {
   };
 }
 
-async function getCatalogNamesById(
+type SearchCatalogMeta = { name: string; serverType: string };
+
+async function getCatalogsById(
   tools: Array<{ catalogId: string | null }>,
-): Promise<Map<string, string>> {
+): Promise<Map<string, SearchCatalogMeta>> {
   const catalogIds = Array.from(
     new Set(
       tools
@@ -477,7 +500,16 @@ async function getCatalogNamesById(
   );
   const catalogs = await InternalMcpCatalogModel.getByIds(catalogIds);
   return new Map(
-    Array.from(catalogs.values()).map((catalog) => [catalog.id, catalog.name]),
+    Array.from(catalogs.values()).map((catalog) => [
+      catalog.id,
+      // Author-controlled name — neutralize control/format/whitespace at this
+      // single source so it is safe wherever it reaches the model (the returned
+      // candidate `catalogName` and the zero-match "Available servers" hint).
+      {
+        name: sanitizeAppNameForToolMetadata(catalog.name),
+        serverType: catalog.serverType,
+      },
+    ]),
   );
 }
 
@@ -1181,7 +1213,7 @@ function visitSchema(
 }
 
 // search_tools only runs in search_and_run_only mode, where the meta tools and
-// the always-exposed runtime tools (skills + sandbox + apps) are already
+// the always-exposed runtime tools (skills + sandbox) are already
 // top-level — returning them as results would be redundant noise. But "always-exposed" only
 // holds once a tool is assigned: an unassigned sandbox tool the user can reach
 // via sandbox:execute is NOT top-level, so surface it here so the model can

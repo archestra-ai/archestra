@@ -6,6 +6,12 @@
 //! the envelope module). A scan is pure: it never mutates the HTML, it only
 //! reports the first disqualifying construct (rejection) plus soft warnings.
 //! Parsing failures fail closed (a rejection), never a silent pass.
+//!
+//! Script text is extracted lexically from the raw input, not the `tl` DOM
+//! (`tl` has no RAWTEXT mode; a bare `<` in ordinary JS would hide a marker
+//! from the gate). This also reads script blocks inside HTML comments —
+//! fail-closed for a gate. Attribute refs come from the DOM (see
+//! `resource_ref`), with a lexical fallback for tag shapes `tl` drops.
 
 use std::sync::LazyLock;
 
@@ -29,6 +35,25 @@ const NO_DOCUMENT_ROOT_WARNING: &str = "html has no <head> or <html> element; pr
 
 static HEAD_OR_HTML: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)<(head|html)[\s>]").expect("static head/html probe regex"));
+
+// Exact script/link open tags with a browser-recognized tag-name boundary.
+// This backstops the DOM loops for tag shapes `tl` drops without treating
+// custom or namespace-like elements as native resource tags.
+static RESOURCE_TAG_FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)<(?i-u:(script|link))([\x20\t\n\x0c\r/][^>]*|>)")
+        .expect("static resource tag fallback regex")
+});
+
+// A src/href ref inside the bounded opening-tag tail, quoted (group 2) or
+// unquoted (group 3). The attribute name must follow a whitespace, solidus, or
+// quote boundary so `data-src` does not count. Deliberately regex-grade:
+// crafted markup (decoy `src=` in another attribute's value, mixed quotes,
+// entity-spliced markers) can still slip it — the render-time CSP stays the
+// real security boundary.
+static RESOURCE_ATTR_FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?is)[\s/"'](?i-u:(src|href))\s*=\s*(?:["']([^"']*)["']|([^\s>"']+))"#)
+        .expect("static resource attribute fallback regex")
+});
 
 /// Why a scan disqualified the HTML. Carries the offending value so the caller
 /// can build a precise user-facing message (kept on the TypeScript side).
@@ -69,15 +94,14 @@ pub fn scan_app_html(html: &str) -> ScanResult {
             warnings: Vec::new(),
         };
     };
-    let parser = dom.parser();
 
     let tags = || dom.nodes().iter().filter_map(|node| node.as_tag());
 
-    // 1. SDK self-bootstrap inside <script> text. Concatenate all script text,
-    //    then test markers in list order (mirrors the TS precedence).
-    let script_text: String = tags()
-        .filter(|tag| tag.name().as_utf8_str().eq_ignore_ascii_case("script"))
-        .map(|tag| tag.inner_text(parser).into_owned())
+    // 1. SDK self-bootstrap inside <script> text. Markers are tested in list
+    //    order over the concatenated blocks (mirrors the TS precedence).
+    let script_text: String = SCRIPT_BLOCK
+        .captures_iter(html)
+        .map(|block| block[1].to_string())
         .collect::<Vec<_>>()
         .join("\n");
     for marker in SDK_BOOTSTRAP_MARKERS {
@@ -87,34 +111,57 @@ pub fn scan_app_html(html: &str) -> ScanResult {
     }
 
     // 2. Platform script self-load via <script src>, document order.
-    for tag in tags().filter(|tag| tag.name().as_utf8_str().eq_ignore_ascii_case("script")) {
-        if let Some(src) = attr(tag, "src") {
+    for tag in tags().filter(|tag| exact_resource_tag_is(tag, "script")) {
+        if let Some(src) = resource_ref(tag, "src") {
+            let normalized = normalize_resource_ref(&src);
             if PLATFORM_SCRIPT_SRC_MARKERS
                 .iter()
-                .any(|marker| src.contains(marker))
+                .any(|marker| normalized.contains(marker))
             {
                 return reject(RejectionKind::PlatformScriptSrc, src);
             }
         }
     }
 
-    // 3. Platform stylesheet self-load via <link href>. Strip whitespace the
-    //    browser ignores when resolving the URL so a spliced tab/newline (or a
-    //    ZWNBSP, which JS `\s` strips but Rust's `is_whitespace` does not) can't
-    //    sneak the marker past.
-    for tag in tags().filter(|tag| tag.name().as_utf8_str().eq_ignore_ascii_case("link")) {
-        if let Some(href) = attr(tag, "href") {
-            let collapsed: String = href
-                .chars()
-                .filter(|c| !c.is_whitespace() && *c != '\u{feff}')
-                .collect();
-            if collapsed.contains(PLATFORM_BASE_CSS_MARKER) {
-                return reject(RejectionKind::PlatformBaseCss, href);
-            }
+    // 3. Platform stylesheet self-load via <link href>.
+    for tag in tags().filter(|tag| exact_resource_tag_is(tag, "link")) {
+        if let Some(href) = resource_ref(tag, "href")
+            && normalize_resource_ref(&href).contains(PLATFORM_BASE_CSS_MARKER)
+        {
+            return reject(RejectionKind::PlatformBaseCss, href);
         }
     }
 
-    // 4. Soft warning: no document root. Probed on the raw input (a parser
+    // 4. Lexical fallback for self-load refs in tag shapes `tl` drops
+    //    entirely (`<script /src=…>`, unquoted URL values with `/`). Extra
+    //    matches this can add (e.g. inside HTML comments) are fail-closed.
+    for tag_capture in RESOURCE_TAG_FALLBACK.captures_iter(html) {
+        let tag_name = &tag_capture[1];
+        let Some(attr_capture) = RESOURCE_ATTR_FALLBACK.captures(&tag_capture[2]) else {
+            continue;
+        };
+        let attr_name = &attr_capture[1];
+        let value = attr_capture
+            .get(2)
+            .or_else(|| attr_capture.get(3))
+            .map_or("", |matched| matched.as_str());
+        let normalized = normalize_resource_ref(value);
+        if tag_name.eq_ignore_ascii_case("script") && attr_name.eq_ignore_ascii_case("src") {
+            if PLATFORM_SCRIPT_SRC_MARKERS
+                .iter()
+                .any(|marker| normalized.contains(marker))
+            {
+                return reject(RejectionKind::PlatformScriptSrc, value.to_string());
+            }
+        } else if tag_name.eq_ignore_ascii_case("link")
+            && attr_name.eq_ignore_ascii_case("href")
+            && normalized.contains(PLATFORM_BASE_CSS_MARKER)
+        {
+            return reject(RejectionKind::PlatformBaseCss, value.to_string());
+        }
+    }
+
+    // 5. Soft warning: no document root. Probed on the raw input (a parser
     //    normalizes fragments away), mirroring the TS regex.
     let mut warnings = Vec::new();
     if !HEAD_OR_HTML.is_match(html) {
@@ -124,6 +171,43 @@ pub fn scan_app_html(html: &str) -> ScanResult {
         rejection: None,
         warnings,
     }
+}
+
+// A `<script>` block's raw text, up to the next `</script>` — the closest
+// lexical approximation of the browser's RAWTEXT tokenization. Shared with
+// the authoring lint (`app_html_lint`), like the tag helpers below.
+pub(crate) static SCRIPT_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<script\b[^>]*>(.*?)</script>").expect("static script block regex")
+});
+
+// Tag-name match tolerant of `tl`'s solidus fusing: `<script/src=…>` is a
+// script element to the browser, but `tl` parses the name as `script/src` —
+// compare only the part before the first solidus.
+pub(crate) fn tag_is(tag: &tl::HTMLTag, expected: &str) -> bool {
+    let name = tag.name().as_utf8_str();
+    name.split('/')
+        .next()
+        .unwrap_or(&name)
+        .eq_ignore_ascii_case(expected)
+}
+
+// An attribute ref, recovering the solidus-fused shape `tag_is` matches on
+// (`tl` leaves the value under an empty attribute key there). `<script /src=…>`
+// makes `tl` drop the tag entirely — the save gate's lexical fallback covers
+// that; the authoring lint deliberately leaves it a blind spot.
+pub(crate) fn resource_ref(tag: &tl::HTMLTag, attr_name: &str) -> Option<String> {
+    if let Some(value) = attr(tag, attr_name) {
+        return Some(value);
+    }
+    let name = tag.name().as_utf8_str();
+    let (_, fused) = name.split_once('/')?;
+    if fused
+        .trim_start_matches('/')
+        .eq_ignore_ascii_case(attr_name)
+    {
+        return attr(tag, "");
+    }
+    None
 }
 
 // HTML attribute names are case-insensitive, but `tl`'s `Attributes::get` is an
@@ -136,6 +220,26 @@ fn attr(tag: &tl::HTMLTag, name: &str) -> Option<String> {
         .find(|(key, _)| key.eq_ignore_ascii_case(name))
         .and_then(|(_, value)| value)
         .map(|value| value.into_owned())
+}
+
+fn exact_resource_tag_is(tag: &tl::HTMLTag, expected: &str) -> bool {
+    if !tag_is(tag, expected) {
+        return false;
+    }
+    let raw = tag.raw().as_utf8_str();
+    RESOURCE_TAG_FALLBACK
+        .captures(raw.as_ref())
+        .is_some_and(|capture| {
+            capture.get(0).is_some_and(|matched| matched.start() == 0)
+                && capture[1].eq_ignore_ascii_case(expected)
+        })
+}
+
+fn normalize_resource_ref(reference: &str) -> String {
+    reference
+        .chars()
+        .filter(|character| !matches!(character, '\t' | '\n' | '\r'))
+        .collect()
 }
 
 fn reject(kind: RejectionKind, offender: String) -> ScanResult {
@@ -202,16 +306,6 @@ mod tests {
     }
 
     #[test]
-    fn zwnbsp_spliced_href_is_still_caught() {
-        let html =
-            "<html><head><link href=\"/_sandbox/archestra-app-\u{feff}base.css\"></head></html>";
-        assert_eq!(
-            scan_app_html(html).rejection.expect("should reject").kind,
-            RejectionKind::PlatformBaseCss
-        );
-    }
-
-    #[test]
     fn unrelated_stylesheet_link_is_allowed() {
         let html = r#"<html><head><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/normalize.css"></head></html>"#;
         assert_eq!(scan_app_html(html).rejection, None);
@@ -250,6 +344,182 @@ mod tests {
         let result = scan_app_html("<p>just a fragment</p>");
         assert_eq!(result.rejection, None);
         assert_eq!(result.warnings, vec![NO_DOCUMENT_ROOT_WARNING.to_string()]);
+    }
+
+    #[test]
+    fn bare_less_than_before_a_marker_cannot_evade_the_bootstrap_rejection() {
+        // A `<` comparison splinters the script element in `tl`'s DOM; the
+        // lexical extraction must still see the marker.
+        let html = "<html><head><script>if (a < b) { const u = window.__ARCHESTRA_APP_SDK_URL__; }</script></head></html>";
+        assert_eq!(
+            scan_app_html(html).rejection.expect("should reject").kind,
+            RejectionKind::SdkBootstrap
+        );
+    }
+
+    #[test]
+    fn commented_out_bootstrap_script_fails_closed() {
+        // The lexical extraction reads script blocks inside HTML comments too.
+        let html = "<html><head><!-- <script>PostMessageTransport</script> --></head></html>";
+        assert_eq!(
+            scan_app_html(html).rejection.expect("should reject").kind,
+            RejectionKind::SdkBootstrap
+        );
+    }
+
+    #[test]
+    fn solidus_fused_platform_self_loads_are_rejected() {
+        let script =
+            r#"<html><head><script/src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
+        let rejection = scan_app_html(script).rejection.expect("should reject");
+        assert_eq!(rejection.kind, RejectionKind::PlatformScriptSrc);
+        assert_eq!(rejection.offender, "/_sandbox/archestra-app-sdk.js");
+        let link = r#"<html><head><link/href="/_sandbox/archestra-app-base.css"></head></html>"#;
+        assert_eq!(
+            scan_app_html(link).rejection.expect("should reject").kind,
+            RejectionKind::PlatformBaseCss
+        );
+    }
+
+    #[test]
+    fn space_solidus_self_loads_are_rejected_via_the_lexical_fallback() {
+        // `tl` drops these tags entirely; browsers load them.
+        let script =
+            r#"<html><head><script /src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
+        let rejection = scan_app_html(script).rejection.expect("should reject");
+        assert_eq!(rejection.kind, RejectionKind::PlatformScriptSrc);
+        assert_eq!(rejection.offender, "/_sandbox/archestra-app-sdk.js");
+        let link = r#"<html><head><link /href="/_sandbox/archestra-app-base.css"></head></html>"#;
+        assert_eq!(
+            scan_app_html(link).rejection.expect("should reject").kind,
+            RejectionKind::PlatformBaseCss
+        );
+    }
+
+    #[test]
+    fn unquoted_self_load_src_is_rejected_via_the_lexical_fallback() {
+        // Unquoted URL values containing `/` also make `tl` drop the tag.
+        let html = "<html><head><script src=/_sandbox/archestra-app-sdk.js></script></head></html>";
+        assert_eq!(
+            scan_app_html(html).rejection.expect("should reject").kind,
+            RejectionKind::PlatformScriptSrc
+        );
+    }
+
+    #[test]
+    fn data_src_metadata_is_not_treated_as_a_self_load() {
+        // The browser never loads `data-src`; the fallback's attribute
+        // boundary must not read it as a real `src`.
+        let html = r#"<html><head><script data-src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
+        assert_eq!(scan_app_html(html).rejection, None);
+    }
+
+    #[test]
+    fn fallback_does_not_treat_non_native_names_as_resource_tags() {
+        let cases = [
+            r#"<html><head><script-widget src="/_sandbox/archestra-app-sdk.js"></script-widget></head></html>"#,
+            r#"<html><head><link-widget href="/_sandbox/archestra-app-base.css"></head></html>"#,
+            r#"<html><head><script:widget src="/_sandbox/archestra-app-sdk.js"></script:widget></head></html>"#,
+            "<html><head><link\u{00a0}href=\"/_sandbox/archestra-app-base.css\"></head></html>",
+            "<html><head><ſcript src=\"/_sandbox/archestra-app-sdk.js\"></ſcript></head></html>",
+            "<html><head><linK href=\"/_sandbox/archestra-app-base.css\"></head></html>",
+        ];
+        for html in cases {
+            assert_eq!(scan_app_html(html).rejection, None, "{html}");
+        }
+    }
+
+    #[test]
+    fn fallback_preserves_browser_effective_resource_attributes() {
+        let cases = [
+            r#"<html><head><script src="safe.js" src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#,
+            r#"<html><head><link href="safe.css" href="/_sandbox/archestra-app-base.css"></head></html>"#,
+            r#"<html><head><script href="safe" data-note="src=/_sandbox/archestra-app-sdk.js"></script></head></html>"#,
+            r#"<html><head><link src="safe" data-note="href=/_sandbox/archestra-app-base.css"></head></html>"#,
+        ];
+        for html in cases {
+            assert_eq!(scan_app_html(html).rejection, None, "{html}");
+        }
+    }
+
+    #[test]
+    fn native_resource_tags_accept_only_html_tag_name_boundaries() {
+        for boundary in [" ", "\t", "\n", "\u{000c}", "\r", "/"] {
+            let script = format!(
+                "<html><head><script{boundary}src=/_sandbox/archestra-app-sdk.js></script></head></html>"
+            );
+            assert_eq!(
+                scan_app_html(&script)
+                    .rejection
+                    .expect("should reject")
+                    .kind,
+                RejectionKind::PlatformScriptSrc,
+                "{script}"
+            );
+
+            let link = format!(
+                "<html><head><link{boundary}href=/_sandbox/archestra-app-base.css></head></html>"
+            );
+            assert_eq!(
+                scan_app_html(&link).rejection.expect("should reject").kind,
+                RejectionKind::PlatformBaseCss,
+                "{link}"
+            );
+        }
+    }
+
+    #[test]
+    fn ignored_url_controls_cannot_splice_platform_resource_markers() {
+        for control in ["\t", "\n", "\r"] {
+            let script_ref = format!("/_sandbox/archestra-app-{control}sdk.js");
+            for html in [
+                format!(r#"<html><head><script src="{script_ref}"></script></head></html>"#),
+                format!(r#"<html><head><script /src="{script_ref}"></script></head></html>"#),
+            ] {
+                let rejection = scan_app_html(&html).rejection.expect("should reject");
+                assert_eq!(rejection.kind, RejectionKind::PlatformScriptSrc);
+                assert_eq!(rejection.offender, script_ref);
+            }
+
+            let stylesheet_ref = format!("/_sandbox/archestra-app-{control}base.css");
+            for html in [
+                format!(r#"<html><head><link href="{stylesheet_ref}"></head></html>"#),
+                format!(r#"<html><head><link /href="{stylesheet_ref}"></head></html>"#),
+            ] {
+                let rejection = scan_app_html(&html).rejection.expect("should reject");
+                assert_eq!(rejection.kind, RejectionKind::PlatformBaseCss);
+                assert_eq!(rejection.offender, stylesheet_ref);
+            }
+        }
+    }
+
+    #[test]
+    fn non_ignored_url_characters_do_not_reconstruct_platform_resource_markers() {
+        for preserved in [" ", "\u{000c}", "\u{feff}"] {
+            let script_ref = format!("/_sandbox/archestra-app-{preserved}sdk.js");
+            let stylesheet_ref = format!("/_sandbox/archestra-app-{preserved}base.css");
+            for html in [
+                format!(r#"<html><head><script src="{script_ref}"></script></head></html>"#),
+                format!(r#"<html><head><script /src="{script_ref}"></script></head></html>"#),
+                format!(r#"<html><head><link href="{stylesheet_ref}"></head></html>"#),
+                format!(r#"<html><head><link /href="{stylesheet_ref}"></head></html>"#),
+            ] {
+                assert_eq!(scan_app_html(&html).rejection, None, "{html}");
+            }
+        }
+    }
+
+    #[test]
+    fn marker_after_a_gt_inside_a_script_attribute_fails_closed() {
+        // The lexical extraction ends the open tag at the first `>` even
+        // inside a quoted attribute. Deliberate: a quote-aware pattern would
+        // go fail-open on unterminated quotes, which is worse for a gate.
+        let html =
+            r#"<html><head><script data-note=">PostMessageTransport"></script></head></html>"#;
+        assert_eq!(
+            scan_app_html(html).rejection.expect("should reject").kind,
+            RejectionKind::SdkBootstrap
+        );
     }
 
     #[test]

@@ -140,6 +140,7 @@ export function CronExpressionPicker({
           </p>
           <div className="flex items-center gap-1.5">
             <Input
+              aria-label="Custom cron expression"
               placeholder={customPlaceholder}
               value={customDraft}
               onChange={(event) => setCustomDraft(event.target.value)}

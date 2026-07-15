@@ -34,13 +34,10 @@ async function setup(
     makeAppTool: any;
   },
   options: {
-    globalToolPolicy?: "permissive" | "restrictive";
     meta?: Record<string, unknown> | null;
   } = {},
 ) {
-  const org = await fx.makeOrganization({
-    globalToolPolicy: options.globalToolPolicy ?? "restrictive",
-  });
+  const org = await fx.makeOrganization();
   const user = await fx.makeUser();
   const app = await fx.makeApp({ organizationId: org.id });
   const catalog = await fx.makeInternalMcpCatalog({ organizationId: org.id });
@@ -131,9 +128,9 @@ test("refuses an assigned tool whose catalog is outside the app's bound environm
   makeTool,
   makeAppTool,
 }) => {
-  // Permissive org so the policy engine short-circuits to allow — the env fence
-  // (which runs before policy) is the only thing that can refuse here.
-  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  // The tool has no policy, so the env fence (which runs before policy) is the
+  // only thing that can refuse here.
+  const org = await makeOrganization();
   const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,
@@ -283,7 +280,13 @@ test("enforces a block_always policy on the target (runtime gap fix)", async ({
       treatRequireApprovalAsBlock,
     });
     expect(decision.allowed).toBe(false);
-    if (!decision.allowed) expect(decision.reason).toContain("policy");
+    if (!decision.allowed) {
+      // Attribute the guardrail to Archestra so the app (and whoever reads the
+      // error) knows the gateway blocked the call, not the tool.
+      expect(decision.reason).toContain(
+        "a security guardrail enforced by Archestra, not by the tool itself",
+      );
+    }
   }
 });
 
@@ -386,7 +389,7 @@ test("a team-scoped policy is matched against the viewer's teams", async ({
   makeTeamMember,
   makeToolPolicy,
 }) => {
-  const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+  const org = await makeOrganization();
   const inTeam = await makeUser();
   const outOfTeam = await makeUser();
   const team = await makeTeam(org.id, inTeam.id);
@@ -428,39 +431,6 @@ test("a team-scoped policy is matched against the viewer's teams", async ({
   expect(allowed.allowed).toBe(true);
 });
 
-test("a permissive org skips policy enforcement", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeInternalMcpCatalog,
-  makeTool,
-  makeAppTool,
-  makeToolPolicy,
-}) => {
-  const { organizationId, userId, appId, toolId, toolName } = await setup(
-    {
-      makeOrganization,
-      makeUser,
-      makeApp,
-      makeInternalMcpCatalog,
-      makeTool,
-      makeAppTool,
-    },
-    { globalToolPolicy: "permissive" },
-  );
-  await makeToolPolicy(toolId, { conditions: [], action: "block_always" });
-
-  const decision = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(decision.allowed).toBe(true);
-});
-
 test("refuses an assigned tool whose catalog left the app's environment", async ({
   makeOrganization,
   makeUser,
@@ -469,7 +439,7 @@ test("refuses an assigned tool whose catalog left the app's environment", async 
   makeTool,
   makeAppTool,
 }) => {
-  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  const org = await makeOrganization();
   const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,
@@ -515,7 +485,7 @@ test("allows an assigned tool in the app's bound environment", async ({
   makeTool,
   makeAppTool,
 }) => {
-  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  const org = await makeOrganization();
   const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,
@@ -549,12 +519,10 @@ test("allows an assigned tool in the app's bound environment", async ({
 
 // --- App-assignable built-ins (the read-only file tools) ---
 
-// Registration of the file tools is itself flag-gated, so the flags must be on
-// BEFORE seeding. Config is restored pristine before every test, so this is
-// per-test, never module-scope.
+// Registration of the file tools is itself gated on the sandbox flag, so it
+// must be on BEFORE seeding. Config is restored pristine before every test, so
+// this is per-test, never module-scope.
 async function enableFlagsAndSeedBuiltins() {
-  (config.apps as { enabled: boolean }).enabled = true;
-  (config.projects as { enabled: boolean }).enabled = true;
   (config.skillsSandbox as { enabled: boolean }).enabled = true;
   await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
 }
@@ -616,7 +584,7 @@ test("refuses an app-assignable built-in without an app_tools grant", async ({
   }
 });
 
-test("a stale file-tool grant is dead when the projects flag is dark", async ({
+test("a stale file-tool grant is dead when the sandbox flag is dark", async ({
   makeOrganization,
   makeUser,
   makeApp,
@@ -629,7 +597,7 @@ test("a stale file-tool grant is dead when the projects flag is dark", async ({
   const searchFiles = await findSeededBuiltin(TOOL_SEARCH_FILES_SHORT_NAME);
   await makeAppTool(app.id, searchFiles.id);
 
-  (config.projects as { enabled: boolean }).enabled = false;
+  (config.skillsSandbox as { enabled: boolean }).enabled = false;
 
   const decision = await gateAppToolCall({
     appId: app.id,

@@ -429,6 +429,15 @@ const ReadFileOutputSchema = z.object({
     .describe(
       "True when more lines follow the returned window (raise `offset` to continue).",
     ),
+  content: z
+    .string()
+    .optional()
+    .describe(
+      "The returned window's text, numbered by line (the same rendering as " +
+        "the text output). Present for text reads so structured consumers " +
+        "(e.g. apps via archestra.tools.call) get the content, not just " +
+        "metadata.",
+    ),
 });
 
 const SaveFileSchema = z
@@ -721,12 +730,6 @@ const registry = defineArchestraTools([
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
-      if (!config.projects.enabled && args.source.type === "my_file") {
-        return errorResult(
-          "Copying one of the user's saved files into the sandbox is not available on this deployment.",
-        );
-      }
-
       const resolved = await resolveTarget({
         target: args.target,
         userCtx: guard.userCtx,
@@ -975,6 +978,7 @@ const registry = defineArchestraTools([
             startLine: 1,
             returnedLines: 0,
             truncated: false,
+            content: "",
           },
           `"${originalName}" is empty.`,
         );
@@ -1036,6 +1040,7 @@ const registry = defineArchestraTools([
           startLine,
           returnedLines: numbered.returnedLines,
           truncated,
+          content: numbered.returnedLines > 0 ? numbered.body : "",
         },
         summary.join("\n"),
       );
@@ -1642,7 +1647,7 @@ function handleRuntimeError(
 ) {
   if (error instanceof FileNameExistsError) {
     return errorResult(
-      `${error.message}. Choose a different name, or delete the existing file first.`,
+      `${error.message}. Choose a different name, pass overwrite: true, or delete the existing file first.`,
     );
   }
   if (error instanceof SkillSandboxError) {

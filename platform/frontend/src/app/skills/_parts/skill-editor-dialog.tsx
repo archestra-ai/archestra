@@ -7,17 +7,22 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  Github,
+  MessageSquare,
   Plus,
   RotateCcw,
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -25,6 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useCreateSkill,
   useSkill,
@@ -107,6 +113,15 @@ export function SkillEditorDialog({
   );
   const createSkill = useCreateSkill();
   const updateSkill = useUpdateSkill();
+  const appName = useAppName();
+
+  // GitHub-imported skills are a one-time snapshot, not a live link: editing
+  // here never touches the repo, and the repo is never re-pulled. Surface that
+  // in edit mode so the disconnect isn't a surprise.
+  const isGithubSkill = isEdit && skill?.sourceType === "github";
+  const githubSourceRepo = isGithubSkill
+    ? (skill?.sourceRef?.split("@")[0] ?? null)
+    : null;
 
   const [manifest, setManifest] = useState("");
   const [files, setFiles] = useState<ResourceFile[]>([]);
@@ -127,6 +142,15 @@ export function SkillEditorDialog({
   // soft-deleted files held in a trash bin until the dialog is closed; restorable until then.
   const [trash, setTrash] = useState<TrashedFile[]>([]);
   const [trashExpanded, setTrashExpanded] = useState(true);
+
+  // A dead deep link (`/skills?edit=<id>` for a deleted or inaccessible
+  // skill) resolves to null; close instead of showing a blank editor.
+  useEffect(() => {
+    if (open && isEdit && !isLoading && !skill) {
+      toast.error("Skill not found");
+      onOpenChange(false);
+    }
+  }, [open, isEdit, isLoading, skill, onOpenChange]);
 
   useEffect(() => {
     if (!open) return;
@@ -337,28 +361,44 @@ export function SkillEditorDialog({
       size="large"
       bodyClassName="flex flex-col overflow-hidden"
       footer={
-        isPreview ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Close
-          </Button>
-        ) : (
-          <>
+        <>
+          {/* Existing skills only (edit/preview with an id) — a skill being
+              created has no id to start a chat with yet. */}
+          {skillId !== null && (
+            <PermissionButton
+              permissions={{ chat: ["read", "create"] }}
+              variant="outline"
+              asChild
+            >
+              <Link href={`/chat/new?skill_id=${skillId}`}>
+                <MessageSquare className="h-4 w-4" />
+                Chat
+              </Link>
+            </PermissionButton>
+          )}
+          {isPreview ? (
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              Close
             </Button>
-            <Button type="button" disabled={!canSave} onClick={handleSave}>
-              {isSaving ? "Saving..." : "Save skill"}
-            </Button>
-          </>
-        )
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="button" disabled={!canSave} onClick={handleSave}>
+                {isSaving ? "Saving..." : "Save skill"}
+              </Button>
+            </>
+          )}
+        </>
       }
     >
       {(isPreview && isPreviewLoading) || (isEdit && isLoading) ? (
@@ -367,6 +407,23 @@ export function SkillEditorDialog({
         </div>
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-4">
+          {isGithubSkill && (
+            <div className="flex gap-2.5 rounded-md border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+              <Github className="mt-0.5 size-4 shrink-0" />
+              <p>
+                Imported from{" "}
+                {githubSourceRepo ? (
+                  <code className="font-mono text-foreground">
+                    {githubSourceRepo}
+                  </code>
+                ) : (
+                  "GitHub"
+                )}{" "}
+                as a one-time copy. Saving changes here won’t update the repo,
+                and {appName} won’t pull later changes from it.
+              </p>
+            </div>
+          )}
           <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3">
             <div className="flex min-h-0 flex-col rounded-md border">
               <div className="flex-1 overflow-y-auto p-2">
@@ -550,6 +607,7 @@ export function SkillEditorDialog({
                 <Textarea
                   value={editorValue}
                   onChange={(e) => setEditorValue(e.target.value)}
+                  aria-label="File contents"
                   placeholder={
                     openFile ? "File contents..." : MANIFEST_PLACEHOLDER
                   }
@@ -744,6 +802,7 @@ function NewFileRow({
         }}
         placeholder={placeholder}
         className="h-7 flex-1 font-mono text-xs"
+        aria-label="File name"
       />
       <Button
         type="button"
@@ -761,6 +820,7 @@ function NewFileRow({
         size="icon"
         className="h-7 w-7"
         onClick={onCancel}
+        aria-label="Cancel"
       >
         <X className="h-3.5 w-3.5" />
       </Button>
@@ -835,6 +895,7 @@ function NewFolderRow({
         }}
         placeholder="folder name"
         className="h-7 flex-1 font-mono text-xs"
+        aria-label="Folder name"
       />
       <Button
         type="button"
@@ -852,6 +913,7 @@ function NewFolderRow({
         size="icon"
         className="h-7 w-7"
         onClick={onCancel}
+        aria-label="Cancel"
       >
         <X className="h-3.5 w-3.5" />
       </Button>

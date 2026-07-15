@@ -14,7 +14,7 @@ import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
-import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
+import { EmailProviderTypeSchema } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
 export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -67,17 +67,12 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
               sandboxArtifactBytesLimit: z.number(),
-              agentSkillsEnabled: z.boolean(),
-              agentEnvironmentsEnabled: z.boolean(),
-              appsEnabled: z.boolean(),
-              projectsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
               anthropicWifEnabled: z.boolean(),
               bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
-              globalToolPolicy: z.enum(["permissive", "restrictive"]),
               incomingEmail: z.object({
                 enabled: z.boolean(),
                 provider: EmailProviderTypeSchema.optional(),
@@ -94,6 +89,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
+              chatopsTelegramEnabled: z.boolean(),
+              /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
+              kbAutoSyncPermissionsEnabled: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -104,11 +102,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      // Get global tool policy from first organization (fallback to permissive)
-      const org = await OrganizationModel.getFirst();
-      const globalToolPolicy: GlobalToolPolicy =
-        org?.globalToolPolicy ?? "permissive";
-
       const tier = enterpriseTier.getState();
 
       return reply.send({
@@ -129,17 +122,12 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
-          agentSkillsEnabled: config.agents.skillsEnabled,
-          agentEnvironmentsEnabled: config.agents.environmentsEnabled,
-          appsEnabled: config.apps.enabled,
-          projectsEnabled: config.projects.enabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
           anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
           bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
-          globalToolPolicy,
           incomingEmail: getEmailProviderInfo(),
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
@@ -153,6 +141,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
           agentHooksEnabled: config.hooks.enabled,
+          chatopsTelegramEnabled: config.chatops.telegramEnabled,
+          kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
@@ -172,6 +162,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
           "github-copilot": config.llm["github-copilot"].baseUrl || null,
+          "microsoft-365-copilot":
+            config.llm["microsoft-365-copilot"].baseUrl || null,
           azure: config.llm.azure.baseUrl || null,
         },
       });
@@ -184,7 +176,14 @@ export default configRoutes;
 const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),
   disableInvitations: z.boolean(),
+  // Developer-only: when true, the login page auto-mints a session via
+  // POST /api/auth/dev-auto-login instead of showing the sign-in form. Always
+  // false in production (the driving env var is ignored there).
+  devAutoLoginEnabled: z.boolean(),
   maintenanceMode: z.string().nullable(),
+  // Instance-wide banner (markdown) rendered at the top of the UI. Exposed
+  // pre-auth so operators can label an instance on the login screen too.
+  siteNotificationMessage: z.string().nullable(),
   // Effective enterprise core flag (env var OR small-team free tier). Exposed
   // pre-auth so the login screen can decide whether to render the SSO picker.
   enterpriseCoreActive: z.boolean(),
@@ -208,7 +207,9 @@ async function getPublicConfigResponse(): Promise<
   return {
     disableBasicAuth: config.auth.disableBasicAuth,
     disableInvitations: config.auth.disableInvitations,
+    devAutoLoginEnabled: !!config.auth.devAutoAuthenticateEmail,
     maintenanceMode: config.maintenanceMode,
+    siteNotificationMessage: config.siteNotificationMessage,
     enterpriseCoreActive: enterpriseTier.isCoreActive(),
     analytics: {
       enabled: config.analytics.enabled,

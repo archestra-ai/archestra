@@ -507,8 +507,8 @@ export function transformCatalogItemToFormValues(
     labels: item.labels ?? [],
     // Scope
     scope: (item.scope as AgentScope) ?? "org",
-    // Teams
-    teams: item.teams?.map((t) => t.id) ?? [],
+    // Teams, each with the access level it holds on this item
+    teams: item.teams?.map((t) => ({ id: t.id, level: t.level })) ?? [],
     // Deployment environment (null = the default environment)
     environmentId: item.environmentId ?? null,
   } as McpCatalogFormValues;

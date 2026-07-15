@@ -17,10 +17,15 @@ const {
   unassignToolFromApp,
   openAppInChat,
   openExternalAppInChat,
+  pinApp,
+  unpinApp,
+  pinExternalApp,
+  unpinExternalApp,
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
 type AppsParams = Pick<AppsQuery, "limit" | "offset" | "search">;
+type AppDetailQueryOptions = { toastOnError?: boolean };
 
 // ===== Query hooks =====
 
@@ -43,7 +48,11 @@ export function useApps(
 
 // Resolves an external UI-providing app by catalog id: its UI resource plus the
 // caller's accessible installs and default install for the run-page selector.
-export function useExternalApp(catalogId: string | null) {
+export function useExternalApp(
+  catalogId: string | null,
+  options?: AppDetailQueryOptions,
+) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["apps", "external", catalogId],
     enabled: !!catalogId,
@@ -51,13 +60,14 @@ export function useExternalApp(catalogId: string | null) {
       const { data, error } = await getExternalApp({
         path: { catalogId: catalogId as string },
       });
-      throwOnApiError(error, { allowNotFound: true });
+      throwOnApiError(error, { allowNotFound: true, toastOnError });
       return data ?? null;
     },
   });
 }
 
-export function useApp(appId: string | null) {
+export function useApp(appId: string | null, options?: AppDetailQueryOptions) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["apps", appId],
     enabled: !!appId,
@@ -65,7 +75,7 @@ export function useApp(appId: string | null) {
       const { data, error } = await getApp({
         path: { appId: appId as string },
       });
-      throwOnApiError(error, { allowNotFound: true });
+      throwOnApiError(error, { allowNotFound: true, toastOnError });
       return data ?? null;
     },
   });
@@ -153,8 +163,11 @@ export function useOpenAppInChat() {
 }
 
 // Opens an external (MCP-server) app in chat against a concrete install: the
-// backend seeds a conversation with the UI rendered inline and returns its id.
-// The caller navigates to `/chat/<conversationId>` on success.
+// backend creates a conversation and returns its id plus how it was set up —
+// `mode: "render"` (UI seeded inline) or `mode: "prompt"` (empty conversation
+// plus an opening prompt for the caller to send, used when the tool has
+// required inputs). The caller navigates to `/chat/<conversationId>` on
+// success.
 export function useOpenExternalAppInChat() {
   return useMutation({
     mutationFn: async (params: {
@@ -170,6 +183,122 @@ export function useOpenExternalAppInChat() {
         return null;
       }
       return data;
+    },
+  });
+}
+
+/**
+ * The identity of a pinnable Apps-surface item, matching the list's
+ * discriminated union: owned apps by id, external apps by (install, resource,
+ * tool). The tool name is part of the identity because several tools of one
+ * server can share a ui:// resource yet list as separate tiles — a pin must
+ * land on one tile, not the group.
+ */
+export type PinAppTarget =
+  | { source: "owned"; appId: string }
+  | {
+      source: "external";
+      mcpServerId: string;
+      resourceUri: string;
+      toolName: string;
+    };
+
+type AppsListResponse = archestraApiTypes.GetAppsResponses["200"];
+type AppListItem = AppsListResponse["data"][number];
+
+function matchesPinTarget(app: AppListItem, target: PinAppTarget): boolean {
+  return target.source === "owned"
+    ? app.source === "owned" && app.id === target.appId
+    : app.source === "external" &&
+        app.mcpServerId === target.mcpServerId &&
+        app.resourceUri === target.resourceUri &&
+        app.toolName === target.toolName;
+}
+
+/**
+ * Flip `pinnedAt` for the target across every cached apps list (the Apps page
+ * and the sidebar Pinned section may hold separate entries, e.g. with a search
+ * active), so all surfaces reflect a pin/unpin together and immediately.
+ */
+function writePinToAppsLists(params: {
+  queryClient: ReturnType<typeof useQueryClient>;
+  target: PinAppTarget;
+  pinnedAt: string | null;
+}): void {
+  const { queryClient, target, pinnedAt } = params;
+  queryClient.setQueriesData<AppsListResponse>(
+    { queryKey: ["apps", "paginated"] },
+    (old) =>
+      old && {
+        ...old,
+        data: old.data.map((app) =>
+          matchesPinTarget(app, target) ? { ...app, pinnedAt } : app,
+        ),
+      },
+  );
+}
+
+/** Pin/unpin an app for the current user (personal — toggle by `pinned`). */
+export function usePinApp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      pinned,
+      target,
+    }: {
+      pinned: boolean;
+      target: PinAppTarget;
+    }) => {
+      const { error } =
+        target.source === "owned"
+          ? pinned
+            ? await pinApp({ path: { appId: target.appId } })
+            : await unpinApp({ path: { appId: target.appId } })
+          : pinned
+            ? await pinExternalApp({
+                path: { mcpServerId: target.mcpServerId },
+                body: {
+                  resourceUri: target.resourceUri,
+                  toolName: target.toolName,
+                },
+              })
+            : await unpinExternalApp({
+                path: { mcpServerId: target.mcpServerId },
+                query: {
+                  resourceUri: target.resourceUri,
+                  toolName: target.toolName,
+                },
+              });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    // Optimistically flip the pin in every cached list so the card grid and
+    // the sidebar move together without waiting a full list round-trip.
+    onMutate: async ({ pinned, target }) => {
+      await queryClient.cancelQueries({ queryKey: ["apps", "paginated"] });
+      const previousLists = queryClient.getQueriesData<AppsListResponse>({
+        queryKey: ["apps", "paginated"],
+      });
+      writePinToAppsLists({
+        queryClient,
+        target,
+        pinnedAt: pinned ? new Date().toISOString() : null,
+      });
+      return { previousLists };
+    },
+    // mutationFn reports failures by resolving `null` (the error was already
+    // toasted), so the rollback lives here rather than in onError.
+    onSuccess: (ok, _variables, context) => {
+      if (!ok) {
+        for (const [queryKey, data] of context.previousLists) {
+          queryClient.setQueryData(queryKey, data);
+        }
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
     },
   });
 }

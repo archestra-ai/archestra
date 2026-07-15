@@ -42,6 +42,7 @@ import {
 } from "@/lib/environment.query";
 import {
   useDefaultEnvironment,
+  useOrganization,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
 import {
@@ -51,6 +52,11 @@ import {
   ENVIRONMENT_EDIT_PARAM,
   setEnvironmentEditParam,
 } from "./environment-edit-link";
+import {
+  buildEditorNetworkPolicy,
+  resolveEditorDraftPolicy,
+  resolveNetworkPolicyUpdate,
+} from "./environment-policy-draft";
 import { compileValidationRegex } from "./environment-validation-helpers";
 
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
@@ -268,6 +274,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         open={editTargetOpen}
         onOpenChange={(open) => !open && closeEditor()}
         environment={editEnvironment}
+        defaultEnvironment={defaultEnvironment}
         capabilities={capabilities}
       />
 
@@ -338,13 +345,6 @@ function NetworkPolicyCell({ policy }: { policy: NetworkPolicy | null }) {
 // the environment inherits the org default). shadcn Select can't use "".
 const NAMESPACE_DEFAULT_VALUE = "__default_namespace__";
 
-const EMPTY_NETWORK_POLICY: NetworkPolicy = {
-  egressMode: "restricted",
-  domainPreset: "none",
-  allowedDomains: [],
-  allowedCidrs: [],
-};
-
 function EnvironmentEditorDialog({
   mode,
   open,
@@ -391,6 +391,10 @@ function EnvironmentEditorDialog({
   const [domainPreset, setDomainPreset] = useState<DomainPreset>("none");
   const [allowedDomainsText, setAllowedDomainsText] = useState("");
   const [allowedCidrsText, setAllowedCidrsText] = useState("");
+  // Whether the user changed any egress control since the dialog opened. Only a
+  // touched policy is persisted — see resolveNetworkPolicyUpdate — so seeding the
+  // controls for display never lets a passive save rewrite the stored policy.
+  const [egressDirty, setEgressDirty] = useState(false);
   const [restricted, setRestricted] = useState(false);
   const [validationRegex, setValidationRegex] = useState("");
   const [trustedImageRegistries, setTrustedImageRegistries] = useState<
@@ -399,13 +403,16 @@ function EnvironmentEditorDialog({
   const [registryDraft, setRegistryDraft] = useState("");
   const [registryError, setRegistryError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
-  const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy | null) => {
-    const nextPolicy = policy ?? EMPTY_NETWORK_POLICY;
-    setEgressMode(nextPolicy.egressMode);
-    setDomainPreset(nextPolicy.domainPreset);
-    setAllowedDomainsText(nextPolicy.allowedDomains.join("\n"));
-    setAllowedCidrsText(nextPolicy.allowedCidrs.join("\n"));
+  const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy) => {
+    setEgressMode(policy.egressMode);
+    setDomainPreset(policy.domainPreset);
+    setAllowedDomainsText(policy.allowedDomains.join("\n"));
+    setAllowedCidrsText(policy.allowedCidrs.join("\n"));
   }, []);
+
+  // Whether the org query has resolved — so a null org default policy can be
+  // trusted as genuinely absent (→ unrestricted floor) rather than still-loading.
+  const { isSuccess: orgLoaded } = useOrganization();
 
   // Sync drafts whenever the dialog (re)opens for a target.
   useEffect(() => {
@@ -413,11 +420,22 @@ function EnvironmentEditorDialog({
       setShowConfirm(false);
       setRegistryDraft("");
       setRegistryError(null);
+      setEgressDirty(false);
+      // The org default a null-policy env falls through to. Only trustworthy once
+      // the org query has resolved (orgLoaded), so the seed gates on it.
+      const orgDefaultPolicy = defaultEnvironment?.networkPolicy ?? null;
       if (mode === "default") {
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
         setDescription(defaultEnvironment?.description ?? "");
-        syncNetworkPolicyDraft(defaultEnvironment?.networkPolicy ?? null);
+        syncNetworkPolicyDraft(
+          resolveEditorDraftPolicy({
+            mode: "default",
+            policy: orgDefaultPolicy,
+            orgDefaultPolicy,
+            policyLoaded: orgLoaded,
+          }),
+        );
         setRestricted(defaultEnvironment?.restricted ?? false);
         setValidationRegex(defaultEnvironment?.validationRegex ?? "");
         setTrustedImageRegistries(
@@ -427,13 +445,27 @@ function EnvironmentEditorDialog({
         setName(environment?.name ?? "");
         setNamespace(environment?.namespace ?? "");
         setDescription(environment?.description ?? "");
-        syncNetworkPolicyDraft(environment?.networkPolicy ?? null);
+        syncNetworkPolicyDraft(
+          resolveEditorDraftPolicy({
+            mode,
+            policy: environment?.networkPolicy ?? null,
+            orgDefaultPolicy,
+            policyLoaded: orgLoaded,
+          }),
+        );
         setRestricted(environment?.restricted ?? false);
         setValidationRegex(environment?.validationRegex ?? "");
         setTrustedImageRegistries(environment?.trustedImageRegistries ?? []);
       }
     }
-  }, [open, mode, environment, defaultEnvironment, syncNetworkPolicyDraft]);
+  }, [
+    open,
+    mode,
+    environment,
+    defaultEnvironment,
+    orgLoaded,
+    syncNetworkPolicyDraft,
+  ]);
 
   const isPending =
     createMutation.isPending ||
@@ -479,32 +511,25 @@ function EnvironmentEditorDialog({
   const supportsFqdn = capabilities?.networkPolicy.supportsFqdn === true;
   const enforcementUnavailable =
     capabilities?.networkPolicy.provider === "none";
-  // With no enforcer the egress controls are disabled, so the form can't express
-  // intent. Persisting the default "restricted" + empty allowlists would silently
-  // become a deny-all once an enforcer is installed. Keep an existing policy
-  // untouched; for a new/policy-less environment save a non-enforcing one.
   const originalNetworkPolicy =
     mode === "default"
       ? (defaultEnvironment?.networkPolicy ?? null)
       : (environment?.networkPolicy ?? null);
-  const networkPolicy: NetworkPolicy = enforcementUnavailable
-    ? (originalNetworkPolicy ?? {
-        egressMode: "unrestricted",
-        domainPreset: "none",
-        allowedDomains: [],
-        allowedCidrs: [],
-      })
-    : {
-        egressMode,
-        domainPreset:
-          egressMode === "restricted" && supportsFqdn ? domainPreset : "none",
-        allowedDomains:
-          egressMode === "restricted" && supportsFqdn
-            ? splitPolicyList(allowedDomainsText)
-            : [],
-        allowedCidrs:
-          egressMode === "restricted" ? splitPolicyList(allowedCidrsText) : [],
-      };
+  // A null-policy target is seeded from the org default, so its egress can't be
+  // edited until that query resolves — otherwise a change would be seeded off the
+  // locked-down fallback and dropped on save (see resolveNetworkPolicyUpdate),
+  // acknowledged as saved but never applied. An explicit policy is its own
+  // baseline and stays editable regardless. Create needs no baseline.
+  const egressBaselineLoaded =
+    mode === "create" || originalNetworkPolicy !== null || orgLoaded;
+  const networkPolicy = buildEditorNetworkPolicy({
+    enforcementUnavailable,
+    egressMode,
+    domainPreset,
+    allowedDomainsText,
+    allowedCidrsText,
+    originalPolicy: originalNetworkPolicy,
+  });
 
   // The current value is included so editing an environment whose namespace
   // predates the configured list never silently drops it.
@@ -524,13 +549,20 @@ function EnvironmentEditorDialog({
     const namespaceValue = trimmedNamespace === "" ? null : trimmedNamespace;
     const descriptionValue =
       trimmedDescription === "" ? null : trimmedDescription;
+    const policyPatch = resolveNetworkPolicyUpdate({
+      mode,
+      egressDirty,
+      originalPolicy: originalNetworkPolicy,
+      orgLoaded,
+      networkPolicy,
+    });
     if (mode === "create") {
       createMutation.mutate(
         {
           name: trimmedName,
           namespace: namespaceValue,
           description: descriptionValue,
-          networkPolicy,
+          ...policyPatch,
           restricted,
           validationRegex: validationRegexValue,
           trustedImageRegistries: trustedImageRegistriesValue,
@@ -543,7 +575,7 @@ function EnvironmentEditorDialog({
           name: trimmedName,
           namespace: namespaceValue,
           description: descriptionValue,
-          networkPolicy,
+          ...policyPatch,
           restricted,
           validationRegex: validationRegexValue,
           trustedImageRegistries: trustedImageRegistriesValue,
@@ -558,7 +590,7 @@ function EnvironmentEditorDialog({
             name: trimmedName,
             namespace: namespaceValue,
             description: descriptionValue,
-            networkPolicy,
+            ...policyPatch,
             restricted,
             validationRegex: validationRegexValue,
             trustedImageRegistries: trustedImageRegistriesValue,
@@ -777,16 +809,29 @@ function EnvironmentEditorDialog({
 
           <NetworkPolicyFields
             egressMode={egressMode}
-            setEgressMode={setEgressMode}
+            setEgressMode={(value) => {
+              setEgressMode(value);
+              setEgressDirty(true);
+            }}
             domainPreset={domainPreset}
-            setDomainPreset={setDomainPreset}
+            setDomainPreset={(value) => {
+              setDomainPreset(value);
+              setEgressDirty(true);
+            }}
             allowedDomainsText={allowedDomainsText}
-            setAllowedDomainsText={setAllowedDomainsText}
+            setAllowedDomainsText={(value) => {
+              setAllowedDomainsText(value);
+              setEgressDirty(true);
+            }}
             allowedCidrsText={allowedCidrsText}
-            setAllowedCidrsText={setAllowedCidrsText}
+            setAllowedCidrsText={(value) => {
+              setAllowedCidrsText(value);
+              setEgressDirty(true);
+            }}
             supportsFqdn={supportsFqdn}
             provider={capabilities?.networkPolicy.provider ?? null}
-            disabled={isPending}
+            baselineLoaded={egressBaselineLoaded}
+            disabled={isPending || !egressBaselineLoaded}
           />
         </section>
       </DialogBody>
@@ -827,6 +872,7 @@ function NetworkPolicyFields({
   setAllowedCidrsText,
   supportsFqdn,
   provider,
+  baselineLoaded,
   disabled,
 }: {
   egressMode: EgressMode;
@@ -839,6 +885,7 @@ function NetworkPolicyFields({
   setAllowedCidrsText: (value: string) => void;
   supportsFqdn: boolean;
   provider: string | null;
+  baselineLoaded: boolean;
   disabled: boolean;
 }) {
   // No enforcer on the cluster: every rule below would be accepted but never
@@ -859,6 +906,16 @@ function NetworkPolicyFields({
             <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
               View docs
             </ExternalDocsLink>
+          </AlertDescription>
+        </Alert>
+      ) : !baselineLoaded ? (
+        <Alert variant="info">
+          <Info className="h-4 w-4" />
+          <AlertTitle>Organization default not loaded</AlertTitle>
+          <AlertDescription className="block leading-6">
+            This environment inherits its egress from the organization default,
+            which hasn't loaded. Editing is disabled until it's available, so a
+            change isn't saved against the wrong baseline.
           </AlertDescription>
         </Alert>
       ) : !supportsFqdn ? (
@@ -999,13 +1056,6 @@ function FieldLabel({
       </Popover>
     </div>
   );
-}
-
-function splitPolicyList(value: string): string[] {
-  return value
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function formatEgressMode(mode: EgressMode) {

@@ -12,6 +12,10 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import {
+  CatalogTeamAccessLevelSchema,
+  CatalogTeamInputSchema,
+} from "./catalog-team-level";
 import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-credentials";
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
@@ -151,8 +155,17 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
     catalogItemApprovalStatus: z.string().nullable(),
     // Labels are loaded from the junction table, not from the DB row
     labels: z.array(CatalogLabelSchema).default([]),
-    // Teams are loaded from the junction table, not from the DB row
-    teams: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+    // Teams are loaded from the junction table, not from the DB row. A stored
+    // NULL level is resolved to `write` on read, so this never serializes null.
+    teams: z
+      .array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          level: CatalogTeamAccessLevelSchema,
+        }),
+      )
+      .default([]),
     authorName: z.string().nullable().optional(),
   });
 
@@ -196,8 +209,9 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     clonedFrom: z.string().uuid().nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
-    // Team IDs for team scope (synced separately)
-    teams: z.array(z.string()).optional(),
+    // Teams for team scope (synced separately). A bare id keeps whatever level
+    // is already stored for that team; an object sets it explicitly.
+    teams: z.array(CatalogTeamInputSchema).optional(),
   })
   .omit({
     createdAt: true,
@@ -229,8 +243,9 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
-    // Team IDs for team scope (synced separately)
-    teams: z.array(z.string()).optional(),
+    // Teams for team scope (synced separately). A bare id keeps whatever level
+    // is already stored for that team; an object sets it explicitly.
+    teams: z.array(CatalogTeamInputSchema).optional(),
   })
   .omit({
     id: true,

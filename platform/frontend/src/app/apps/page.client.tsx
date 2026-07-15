@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApps } from "@/lib/app.query";
+import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
 import { useSession } from "@/lib/auth/auth.query";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
@@ -31,6 +32,7 @@ export default function AppsPage() {
   const searchParams = useSearchParams();
   const search = searchParams.get("search") ?? "";
   const filter = searchParams.get("filter") ?? "all";
+  const kind = searchParams.get("kind") ?? "all";
 
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -44,13 +46,24 @@ export default function AppsPage() {
   );
   const [createOpen, setCreateOpen] = useState(false);
 
+  // Pinned-first grouping applies on top of the scope filter, mirroring the
+  // Projects page: a "Pinned" section above, everything else below.
   const filtered = useMemo(
     () =>
-      (data?.data ?? []).filter((app) =>
-        matchesFilter(app, filter, currentUserId),
+      sortAppsPinnedFirst(
+        (data?.data ?? []).filter(
+          (app) =>
+            matchesKind(app, kind) && matchesFilter(app, filter, currentUserId),
+        ),
       ),
-    [data, filter, currentUserId],
+    [data, kind, filter, currentUserId],
   );
+  const pinnedApps = filtered.filter((app) => app.pinnedAt);
+  const unpinnedApps = filtered.filter((app) => !app.pinnedAt);
+  // Below "Pinned", owned and external apps are separate sections: apps you
+  // authored here vs UIs that came with installed MCP servers.
+  const ownedApps = unpinnedApps.filter((app) => app.source === "owned");
+  const externalApps = unpinnedApps.filter((app) => app.source === "external");
 
   const setParam = (name: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -95,6 +108,21 @@ export default function AppsPage() {
             <SelectItem value="org">Organization</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={kind}
+          onValueChange={(value) =>
+            setParam("kind", value === "all" ? null : value)
+          }
+        >
+          <SelectTrigger className="w-[160px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" side="bottom" align="start">
+            <SelectItem value="all">All kinds</SelectItem>
+            <SelectItem value="owned">Apps</SelectItem>
+            <SelectItem value="external">MCP Server Apps</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <LoadingWrapper isPending={isPending && !data}>
@@ -116,17 +144,13 @@ export default function AppsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((app) => (
-              <AppCard
-                key={
-                  app.source === "owned"
-                    ? app.id
-                    : `${app.mcpServerId}:${app.resourceUri}`
-                }
-                app={app}
-              />
-            ))}
+          <div className="space-y-6">
+            <AppSection title="Pinned" apps={pinnedApps} />
+            <AppSection title="Apps" apps={ownedApps} />
+            <AppSection
+              title="Apps from installed MCP servers"
+              apps={externalApps}
+            />
           </div>
         )}
       </LoadingWrapper>
@@ -134,6 +158,46 @@ export default function AppsPage() {
       <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </PageLayout>
   );
+}
+
+// Mirrors the Projects page's ProjectSection: an uppercase header over the
+// card grid. Renders nothing when the group is empty, so only sections with
+// cards appear.
+function AppSection({ title, apps }: { title: string; apps: AppListItem[] }) {
+  if (apps.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h2>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {apps.map((app) => (
+          <AppCard
+            // Several tools of one server can share a widget resource, so
+            // (mcpServerId, resourceUri) alone collides; duplicate keys make
+            // React duplicate/omit cards on search re-renders, breaking the
+            // grid. The tool-scoped name disambiguates.
+            key={
+              app.source === "owned"
+                ? app.id
+                : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
+            }
+            app={app}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// "Apps" are authored inside the platform (source "owned"); "MCP Server Apps"
+// are ui:// resources exposed by installed external MCP servers (source
+// "external"). Exported for tests.
+export function matchesKind(app: AppListItem, kind: string): boolean {
+  if (kind === "owned") return app.source === "owned";
+  if (kind === "external") return app.source === "external";
+  return true;
 }
 
 function matchesFilter(

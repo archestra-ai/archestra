@@ -14,6 +14,8 @@ import { useDeleteMcpServer } from "@/lib/mcp/mcp-server.query";
 
 export interface UninstallServerInstall {
   server: { id: string; name: string };
+  /** Agents with tools explicitly assigned from this install. */
+  assignedAgents?: Array<{ id: string; name: string }>;
 }
 
 interface UninstallServerDialogProps {
@@ -34,6 +36,7 @@ export function UninstallServerDialog({
   const uninstallMutation = useDeleteMcpServer();
 
   const server = installs[0]?.server ?? null;
+  const assignedAgents = installs[0]?.assignedAgents ?? [];
 
   const handleConfirm = async () => {
     if (!server) return;
@@ -89,6 +92,19 @@ export function UninstallServerDialog({
         >
           <div className="flex flex-col gap-3 px-4 pb-4">
             <DialogDescription>{description}</DialogDescription>
+            {!isCancelingInstallation && assignedAgents.length > 0 && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+                <p className="font-medium text-amber-600 dark:text-amber-500">
+                  Used by {assignedAgents.length}{" "}
+                  {assignedAgents.length === 1 ? "agent" : "agents"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {assignedAgents.map((agent) => agent.name).join(", ")}{" "}
+                  {assignedAgents.length === 1 ? "has" : "have"} tools assigned
+                  from this server and may lose access to them.
+                </p>
+              </div>
+            )}
           </div>
           <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
             <Button type="button" variant="outline" onClick={() => onClose()}>

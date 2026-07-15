@@ -23,6 +23,7 @@ export const E2eTestId = {
   CredentialTeamSelect: "credential-team-select",
   ManageCredentialsButton: "manage-credentials-button",
   ConfigureIdpTeamSyncButton: "configure-idp-team-sync-button",
+  TeamExternalGroupMappingRow: "team-external-group-mapping-row",
   IdentityProviderCard: "identity-provider-card",
   IdentityProviderOpenDialogButton: "identity-provider-open-dialog-button",
   IdentityProviderCreateButton: "identity-provider-create-button",
@@ -38,10 +39,15 @@ export const E2eTestId = {
   McpServerCard: "mcp-server-card",
   McpServerSettingsButton: "mcp-server-settings-button",
   McpServerToolsCount: "mcp-server-tools-count",
+  McpServerAgentsCount: "mcp-server-agents-count",
   McpToolsDialog: "mcp-tools-dialog",
   TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
   ConnectAgentButton: "connect-agent-button",
+  PostCreateConnectDialog: "post-create-connect-dialog",
+  PostCreateOpenConnectionGuideButton:
+    "post-create-open-connection-guide-button",
+  PostCreateConnectDoneButton: "post-create-connect-done-button",
   ConnectCatalogItemButton: "connect-catalog-item-button",
   SelectCredentialTypePersonal: "select-credential-type-personal",
   CredentialsCount: "credentials-count",
@@ -118,10 +124,18 @@ export const E2eTestId = {
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
   ChatPromptTextarea: "chat-prompt-textarea",
+  // Queue of messages composed while a response was in-flight
+  ChatMessageQueue: "chat-message-queue",
+  ChatMessageQueueItem: "chat-message-queue-item",
+  ChatMessageQueueRemoveButton: "chat-message-queue-remove-button",
   // Chat sidebar item status indicators
   ChatItemGeneratingIndicator: "chat-item-generating-indicator",
   ChatItemUnreadIndicator: "chat-item-unread-indicator",
   QuickstartAddApiKeyButton: "quickstart-add-api-key-button",
+  // First-run "set a default model" onboarding nudge (after the first key)
+  OnboardingDefaultModelOpen: "onboarding-default-model-open",
+  OnboardingDefaultModelSkip: "onboarding-default-model-skip",
+  OnboardingDefaultModelSubmit: "onboarding-default-model-submit",
   ApiKeysLoadErrorRetry: "api-keys-load-error-retry",
   // MCP Logs
   McpLogsDialog: "mcp-logs-dialog",

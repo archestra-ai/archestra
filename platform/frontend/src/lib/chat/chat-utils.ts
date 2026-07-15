@@ -1,6 +1,8 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   type archestraApiTypes,
+  type ChatMessageFeedback,
+  ChatMessageFeedbackSchema,
   HOOK_RUN_PART_TYPE,
   hasRenderableAssistantContent,
 } from "@archestra/shared";
@@ -35,6 +37,7 @@ export function conversationStorageKeys(conversationId: string) {
     rightPanelOpen: `archestra-chat-right-panel-open-${conversationId}`,
     rightPanelTab: `archestra-chat-right-panel-tab-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
+    messageQueue: `archestra_chat_queue_${conversationId}`,
   };
 }
 
@@ -269,6 +272,40 @@ export function resolveCanonicalMessageId(params: {
   }
 
   return null;
+}
+
+/** Read a message's current feedback verdict from its metadata. */
+export function getMessageFeedback(
+  message: UIMessage | undefined,
+): ChatMessageFeedback | null {
+  if (!message) {
+    return null;
+  }
+  const parsed = ChatMessageFeedbackSchema.safeParse(
+    getObjectMetadata(message).feedback,
+  );
+  return parsed.success ? parsed.data : null;
+}
+
+/** Set or clear one message's feedback metadata, immutably. */
+export function applyFeedbackToMessages(params: {
+  messages: UIMessage[];
+  messageId: string;
+  feedback: ChatMessageFeedback | null;
+}): UIMessage[] {
+  return params.messages.map((message) => {
+    if (message.id !== params.messageId) {
+      return message;
+    }
+
+    return {
+      ...message,
+      metadata: {
+        ...getObjectMetadata(message),
+        feedback: params.feedback ?? undefined,
+      },
+    };
+  });
 }
 
 /** Replace the text of one text part of one message, immutably. */

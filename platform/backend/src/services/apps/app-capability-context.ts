@@ -1,7 +1,5 @@
 import { ARCHESTRA_APP_SDK_SUMMARY } from "@/archestra-mcp-server/app-authoring-guidance";
-import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-tools";
-import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
-import { AgentModel, ToolModel } from "@/models";
+import { resolveAppAssignableToolRows } from "./app-assignable-tools";
 
 interface AppCapabilityTool {
   /** Full MCP tool name as used by archestra.tools.call(...). */
@@ -23,65 +21,39 @@ interface AppCapabilityContext {
  *
  * The tool set is the same candidate space search_tools exposes — the agent's
  * assigned MCP tools plus, when the agent has dynamic access, the tools the
- * user can otherwise reach — RBAC-filtered the identical way, then narrowed to
- * the app-assignable rows (external catalog-backed tools; Archestra built-ins
- * are excluded because apps reach the data store through archestra.storage).
- * That narrowing reuses {@link ToolModel.findAppAssignableToolsByNames}, the
- * exact gate resolveAppToolsByName applies at assignment time, so the grounding
- * matches what can really be attached.
+ * user can otherwise reach — resolved through {@link resolveAppAssignableToolRows},
+ * the exact surface `resolveAppToolsByName` assigns from. Each name maps to its
+ * canonical row (RBAC-filtered, install-scoped, Archestra built-ins excluded
+ * because apps reach the data store through archestra.storage), so the grounding
+ * lists exactly the names that can really be attached and each description comes
+ * from the row that would actually be assigned and run.
+ *
+ * Grounding resolves in the *app's* `environmentId`, not the authoring agent's:
+ * an app is bound to a deliberate environment (e.g. staging/prod) and its tools
+ * are assigned (set_app_tools) and executed (runtime gate) there, so the
+ * capability list must reflect that environment even when the agent editing the
+ * app runs in a different one.
  */
 export async function buildAppCapabilityContext(params: {
   userId: string;
   organizationId: string;
-  /** The chat agent making the request (for agent-scoped tool resolution). */
+  /** The chat agent making the request (for its assigned tools + dynamic-access
+   * gate; the environment comes from the app, not the agent). */
   agentId: string;
+  /** The app's bound environment — the tools it can actually assign and run. */
+  environmentId: string | null;
 }): Promise<AppCapabilityContext> {
-  const { agentId, organizationId, userId } = params;
+  const { agentId, environmentId, organizationId, userId } = params;
 
-  const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
-  const assignedNames = new Set(assignedTools.map((tool) => tool.name));
-  const discoverableTools = await getUnassignedDiscoverableTools({
-    assignedToolNames: assignedNames,
+  const byName = await resolveAppAssignableToolRows({
     agentId,
     userId,
     organizationId,
+    environmentId,
   });
 
-  // First occurrence wins on duplicate names (assigned before discoverable),
-  // matching the search_tools ordering so a name resolves to the same row's
-  // description the model would otherwise see.
-  const descriptionByName = new Map<string, string>();
-  for (const tool of [...assignedTools, ...discoverableTools]) {
-    if (!descriptionByName.has(tool.name)) {
-      descriptionByName.set(tool.name, tool.description ?? "");
-    }
-  }
-
-  const permittedNames = await filterToolNamesByPermission(
-    [...descriptionByName.keys()],
-    userId,
-    organizationId,
-  );
-  const assignableRows = await ToolModel.findAppAssignableToolsByNames(
-    organizationId,
-    [...permittedNames].filter((name) => descriptionByName.has(name)),
-    await AgentModel.findEnvironmentId(agentId),
-  );
-
-  // A name backed by more than one assignable row is ambiguous and cannot be
-  // assigned by name (resolveAppToolsByName rejects it), so it is not a real
-  // grounding capability — drop ambiguous names and keep unique ones.
-  const rowCountByName = new Map<string, number>();
-  for (const row of assignableRows) {
-    if (row.clonedPendingDiscovery) {
-      continue;
-    }
-    rowCountByName.set(row.name, (rowCountByName.get(row.name) ?? 0) + 1);
-  }
-
-  const tools: AppCapabilityTool[] = [...rowCountByName.entries()]
-    .filter(([, count]) => count === 1)
-    .map(([name]) => ({ name, description: descriptionByName.get(name) ?? "" }))
+  const tools: AppCapabilityTool[] = [...byName.values()]
+    .map((tool) => ({ name: tool.name, description: tool.description ?? "" }))
     .sort((left, right) => left.name.localeCompare(right.name));
 
   return { tools, sdkSummary: ARCHESTRA_APP_SDK_SUMMARY };

@@ -155,6 +155,121 @@ describe("search_tools", () => {
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
+  test("derives an app launch tool's description from the catalog name, not the raw stored value", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeAgentTool,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const appCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "PizzaTracker",
+      serverType: "app",
+    });
+    // A pre-sanitization stored description: raw, injection-shaped. The handler
+    // must not surface it — it derives from the catalog name instead.
+    const launchTool = await makeTool({
+      name: "pizzatracker__open",
+      description: "INJECTED_SENTINEL ![x](http://evil/a.png)",
+      catalogId: appCatalog.id,
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, launchTool.id);
+    await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
+
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+    };
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "PizzaTracker open", limit: 5 },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    const launch = structuredContent.tools.find(
+      (tool) => tool.toolName === "pizzatracker__open",
+    );
+    expect(launch).toBeDefined();
+    expect(launch?.description).toBe(
+      'Open the "PizzaTracker" app and render its UI.',
+    );
+    expect(launch?.description).not.toContain("INJECTED_SENTINEL");
+  });
+
+  test("neutralizes control/format characters in catalog names in the zero-match hint", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeAgentTool,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const bidi = String.fromCodePoint(0x202e);
+    const bel = String.fromCodePoint(0x07);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: `Ev${bidi}il\n${bel}Corp`,
+    });
+    const tool = await makeTool({
+      name: "evilcorp__do_thing",
+      description: "Does a thing.",
+      catalogId: catalog.id,
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+    };
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "zzzznomatchqqq", limit: 5 },
+      context,
+    );
+
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    expect(structuredContent.matchCount).toBe(0);
+    const hint = structuredContent.hint ?? "";
+    expect(hint).toContain("Available servers:");
+    // The collapsed, single-line name is present; the raw control/format
+    // characters that could reshape the model-facing hint are gone.
+    expect(hint).toContain("Ev il Corp");
+    expect(hint).not.toContain(bidi);
+    expect(hint).not.toContain(bel);
+    expect(hint).not.toContain("\n");
+  });
+
   test("marks tools without an installed connection as unavailable and ranks them last", async ({
     makeAgent,
     makeInternalMcpCatalog,
@@ -561,9 +676,12 @@ describe("search_tools", () => {
     }
   });
 
-  // Sandbox built-ins surface in search only while UNassigned (so the model can
-  // discover and run them dynamically), and only for callers who can actually
-  // run them. Seeded but not assigned here to exercise that path.
+  // Unassigned Archestra built-ins surface in search for All-mode agents (so
+  // the model can discover and run them dynamically); assigned always-exposed
+  // tools stay out (they are already top-level). Sandbox built-ins additionally
+  // require their feature flag, and every result is RBAC-filtered — so they
+  // only surface for callers who can actually run them (sandbox:execute).
+  // Seeded but not assigned here to exercise that path.
   describe("sandbox built-in discovery", () => {
     async function searchSandboxTools(
       context: ArchestraContext,
@@ -611,57 +729,11 @@ describe("search_tools", () => {
         expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
         expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
         expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
-        // Persistent-files tools surface too while the Projects feature is on.
+        // Persistent-files tools surface too when the sandbox runtime is on.
         expect(names).toContain(TOOL_READ_FILE_FULL_NAME);
       } finally {
         (config.skillsSandbox as { enabled: boolean }).enabled =
           originalSandboxEnabled;
-      }
-    });
-
-    test("drops persistent-files tools from discovery when the Projects feature is off, keeping sandbox-runtime tools", async ({
-      makeAgent,
-      makeMember,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const config = (await import("@/config")).default;
-      const originalSandboxEnabled = config.skillsSandbox.enabled;
-      const originalProjectsEnabled = config.projects.enabled;
-      (config.skillsSandbox as { enabled: boolean }).enabled = true;
-      try {
-        const org = await makeOrganization();
-        const user = await makeUser();
-        await makeMember(user.id, org.id, { role: "admin" });
-        const agent = await makeAgent({
-          name: "Projects Discovery Agent",
-          organizationId: org.id,
-          accessAllTools: true,
-        });
-        // Seed with the Projects feature on so the persistent-files catalog rows
-        // exist, then turn it off: the rows persist but discovery must drop them.
-        (config.projects as { enabled: boolean }).enabled = true;
-        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-        (config.projects as { enabled: boolean }).enabled = false;
-
-        const names = await searchSandboxTools({
-          agent: { id: agent.id, name: agent.name },
-          agentId: agent.id,
-          organizationId: org.id,
-          userId: user.id,
-        });
-
-        // Runtime tools follow the runtime flag — still discoverable.
-        expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
-        expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
-        expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
-        // Persistent-files tools follow the Projects flag — gone.
-        expect(names).not.toContain(TOOL_READ_FILE_FULL_NAME);
-      } finally {
-        (config.skillsSandbox as { enabled: boolean }).enabled =
-          originalSandboxEnabled;
-        (config.projects as { enabled: boolean }).enabled =
-          originalProjectsEnabled;
       }
     });
 
@@ -701,6 +773,62 @@ describe("search_tools", () => {
         (config.skillsSandbox as { enabled: boolean }).enabled =
           originalSandboxEnabled;
       }
+    });
+  });
+
+  // The same discovery widening covers the management built-ins: unassigned,
+  // they surface for an All-mode agent and drop out when excluded per-agent.
+  describe("management built-in discovery", () => {
+    test("surfaces an unassigned management built-in for an All-mode agent and hides it when excluded", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const { agentToolExclusionsService } = await import(
+        "@/services/agent-tool-exclusions"
+      );
+      const { TOOL_LIST_AGENTS_FULL_NAME } = await import("@archestra/shared");
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Management Discovery Agent",
+        organizationId: org.id,
+        accessAllTools: true,
+      });
+      // seed the built-in rows, do NOT assign them
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const search = async () => {
+        const result = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query: "list agents", limit: 20 },
+          context,
+        );
+        expect(result.isError).toBe(false);
+        return (
+          result.structuredContent as SearchToolsStructuredContent
+        ).tools.map((tool) => tool.toolName);
+      };
+
+      expect(await search()).toContain(TOOL_LIST_AGENTS_FULL_NAME);
+
+      const listAgents = await ToolModel.findByName(TOOL_LIST_AGENTS_FULL_NAME);
+      if (!listAgents) throw new Error("list_agents row missing");
+      await agentToolExclusionsService.replaceExclusions({
+        agentId: agent.id,
+        organizationId: org.id,
+        excludedToolIds: [listAgents.id],
+      });
+
+      expect(await search()).not.toContain(TOOL_LIST_AGENTS_FULL_NAME);
     });
   });
 

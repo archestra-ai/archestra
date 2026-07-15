@@ -4,7 +4,9 @@
  * Unit tests for shared helper functions extracted from llm-proxy-handler.ts.
  */
 
+import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
+import type { FastifyReply } from "fastify";
 import { vi } from "vitest";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import { describe, expect, test } from "@/test";
@@ -79,6 +81,7 @@ import { metrics } from "@/observability";
 import {
   buildInteractionRecord,
   calculateInteractionCosts,
+  handleError,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
@@ -391,7 +394,6 @@ describe("recordBlockedToolCallMetrics", () => {
       toolCallCount: 2,
       actualModel: "gpt-4",
       source: "api",
-      externalAgentId: "ext-1",
     });
 
     expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith({
@@ -417,7 +419,6 @@ describe("recordBlockedToolCallMetrics", () => {
       toolCallCount: 1,
       actualModel: "claude-3-opus",
       source: "api",
-      externalAgentId: "ext-2",
     });
 
     expect(vi.mocked(metrics.llm.reportBlockedTools)).toHaveBeenCalledWith(
@@ -426,7 +427,6 @@ describe("recordBlockedToolCallMetrics", () => {
       1,
       "claude-3-opus",
       "api",
-      "ext-2",
     );
   });
 
@@ -506,5 +506,146 @@ describe("shouldForwardAnthropicBeta", () => {
 
   test("keeps forwarding a non-Claude model with no override (canonical endpoint)", () => {
     expect(shouldForwardAnthropicBeta("kimi-k2", false)).toBe(true);
+  });
+});
+
+describe("handleError", () => {
+  function makeReply(headersSent: boolean) {
+    const writes: string[] = [];
+    const reply = {
+      raw: {
+        headersSent,
+        write: (chunk: string) => {
+          writes.push(chunk);
+          return true;
+        },
+        end: () => {},
+      },
+    } as unknown as FastifyReply;
+    return { reply, writes };
+  }
+
+  const extractMessage = (error: unknown) =>
+    error instanceof Error ? error.message : "Internal server error";
+
+  test("preserves the internal code carried by a thrown ApiError", () => {
+    const { reply } = makeReply(false);
+    const upstreamError = new ApiError(
+      503,
+      "empty upstream response",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    let thrown: unknown;
+    try {
+      handleError(upstreamError, reply, extractMessage, true, () => undefined);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect((thrown as ApiError).statusCode).toBe(503);
+    expect((thrown as ApiError).internalCode).toBe(
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+  });
+
+  test("prefers the adapter's classification over the ApiError's own code", () => {
+    const { reply } = makeReply(false);
+    const upstreamError = new ApiError(
+      400,
+      "context too long",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    let thrown: unknown;
+    try {
+      handleError(
+        upstreamError,
+        reply,
+        extractMessage,
+        false,
+        () => ArchestraInternalErrorCode.ContextLengthExceeded,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect((thrown as ApiError).internalCode).toBe(
+      ArchestraInternalErrorCode.ContextLengthExceeded,
+    );
+  });
+
+  test("surfaces the internal code in the mid-stream SSE error event", () => {
+    const { reply, writes } = makeReply(true);
+    const upstreamError = new ApiError(
+      503,
+      "empty upstream response",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    handleError(upstreamError, reply, extractMessage, true, () => undefined);
+
+    expect(writes).toHaveLength(1);
+    const payload = JSON.parse(writes[0].replace(/^event: error\ndata: /, ""));
+    expect(payload.error.internal_code).toBe(
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+    expect(payload.error.message).toBe("empty upstream response");
+  });
+
+  // Transient upstream connection failures carry no HTTP status, so they used to
+  // fall through as a generic 500 and get captured as a server exception. They're
+  // reclassified to 502/504 so the central handler keeps them out of error
+  // tracking (it already excludes 502/504) while the client still sees a 5xx.
+  function throwStatusFor(error: unknown): number | undefined {
+    const { reply } = makeReply(false);
+    try {
+      handleError(error, reply, extractMessage, false, () => undefined);
+    } catch (thrown) {
+      return (thrown as ApiError).statusCode;
+    }
+    return undefined;
+  }
+
+  test("classifies an SDK connection error as 502", () => {
+    // OpenAI/Anthropic SDK APIConnectionError message, no HTTP status.
+    expect(throwStatusFor(new Error("Connection error."))).toBe(502);
+  });
+
+  test("classifies an SDK request timeout as 504", () => {
+    // OpenAI/Anthropic SDK APIConnectionTimeoutError message, no HTTP status.
+    expect(throwStatusFor(new Error("Request timed out."))).toBe(504);
+  });
+
+  test("classifies a wrapped network errno cause as an upstream gateway error", () => {
+    const connReset = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("read ECONNRESET"), {
+        code: "ECONNRESET",
+      }),
+    });
+    expect(throwStatusFor(connReset)).toBe(502);
+
+    const timedOut = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("connect ETIMEDOUT"), {
+        code: "ETIMEDOUT",
+      }),
+    });
+    expect(throwStatusFor(timedOut)).toBe(504);
+  });
+
+  test("leaves an error that carries an explicit HTTP status untouched", () => {
+    // A real upstream 500 response must not be reclassified away from capture.
+    expect(throwStatusFor(new ApiError(500, "Connection error."))).toBe(500);
+    expect(
+      throwStatusFor(Object.assign(new Error("boom"), { status: 500 })),
+    ).toBe(500);
+  });
+
+  test("leaves a generic internal error as a 500", () => {
+    // No connection/timeout signal → stays a 500 and remains captured.
+    expect(throwStatusFor(new TypeError("cannot read x of undefined"))).toBe(
+      500,
+    );
   });
 });

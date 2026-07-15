@@ -2,25 +2,22 @@
 title: Secure Agent with Pydantic AI
 category: Examples
 order: 6
+lastUpdated: 2026-07-03
 ---
 
-<!-- 
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ## Overview
 
-[**Pydantic AI**](https://ai.pydantic.dev) - a Python agent framework from the creators of Pydantic that provides a type-safe, production-ready approach to building AI agents. It offers unified LLM provider support (OpenAI, Anthropic, Gemini, etc.), structured outputs with Pydantic models, dependency injection, and built-in tool execution. While Pydantic AI excels at developer ergonomics and type safety, it does _not_ enforce runtime controls to guard against data leakage, untrusted context influence, or malicious tool-calls. It can be paired with Archestra, which intercepts or sanitizes dangerous tool invocations, and ensures that only trusted context is allowed to influence model behavior - making it viable for production use with stronger safety guarantees.
+[**Pydantic AI**](https://ai.pydantic.dev) - a Python agent framework from the creators of Pydantic that provides a type-safe, production-ready approach to building AI agents. It offers unified LLM provider support (OpenAI, Anthropic, Gemini, etc.), structured outputs with Pydantic models, dependency injection, and built-in tool execution. Pydantic AI does _not_ enforce runtime controls to guard against data leakage, untrusted context influence, or malicious tool-calls. You can pair it with Archestra, which intercepts or sanitizes dangerous tool invocations and ensures that only trusted context influences model behavior.
 
-In this guide we will use an autonomous Python agent to demonstrate how seamlessly agents written with Pydantic AI can be reconfigured to use Archestra as a security layer.
+In this guide we will use an autonomous Python agent to show how agents written with Pydantic AI can be reconfigured to use Archestra as a security layer.
 
 The full example can be found on: [https://github.com/archestra-ai/examples/tree/main/pydantic-ai](https://github.com/archestra-ai/examples/tree/main/pydantic-ai)
 
 ## Problem
 
-Without Archestra, whenever an agent is capable of fetching potentially untrusted content, it can be the source of malicious instructions that the LLM can follow. This demonstrates the [Lethal Trifecta](https://www.archestra.ai/docs/platform-lethal-trifecta) vulnerability pattern.
+Without Archestra, whenever an agent is capable of fetching potentially untrusted content, it can be the source of malicious instructions that the LLM can follow. This demonstrates the [Lethal Trifecta](/docs/platform-ai-tool-guardrails#the-lethal-trifecta) vulnerability pattern.
 
 In our example, the agent:
 
@@ -32,7 +29,7 @@ The GitHub issue ([archestra-ai/archestra#669](https://github.com/archestra-ai/a
 
 ## Step 1. Get your LLM Provider API Key
 
-This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](https://www.archestra.ai/docs/platform-supported-llm-providers) for the complete list.
+This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the complete list.
 
 For OpenAI, you can get an API key from:
 
@@ -40,7 +37,7 @@ For OpenAI, you can get an API key from:
 - Azure OpenAI
 - Any OpenAI-compatible service (e.g., LocalAI, FastChat, Helicone, LiteLLM, OpenRouter etc.)
 
-👉 Once you have the key, copy it and keep it handy.
+Once you have the key, copy it and keep it handy.
 
 ## Step 2. Get a GitHub Personal Access Token
 
@@ -67,7 +64,7 @@ docker build -t pydantic-ai-archestra-example .
 docker run pydantic-ai-archestra-example
 ```
 
-**Expected behavior**: The agent will fetch the GitHub issue, read the hidden prompt injection, and attempt to send an email with sensitive information. Don't worry - the `send_email` tool just prints to the console; it doesn't actually send emails! 🙈
+**Expected behavior**: The agent will fetch the GitHub issue, read the hidden prompt injection, and attempt to send an email with sensitive information. Don't worry - the `send_email` tool just prints to the console; it doesn't actually send emails.
 
 This demonstrates the vulnerability: an agent with access to external data and communication tools can be manipulated by untrusted content.
 
@@ -76,7 +73,12 @@ This demonstrates the vulnerability: an agent with access to external data and c
 Now let's add the security layer:
 
 ```shell
-docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 archestra/platform
+docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
+  -e ARCHESTRA_QUICKSTART=true \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v archestra-postgres-data:/var/lib/postgresql/data \
+  -v archestra-app-data:/app/data \
+  archestra/platform
 ```
 
 This starts Archestra Platform with:
@@ -161,6 +163,6 @@ The decision tree for Archestra would be:
 
 ## All Set
 
-Now you are safe from Lethal Trifecta type attacks and prompt injections cannot influence your agent. With Archestra, the GitHub API response is automatically marked as untrusted, and any subsequent dangerous tool calls (like `send_email`) are blocked.
+With Archestra, the GitHub API response is marked as untrusted, so any subsequent tool calls that could be influenced by it (like `send_email`) are blocked unless a rule you set allows them.
 
 To learn more about how Archestra's AI tool guardrails work, see the [AI tool guardrails documentation](/docs/platform-ai-tool-guardrails).

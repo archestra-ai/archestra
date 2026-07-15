@@ -62,7 +62,6 @@ def get_frontend_env():
 frontend_env_vars = get_frontend_env()
 
 code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
-apps_enabled = os.getenv('ARCHESTRA_APPS_ENABLED') == 'true'
 backend_resource_deps = ['db-migrate']
 if code_runtime_enabled:
   # Skip the local port-forward dep when pointing at an external engine — that
@@ -72,8 +71,8 @@ if code_runtime_enabled:
     backend_resource_deps.append('dagger-runtime-port-forward')
   # build the napi addon before the backend boots, so it never loads a stale .node
   backend_resource_deps.append('sandbox-rs-build')
-if apps_enabled:
-  backend_resource_deps.append('app-runtime-rs-build')
+# The MCP App runtime addon must be built before the backend boots.
+backend_resource_deps.append('app-runtime-rs-build')
 
 local_resource(
   'pnpm-install',
@@ -89,22 +88,23 @@ local_resource(
 # Rebuild the native app-runtime addon (napi) when its Rust sources change. The
 # compiled .node is gitignored and CI/Docker build it, so without this the
 # backend throws "Unable to load @archestra/app-runtime-rs" the first time an
-# owned app is served. Mirrors sandbox-rs-build; only runs when the apps
-# feature (this addon's sole consumer) is enabled.
-if apps_enabled:
-  local_resource(
-    'app-runtime-rs-build',
-    cmd='pnpm --filter @archestra/app-runtime-rs build',
-    deps=[
-      '../archestra-rs/app-runtime-rs/src',
-      '../archestra-rs/app-runtime-core/src',
-      '../archestra-rs/app-runtime-rs/Cargo.toml',
-      '../archestra-rs/app-runtime-core/Cargo.toml',
-      '../archestra-rs/Cargo.lock',
-    ],
-    resource_deps=['pnpm-install'],
-    labels=['apps'],
-  )
+# owned app is served. Mirrors sandbox-rs-build.
+local_resource(
+  'app-runtime-rs-build',
+  # build:dev = the release-fast profile (no LTO, incremental) for fast in-loop
+  # rebuilds; CI/Docker still build the optimized --release binary.
+  cmd='pnpm --filter @archestra/app-runtime-rs build:dev',
+  deps=[
+    '../archestra-rs/app-runtime-rs/src',
+    '../archestra-rs/app-runtime-core/src',
+    '../archestra-rs/app-runtime-rs/Cargo.toml',
+    '../archestra-rs/app-runtime-core/Cargo.toml',
+    '../archestra-rs/Cargo.toml',
+    '../archestra-rs/Cargo.lock',
+  ],
+  resource_deps=['pnpm-install'],
+  labels=['apps'],
+)
 
 # Main dev/prod bundle
 if is_prod:
@@ -132,9 +132,17 @@ else:
     deps=['../.env', 'run-backend-dev.sh'],
   )
 
+  # Standardize Tilt local dev on Turbopack for the Next dev server. Left to
+  # itself, scripts/dev.mjs falls back to webpack on macOS arm64 (the
+  # @next/swc-darwin-arm64 IOAccelerator memory leak under Turbopack,
+  # vercel/next.js#92055). Set ARCHESTRA_DEV_BUNDLER=webpack in .env (or the
+  # shell) to opt back out.
+  dev_bundler = os.getenv('ARCHESTRA_DEV_BUNDLER', 'turbopack')
+
   # Frontend dev server - waits for backend to be ready
   frontend_serve_env = dict(frontend_env_vars)
   frontend_serve_env['PORT'] = frontend_port
+  frontend_serve_env['ARCHESTRA_DEV_BUNDLER'] = dev_bundler
   local_resource(
     dev_resource_name + '-frontend',
     serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; pnpm dev --filter @frontend & wait $!',
@@ -155,14 +163,15 @@ else:
   local_resource(
     dev_resource_name + '-frontend-int-tests',
     # Route through scripts/dev.mjs so the int-tests frontend gets the same
-    # platform-aware bundler choice as `pnpm dev`: Turbopack on Linux/CI, webpack
-    # on macOS arm64 (the unfixed @next/swc-darwin-arm64 memory bug, see the
-    # "//dev" comment in frontend/package.json). The script adds `-H 127.0.0.1`.
+    # bundler handling as `pnpm dev` (ARCHESTRA_DEV_BUNDLER validation plus the
+    # platform-aware fallback outside Tilt — see the "//dev" comment in
+    # frontend/package.json). The script adds `-H 127.0.0.1`.
     serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && node ./scripts/dev.mjs -p ' + frontend_int_tests_port + ' & wait $!',
     serve_cmd_bat='cd ..\\frontend && node .\\scripts\\dev.mjs -p ' + frontend_int_tests_port,
     labels=['dev'],
     deps=['../.env'],
     serve_env={
+      'ARCHESTRA_DEV_BUNDLER': dev_bundler,
       'NEXT_DIST_DIR': '.next-pw',
       'NEXT_PUBLIC_API_MOCKING': 'enabled',
       # Both must be pinned: the SSR path reads ARCHESTRA_INTERNAL_API_BASE_URL,

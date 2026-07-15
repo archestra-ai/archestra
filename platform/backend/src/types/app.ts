@@ -68,6 +68,8 @@ const AppListItemBaseSchema = z.object({
   description: z.string().nullable(),
   executionModel: z.enum(["viewer-scoped", "server-scoped"]),
   cspOrigin: z.enum(["platform-pinned", "author-declared"]),
+  /** When the requesting user pinned this app; null = not pinned. */
+  pinnedAt: z.date().nullable(),
 });
 
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
@@ -96,6 +98,18 @@ export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   mcpServerId: z.string(),
   scope: AppScopeSchema,
   resourceUri: z.string(),
+  // The short tool name. Together with (mcpServerId, resourceUri) it is the
+  // item's pin identity: several tools of one server can share a ui://
+  // resource, so the resource alone does not identify a tile.
+  toolName: z.string(),
+  // The catalog's icon, exactly as the MCP registry renders it: an emoji
+  // character or a base64 image data URL. Null when the server has none (the
+  // card falls back to its generic server glyph).
+  icon: z.string().nullable(),
+  // The tool declares required inputs, so opening renders nothing until the
+  // agent collects them in chat (mode "prompt"). The card hides its standalone
+  // "Open in new tab" link for these — a bare render would mount a broken app.
+  requiresInput: z.boolean(),
 });
 
 export const AppListItemSchema = z.discriminatedUnion("source", [
@@ -122,6 +136,9 @@ export const ExternalAppResourceSchema = z.object({
   toolName: z.string(),
   // Card/header label: "${serverName} / ${toolName}".
   name: z.string(),
+  // The tool declares required inputs; the standalone run page shows an
+  // open-in-chat handoff instead of rendering the resource with no input.
+  requiresInput: z.boolean(),
 });
 export type ExternalAppResource = z.infer<typeof ExternalAppResourceSchema>;
 
@@ -243,7 +260,7 @@ export const ScaffoldAppSchema = z.strictObject({
     .optional()
     .describe("Optional description."),
   scope: AppScopeSchema.optional().describe(
-    "Visibility scope. Defaults to personal (owned by the calling user).",
+    "Visibility scope, personal (default, owned by the calling user) or org. Team scope is not available here — team-scoped apps must be created in the Apps UI so teams can be assigned.",
   ),
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
@@ -268,7 +285,7 @@ export const RefineAppToolSchema = z.strictObject({
           .min(1)
           .optional()
           .describe(
-            "When present, the question is single-select over these options; otherwise it is free-text.",
+            'When present, the question is single-select over these plain-string option labels, e.g. ["Light", "Dark"] — never {label, value} objects; otherwise it is free-text.',
           ),
       }),
     )

@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ToolChecklist } from "@/components/agent-tools-editor";
 import {
   isCatalogInEnvironment,
@@ -15,13 +15,11 @@ import {
 } from "@/components/agent-tools-editor.utils";
 import { LoadingWrapper } from "@/components/loading";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { McpServerPillShell } from "@/components/mcp-server-pill-shell";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
+  AssignmentCombobox,
+  type AssignmentComboboxItem,
+} from "@/components/ui/assignment-combobox";
 import { Button } from "@/components/ui/button";
 import {
   useApp,
@@ -35,7 +33,6 @@ import {
   fetchCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { cn } from "@/lib/utils";
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -45,12 +42,18 @@ type AssignedTool = archestraApiTypes.GetAppToolsResponses["200"][number];
 
 const EMPTY_TOOLS: CatalogTool[] = [];
 
+// Shown in the built-in group's pill popover instead of the catalog's generic
+// description: the file tools' scope depends on where the app is rendered.
+const BUILTIN_FILE_TOOLS_BLURB =
+  "Built-in file tools. When the app runs inside a chat, they let it list and read that conversation's files — or the project's files for a project chat — as the person viewing the app. Outside a chat the app sees no files.";
+
 /**
  * An app's assignable upstream tools, grouped by their MCP server (catalog) to
  * mirror the agent tool selector. Assignment uses dynamic credentials (resolved
  * per viewer at call time) — the only resolution mode that fits an app shared
  * across an org. Built-in Archestra tools (incl. the always-available App Data
- * Store) aren't assignable and are omitted. Only servers in the app's bound
+ * Store) aren't assignable and are omitted — except the app-assignable
+ * read-only file tools, offered as their own built-in group. Only servers in the app's bound
  * environment are offered; a server an existing assignment has left is still
  * shown so the stale assignment can be removed.
  */
@@ -59,7 +62,6 @@ export function AppToolsEditor({
   environmentId,
   selectedToolIds,
   onSelectionChange,
-  unbounded = false,
 }: {
   appId: string;
   /**
@@ -77,15 +79,8 @@ export function AppToolsEditor({
    */
   selectedToolIds?: Set<string>;
   onSelectionChange?: (next: Set<string>) => void;
-  /**
-   * Let each server's tool list flow at its full height instead of capping it
-   * at a scrollable `max-h-96` box. Set when embedding in a surface that already
-   * scrolls (e.g. the inline settings form) so its wheel scroll isn't captured
-   * by a nested scroller.
-   */
-  unbounded?: boolean;
 }) {
-  const { data: app } = useApp(appId);
+  const { data: app } = useApp(environmentId === undefined ? appId : null);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();
   const { data: assignableBuiltins = [] } = useAppAssignableBuiltinTools();
@@ -214,13 +209,6 @@ export function AppToolsEditor({
     }
     return [...byId.values()];
   }, [assignableBuiltins, assigned]);
-  const builtinSelected = useMemo(
-    () =>
-      new Set(builtinTools.filter((t) => selection.has(t.id)).map((t) => t.id)),
-    [builtinTools, selection],
-  );
-  const builtinSelectedCount = builtinSelected.size;
-
   // Editors get the interactive checklist, so load each candidate's tools to
   // group, count, and render them. Viewers only see assigned tools (below) and
   // don't fetch catalog tools.
@@ -254,17 +242,22 @@ export function AppToolsEditor({
     );
   }, [candidates, toolsByCatalog, assignedIdsByCatalog]);
 
-  const defaultOpen = useMemo(
-    () => [
-      ...(assignedIdsByCatalog.has(ARCHESTRA_MCP_CATALOG_ID)
-        ? [ARCHESTRA_MCP_CATALOG_ID]
-        : []),
-      ...visibleCatalogs
-        .filter((c) => assignedIdsByCatalog.has(c.id))
-        .map((c) => c.id),
-    ],
-    [visibleCatalogs, assignedIdsByCatalog],
+  // The pill-model catalog list: the built-in file-tools group (when available)
+  // rendered as a pseudo-server ahead of the real ones, with its tools folded
+  // into the per-catalog tool map so the generic pill/combobox code applies.
+  const pillCatalogs = useMemo(
+    () =>
+      builtinCatalog && builtinTools.length > 0
+        ? [builtinCatalog, ...visibleCatalogs]
+        : visibleCatalogs,
+    [builtinCatalog, builtinTools, visibleCatalogs],
   );
+  const pillToolsByCatalog = useMemo(() => {
+    if (builtinTools.length === 0) return toolsByCatalog;
+    const map = new Map(toolsByCatalog);
+    map.set(ARCHESTRA_MCP_CATALOG_ID, builtinTools);
+    return map;
+  }, [toolsByCatalog, builtinTools]);
 
   // Assigned tools that map to no listed catalog (server removed, or the
   // catalog list failed/has not loaded) would otherwise be invisible and
@@ -283,7 +276,126 @@ export function AppToolsEditor({
     [orphanedAssigned, selection],
   );
 
-  const toolsLoading = toolQueries.some((q) => q.isLoading);
+  // A pill stays visible while a server is added this session, even if the user
+  // then deselects all its tools inside the popover (mirrors the gateway).
+  const [activeCatalogIds, setActiveCatalogIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // The pill whose popover should pop open right after it's added.
+  const [autoOpenCatalogId, setAutoOpenCatalogId] = useState<string | null>(
+    null,
+  );
+
+  // Selected tool ids grouped by their catalog. A selected id belongs to a
+  // catalog if its tool is loaded there or it's a persisted assignment of it —
+  // the latter keeps the count right before catalog tools load.
+  const selectedByCatalog = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const catalog of pillCatalogs) {
+      const catalogTools = pillToolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;
+      const catalogToolIds = new Set(catalogTools.map((t) => t.id));
+      const persisted =
+        assignedIdsByCatalog.get(catalog.id) ?? new Set<string>();
+      map.set(
+        catalog.id,
+        new Set(
+          [...selection].filter(
+            (id) => catalogToolIds.has(id) || persisted.has(id),
+          ),
+        ),
+      );
+    }
+    return map;
+  }, [pillCatalogs, pillToolsByCatalog, assignedIdsByCatalog, selection]);
+
+  // Pilled servers: those with a selection, plus ones just added and not yet
+  // removed. Sorted (assigned first) via visibleCatalogs.
+  const shownCatalogs = useMemo(
+    () =>
+      pillCatalogs.filter(
+        (c) =>
+          (selectedByCatalog.get(c.id)?.size ?? 0) > 0 ||
+          activeCatalogIds.has(c.id),
+      ),
+    [pillCatalogs, selectedByCatalog, activeCatalogIds],
+  );
+  const shownCatalogIds = useMemo(
+    () => shownCatalogs.map((c) => c.id),
+    [shownCatalogs],
+  );
+
+  // Add a server (select all its tools) or remove it (clear all its tools),
+  // toggled from the "+ Add" combobox or the pill's remove button.
+  const toggleCatalog = (catalogId: string) => {
+    const catalog =
+      catalogId === ARCHESTRA_MCP_CATALOG_ID
+        ? builtinCatalog
+        : candidates.find((c) => c.id === catalogId);
+    if (!catalog) return;
+    const catalogTools = pillToolsByCatalog.get(catalogId) ?? EMPTY_TOOLS;
+    const shown =
+      (selectedByCatalog.get(catalogId)?.size ?? 0) > 0 ||
+      activeCatalogIds.has(catalogId);
+    if (shown) {
+      changeCatalogSelection(catalogTools, new Set());
+      setActiveCatalogIds((prev) => {
+        const next = new Set(prev);
+        next.delete(catalogId);
+        return next;
+      });
+    } else {
+      // Staged mode pre-selects every tool (nothing persists until Save). Live
+      // mode leaves them unselected: a burst of assign mutations here, followed
+      // by a quick remove, would derive its unassigns from a not-yet-refetched
+      // selection and strand the grants — so the user picks tools in the popover
+      // instead, one assignment at a time.
+      if (controlled) {
+        changeCatalogSelection(
+          catalogTools,
+          new Set(catalogTools.map((t) => t.id)),
+        );
+      }
+      setActiveCatalogIds((prev) => new Set(prev).add(catalogId));
+    }
+  };
+
+  const comboboxItems: AssignmentComboboxItem[] = useMemo(
+    () =>
+      [
+        ...(builtinCatalog && builtinTools.length > 0 ? [builtinCatalog] : []),
+        ...candidates,
+      ].map((catalog) => {
+        const total = pillToolsByCatalog.get(catalog.id)?.length ?? 0;
+        const selected = selectedByCatalog.get(catalog.id)?.size ?? 0;
+        const disabled = total === 0;
+        return {
+          id: catalog.id,
+          name: catalog.name,
+          description: catalog.description || undefined,
+          icon: (
+            <McpCatalogIcon
+              icon={catalog.icon}
+              catalogId={catalog.id}
+              size={16}
+            />
+          ),
+          badge: disabled
+            ? undefined
+            : selected > 0
+              ? `${selected}/${total}`
+              : `${total} tools`,
+          disabled,
+          disabledReason: disabled ? "No tools" : undefined,
+        };
+      }),
+    [
+      builtinCatalog,
+      builtinTools,
+      candidates,
+      pillToolsByCatalog,
+      selectedByCatalog,
+    ],
+  );
 
   if (canEdit !== true) {
     return (
@@ -298,127 +410,63 @@ export function AppToolsEditor({
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <LoadingWrapper isPending={isPending && !assigned}>
-        {visibleCatalogs.length === 0 &&
+        {candidates.length === 0 &&
         orphanedVisible.length === 0 &&
         builtinTools.length === 0 ? (
-          candidates.length > 0 && toolsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading tools…</p>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No MCP servers are available in this app's environment. The app
-              can still use its data store.
-            </p>
-          )
+          <p className="text-sm text-muted-foreground">
+            No MCP servers are available in this app's environment. The app can
+            still use its data store.
+          </p>
         ) : (
           <>
-            {visibleCatalogs.length > 0 || builtinTools.length > 0 ? (
-              <Accordion type="multiple" defaultValue={defaultOpen}>
-                {builtinTools.length > 0 ? (
-                  <AccordionItem value={ARCHESTRA_MCP_CATALOG_ID}>
-                    <AccordionTrigger>
-                      <div className="flex w-full items-center gap-2 pr-2">
-                        <McpCatalogIcon
-                          icon={builtinCatalog?.icon ?? null}
-                          catalogId={ARCHESTRA_MCP_CATALOG_ID}
-                          size={20}
-                        />
-                        <span className="truncate font-medium">
-                          {builtinCatalog?.name ?? "Built-in tools"}
-                        </span>
-                        {builtinSelectedCount > 0 ? (
-                          <Badge variant="secondary" className="ml-auto">
-                            {builtinSelectedCount} selected
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <p className="mb-2 text-xs text-muted-foreground">
-                        Built-in file tools. When the app runs inside a chat,
-                        they let it list and read that conversation's files — or
-                        the project's files for a project chat — as the person
-                        viewing the app. Outside a chat the app sees no files.
-                      </p>
-                      <div
-                        className={cn(
-                          "flex flex-col rounded-md border",
-                          !unbounded && "max-h-96",
-                        )}
-                      >
-                        <AppCatalogToolList
-                          tools={builtinTools}
-                          selectedToolIds={builtinSelected}
-                          onSelectionChange={(next) =>
-                            changeCatalogSelection(builtinTools, next)
-                          }
-                        />
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ) : null}
-                {visibleCatalogs.map((catalog) => {
-                  const catalogTools =
-                    toolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;
-                  // A selected id belongs to this catalog if its tool is loaded
-                  // here or it's a persisted assignment of this catalog — the
-                  // latter keeps the count correct before catalog tools load.
-                  const catalogToolIds = new Set(catalogTools.map((t) => t.id));
-                  const persistedInCatalog =
-                    assignedIdsByCatalog.get(catalog.id) ?? new Set<string>();
-                  const selectedInCatalog = new Set(
-                    [...selection].filter(
-                      (id) =>
-                        catalogToolIds.has(id) || persistedInCatalog.has(id),
-                    ),
-                  );
-                  const outOfEnv =
-                    !isPlaywrightCatalogItem(catalog.id) &&
-                    !isCatalogInEnvironment(catalog, appEnvironmentId);
-                  return (
-                    <AccordionItem key={catalog.id} value={catalog.id}>
-                      <AccordionTrigger>
-                        <div className="flex w-full items-center gap-2 pr-2">
-                          <McpCatalogIcon
-                            icon={catalog.icon}
-                            catalogId={catalog.id}
-                            size={20}
-                          />
-                          <span className="truncate font-medium">
-                            {catalog.name}
-                          </span>
-                          {outOfEnv ? (
-                            <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                              (outside this environment)
-                            </span>
-                          ) : null}
-                          {selectedInCatalog.size > 0 ? (
-                            <Badge variant="secondary" className="ml-auto">
-                              {selectedInCatalog.size} selected
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div
-                          className={cn(
-                            "flex flex-col rounded-md border",
-                            !unbounded && "max-h-96",
-                          )}
-                        >
-                          <AppCatalogToolList
-                            tools={catalogTools}
-                            selectedToolIds={selectedInCatalog}
-                            onSelectionChange={(next) =>
-                              changeCatalogSelection(catalogTools, next)
-                            }
-                          />
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {shownCatalogs.map((catalog) => {
+                const isBuiltin = catalog.id === ARCHESTRA_MCP_CATALOG_ID;
+                const catalogTools =
+                  pillToolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;
+                const selectedInCatalog =
+                  selectedByCatalog.get(catalog.id) ?? new Set<string>();
+                const persistedInCatalog =
+                  assignedIdsByCatalog.get(catalog.id) ?? new Set<string>();
+                const outOfEnv =
+                  !isBuiltin &&
+                  !isPlaywrightCatalogItem(catalog.id) &&
+                  !isCatalogInEnvironment(catalog, appEnvironmentId);
+                return (
+                  <AppMcpServerPill
+                    key={catalog.id}
+                    catalog={catalog}
+                    tools={catalogTools}
+                    selectedToolIds={selectedInCatalog}
+                    highlighted={
+                      !setsEqual(selectedInCatalog, persistedInCatalog)
+                    }
+                    note={outOfEnv ? "(outside this environment)" : undefined}
+                    description={
+                      isBuiltin ? BUILTIN_FILE_TOOLS_BLURB : catalog.description
+                    }
+                    onSelectionChange={(next) =>
+                      changeCatalogSelection(catalogTools, next)
+                    }
+                    onRemove={() => toggleCatalog(catalog.id)}
+                    autoOpen={catalog.id === autoOpenCatalogId}
+                    onAutoOpened={() => setAutoOpenCatalogId(null)}
+                  />
+                );
+              })}
+              <AssignmentCombobox
+                items={comboboxItems}
+                selectedIds={shownCatalogIds}
+                onToggle={toggleCatalog}
+                onItemAdded={setAutoOpenCatalogId}
+                placeholder="Search MCP servers..."
+                emptyMessage="No MCP servers found."
+                createAction={{
+                  label: "Install New MCP Server",
+                  href: "/mcp/registry",
+                }}
+              />
+            </div>
             {orphanedVisible.length > 0 ? (
               <OrphanedAssignedTools
                 tools={orphanedVisible}
@@ -430,6 +478,12 @@ export function AppToolsEditor({
       </LoadingWrapper>
     </div>
   );
+}
+
+function setsEqual(a: Set<string>, b: Set<string>) {
+  if (a.size !== b.size) return false;
+  for (const value of a) if (!b.has(value)) return false;
+  return true;
 }
 
 function OrphanedAssignedTools({
@@ -474,29 +528,72 @@ function OrphanedAssignedTools({
   );
 }
 
-function AppCatalogToolList({
+// One MCP server as a pill: the shared visual shell (trigger + popover chrome)
+// wrapping this app's tool checklist. Fully controlled by the parent's selection
+// — toggling a tool routes straight back through `onSelectionChange`.
+function AppMcpServerPill({
+  catalog,
   tools,
   selectedToolIds,
+  highlighted,
+  note,
+  description,
   onSelectionChange,
+  onRemove,
+  autoOpen,
+  onAutoOpened,
 }: {
+  catalog: CatalogItem;
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
+  highlighted: boolean;
+  note?: string;
+  description?: string | null;
   onSelectionChange: (next: Set<string>) => void;
+  onRemove: () => void;
+  autoOpen: boolean;
+  onAutoOpened: () => void;
 }) {
-  if (tools.length === 0) {
-    return (
-      <p className="px-4 py-3 text-sm text-muted-foreground">
-        This server exposes no tools yet.
-      </p>
-    );
-  }
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (autoOpen) {
+      setOpen(true);
+      onAutoOpened();
+    }
+  }, [autoOpen, onAutoOpened]);
 
   return (
-    <ToolChecklist
-      tools={tools}
-      selectedToolIds={selectedToolIds}
-      onSelectionChange={onSelectionChange}
-    />
+    <McpServerPillShell
+      icon={
+        <McpCatalogIcon icon={catalog.icon} catalogId={catalog.id} size={14} />
+      }
+      displayName={catalog.name}
+      count={selectedToolIds.size}
+      isEmpty={selectedToolIds.size === 0}
+      highlighted={highlighted}
+      note={note}
+      description={description ?? catalog.description}
+      docsUrl={catalog.docsUrl}
+      open={open}
+      onOpenChange={setOpen}
+      onRemove={onRemove}
+      removeAriaLabel={`Remove ${catalog.name}`}
+    >
+      {tools.length === 0 ? (
+        <p className="p-4 text-sm text-muted-foreground">
+          This server exposes no tools yet.
+        </p>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ToolChecklist
+            tools={tools}
+            selectedToolIds={selectedToolIds}
+            onSelectionChange={onSelectionChange}
+          />
+        </div>
+      )}
+    </McpServerPillShell>
   );
 }
 

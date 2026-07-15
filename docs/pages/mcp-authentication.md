@@ -3,12 +3,10 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-06-30
+lastUpdated: 2026-07-14
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 MCP authentication in Archestra has two separate layers: the client-facing gateway layer and the upstream MCP server layer.
 
@@ -69,7 +67,9 @@ Admins can change this in **Settings > Organization > Auth**. The setting is org
 
 When the caller is an application — a backend service, automation job, or another team's bot — rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an application, not a person.
 
-Create and manage these clients under **MCPs > Credentials > OAuth Clients**. Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
+Create and manage these clients under **Client Credentials > OAuth Clients** (pick the *Agents & MCP gateways* client type). Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
+
+Like agents and gateways, each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `mcpOauthClient:team-admin`, organization-wide visibility requires `mcpOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
 
 The client exchanges its credentials for a short-lived (1-hour) bearer token at `POST /api/auth/oauth2/token` with:
 
@@ -85,7 +85,7 @@ Because there is no acting user, per-user dynamic credential resolution does not
 
 When a pre-registered application needs to act with the **user's** Archestra identity — for example an agentic chat backend calling gateways for whoever is signed in — register an MCP OAuth client with the `authorization_code` grant. Its tokens are user-bound, so unlike client credentials, gateway tools resolve each caller's own permissions and connections, and **Resolve at call time** works.
 
-Create it under **MCPs > Credentials > OAuth Clients**, choose the "On behalf of users" grant type, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`; PKCE is required.
+Create it under **Client Credentials > OAuth Clients** (pick the *Agents & MCP gateways* client type), choose the "On behalf of users" grant type, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`; PKCE is required.
 
 The application runs the standard browser flow:
 
@@ -152,7 +152,7 @@ Identity Providers (IdPs) configured in Archestra can also be used to authentica
 
 After authentication, the gateway resolves credentials for the upstream MCP server. If the upstream server has its own credentials configured (e.g., a GitHub PAT or OAuth token), those are used. If no upstream credentials are configured, the gateway propagates the original JWT as an `Authorization: Bearer` header, enabling end-to-end identity propagation where the upstream server validates the same JWT against the IdP's JWKS. See [End-to-End JWKS](#end-to-end-jwks-without-gateway) below for how to build servers that consume propagated JWTs.
 
-This credential resolution enables a powerful workflow: an admin installs upstream MCP servers (GitHub, Jira, etc.) with service credentials once, and any user who authenticates via their org's IdP can access those tools seamlessly — the gateway resolves the appropriate upstream token automatically. Both [static and per-user credentials](#upstream-mcp-server-authentication) work with JWKS authentication.
+This credential resolution supports a common setup: an admin installs upstream MCP servers (GitHub, Jira, etc.) with service credentials once, and any user who authenticates via their org's IdP can access those tools — the gateway resolves the appropriate upstream token automatically. Both [static and per-user credentials](#upstream-mcp-server-authentication) work with JWKS authentication.
 
 #### How It Works
 
@@ -201,7 +201,7 @@ Auth credentials are stored in the secrets backend, which uses the database by d
 
 ### Credential Resolution
 
-Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity, following the server's **Agent connections** setting.
+Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity, following the server's **Default credential** setting. Resolve at call time is the default for new assignments; pinning a connection is an explicit choice.
 
 #### Static Credentials
 
@@ -217,7 +217,7 @@ This means a team-shared connection is governed by the team it is shared with, n
 
 #### Resolve at Call Time
 
-When a tool assignment uses "Resolve at call time" (or an agent has **All tools** dynamic access), Archestra picks the credential at execution time. Which one is used is defined on the MCP server itself — the **Agent connections** setting on the server's Connections page:
+When a tool assignment uses "Resolve at call time" (or an agent is in **Auto** tool mode), Archestra picks the credential at execution time. Which one is used is defined on the MCP server itself — the **Default credential** setting on the server's Credentials tab:
 
 - **On behalf of the user** (default): the chatting identity's own connection takes priority, falling back to a connection it can access. A user token resolves to that user's personal connection, then a connection for a team they belong to, then an org-scoped connection; a team token resolves to that team's connection, then an org-scoped one. A caller with no reachable connection gets an actionable connect prompt.
 - **Always use one account**: every runtime-resolved call goes through the chosen connection, regardless of the caller — a service account. Use this when the whole org or a team should share one upstream account. If that connection is revoked, the server returns to on-behalf-of-the-user resolution.
@@ -226,7 +226,7 @@ When a tool assignment uses "Resolve at call time" (or an agent has **All tools*
 flowchart TD
     A["Tool call arrives<br/>with Gateway Token"] --> B{Assignment resolves<br/>credentials at runtime?}
     B -- No --> C["Use the assignment's<br/>pinned credential"]
-    B -- Yes --> P{Agent connections set to<br/>one shared account?}
+    B -- Yes --> P{Default credential set to<br/>one shared account?}
     P -- Yes --> S["Use that account<br/>(service account)"]
     P -- No --> D{Caller has their<br/>own connection?}
     D -- Yes --> E["Use the caller's<br/>own credential"]

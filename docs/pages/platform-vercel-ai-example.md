@@ -2,19 +2,16 @@
 title: Secure Agent with Vercel AI
 category: Examples
 order: 7
+lastUpdated: 2026-07-03
 ---
 
-<!-- 
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ## Overview
 
-[**AI SDK**](https://ai-sdk.dev) \- an open-source toolkit from Vercel that simplifies building AI-driven applications: unified provider support (OpenAI, Claude, Hugging-Face, etc.), streaming, tools execution, error handling, and more. While it offers great developer ergonomics and abstractions, out of the box it does _not_ enforce runtime controls to guard against data leakage, untrusted context influence, or malicious tool-calls. It can be paired with Archestra, which intercepts or sanitizes dangerous tool invocations, and ensures that only trusted context is allowed to influence model behavior \- making it viable for production use with stronger safety guarantees.
+[**AI SDK**](https://ai-sdk.dev) \- an open-source toolkit from Vercel that simplifies building AI-driven applications: unified provider support (OpenAI, Claude, Hugging-Face, etc.), streaming, tools execution, error handling, and more. Out of the box it does _not_ enforce runtime controls to guard against data leakage, untrusted context influence, or malicious tool-calls. You can pair it with Archestra, which intercepts or sanitizes dangerous tool invocations and ensures that only trusted context influences model behavior.
 
-In this guide we will use an exemplary Express ([Node.js](https://nodejs.org/)) application to show how seamlessly agents written with AI SDK can be reconfigured to use Archestra as a security layer.
+In this guide we will use an example Express ([Node.js](https://nodejs.org/)) application to show how agents written with AI SDK can be reconfigured to use Archestra as a security layer.
 
 The full example can be found on: [https://github.com/archestra-ai/examples/tree/main/ai-sdk-express](https://github.com/archestra-ai/examples/tree/main/ai-sdk-express)
 
@@ -64,7 +61,7 @@ Let’s see how you can plug in Archestra when using AI SDK and how it can help 
 
 ## Step 1. Get your LLM Provider API Key
 
-This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](https://www.archestra.ai/docs/platform-supported-llm-providers) for the complete list.
+This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the complete list.
 
 For OpenAI, you can get an API key from:
 
@@ -72,7 +69,7 @@ For OpenAI, you can get an API key from:
 - Azure OpenAI
 - Any OpenAI-compatible service (e.g., LocalAI, FastChat, Helicone, LiteLLM, OpenRouter etc.)
 
-👉 Once you have the key, copy it and keep it handy.
+Once you have the key, copy it and keep it handy.
 
 ## Step 2. Run Archestra Platform locally
 
@@ -86,15 +83,15 @@ docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
 
 ## Step 3. Integrate AI SDK with Archestra
 
-Change the baseUrl to point to Archestra's proxy. For OpenAI, this is [`http://localhost:9000/v1/openai`](http://localhost:9000/v1/openai). For other providers, see [Supported LLM Providers](https://www.archestra.ai/docs/platform-supported-llm-providers).
+Change the baseUrl to point to Archestra's proxy. For OpenAI, this is [`http://localhost:9000/v1/openai`](http://localhost:9000/v1/openai). For other providers, see [Supported LLM Providers](/docs/platform-supported-llm-providers).
 
-**Important for OpenAI**: Ensure your agent uses `/chat/completions` (not `/responses`, which Archestra doesn't support yet - [issue #720](https://github.com/archestra-ai/archestra/issues/720)). Append `.chat` to the OpenAI provider instance. See [AI SDK docs](https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models) for details.
+**For this example**: Append `.chat` to the OpenAI provider instance so the AI SDK uses `/chat/completions`. Archestra also supports OpenAI `/responses` requests. See [AI SDK docs](https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models) for details.
 
 ```ts
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   baseURL: 'http://localhost:9000/v1/openai', // 1. use Archestra URL with provider
-}).chat; // 2. Add .chat because Archestra supports Chat Completions API
+}).chat; // 2. Add .chat because this example uses Chat Completions
 
 // Make sure to add all messages from the AI SDK result to conversation history
 // This includes assistant messages with tool_calls and tool result messages
@@ -157,7 +154,7 @@ The decision tree for Archestra would be:
 
 ## All Set
 
-Now you are safe from Lethal Trifecta type attacks and prompt injections cannot influence your agent. Following the example from the [Problem section](#problem), Archestra would block any subsequent tool calls if the context is marked as untrusted.
+Following the example from the [Problem section](#problem), Archestra blocks any subsequent tool calls once the context is marked as untrusted.
 
 ![Policy Get File](/docs/platform/policy-get_file.webp)
 

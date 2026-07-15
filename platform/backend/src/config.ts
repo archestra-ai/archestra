@@ -54,6 +54,24 @@ const isDevelopment = !isProduction;
 
 const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
+/**
+ * Developer-only convenience: when set (and NOT in production), the login screen
+ * is skipped by minting a real session for the user with this email (see the
+ * dev-auto-login Better Auth plugin). Hard-disabled in production so it can never
+ * bypass authentication on a real deployment. The session is an ordinary one for
+ * that user — RBAC is unchanged.
+ */
+const devAutoAuthenticateEmail = isProduction
+  ? undefined
+  : process.env.ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL?.trim() || undefined;
+
+if (devAutoAuthenticateEmail) {
+  logger.warn(
+    { email: devAutoAuthenticateEmail },
+    "[config] ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL is set: the login screen is skipped by auto-minting a session for this user. Developer-only, ignored in production.",
+  );
+}
+
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
@@ -292,6 +310,12 @@ const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
 
+// Upper bound applied to every agent turn's output-token budget. Defaults high
+// enough to unblock large tool-call payloads while capping cost; the real
+// per-model output ceiling still applies when it is lower.
+const DEFAULT_CHAT_MAX_OUTPUT_TOKENS = 32_768;
+const MAX_CHAT_MAX_OUTPUT_TOKENS = 1_000_000;
+
 // Per-connection statement timeout (ms). Defense-in-depth: kills runaway
 // queries instead of letting them hang a connection indefinitely. 0 disables.
 const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
@@ -299,6 +323,7 @@ const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
+const DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS = 60;
 const DEFAULT_METRICS_PORT = 9050;
 const MIN_TCP_PORT = 1;
 const MAX_TCP_PORT = 65_535;
@@ -399,6 +424,34 @@ export const parseContentMaxLength = (
   return parsed;
 };
 
+/**
+ * Grace window (seconds) during which a replayed — i.e. already-rotated —
+ * refresh token is treated as a benign rotation race (a lost token-exchange
+ * response the client retried) and a fresh pair is re-issued, rather than a
+ * reuse attack. See services/oauth-refresh-replay.ts. `0` disables the grace,
+ * so every replay is treated as reuse immediately.
+ *
+ * @public — exercised by config.test.ts
+ */
+export const parseRefreshTokenReuseGraceSeconds = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS value "${value}", using default ${DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS}`,
+    );
+    return DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS;
+  }
+
+  return parsed;
+};
+
 /** @public — exported for testability */
 export const parseLogFormat = (
   envValue?: string | undefined,
@@ -426,6 +479,32 @@ export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
       `Invalid ARCHESTRA_DATABASE_POOL_MAX value "${value}", using default ${DEFAULT_DATABASE_POOL_MAX}`,
     );
     return DEFAULT_DATABASE_POOL_MAX;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
+export const parseChatMaxOutputTokens = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+  }
+
+  // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
+  // ("1.5") are rejected rather than silently truncated to a tiny cap.
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
+  ) {
+    logger.warn(
+      `Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "${value}", using default ${DEFAULT_CHAT_MAX_OUTPUT_TOKENS}`,
+    );
+    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
   }
 
   return parsed;
@@ -645,13 +724,16 @@ export function parseActiveChatRunPollIntervalMs(params: {
  */
 /**
  * Raw URL sources a /connection setup baseUrl may come from: the frontend
- * origin plus every URL in `ARCHESTRA_API_BASE_URL` (the same list the
- * frontend's connection page derives its endpoint candidates from). Returned
- * unparsed; callers normalize and compare full URLs, not just hosts.
+ * origin, every URL in `ARCHESTRA_API_BASE_URL`, and the in-cluster
+ * `ARCHESTRA_INTERNAL_API_BASE_URL` (the connection page falls back to the
+ * internal URL when every external URL is hidden). Returned unparsed; callers
+ * normalize and compare full URLs, not just hosts.
  * @public — exported for testability
  */
 export const getConnectionBaseUrlSources = (): string[] => {
   const sources = [frontendBaseUrl];
+  const internalUrl = process.env.ARCHESTRA_INTERNAL_API_BASE_URL?.trim();
+  if (internalUrl) sources.push(internalUrl);
   const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
   if (externalUrls) {
     for (const url of externalUrls.split(",")) {
@@ -833,7 +915,12 @@ export function parseFileStorageS3Config(params: {
   };
 }
 
-/** @public — exported for testability */
+/**
+ * Parse the per-run sync work budget (seconds). A run stops at ~90% of this,
+ * checkpoints, and a continuation resumes from there. Invalid or non-positive
+ * values disable the budget (a run then goes to completion in one pass).
+ * @public — exported for testability
+ */
 export function parseConnectorSyncMaxDuration(
   value: string | undefined,
 ): number | undefined {
@@ -881,17 +968,30 @@ export function parseCommaSeparatedList(value: string): string[] {
 }
 
 /** @public — exported for testability */
-export const getAnalyticsConfig = () => ({
-  enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
-  posthog: {
-    key:
-      process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
-      DEFAULT_POSTHOG_KEY,
-    host:
-      process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
-      DEFAULT_POSTHOG_HOST,
-  },
-});
+export const getAnalyticsConfig = () => {
+  const analyticsEnv = process.env.ARCHESTRA_ANALYTICS?.trim();
+  // Evaluated at call time (not the module-level `isProduction`) so tests can
+  // exercise both environments.
+  const isProductionEnv = ["production", "prod"].includes(
+    process.env.NODE_ENV?.toLowerCase() ?? "",
+  );
+  return {
+    // Analytics (PostHog product analytics, instance heartbeats, and backend
+    // error tracking) defaults to on only in production builds. Local dev and
+    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
+    // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
+    // wins in both directions ("disabled" → off, any other value → on).
+    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    posthog: {
+      key:
+        process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
+        DEFAULT_POSTHOG_KEY,
+      host:
+        process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
+        DEFAULT_POSTHOG_HOST,
+    },
+  };
+};
 
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
@@ -914,13 +1014,14 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
   const runnerHost = envValue?.trim();
   if (!enabled) return runnerHost || undefined;
 
+  // No host configured is the normal "this deployment runs no code sandbox"
+  // case, not a misconfiguration — stay silent and leave the sandbox off.
   if (!runnerHost) {
-    logger.error(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must be set when ARCHESTRA_CODE_RUNTIME_ENABLED=true — code runtime disabled",
-    );
     return undefined;
   }
 
+  // A host that's set but malformed is a genuine misconfiguration (unlike an
+  // absent host, which just means "no sandbox here") — surface it loudly.
   if (!isSupportedDaggerRunnerHost(runnerHost)) {
     logger.error(
       "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must use tcp:// or kube-pod:// — code runtime disabled",
@@ -938,17 +1039,12 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
  * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
  * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
  * always wins (`"true"`/`"false"`); a blank or unset value falls back to
- * `ARCHESTRA_BETA`. This lets a single `ARCHESTRA_BETA=true` light up every
- * ships-dark/preview feature at once while keeping per-feature opt-out intact
- * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_APPS_ENABLED=false` keeps Apps off).
+ * `ARCHESTRA_BETA`, so `ARCHESTRA_BETA=true` turns on every gate wired through
+ * this helper while a per-feature flag keeps its own opt-out. Backs *product*
+ * features only, never credential/auth-mode toggles (e.g. Bedrock IAM,
+ * Azure/Vertex Entra).
  *
- * This backs ships-dark *product* features only. It deliberately does NOT touch
- * credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), which are
- * deployment configuration rather than preview features. Beta only flips the
- * *intent* to enable — the sandbox and agent hooks still need a Dagger runner
- * host present to actually run.
- *
- * @public — exported for testability
+ * @public — the shared gate for a product feature that ships off by default; also exported for testability
  */
 export function betaFeatureEnabled(envValue: string | undefined): boolean {
   if (envValue === undefined || envValue === "") {
@@ -958,22 +1054,18 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 }
 
 // the code execution sandbox (run_command / upload_file / download_file, plus
-// skill activation-mounts) needs a Dagger runner host. it is independent of the
-// skills *read* feature — skills can be listed/activated/read with the sandbox
-// off.
-const skillsSandboxRequested = betaFeatureEnabled(
-  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
-);
+// skill activation-mounts) needs a Dagger runner host: it runs when a host is
+// configured and stays off otherwise — presence of the host is the switch. it
+// is independent of the skills *read* feature — skills can be listed/activated/
+// read with the sandbox off.
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: skillsSandboxRequested,
+  enabled: true,
   envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 });
-// a missing/invalid runner host disables the feature instead of crashing boot.
-const skillsSandboxEnabled =
-  skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
+const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
 
-// the Dagger runtime fronts the sandbox; the feature flag turning on lights up
-// the shared session + warm base.
+// the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
+// shared session + warm base.
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =
   skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
@@ -1026,6 +1118,28 @@ const config = {
   },
   mcpGateway: {
     endpoint: "/v1/mcp",
+    /**
+     * Per-request timeout (ms) for an upstream MCP tool call made through the
+     * gateway. The MCP SDK defaults to 60s, which is too short for tools that
+     * do slow work (long-running scrapers, report builders, etc.). Raise this
+     * env var to give such tools more time before the request times out.
+     */
+    toolCallTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
+      60000,
+    ),
+  },
+  mcpServer: {
+    /**
+     * Opt-in periodic re-discovery of installed MCP servers' tools. Every N
+     * minutes each installed server's catalog tool snapshot is re-synced from
+     * the live server (add/update/remove — same as the reload-tools endpoint,
+     * no pod restart). Unset or 0 disables the refresher (the default).
+     */
+    toolsRefreshIntervalMinutes: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES,
+      0,
+    ),
   },
   skillMarketplace: {
     endpoint: SKILL_MARKETPLACE_PREFIX,
@@ -1049,12 +1163,6 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    skillsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED,
-    ),
-    environmentsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED,
-    ),
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -1086,6 +1194,14 @@ const config = {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    /**
+     * Prefix for auth cookie names (`<prefix>.session_token` etc.). Browsers
+     * scope cookies to the host without the port, so parallel local instances
+     * on different localhost ports clobber each other's sessions unless each
+     * uses a distinct prefix.
+     */
+    cookiePrefix:
+      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() || "archestra",
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
@@ -1098,6 +1214,16 @@ const config = {
      */
     dynamicClientRegistrationEnabled:
       process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
+    /**
+     * Grace window (seconds) for the OAuth refresh-token replay shield: a
+     * replayed refresh token revoked within this window is treated as a benign
+     * rotation race and re-issued instead of triggering reuse invalidation.
+     * See services/oauth-refresh-replay.ts.
+     */
+    refreshTokenReuseGraceSeconds: parseRefreshTokenReuseGraceSeconds(
+      process.env.ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS,
+    ),
+    devAutoAuthenticateEmail,
   },
   analytics: getAnalyticsConfig(),
   database: {
@@ -1230,6 +1356,35 @@ const config = {
         process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
         "Iv1.b507a08c87ecfe98",
     },
+    "microsoft-365-copilot": {
+      /** Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API (beta). */
+      baseUrl:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL ||
+        "https://graph.microsoft.com/beta",
+      /**
+       * Host serving the Entra ID OAuth endpoints
+       * (/{tenant}/oauth2/v2.0/devicecode and /{tenant}/oauth2/v2.0/token).
+       * Overridable for sovereign clouds and e2e tests.
+       */
+      authBaseUrl:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL ||
+        "https://login.microsoftonline.com",
+      /**
+       * Entra tenant segment of the OAuth endpoints. "organizations" allows any
+       * work/school account; operators can pin their own tenant id to restrict
+       * sign-in to one directory.
+       */
+      tenantId:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID ||
+        "organizations",
+      /**
+       * Application (client) ID of the operator's Entra app registration (a
+       * public client with "Allow public client flows" enabled and the Graph
+       * delegated scopes the Chat API requires). No community default exists,
+       * so device-flow sign-in is unavailable until this is set.
+       */
+      clientId: process.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID || "",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -1307,6 +1462,11 @@ const config = {
     "github-copilot": {
       apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",
     },
+    "microsoft-365-copilot": {
+      // Per-user provider: every env-key consumer skips it (resolution
+      // fallback, env seeding, system defaults), so no env var is read.
+      apiKey: "",
+    },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
     },
@@ -1351,6 +1511,9 @@ const config = {
     },
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+    maxOutputTokensCeiling: parseChatMaxOutputTokens(
+      process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -1417,16 +1580,14 @@ const config = {
     ),
   },
   /**
-   * agent lifecycle hooks — user scripts run at chat lifecycle events. Gated by
-   * `ARCHESTRA_AGENT_HOOKS_ENABLED`, but only effective when the agent runtime
-   * (the code execution sandbox) is also on, since hooks execute in the
-   * conversation sandbox. This `enabled` is the fully-resolved flag — the
-   * dispatcher, the `/debug` toggle, and the chip read-gate all key off it.
+   * agent lifecycle hooks — user scripts run at chat lifecycle events.
+   * Available whenever the agent runtime (the code execution sandbox) is on,
+   * since hooks execute in the conversation sandbox; off otherwise. This
+   * `enabled` is the fully-resolved flag — the dispatcher, the `/debug` toggle,
+   * and the chip read-gate all key off it.
    */
   hooks: {
-    enabled:
-      betaFeatureEnabled(process.env.ARCHESTRA_AGENT_HOOKS_ENABLED) &&
-      skillsSandboxEnabled,
+    enabled: skillsSandboxEnabled,
   },
   /**
    * unified Dagger runtime — one shared session with a pre-warmed base
@@ -1467,24 +1628,6 @@ const config = {
         1024 * 1024 * 1024,
       ),
     },
-  },
-  /**
-   * user-authored MCP Apps — first-class apps created inside Archestra (from
-   * chat or the /apps page), backed by a per-app data store and assignable
-   * tools. Ships dark: off by default until the feature is ready to surface.
-   */
-  apps: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_APPS_ENABLED),
-  },
-  /**
-   * Projects + the persistent "My Files" file system on top of the skill
-   * sandbox. Ships dark: off by default until ready to surface. Gates the
-   * project APIs, the My Files endpoints, the persistent-file MCP tools
-   * (search_files, read_file, save_file, edit_file, delete_file), and the
-   * my_file upload source.
-   */
-  projects: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PROJECTS_ENABLED),
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
@@ -1586,24 +1729,67 @@ const config = {
       : undefined,
   },
   kb: {
+    // BETA gate for the auto-sync-permissions connector visibility: the
+    // permission-sync passes, the connector Permissions tab APIs, and manual
+    // member overrides. Off by default; a blank value falls back to the
+    // ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+    autoSyncPermissionsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
+    ),
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    taskWorkerPollIntervalSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
+      5,
+    ),
+    taskWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
+      2,
+    ),
+    // Concurrency cap for the runtime-isolated permission-sync lane. Separate
+    // from the content lane so permission passes can neither starve nor be
+    // starved by content ingestion.
+    permissionSyncWorkerMaxConcurrent: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
+      1,
+    ),
+    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
+      30,
+    ),
+    // Liveness lease for connector sync runs. The owning worker renews the
+    // lease every `heartbeatInterval`; a run whose lease is not renewed within
+    // `leaseTtl` is treated as orphaned and reclaimed. TTL must be several times
+    // the heartbeat interval so a missed beat (GC pause, slow batch) doesn't
+    // falsely expire a live run.
+    connectorRunLeaseTtlSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_LEASE_TTL_SECONDS,
+      300,
+    ),
+    connectorRunHeartbeatIntervalSeconds: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS,
+      90,
+    ),
+    // Max wall-clock time a single sync run works before it checkpoints and
+    // yields; a continuation then resumes from that checkpoint. This bounds how
+    // long one run holds a worker and chunks large syncs into resumable pieces.
+    // A run stops at ~90% of this, so 3300s (55m) yields ~49m of work per run.
+    // Liveness is enforced by the lease/heartbeat, not by this budget. (Retains
+    // the older env var name so existing custom configs keep working.)
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    taskWorkerPollIntervalSeconds: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
-        "5",
-      10,
-    ),
-    taskWorkerMaxConcurrent: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
-      10,
-    ),
-    taskWorkerShutdownTimeoutSeconds: Number.parseInt(
-      process.env
-        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS || "30",
-      10,
+    // A document still `pending`/`processing` this long after its last touch has
+    // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
+    // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the
+    // recovery sweep re-enqueues it. Kept comfortably above that ~8 min span (not
+    // at it) so a slow-but-live embedding batch is never reset out from under its
+    // worker, which would double-embed and waste embedding-API cost.
+    stalledEmbeddingAgeSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS,
+      15 * 60,
     ),
   },
   secretsManager: {
@@ -1633,8 +1819,32 @@ const config = {
     // it ngrok assigns an ephemeral domain that rotates on each restart.
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   },
+  chatops: {
+    // Gate for the Telegram integration: per-feature flag with ARCHESTRA_BETA
+    // as the fallback (betaFeatureEnabled). Off = the provider never starts
+    // (even with a token saved in the DB), the config endpoint rejects
+    // updates, and the frontend hides the Telegram messaging channel.
+    telegramEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED,
+    ),
+    // Per-process cap on concurrent chatops file downloads + image shrinking.
+    // Chatops events are acked to the provider before processing, so an OOM
+    // during a burst of attachment-heavy messages means silent message loss —
+    // this bounds the transient memory (JS buffer + native copy + decode
+    // alloc) a burst can hold. 4 matches libuv's default threadpool, which
+    // already serializes the native image decodes. Currently gates Slack only:
+    // MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap.
+    maxConcurrentFileTransfers: parsePositiveInt(
+      process.env.ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS,
+      4,
+    ),
+  },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
+  // Instance-wide banner (markdown) shown at the top of the UI. Unlike
+  // maintenanceMode it does not affect request handling.
+  siteNotificationMessage:
+    process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     retentionDays: parseAuditLogRetentionDays(
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,

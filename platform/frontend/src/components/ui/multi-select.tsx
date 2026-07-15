@@ -109,6 +109,7 @@ export function MultiSelect({
                   {item.label}
                   <button
                     type="button"
+                    aria-label="Remove selected item"
                     className="ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -142,6 +143,7 @@ export function MultiSelect({
           <div className="flex items-center border-b px-3 pb-2 pt-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
+              aria-label="Search options"
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

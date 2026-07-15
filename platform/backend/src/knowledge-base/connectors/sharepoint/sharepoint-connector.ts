@@ -6,7 +6,6 @@ import type {
   DriveItem as GraphDriveItem,
   SitePage as GraphSitePage,
 } from "@microsoft/microsoft-graph-types";
-import JSZip from "jszip";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -27,6 +26,8 @@ import {
   traverseFolders,
 } from "../folder-traversal";
 import { parsePdfBuffer } from "../pdf-utils";
+import { extractTextFromPptx } from "../pptx-text-extractor";
+import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 const DEFAULT_BATCH_SIZE = 50;
@@ -49,7 +50,12 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
 ]);
 
 // Binary file extensions we can extract text from using libraries
-const SUPPORTED_BINARY_EXTENSIONS = new Set([".docx", ".pdf", ".pptx"]);
+const SUPPORTED_BINARY_EXTENSIONS = new Set([
+  ".docx",
+  ".pdf",
+  ".pptx",
+  ".xlsx",
+]);
 
 // Image file extensions supported for multimodal embedding
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([
@@ -1204,37 +1210,12 @@ async function extractTextFromBinary(
     case ".pptx": {
       return extractTextFromPptx(buffer);
     }
+    case ".xlsx": {
+      return extractTextFromXlsx(buffer);
+    }
     default:
       return "";
   }
-}
-
-async function extractTextFromPptx(buffer: Buffer): Promise<string> {
-  const zip = await JSZip.loadAsync(buffer);
-  const parts: string[] = [];
-
-  // PPTX slides are stored as ppt/slides/slide1.xml, slide2.xml, etc.
-  const slideFiles = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort((a, b) => {
-      const numA = Number.parseInt(a.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      const numB = Number.parseInt(b.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      return numA - numB;
-    });
-
-  for (const slidePath of slideFiles) {
-    const xml = await zip.files[slidePath].async("text");
-    // Extract text from <a:t> tags (DrawingML text runs)
-    const texts = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g);
-    if (texts) {
-      const slideText = texts
-        .map((text: string) => stripHtmlTags(text))
-        .join(" ");
-      if (slideText.trim()) parts.push(slideText.trim());
-    }
-  }
-
-  return parts.join("\n\n");
 }
 
 function driveItemToDocument(

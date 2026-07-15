@@ -16,6 +16,7 @@ import {
   PromptInputTools,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
+import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -24,7 +25,7 @@ import {
   ModelSelector,
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
-import { Badge } from "@/components/ui/badge";
+import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -39,7 +40,6 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
-import { useIsMobile } from "@/lib/hooks/use-mobile";
 
 export interface ChatPromptInputToolsProps {
   selectedModel: string;
@@ -86,6 +86,12 @@ export interface ChatPromptInputToolsProps {
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
   modelSource?: ModelSource | null;
+  /**
+   * The selected model can't take tools while the agent has some — the turn
+   * will run tool-less. Shown as a compact toolbar chip so the composer never
+   * shifts when it toggles.
+   */
+  toolsUnavailable?: boolean;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
   /**
@@ -100,6 +106,17 @@ export interface ChatPromptInputToolsProps {
    */
   agentModelDisplayName?: string;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  /**
+   * Whether the toolbar should collapse its inline controls into a three-dots
+   * menu. Decided by the parent based on whether they actually fit (measured on
+   * the footer), so it also triggers when a side panel squeezes the input.
+   */
+  isNarrow: boolean;
+  /**
+   * Ref attached to the inline tools row so the parent can measure its natural
+   * width and decide whether the controls still fit.
+   */
+  toolbarRef: React.RefObject<HTMLDivElement | null>;
 }
 
 const ChatPromptInputTools = memo(function ChatPromptInputTools({
@@ -125,13 +142,15 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   selectorAgentName,
   onAgentChange,
   modelSource,
+  toolsUnavailable = false,
   onResetModelOverride,
   agentRequiresPerUserConnect = false,
   agentModelDisplayName,
   textareaRef,
+  isNarrow,
+  toolbarRef,
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
-  const isMobile = useIsMobile();
 
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
@@ -190,9 +209,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   );
 
   return (
-    <PromptInputTools className="gap-0.5">
-      {/* Mobile: vertical three-dots menu for collapsed toolbar items */}
-      {isMobile &&
+    <PromptInputTools ref={toolbarRef} className="gap-0.5">
+      {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
+      {isNarrow &&
         (showDefaultLogo &&
         logoProvider &&
         (modelSource === "agent" || modelSource === "organization") ? (
@@ -237,10 +256,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   <>
                     {modelSource && (
                       <div className="flex items-center gap-1.5">
-                        <Badge
-                          variant="secondary"
-                          className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
-                        >
+                        <ComposerBadge>
                           {modelSourceLabel}
                           {modelSource === "user" && onResetModelOverride && (
                             <button
@@ -252,7 +268,12 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                               <XIcon className="size-3" />
                             </button>
                           )}
-                        </Badge>
+                        </ComposerBadge>
+                      </div>
+                    )}
+                    {toolsUnavailable && (
+                      <div className="flex items-center gap-1.5">
+                        <NoToolsModelBadge />
                       </div>
                     )}
                     {(conversationId || onApiKeyChange) && (
@@ -383,8 +404,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </Tooltip>
       )}
 
-      {/* Desktop: inline toolbar items */}
-      {!isMobile && (
+      {/* Wide: inline toolbar items */}
+      {!isNarrow && (
         <>
           {canSeeAgentPicker &&
             selectorAgentId !== undefined &&
@@ -408,7 +429,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <ModelSelectorLogo provider={logoProvider} className="size-4" />
             </Button>
           ) : (
-            <div className="flex items-center h-8 rounded-full border border-border bg-muted/50 overflow-hidden">
+            <div className="flex items-center h-8 rounded-full bg-muted/50 overflow-hidden">
               {(conversationId || onApiKeyChange) && (
                 <LlmProviderApiKeySelector
                   conversationId={conversationId}
@@ -444,10 +465,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 fallbackModelName={agentModelDisplayName}
               />
               {modelSource && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 mr-2 gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
-                >
+                <ComposerBadge className="ml-1 mr-2">
                   {modelSourceLabel}
                   {modelSource === "user" && onResetModelOverride && (
                     <button
@@ -459,10 +477,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       <XIcon className="size-3" />
                     </button>
                   )}
-                </Badge>
+                </ComposerBadge>
               )}
             </div>
           )}
+          {toolsUnavailable && <NoToolsModelBadge />}
           {tokensUsed > 0 && maxContextLength && (
             <ContextWindowDialog
               breakdown={contextWindow ?? null}

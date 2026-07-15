@@ -9,9 +9,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
-import { useSession } from "@/lib/auth/auth.query";
+import { clipErrorMessage, trackEvent } from "@/lib/analytics";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import {
+  getApiErrorMessage,
+  handleApiError,
+  throwOnApiError,
+} from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
 
 const {
@@ -22,6 +27,7 @@ const {
   getMcpServer,
   reauthenticateMcpServer,
   reinstallMcpServer,
+  reloadMcpServerTools,
 } = archestraApiSdk;
 
 type McpServersQuery = Partial<
@@ -34,6 +40,12 @@ type McpServersParams = McpServersQuery & {
 };
 
 export function useMcpServers(params?: McpServersParams) {
+  // The endpoint requires mcpServerInstallation:read; skip the request for
+  // users whose role lacks it instead of letting it 403.
+  const { data: canReadInstallations } = useHasPermissions({
+    mcpServerInstallation: ["read"],
+  });
+
   return useQuery({
     // Include catalogId in queryKey only when provided to maintain cache separation
     queryKey: [
@@ -65,7 +77,7 @@ export function useMcpServers(params?: McpServersParams) {
       return data ?? [];
     },
     initialData: params?.initialData,
-    enabled: params?.enabled,
+    enabled: (params?.enabled ?? true) && !!canReadInstallations,
     refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });
 }
@@ -81,6 +93,31 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
       "mcp_installation_status",
       (message: McpInstallationStatusMessage) => {
         const { serverId, status, error } = message.payload;
+
+        // Several components mount this hook at once, and each gets this
+        // callback for the same message — dedupe by server so one runtime
+        // failure produces one event. A later non-error status re-arms the
+        // server (a retried install can fail again and be captured again).
+        if (status === "error") {
+          if (!runtimeInstallErrorsAlreadyTracked.has(serverId)) {
+            runtimeInstallErrorsAlreadyTracked.add(serverId);
+            const server = queryClient
+              .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
+                queryKey: ["mcp-servers"],
+              })
+              .flatMap(([, servers]) => servers ?? [])
+              .find((candidate) => candidate.id === serverId);
+            trackEvent("mcp_server_installation_failed", {
+              serverId,
+              serverName: server?.name,
+              catalogId: server?.catalogId ?? undefined,
+              stage: "runtime",
+              errorMessage: clipErrorMessage(error),
+            });
+          }
+        } else {
+          runtimeInstallErrorsAlreadyTracked.delete(serverId);
+        }
 
         queryClient.setQueriesData<
           archestraApiTypes.GetMcpServersResponses["200"]
@@ -174,11 +211,28 @@ export function useInstallMcpServer() {
         body: data,
       });
       if (error) {
+        // `handleApiError` doesn't throw, so API rejections still flow
+        // through onSuccess (with `installedServer` undefined) — capture the
+        // failure here, at the only place the API error is visible.
+        trackEvent("mcp_server_installation_failed", {
+          serverName: data.name,
+          catalogId: data.catalogId,
+          stage: "request",
+          errorMessage: clipErrorMessage(getApiErrorMessage(error)),
+        });
         handleApiError(error);
       }
       return { installedServer, dontShowToast: data.dontShowToast };
     },
     onSuccess: async ({ installedServer, dontShowToast }, variables) => {
+      if (installedServer) {
+        trackEvent("mcp_server_installed", {
+          serverId: installedServer.id,
+          serverName: variables.name,
+          catalogId: variables.catalogId,
+          scope: variables.scope,
+        });
+      }
       // Show success toast for remote servers (local servers show toast after async tool fetch completes)
       if (!dontShowToast && installedServer) {
         toast.success(`Successfully installed ${variables.name}`);
@@ -204,7 +258,14 @@ export function useInstallMcpServer() {
       // Invalidate all chat MCP tools (new tools may be available)
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
     },
-    onError: (_error, variables) => {
+    onError: (error, variables) => {
+      // Thrown (non-API) failures, e.g. the request never reached the backend.
+      trackEvent("mcp_server_installation_failed", {
+        serverName: variables.name,
+        catalogId: variables.catalogId,
+        stage: "request",
+        errorMessage: clipErrorMessage(error.message),
+      });
       toast.error(`Failed to install ${variables.name}`);
     },
   });
@@ -218,6 +279,10 @@ export function useDeleteMcpServer() {
       return response.data;
     },
     onSuccess: async (_, variables) => {
+      trackEvent("mcp_server_uninstalled", {
+        serverId: variables.id,
+        serverName: variables.name,
+      });
       // Refetch instead of just invalidating to ensure data is fresh
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       // Invalidate all tool assignment queries (tools, agent-tools, chat, etc.)
@@ -227,6 +292,69 @@ export function useDeleteMcpServer() {
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
       toast.error(`Failed to uninstall ${variables.name}`);
+    },
+  });
+}
+
+/**
+ * Re-discover a server's tools from the live server and persist them to the
+ * tool catalog (add/update/remove) — no reinstall, no pod restart. Refreshes
+ * every query that renders tool lists or counts, since the shared catalog
+ * rows may have changed for all installs of the same server.
+ */
+export function useReloadMcpServerTools() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: string;
+      name?: string;
+      catalogId?: string | null;
+    }) => {
+      const { data: result, error } = await reloadMcpServerTools({
+        path: { id: data.id },
+      });
+      if (error) {
+        handleApiError(error);
+        throw new Error(getApiErrorMessage(error));
+      }
+      return result;
+    },
+    onSuccess: async (result, variables) => {
+      // Callers pass only the server id; recover name/catalogId from the
+      // cached mcp-servers lists (same lookup useMcpInstallationStatusCacheSync
+      // uses) for the toast and catalog-scoped invalidation.
+      const cachedServer = queryClient
+        .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
+          queryKey: ["mcp-servers"],
+        })
+        .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
+        .find((candidate) => candidate.id === variables.id);
+      const name = variables.name ?? cachedServer?.name;
+      const catalogId = variables.catalogId ?? cachedServer?.catalogId;
+
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      invalidateToolAssignmentQueries(queryClient);
+      queryClient.invalidateQueries({
+        queryKey: ["mcp-servers", variables.id, "tools"],
+      });
+      if (catalogId) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-catalog", catalogId, "tools"],
+        });
+      }
+      const target = name ?? "server";
+      const changed =
+        (result?.created ?? 0) +
+        (result?.updated ?? 0) +
+        (result?.deleted ?? 0);
+      toast.success(
+        changed > 0 && result
+          ? `Refreshed ${target} tools: ${result.created} added, ${result.updated} updated, ${result.deleted} removed`
+          : `${name ?? "Server"} tools are already up to date`,
+      );
+    },
+    onError: (_error, variables) => {
+      toast.error(`Failed to refresh ${variables.name ?? "server"} tools`);
     },
   });
 }
@@ -381,6 +509,12 @@ export function useReinstallMcpServer() {
         body,
       });
       if (response.error) {
+        trackEvent("mcp_server_installation_failed", {
+          serverId: id,
+          serverName: name,
+          stage: "request",
+          errorMessage: clipErrorMessage(getApiErrorMessage(response.error)),
+        });
         handleApiError(response.error);
         return null;
       }
@@ -446,3 +580,8 @@ export function useMcpDeploymentStatuses(): Record<
 
   return statuses;
 }
+
+// Server ids whose async ("runtime") install failure was already sent to
+// analytics. Module-level so the capture happens once regardless of how many
+// components have `useMcpInstallationStatusCacheSync` mounted.
+const runtimeInstallErrorsAlreadyTracked = new Set<string>();

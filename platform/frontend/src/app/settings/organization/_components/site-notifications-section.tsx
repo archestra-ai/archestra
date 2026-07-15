@@ -165,6 +165,7 @@ export function SiteNotificationsSection() {
               </div>
               {tab === "markdown" ? (
                 <Textarea
+                  aria-label="Notification content"
                   value={effectiveContent}
                   onChange={(event) => setContent(event.target.value)}
                   placeholder="Write your notification content using markdown."

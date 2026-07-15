@@ -17,6 +17,9 @@ interface ValidateOptions {
   requireComplete?: boolean;
 }
 
+const pageHasContent = (page: OnboardingWizardPageValue): boolean =>
+  page.content.trim().length > 0 || (page.image ?? "") !== "";
+
 export function sanitizeOnboardingWizard(
   wizard: OnboardingWizardValue | null,
 ): OnboardingWizardValue | null {
@@ -27,9 +30,7 @@ export function sanitizeOnboardingWizard(
       image: page.image ?? null,
       content: page.content,
     }))
-    .filter(
-      (page) => page.content.trim().length > 0 || (page.image ?? "") !== "",
-    );
+    .filter(pageHasContent);
   if (label.length === 0 || pages.length === 0) return null;
   return { label, pages };
 }
@@ -45,10 +46,7 @@ export function validateOnboardingWizard(
   const errors: OnboardingWizardValidationError = {};
 
   const hasAnyContent =
-    trimmedLabel.length > 0 ||
-    wizard.pages.some(
-      (page) => page.content.trim().length > 0 || (page.image ?? "") !== "",
-    );
+    trimmedLabel.length > 0 || wizard.pages.some(pageHasContent);
 
   if (!hasAnyContent) return {};
 
@@ -58,9 +56,7 @@ export function validateOnboardingWizard(
     errors.label = "Label must be 25 characters or fewer.";
   }
 
-  const nonEmptyPages = wizard.pages.filter(
-    (page) => page.content.trim().length > 0,
-  );
+  const nonEmptyPages = wizard.pages.filter(pageHasContent);
 
   if (nonEmptyPages.length === 0) {
     if (requireComplete) {

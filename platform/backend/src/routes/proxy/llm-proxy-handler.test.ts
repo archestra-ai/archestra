@@ -30,6 +30,7 @@ import {
   createAnthropicTestClient,
   createGeminiTestClient,
   createOpenAiTestClient,
+  type OpenAiStubOptions,
 } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
 import { ApiError } from "@/types";
@@ -58,8 +59,7 @@ vi.mock("prom-client", () => ({
 
 // Mock tool-invocation to control policy evaluation results.
 // Default: evaluatePolicies → null (allow), matching the real behavior when no
-// policies exist in the DB. The global tool policy is read from the real
-// organization record (via OrganizationModel), so it is not mocked here.
+// policies exist in the DB.
 const mockEvaluatePolicies = vi.fn<() => Promise<PolicyBlockResult | null>>();
 
 vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
@@ -97,12 +97,14 @@ import { metrics } from "@/observability";
 import {
   anthropicAdapterFactory,
   azureAdapterFactory,
+  bedrockAdapterFactory,
   geminiAdapterFactory,
   openaiAdapterFactory,
 } from "./adapters";
 import { virtualKeyRateLimiter } from "./llm-proxy-auth";
 import anthropicProxyRoutes from "./routes/anthropic";
 import azureProxyRoutes from "./routes/azure";
+import bedrockProxyRoutes from "./routes/bedrock";
 import geminiProxyRoutes from "./routes/gemini";
 import githubCopilotProxyRoutes from "./routes/github-copilot";
 import openAiProxyRoutes from "./routes/openai";
@@ -110,7 +112,7 @@ import openAiProxyRoutes from "./routes/openai";
 describe("LLM Proxy Handler Prometheus Metrics", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
-  let openAiStubOptions: { interruptAtChunk?: number };
+  let openAiStubOptions: OpenAiStubOptions;
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -369,6 +371,40 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         }),
       );
     });
+
+    test("streaming failure before any usage persists an error interaction", async () => {
+      // A provider 400 (e.g. context length exceeded) rejects the stream before
+      // any chunk — the failure must still land in the interactions log so it
+      // shows up in LLM logs / session history.
+      openAiStubOptions.failStreamWithError =
+        "This endpoint's maximum context length is 262144 tokens. However, you requested about 285869 tokens";
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].response).toMatchObject({
+        error: expect.stringContaining("maximum context length"),
+      });
+      expect(rows[0].inputTokens).toBe(0);
+      expect(rows[0].outputTokens).toBe(0);
+    });
   });
 
   describe("Anthropic", () => {
@@ -618,12 +654,122 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       );
     });
   });
+
+  // Bedrock uses a custom SigV4 client instead of getObservableFetch, so unlike
+  // fetch-based providers it can't self-instrument llm_request_duration_seconds.
+  // The handler records it on Bedrock's behalf; these tests pin that behavior.
+  // The duration histogram is the only LLM metric carrying a `status_code`
+  // label, which is what distinguishes it from TTFT/tokens-per-second here.
+  describe("Bedrock", () => {
+    const BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0";
+
+    beforeEach(async () => {
+      await app.register(bedrockProxyRoutes);
+
+      vi.spyOn(bedrockAdapterFactory, "createClient").mockReturnValue({
+        converse: async () => ({
+          $metadata: { requestId: "req_bedrock_test" },
+          output: {
+            message: { role: "assistant", content: [{ text: "Hi there" }] },
+          },
+          stopReason: "end_turn",
+          usage: { inputTokens: 12, outputTokens: 10 },
+        }),
+        converseStream: async () =>
+          (async function* () {
+            yield { messageStart: { role: "assistant" } };
+            yield {
+              contentBlockDelta: {
+                contentBlockIndex: 0,
+                delta: { text: "Hi there" },
+              },
+            };
+            yield { contentBlockStop: { contentBlockIndex: 0 } };
+            yield { messageStop: { stopReason: "end_turn" } };
+            yield {
+              metadata: { usage: { inputTokens: 12, outputTokens: 10 } },
+            };
+          })(),
+      } as never);
+
+      await ModelModel.upsert({
+        externalId: `bedrock/${BEDROCK_MODEL}`,
+        provider: "bedrock",
+        modelId: BEDROCK_MODEL,
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "3.00",
+        customPricePerMillionOutput: "15.00",
+        lastSyncedAt: new Date(),
+      });
+    });
+
+    test("streaming request records the request-duration metric", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/bedrock/${testAgent.id}/converse-stream`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          modelId: BEDROCK_MODEL,
+          messages: [{ role: "user", content: [{ text: "Hello!" }] }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(histogramObserve).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            provider: "bedrock",
+            model: BEDROCK_MODEL,
+            agent_id: testAgent.id,
+            status_code: "200",
+          }),
+          value: expect.any(Number),
+        }),
+      );
+    });
+
+    test("non-streaming request records the request-duration metric", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/bedrock/${testAgent.id}/converse`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          modelId: BEDROCK_MODEL,
+          messages: [{ role: "user", content: [{ text: "Hello!" }] }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(histogramObserve).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            provider: "bedrock",
+            model: BEDROCK_MODEL,
+            agent_id: testAgent.id,
+            status_code: "200",
+          }),
+          value: expect.any(Number),
+        }),
+      );
+    });
+  });
 });
 
 describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
-  let openAiStubOptions: { interruptAtChunk?: number };
+  let openAiStubOptions: OpenAiStubOptions;
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -682,6 +828,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool list_files was blocked",
         reason: "Tool invocation blocked: policy is configured to always block",
         blockedToolName: "list_files",
+        toolInput: {},
         allToolCallNames: ["list_files"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);
@@ -745,6 +892,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool list_files was blocked",
         reason: "blocked by policy",
         blockedToolName: "list_files",
+        toolInput: {},
         allToolCallNames: ["list_files"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);
@@ -797,6 +945,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool get_weather was blocked",
         reason: "Tool invocation blocked: always block",
         blockedToolName: "get_weather",
+        toolInput: {},
         allToolCallNames: ["get_weather"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);

@@ -10,6 +10,7 @@ import {
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
   TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
+  TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_SEARCH_PRIVATE_MCP_REGISTRY_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -17,6 +18,7 @@ import { z } from "zod";
 import {
   assertMcpCatalogTeams,
   authorizeMcpCatalogScope,
+  getCatalogWriteMembershipTeamIds,
   getMcpCatalogPermissionChecker,
   requireMcpCatalogModifyPermission,
 } from "@/auth/mcp-catalog-permissions";
@@ -32,6 +34,7 @@ import {
 } from "@/models";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
+import { reloadToolsForServer } from "@/services/mcp-reinstall";
 import {
   ApiError,
   InsertInternalMcpCatalogSchema,
@@ -397,6 +400,14 @@ const GetMcpServerLogsToolArgsSchema = z
   })
   .strict();
 
+const ReloadMcpServerToolsToolArgsSchema = z
+  .object({
+    serverId: UuidIdSchema.describe(
+      `The deployment ID of the MCP server whose tools should be refreshed. Use ${TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME} to find it.`,
+    ),
+  })
+  .strict();
+
 type SearchPrivateMcpRegistryArgs = z.infer<
   typeof SearchPrivateMcpRegistryToolArgsSchema
 >;
@@ -406,6 +417,9 @@ type EditMcpConfigArgs = z.infer<typeof EditMcpConfigToolArgsSchema>;
 type CreateMcpServerArgs = z.infer<typeof CreateMcpServerToolArgsSchema>;
 type DeployMcpServerArgs = z.infer<typeof DeployMcpServerToolArgsSchema>;
 type GetMcpServerLogsArgs = z.infer<typeof GetMcpServerLogsToolArgsSchema>;
+type ReloadMcpServerToolsArgs = z.infer<
+  typeof ReloadMcpServerToolsToolArgsSchema
+>;
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -477,6 +491,13 @@ const registry = defineArchestraTools([
     description: `Get recent container logs from a deployed local (K8s) MCP server. Use ${TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME} to find the server ID. Only works for local servers with K8s runtime enabled.`,
     schema: GetMcpServerLogsToolArgsSchema,
     handler: ({ args, context }) => handleGetMcpServerLogs(args, context),
+  }),
+  defineArchestraTool({
+    shortName: TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME,
+    title: "Reload MCP Server Tools",
+    description: `Re-discover a deployed MCP server's tools from the live server and refresh Archestra's tool catalog for it — picks up added, removed, and changed tools (names, descriptions, and input schemas) without reinstalling or restarting the server. Use when an MCP server's tools have changed and agents are seeing a stale list. Use ${TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME} to find the server ID. Note: tools are shared per catalog item, so this refreshes the tool list for every deployment of the same server.`,
+    schema: ReloadMcpServerToolsToolArgsSchema,
+    handler: ({ args, context }) => handleReloadMcpServerTools(args, context),
   }),
   defineArchestraTool({
     shortName: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
@@ -710,17 +731,20 @@ async function handleEditMcpDescription(
       (newTeamIds.length !== existingTeamIds.length ||
         !newTeamIds.every((teamId) => existingTeamIds.includes(teamId)));
     try {
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(context.userId);
-      // Gate at the item's current scope (lets a team-admin member edit a team
-      // item; blocks editing someone else's personal item)…
+      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
+        ? [[], []]
+        : await Promise.all([
+            TeamModel.getUserTeamIds(context.userId),
+            getCatalogWriteMembershipTeamIds(context.userId),
+          ]);
+      // Gate at the item's current scope (lets an admin of one of the item's
+      // `write` teams edit it; blocks editing someone else's personal item)…
       requireMcpCatalogModifyPermission({
         checker,
         scope: existing.scope,
         authorId: existing.authorId,
-        catalogTeamIds: existingTeamIds,
-        userTeamIds,
+        catalogTeams: existing.teams,
+        writeMembershipTeamIds,
         userId: context.userId,
       });
       // …then gate the target scope/teams only when they actually change.
@@ -731,6 +755,7 @@ async function handleEditMcpDescription(
           authorId: existing.authorId,
           requestedTeamIds: newTeamIds,
           userTeamIds,
+          writeMembershipTeamIds,
           userId: context.userId,
         });
         await assertMcpCatalogTeams({
@@ -855,10 +880,10 @@ async function handleEditMcpConfig(
         checker,
         scope: existing.scope,
         authorId: existing.authorId,
-        catalogTeamIds: existing.teams.map((t) => t.id),
-        userTeamIds: checker.isAdmin
+        catalogTeams: existing.teams,
+        writeMembershipTeamIds: checker.isAdmin
           ? []
-          : await TeamModel.getUserTeamIds(context.userId),
+          : await getCatalogWriteMembershipTeamIds(context.userId),
         userId: context.userId,
       });
     } catch (error) {
@@ -1021,14 +1046,19 @@ async function handleCreateMcpServer(
       organizationId,
     });
     try {
+      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
+        ? [[], []]
+        : await Promise.all([
+            TeamModel.getUserTeamIds(context.userId),
+            getCatalogWriteMembershipTeamIds(context.userId),
+          ]);
       authorizeMcpCatalogScope({
         checker,
         scope,
         authorId: context.userId,
         requestedTeamIds: teamIdsForScope,
-        userTeamIds: checker.isAdmin
-          ? []
-          : await TeamModel.getUserTeamIds(context.userId),
+        userTeamIds,
+        writeMembershipTeamIds,
         userId: context.userId,
       });
       await assertMcpCatalogTeams({
@@ -1196,6 +1226,30 @@ async function handleDeployMcpServer(
     });
     if (authError) {
       return errorResult(authError);
+    }
+
+    // A shared install of a team-scoped item becomes the connection other
+    // members resolve through, so creating one is a write on the item (mirrors
+    // the REST install route).
+    if (catalogItem.scope === "team" && scope !== "personal") {
+      try {
+        requireMcpCatalogModifyPermission({
+          checker: { isAdmin },
+          scope: catalogItem.scope,
+          authorId: catalogItem.authorId,
+          catalogTeams: catalogItem.teams,
+          writeMembershipTeamIds: isAdmin
+            ? []
+            : await getCatalogWriteMembershipTeamIds(context.userId),
+          userId: context.userId,
+        });
+      } catch (error) {
+        return errorResult(
+          error instanceof Error
+            ? error.message
+            : "Failed to authorize shared install.",
+        );
+      }
     }
 
     const existingServers = await McpServerModel.findByCatalogId(
@@ -1417,6 +1471,54 @@ async function handleGetMcpServerLogs(
   }
 }
 
+async function handleReloadMcpServerTools(
+  args: ReloadMcpServerToolsArgs,
+  context: ArchestraContext,
+): Promise<CallToolResult> {
+  const { agent: contextAgent, organizationId } = context;
+
+  logger.info(
+    { agentId: contextAgent.id, reloadArgs: args },
+    "reload_mcp_server_tools tool called",
+  );
+
+  try {
+    if (!context.userId || !organizationId) {
+      return errorResult("user/organization context not available.");
+    }
+
+    const isAdmin = await userHasPermission(
+      context.userId,
+      organizationId,
+      "mcpServerInstallation",
+      "admin",
+    );
+    const server = await McpServerModel.findById(
+      args.serverId,
+      context.userId,
+      isAdmin,
+    );
+    if (!server) {
+      return errorResult("MCP server not found or you don't have access.");
+    }
+    // Only local/remote servers have a live upstream to re-discover from.
+    if (server.serverType === "app" || server.serverType === "builtin") {
+      return errorResult(
+        "This server manages its tools in-process; there is nothing to reload.",
+      );
+    }
+
+    const result = await reloadToolsForServer(server);
+
+    return structuredSuccessResult(
+      { serverId: server.id, ...result },
+      `Reloaded tools for ${server.name}: ${result.created} added, ${result.updated} updated, ${result.deleted} removed, ${result.unchanged} unchanged.`,
+    );
+  } catch (error) {
+    return catchError(error, "reloading MCP server tools");
+  }
+}
+
 async function handleCreateMcpServerInstallationRequest(
   context: ArchestraContext,
 ): Promise<CallToolResult> {
@@ -1467,6 +1569,7 @@ async function discoverLocalMcpServerTools(params: {
         catalogItem.name || mcpServer.name,
         tool.name,
       ),
+      rawToolName: tool.name,
       description: tool.description,
       parameters: tool.inputSchema,
       catalogId: catalogItem.id,
@@ -1519,6 +1622,7 @@ async function discoverRemoteMcpServerTools(params: {
 
     const toolsToCreate = discoveredTools.map((tool) => ({
       name: ToolModel.slugifyName(catalogItem.name, tool.name),
+      rawToolName: tool.name,
       description: tool.description,
       parameters: tool.inputSchema,
       catalogId: catalogItem.id,

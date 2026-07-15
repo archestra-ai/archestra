@@ -47,6 +47,12 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 vi.mock("@/clients/mcp-client", () => ({
   default: {
     executeToolCallForOwner: vi.fn(),
+    resolveUiAppInstallIdForCaller: vi.fn().mockResolvedValue(null),
+    // Enrichment gates attaching a tool's ui:// resource on it being readable;
+    // default to a successful read so UI-resource attachment tests are unaffected.
+    readResource: vi.fn().mockResolvedValue({
+      contents: [{ uri: "ui://x", text: "<html></html>" }],
+    }),
   },
 }));
 
@@ -62,6 +68,12 @@ vi.mock("@/services/identity-providers/session-token", () => ({
 
 beforeEach(() => {
   vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
+  vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockReset();
+  vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(null);
+  vi.mocked(mcpClient.readResource).mockReset();
+  vi.mocked(mcpClient.readResource).mockResolvedValue({
+    contents: [{ uri: "ui://x", text: "<html></html>" }],
+  });
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   vi.mocked(StreamableHTTPClientTransport).mockClear();
 });
@@ -249,6 +261,58 @@ describe("normalizeJsonSchema", () => {
     expect(normalizeJsonSchema(schema)).toEqual({ type: "string" });
   });
 
+  test("gives untyped nodes an explicit type (Gemini/Vertex rejects untyped schema nodes)", () => {
+    // posthog__cohorts-partial-update shape: `query` is zod.unknown().nullable(),
+    // which serializes to a bare {} branch that Vertex 400s on — even behind
+    // OpenRouter when it routes the model to a Google-hosted deployment.
+    const schema = {
+      type: "object",
+      properties: {
+        query: { anyOf: [{}, { type: "null" }] },
+        payload: {},
+        config: { properties: { a: { type: "string" } } },
+        tags: { items: { type: "string" } },
+        mode: { enum: ["fast", "slow"] },
+        count: { enum: [1, 2] },
+        linked: { $ref: "#/$defs/Thing" },
+      },
+      $defs: { Thing: { type: "string" } },
+    };
+    expect(normalizeJsonSchema(schema)).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          anyOf: [
+            { type: "object", additionalProperties: true },
+            { type: "null" },
+          ],
+        },
+        payload: { type: "object", additionalProperties: true },
+        config: {
+          type: "object",
+          properties: { a: { type: "string" } },
+          additionalProperties: false,
+        },
+        tags: { type: "array", items: { type: "string" } },
+        mode: { type: "string", enum: ["fast", "slow"] },
+        count: { type: "integer", enum: [1, 2] },
+        linked: { $ref: "#/$defs/Thing" },
+      },
+      $defs: { Thing: { type: "string" } },
+      additionalProperties: false,
+    });
+  });
+
+  test("keeps a bare any-node open instead of clamping it with additionalProperties: false", () => {
+    const result = normalizeJsonSchema({
+      type: "object",
+      properties: { anything: {} },
+    });
+    expect(
+      (result.properties as Record<string, Record<string, unknown>>).anything,
+    ).toEqual({ type: "object", additionalProperties: true });
+  });
+
   test("does not mutate the original schema", () => {
     const schema = {
       type: "object",
@@ -425,6 +489,19 @@ describe("chat-mcp-client health check", () => {
     await chatClient.__test.clearToolCache(cacheKey);
   });
 
+  test("clears the ping timeout timer once ping settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const before = vi.getTimerCount();
+      await chatClient.__test.pingClientWithTimeout({
+        ping: () => Promise.resolve({}),
+      });
+      expect(vi.getTimerCount()).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("discards cached client when ping hangs past timeout", async ({
     makeAgent,
     makeUser,
@@ -542,7 +619,6 @@ describe("executeMcpTool error handling", () => {
     organizationId: "00000000-0000-4000-8000-000000000003",
     userIsAgentAdmin: false,
     mcpGwToken: null,
-    globalToolPolicy: "permissive" as const,
     considerContextUntrusted: false,
   };
 
@@ -722,7 +798,6 @@ describe("executeMcpTool error handling", () => {
     const result = await toolBuilderTest.executeMcpTool({
       ...baseCtx,
       agentId: agent.id,
-      globalToolPolicy: "restrictive",
     });
 
     expect(result.unsafeContextBoundary).toMatchObject({
@@ -864,7 +939,7 @@ describe("chat-mcp-client tool caching", () => {
     makeToolPolicy,
     makeConversation,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({
@@ -2133,6 +2208,41 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
+  test("does not attach the UI resource when its upstream resource can't be read", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    // The upstream server advertises the ui:// resource but doesn't serve it
+    // (e.g. resources/read -> -32601 Method not found). The app must NOT register
+    // — no `_meta.ui` — so chat renders a plain tool call instead of an empty
+    // pill and an auto-opened, blank right panel.
+    vi.mocked(mcpClient.readResource).mockRejectedValue(
+      new Error("MCP error -32601: Method not found"),
+    );
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+  });
+
   test("does not attach the UI resource when the target tool is not assigned to the agent", async ({
     makeAgent,
     makeAgentTool,
@@ -2178,7 +2288,7 @@ describe("buildArchestraToolOutput", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    // "All tools" mode: run_tool dispatches to any tool the user can access
+    // "Auto" mode: run_tool dispatches to any tool the user can access
     // without an agent_tools assignment. The UI resource must still attach so
     // the MCP App renders as an iframe instead of a plain tool-call card.
     const agent = await makeAgent({
@@ -2212,6 +2322,87 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
+  test("stamps the resolved install id onto the dispatched app's UI so callbacks bind to the server", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    // The resolver (unit-tested against the DB in mcp-client.test.ts) yields the
+    // caller's install; here we assert buildArchestraToolOutput surfaces it on
+    // _meta.ui.mcpServerId. Without it the app's SDK callServerTool misroutes to
+    // the agent gateway ("No tool named ..."); with it chat mounts callbacks
+    // against POST /api/mcp/server/<install>.
+    vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(
+      "install-123",
+    );
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      _meta: {
+        ui: {
+          resourceUri: "ui://excalidraw/mcp-app.html",
+          mcpServerId: "install-123",
+        },
+      },
+    });
+  });
+
+  test("omits mcpServerId when the resolver returns null (owned-app backing / unreachable install)", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    // The resolver returns null for owned-app backings (routed by app id via
+    // render_app) and when no install is reachable — the UI must render without
+    // a spurious server binding.
+    vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(null);
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } },
+    });
+    expect(
+      (result as unknown as { _meta: { ui: Record<string, unknown> } })._meta
+        .ui,
+    ).not.toHaveProperty("mcpServerId");
+  });
+
   test("does not attach the UI resource for an all-tools agent when the target tool is not accessible", async ({
     makeAgent,
     makeInternalMcpCatalog,
@@ -2227,15 +2418,18 @@ describe("buildArchestraToolOutput", () => {
       organizationId: org.id,
       accessAllTools: true,
     });
-    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    // Another organization's catalog: not visible to the user, so the dynamic
+    // fallback must not attach its UI resource — the boundary the widening
+    // must respect.
+    const otherOrg = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: otherOrg.id,
+    });
     await makeTool({
       name: "excalidraw__create_view",
       catalogId: catalog.id,
       meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
     });
-    // No install (makeMcpServer) for this catalog: the tool is not reachable, so
-    // the dynamic fallback must not attach its UI resource — the boundary the
-    // widening must respect.
 
     const result = await buildArchestraToolOutput({
       response: archestraResponse,
@@ -2341,12 +2535,6 @@ describe("throwIfApprovalRequired", () => {
   const { resolveApprovalPolicyTarget, throwIfApprovalRequired } =
     toolBuilderTest;
 
-  test("does not throw when globalToolPolicy is permissive", async () => {
-    await expect(
-      throwIfApprovalRequired("some-tool", {}, "permissive"),
-    ).resolves.toBeUndefined();
-  });
-
   test("does not throw when tool has no require_approval policy", async ({
     makeTool,
     makeToolPolicy,
@@ -2358,7 +2546,7 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired("allowed-tool", {}, "restrictive"),
+      throwIfApprovalRequired("allowed-tool", {}),
     ).resolves.toBeUndefined();
   });
 
@@ -2373,7 +2561,7 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired("restricted-tool", {}, "restrictive"),
+      throwIfApprovalRequired("restricted-tool", {}),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   });
 
@@ -2390,20 +2578,16 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired(
-        getArchestraToolFullName("run_tool"),
-        {
-          tool_name: tool.name,
-          tool_args: { destination: "external" },
-        },
-        "restrictive",
-      ),
+      throwIfApprovalRequired(getArchestraToolFullName("run_tool"), {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      }),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   });
 
   test("does not throw when tool is not found in DB", async () => {
     await expect(
-      throwIfApprovalRequired("nonexistent-tool", {}, "restrictive"),
+      throwIfApprovalRequired("nonexistent-tool", {}),
     ).resolves.toBeUndefined();
   });
 

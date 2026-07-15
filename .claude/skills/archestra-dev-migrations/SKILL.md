@@ -19,7 +19,7 @@ That subpage overrides the default working directory rule and runs its procedure
 
 ```bash
 pnpm db:generate
-pnpm exec drizzle-kit check
+pnpm --dir backend exec drizzle-kit check
 pnpm --dir backend check:migrations
 pnpm db:migrate
 pnpm db:studio
@@ -34,7 +34,7 @@ When creating migrations that include schema changes and data migration logic:
 1. Update the Drizzle schema files with the schema changes.
 2. Run `pnpm db:generate`.
 3. Add the data migration SQL to the generated file.
-4. Run `pnpm exec drizzle-kit check` and `pnpm --dir backend check:migrations`
+4. Run `pnpm --dir backend exec drizzle-kit check` and `pnpm --dir backend check:migrations`
    to verify consistency and journal ordering.
 
 Drizzle creates a migration with a generated name such as `0119_military_alice.sql`. Use that generated filename. Never create manually named migration files because Drizzle tracks migrations through `backend/src/database/migrations/meta/_journal.json`, which references generated file names.
@@ -45,7 +45,7 @@ Data migration SQL can include statements such as `INSERT`, `UPDATE`, and other 
 
 Keep schema DDL before data migration statements when the data migration references newly created tables or columns.
 
-Always verify with `pnpm exec drizzle-kit check` and
+Always verify with `pnpm --dir backend exec drizzle-kit check` and
 `pnpm --dir backend check:migrations` after editing generated SQL.
 
 ## Custom data-only migrations
@@ -59,7 +59,7 @@ pnpm --dir backend exec drizzle-kit generate --custom --name=<descriptive-name>
 Then add the SQL to the generated file and run:
 
 ```bash
-pnpm exec drizzle-kit check
+pnpm --dir backend exec drizzle-kit check
 ```
 
 ## Database connection

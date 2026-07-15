@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   jsonb,
   pgTable,
@@ -6,6 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { MessageFeedback } from "@/types/message";
 import conversationsTable from "./conversation";
 
 const messagesTable = pgTable(
@@ -18,12 +21,18 @@ const messagesTable = pgTable(
     role: text("role").notNull(),
     // biome-ignore lint/suspicious/noExplicitAny: Stores complete UIMessage structure from AI SDK which is dynamic
     content: jsonb("content").$type<any>().notNull(),
+    // Owner's thumbs verdict on an assistant message; NULL = no feedback.
+    feedback: text("feedback").$type<MessageFeedback>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }),
   },
   (table) => ({
     conversationIdIdx: index("messages_conversation_id_idx").on(
       table.conversationId,
+    ),
+    feedbackCheck: check(
+      "messages_feedback_check",
+      sql`${table.feedback} in ('up', 'down')`,
     ),
     // Note: Additional pg_trgm GIN index for search is created in migration 0117_messages_content_trgm_idx.sql:
     // - messages_content_trgm_idx: GIN index on (content::text)

@@ -12,11 +12,11 @@ import {
   resolveCreateAppHtml,
 } from "@/app-templates";
 import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import logger from "@/logging";
 import {
   AppAccessModel,
   AppModel,
+  AppPinModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
   AppToolModel,
@@ -32,7 +32,7 @@ import {
 import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
-  resolveOrgTeamIds,
+  resolveOrgTeams,
 } from "@/services/apps/app-authorization";
 import {
   createSeededAppConversation,
@@ -65,6 +65,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { externalAppLabel } from "@/utils/external-app-label";
 
 // REST bodies extend the shared create/update schemas with team assignments,
 // which only the REST surface needs for team-scoped apps.
@@ -95,6 +96,15 @@ const OpenAppInChatResponseSchema = z.object({
   conversationId: z.string().uuid(),
 });
 
+// The external variant also says how the conversation was set up: "render"
+// seeds the app already mounted; "prompt" leaves it empty and the client sends
+// `prompt` as the first user message (the tool has required inputs the agent
+// must collect before calling it).
+const OpenExternalAppInChatResponseSchema = OpenAppInChatResponseSchema.extend({
+  mode: z.enum(["render", "prompt"]),
+  prompt: z.string().optional(),
+});
+
 // The single-app GET resolves the app's team assignments so the detail page can
 // render team-name badges and seed the visibility editor.
 const AppWithTeamsSchema = SelectAppSchema.extend({
@@ -102,14 +112,6 @@ const AppWithTeamsSchema = SelectAppSchema.extend({
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  // Ships dark: routes are always registered (so they appear in the OpenAPI
-  // spec + generated client), but every request 404s until the feature is on.
-  fastify.addHook("onRequest", async () => {
-    if (!config.apps.enabled) {
-      throw new ApiError(404, "Not found");
-    }
-  });
-
   fastify.get(
     "/api/apps",
     {
@@ -152,9 +154,23 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         limit: ownedCount,
         offset: 0,
       });
-      const teamsByApp = await AppAccessModel.getTeamDetailsForApps(
-        owned.map((app) => app.id),
-      );
+      const [teamsByApp, ownedPins, externalPins] = await Promise.all([
+        AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
+        // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
+        // the client can group pinned-first, like the Projects page.
+        AppPinModel.getPinnedAtForApps({
+          userId: user.id,
+          appIds: owned.map((app) => app.id),
+        }),
+        AppPinModel.getPinnedAtForExternalApps({
+          userId: user.id,
+          refs: external.map((catalogApp) => ({
+            mcpServerId: catalogApp.mcpServerId,
+            resourceUri: catalogApp.resourceUri,
+            toolName: catalogApp.toolName,
+          })),
+        }),
+      ]);
 
       const items: AppListItem[] = [
         ...owned.map((app) => ({
@@ -168,19 +184,34 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teams: teamsByApp.get(app.id) ?? [],
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
+          pinnedAt: ownedPins.get(app.id) ?? null,
         })),
         ...external.map((catalogApp) => ({
           source: "external" as const,
           catalogId: catalogApp.catalogId,
           mcpServerId: catalogApp.mcpServerId,
           scope: catalogApp.scope,
-          // "Server / Tool" as the title (short tool name, never the slug
-          // prefix); the tool's own description as the subtitle.
-          name: `${catalogApp.serverName} / ${catalogApp.toolName}`,
+          // The server name as the title, suffixed with "/ <tool>" (short
+          // tool name, never the slug prefix) only when the server exposes
+          // several UI tools; the tool's own description as the subtitle.
+          name: externalAppLabel(catalogApp),
           description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
+          toolName: catalogApp.toolName,
+          // The server's registry icon (emoji or data URL) so the card can
+          // show which server the app comes from.
+          icon: catalogApp.serverIcon,
+          requiresInput: catalogApp.requiresInput,
           executionModel: "server-scoped" as const,
           cspOrigin: "author-declared" as const,
+          pinnedAt:
+            externalPins.get(
+              AppPinModel.externalPinKey({
+                mcpServerId: catalogApp.mcpServerId,
+                resourceUri: catalogApp.resourceUri,
+                toolName: catalogApp.toolName,
+              }),
+            ) ?? null,
         })),
       ];
       items.sort((a, b) => a.name.localeCompare(b.name));
@@ -228,7 +259,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(getAppTemplates());
+      return reply.send(await getAppTemplates());
     },
   );
 
@@ -245,7 +276,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ body, user, organizationId }, reply) => {
       const scope = body.scope ?? "personal";
-      const teamIds = await resolveOrgTeamIds(body.teamIds, organizationId);
+      const teamIds = await resolveOrgTeams(body.teamIds, organizationId);
       if (scope === "team" && teamIds.length === 0) {
         throw new ApiError(
           400,
@@ -264,7 +295,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         environmentId: body.environmentId ?? null,
       });
-      const { html, seededFromTemplate } = resolveCreateAppHtml({
+      const { html, seededFromTemplate } = await resolveCreateAppHtml({
         html: body.html,
         name: body.name,
       });
@@ -368,11 +399,11 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.OpenExternalAppInChat,
         description:
-          "Open an external (MCP-server) UI app in chat: create a conversation with the app rendered against the given install (no model turn) and return its id to navigate to.",
+          "Open an external (MCP-server) UI app in chat: create a conversation and return its id to navigate to. When the tool needs no inputs the app is seeded already rendered (no model turn); when it has required inputs the conversation is created empty and the response carries an opening prompt for the client to send.",
         tags: ["Apps"],
         params: z.object({ mcpServerId: UuidIdSchema }),
         body: z.object({ resourceUri: z.string().min(1) }),
-        response: constructResponseSchema(OpenAppInChatResponseSchema),
+        response: constructResponseSchema(OpenExternalAppInChatResponseSchema),
       },
     },
     async (
@@ -381,13 +412,131 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     ) => {
       // The service re-checks install access + that the resource exists (404s
       // otherwise).
-      const { conversationId } = await createSeededExternalAppConversation({
+      const result = await createSeededExternalAppConversation({
         mcpServerId,
         resourceUri,
         userId: user.id,
         organizationId,
       });
-      return reply.send({ conversationId });
+      return reply.send(result);
+    },
+  );
+
+  fastify.put(
+    "/api/apps/:appId/pin",
+    {
+      schema: {
+        operationId: RouteId.PinApp,
+        description:
+          "Pin an app for the current user (mirrors project pins). Personal — " +
+          "does not affect other members. Any user who can view the app may pin it.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { appId }, user, organizationId }, reply) => {
+      await loadViewableApp({ appId, userId: user.id, organizationId });
+      await AppPinModel.pinOwned({ userId: user.id, appId });
+      return reply.send({ ok: true as const });
+    },
+  );
+
+  fastify.delete(
+    "/api/apps/:appId/pin",
+    {
+      schema: {
+        operationId: RouteId.UnpinApp,
+        description:
+          "Remove the current user's pin on an app. Idempotent; intentionally " +
+          "no visibility check, so a stale pin on an app that was since " +
+          "re-scoped away (or deleted) can still be cleared.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { appId }, user }, reply) => {
+      await AppPinModel.unpinOwned({ userId: user.id, appId });
+      return reply.send({ ok: true as const });
+    },
+  );
+
+  fastify.put(
+    "/api/apps/external/:mcpServerId/pin",
+    {
+      schema: {
+        operationId: RouteId.PinExternalApp,
+        description:
+          "Pin an external (MCP-server) UI app for the current user, identified " +
+          "by install + resource + tool (several tools of one server can share " +
+          "a UI resource, so the tool name pins one tile, not the group). " +
+          "Personal — does not affect other members.",
+        tags: ["Apps"],
+        params: z.object({ mcpServerId: UuidIdSchema }),
+        body: z.object({
+          resourceUri: z.string().min(1),
+          toolName: z.string().min(1),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async (
+      { params: { mcpServerId }, body: { resourceUri, toolName }, user },
+      reply,
+    ) => {
+      // Same gate as external open-in-chat: the install must be accessible and
+      // actually expose this UI resource for this tool (404s otherwise, no
+      // existence leak).
+      const uiResource = await McpServerModel.findInstalledUiResourceForCaller({
+        userId: user.id,
+        mcpServerId,
+        resourceUri,
+        toolName,
+      });
+      if (!uiResource) {
+        throw new ApiError(404, "No runnable app found for this install.");
+      }
+      await AppPinModel.pinExternal({
+        userId: user.id,
+        mcpServerId,
+        resourceUri,
+        toolName,
+      });
+      return reply.send({ ok: true as const });
+    },
+  );
+
+  fastify.delete(
+    "/api/apps/external/:mcpServerId/pin",
+    {
+      schema: {
+        operationId: RouteId.UnpinExternalApp,
+        description:
+          "Remove the current user's pin on an external app. Idempotent; " +
+          "intentionally no access check, so a stale pin on an install the " +
+          "user lost access to can still be cleared. `resourceUri` and " +
+          "`toolName` ride the query string (DELETE carries no body).",
+        tags: ["Apps"],
+        params: z.object({ mcpServerId: UuidIdSchema }),
+        querystring: z.object({
+          resourceUri: z.string().min(1),
+          toolName: z.string().min(1),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async (
+      { params: { mcpServerId }, query: { resourceUri, toolName }, user },
+      reply,
+    ) => {
+      await AppPinModel.unpinExternal({
+        userId: user.id,
+        mcpServerId,
+        resourceUri,
+        toolName,
+      });
+      return reply.send({ ok: true as const });
     },
   );
 
@@ -444,7 +593,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const resourceTeamIds = await AppAccessModel.getTeamsForApp(app.id);
       const nextTeamIds =
         body.teamIds !== undefined
-          ? await resolveOrgTeamIds(body.teamIds, organizationId)
+          ? await resolveOrgTeams(body.teamIds, organizationId)
           : undefined;
 
       await assertCallerMayModifyApp({
@@ -753,7 +902,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "invalid image data URL.");
       }
       const [, mimeType, data] = match;
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+      if (!isCanonicalBase64(data)) {
         throw new ApiError(400, "image data is not valid base64.");
       }
       await AppRenderScreenshotModel.record({
@@ -879,6 +1028,13 @@ function isAssignmentError(
   result: ToolAssignmentError | "duplicate" | "updated" | null,
 ): result is ToolAssignmentError {
   return result !== null && result !== "duplicate" && result !== "updated";
+}
+
+function isCanonicalBase64(value: string): boolean {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+
+  const canonical = Buffer.from(value, "base64").toString("base64");
+  return value === canonical || value === canonical.replace(/=+$/, "");
 }
 
 /**

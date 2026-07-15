@@ -3,19 +3,14 @@ title: Quickstart
 category: Archestra Platform
 order: 1
 description: Get started with Archestra Platform using Docker
-lastUpdated: 2025-10-08
+lastUpdated: 2026-07-03
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
-
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ## Run it locally to try!
 
-The fact that you're reading this means that you're willing to give it a try. First of all, thank you! We've prepared an all-in-one Docker image and hope it will make the first meeting with Archestra simple and pleasant ☺️ 
+We've prepared an all-in-one Docker image to make trying Archestra for the first time simple.
 
 **Linux / macOS:**
 
@@ -48,13 +43,13 @@ Once it's up, follow http://localhost:3000
 ## Build Your First Agent `Easy`
 
 1. Go to **MCP Registry**, search for `microsoft__playwright-mcp`, install it.
-2. Gaze at Archestra running the MCP server in Kubernetes cluster! (If you want to make sure: `kubectl get pods`)
-3. Go to **Agents** and create "Archestra Docs Reader Agent" with this system prompt: `You're using playwright to answer questions about Archestra based on https://archestra.ai/docs/`
+2. Archestra runs the MCP server in a Kubernetes cluster. To verify, run `kubectl get pods`.
+3. Go to **Agents** and create "Archestra Docs Reader Agent" with this system prompt: `You're using playwright to answer questions about Archestra based on /docs/`
 4. While editing the agent, make sure to enable all `microsoft__playwright-mcp` tools for it.
 5. Go to **Settings -> LLM API Keys** and add your preferred provider. You can connect commercial providers like OpenAI, Anthropic, or Google Gemini. For a free option, use [Cerebras](https://cerebras.ai/) or a local [Ollama](https://ollama.com/) instance.
 6. Go to **Chat**, choose the "Archestra Docs Reader Agent" and ask "How could I deploy Archestra?"
    ![Archestra Chat UI calling the agent](/docs/quickstart-agent-chat.webp)
-7. Enjoy Archestra navigating the website for you!
+   The agent navigates the website to answer the question.
 
 ## Connect to Your Agent via MCP Gateway `Advanced`
 
@@ -100,8 +95,6 @@ Now ask Claude:
 ```
 Ask archestra to give you all the deployment options.
 ```
-
-Feel the magic ✨
 
 ## What's next?
 

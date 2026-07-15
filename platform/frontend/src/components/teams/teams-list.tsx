@@ -8,7 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -48,6 +48,10 @@ export function TeamsList() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [managementDialogOpen, setManagementDialogOpen] = useState(false);
+  const [dialogInitialSection, setDialogInitialSection] = useState<
+    "token" | undefined
+  >(undefined);
+  const consumedDeepLinkRef = useRef(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
 
@@ -90,6 +94,28 @@ export function TeamsList() {
     },
     [parsedLabels, searchParams, router, pathname],
   );
+
+  // Deep link (e.g. "Manage your team token" on connection instructions):
+  // ?team=<id>&section=token opens that team's dialog on the token section.
+  // The params are consumed once and removed so closing the dialog sticks.
+  const teamParam = searchParams.get("team");
+  const sectionParam = searchParams.get("section");
+  useEffect(() => {
+    if (!teamParam || consumedDeepLinkRef.current || !teams) return;
+    consumedDeepLinkRef.current = true;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("team");
+    params.delete("section");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+    const team = teams.find((t) => t.id === teamParam);
+    if (!team) return;
+    setSelectedTeam(team);
+    setDialogInitialSection(sectionParam === "token" ? "token" : undefined);
+    setManagementDialogOpen(true);
+  }, [teamParam, sectionParam, teams, searchParams, router, pathname]);
 
   const deleteMutation = useMutation({
     mutationFn: async (teamId: string) => {
@@ -202,6 +228,7 @@ export function TeamsList() {
             testId: `${E2eTestId.ManageMembersButton}-${team.name}`,
             onClick: () => {
               setSelectedTeam(team);
+              setDialogInitialSection(undefined);
               setManagementDialogOpen(true);
             },
           },
@@ -278,6 +305,7 @@ export function TeamsList() {
           open={managementDialogOpen}
           onOpenChange={setManagementDialogOpen}
           team={selectedTeam}
+          initialSection={dialogInitialSection}
         />
       )}
     </>

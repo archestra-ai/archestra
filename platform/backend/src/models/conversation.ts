@@ -14,6 +14,7 @@ import type {
   Conversation,
   ConversationOrigin,
   InsertConversation,
+  MessageFeedback,
   ToolExposureMode,
   UpdateConversation,
 } from "@/types";
@@ -79,6 +80,17 @@ class ConversationModel {
     const conditions = [
       eq(schema.conversationsTable.userId, userId),
       eq(schema.conversationsTable.organizationId, organizationId),
+      // App-opened chats are drafts until the user writes: opening an app
+      // seeds a conversation (services/apps/app-chat-conversation.ts), and
+      // clicking through apps must not pile unused chats into the sidebar. A
+      // user-role message is the "keep it" signal — until then the chat is
+      // reachable at /chat/<id> but never listed. Derived, not a flag flip,
+      // so it needs no hook in the message write path.
+      sql`(${schema.conversationsTable.origin} != 'app_open' OR EXISTS (
+        SELECT 1 FROM ${schema.messagesTable}
+        WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
+        AND ${schema.messagesTable.role} = 'user'
+      ))`,
     ];
 
     // Add search filter if provided
@@ -177,6 +189,7 @@ class ConversationModel {
         .orderBy(
           desc(schema.conversationsTable.lastMessageAt),
           schema.messagesTable.createdAt,
+          schema.messagesTable.id,
         )
         .limit(
           ConversationModel.SEARCH_RESULT_LIMIT *
@@ -330,7 +343,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) {
       return null;
@@ -577,7 +590,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, params.organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) {
       return null;
@@ -680,7 +693,17 @@ class ConversationModel {
   }): Promise<boolean> {
     const [updated] = await db
       .update(schema.conversationsTable)
-      .set({ lastReadAt: new Date() })
+      // GREATEST: the newest message visible at read time is covered even
+      // when it landed in the same millisecond (or marginally ahead of the
+      // reader's clock) — unread is a strict lastMessageAt > lastReadAt
+      // comparison, so a read must never leave lastReadAt behind
+      // lastMessageAt.
+      .set({
+        // now() (DB clock), not a JS Date param: node-postgres serializes
+        // Dates in host-local time and the ::timestamp cast drops the offset,
+        // shifting the stamp by the host's UTC offset on non-UTC hosts.
+        lastReadAt: sql`GREATEST(now()::timestamp, ${schema.conversationsTable.lastMessageAt})`,
+      })
       .where(
         and(
           eq(schema.conversationsTable.id, params.id),
@@ -799,6 +822,7 @@ function shouldReturnPersistedMessageRow(message: {
 function addMessagePersistenceMetadata(message: {
   id: string;
   content: unknown;
+  feedback: MessageFeedback | null;
   createdAt: Date;
 }) {
   const content =
@@ -818,6 +842,9 @@ function addMessagePersistenceMetadata(message: {
     metadata: {
       ...metadata,
       createdAt: message.createdAt.toISOString(),
+      // The column is authoritative: content JSON may carry a stale copied
+      // value (e.g. a forked conversation), so always override it here.
+      feedback: message.feedback ?? undefined,
     },
   };
 }

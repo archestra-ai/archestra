@@ -46,6 +46,18 @@ describe("resolveAuditableRouteConfig", () => {
     expect(typeof resolved?.cfg.fetchById).toBe("function");
   });
 
+  test("connector permission-sync route is registered so its POST is not dropped as a walk-up", () => {
+    const resolved = resolveAuditableRouteConfig(
+      "/api/connectors/:id/permission-sync",
+    );
+    // viaWalkUp would make the hook discard the POST entirely (no audit row),
+    // and the inherited config would call it a connector creation.
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("connector");
+    expect(resolved?.cfg.action).toBe("connector.permission_sync_triggered");
+    expect(typeof resolved?.cfg.fetchById).toBe("function");
+  });
+
   test("walk-up match returns viaWalkUp=true with the parent config", () => {
     // /api/mcp_server/:id/some-subroute is not registered; walks up to /api/mcp_server/:id
     const resolved = resolveAuditableRouteConfig(

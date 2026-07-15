@@ -210,6 +210,7 @@ export function DataTable<TData, TValue>({
                           configuredSize: header.column.columnDef.size,
                           minSize: header.column.columnDef.minSize,
                           renderedSize: header.getSize(),
+                          totalSize: table.getTotalSize(),
                         })}
                       >
                         {header.isPlaceholder
@@ -247,6 +248,7 @@ export function DataTable<TData, TValue>({
                           configuredSize: cell.column.columnDef.size,
                           minSize: cell.column.columnDef.minSize,
                           renderedSize: cell.column.getSize(),
+                          totalSize: table.getTotalSize(),
                         })}
                       >
                         {flexRender(
@@ -339,10 +341,23 @@ function getColumnStyle(params: {
   configuredSize?: number;
   minSize?: number;
   renderedSize: number;
+  totalSize: number;
 }): React.CSSProperties | undefined {
   const style: React.CSSProperties = {};
   if (params.configuredSize) {
-    style.width = params.renderedSize;
+    // On a fixed-layout table an absolute pixel width forces the table wider
+    // than its container when the sizes don't fit, hiding trailing columns
+    // behind the horizontal scroll. The actions column keeps its pixel width
+    // because its icon buttons cannot shrink; the rest get their percentage
+    // share of the summed sizes, which the browser scales down to fit the
+    // container. Only px and % work here — fixed table layout ignores
+    // min()/calc() widths and min-width on cells.
+    if (params.columnId === ACTIONS_COLUMN_ID) {
+      style.width = params.renderedSize;
+    } else {
+      const share = (params.renderedSize / params.totalSize) * 100;
+      style.width = `${share.toFixed(4)}%`;
+    }
   }
   if (params.minSize) {
     style.minWidth = params.minSize;

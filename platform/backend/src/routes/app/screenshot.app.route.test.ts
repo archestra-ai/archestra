@@ -1,30 +1,14 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
+import AppRenderScreenshotModel from "@/models/app-render-screenshot";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("POST /api/apps/:appId/screenshot", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
@@ -82,5 +66,60 @@ describe("POST /api/apps/:appId/screenshot", () => {
       payload: { version: 99, dataUrl: "data:image/png;base64,QUJD" },
     });
     expect(futureVersion.statusCode).toBe(400);
+  });
+
+  test("accepts only canonical padded or unpadded base64", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      authorId: user.id,
+      name: "Canonical Shots",
+      scope: "org",
+    });
+    const appId = created.id;
+
+    for (const data of ["TQ==", "TQ", "TWE=", "TWE"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/apps/${appId}/screenshot`,
+        payload: { version: 1, dataUrl: `data:image/png;base64,${data}` },
+      });
+      expect(response.statusCode, data).toBe(200);
+    }
+
+    const stableData = "QUJD";
+    const stable = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/screenshot`,
+      payload: {
+        version: 1,
+        dataUrl: `data:image/png;base64,${stableData}`,
+      },
+    });
+    expect(stable.statusCode).toBe(200);
+
+    for (const data of [
+      "A",
+      "AAAAA",
+      "TQ=",
+      "TWE==",
+      "QUJD=",
+      "TR==",
+      "TR",
+      "T Q==",
+      "____",
+      "***",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/apps/${appId}/screenshot`,
+        payload: { version: 1, dataUrl: `data:image/png;base64,${data}` },
+      });
+      expect(response.statusCode, data).toBe(400);
+      expect(
+        (await AppRenderScreenshotModel.getForUser(appId, user.id))?.data,
+      ).toBe(stableData);
+    }
   });
 });

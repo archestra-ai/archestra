@@ -21,9 +21,13 @@ test("create/list/update/delete round-trip with requirements", async ({
   expect(created.requirements).toEqual(["requests"]);
 
   expect(await HookFileModel.listByAgent(agent.id, org.id)).toHaveLength(1);
-  expect(await HookFileModel.listEnabledByAgent(agent.id, org.id)).toHaveLength(
-    1,
-  );
+  expect(
+    await HookFileModel.listEnabledByAgentAndEvent({
+      agentId: agent.id,
+      organizationId: org.id,
+      event: "pre_tool_use",
+    }),
+  ).toHaveLength(1);
 
   const updated = await HookFileModel.update({
     id: created.id,
@@ -32,11 +36,72 @@ test("create/list/update/delete round-trip with requirements", async ({
   });
   expect(updated?.enabled).toBe(false);
   expect(updated?.requirements).toEqual(["httpx"]);
-  expect(await HookFileModel.listEnabledByAgent(agent.id, org.id)).toHaveLength(
-    0,
-  );
+  expect(
+    await HookFileModel.listEnabledByAgentAndEvent({
+      agentId: agent.id,
+      organizationId: org.id,
+      event: "pre_tool_use",
+    }),
+  ).toHaveLength(0);
 
   expect(await HookFileModel.delete(created.id, org.id)).toBe(true);
+});
+
+test("listEnabledByAgentAndEvent returns only enabled hooks for that event, in fileName order", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id, authorId: user.id });
+
+  const base = {
+    organizationId: org.id,
+    agentId: agent.id,
+    content: "exit 0",
+    requirements: [],
+  };
+  await HookFileModel.create({
+    ...base,
+    event: "pre_tool_use",
+    fileName: "b-guard.py",
+  });
+  await HookFileModel.create({
+    ...base,
+    event: "pre_tool_use",
+    fileName: "a-guard.py",
+  });
+  await HookFileModel.create({
+    ...base,
+    event: "post_tool_use",
+    fileName: "audit.sh",
+  });
+  const disabled = await HookFileModel.create({
+    ...base,
+    event: "pre_tool_use",
+    fileName: "disabled.py",
+  });
+  await HookFileModel.update({
+    id: disabled.id,
+    organizationId: org.id,
+    data: { enabled: false },
+  });
+
+  const preHooks = await HookFileModel.listEnabledByAgentAndEvent({
+    agentId: agent.id,
+    organizationId: org.id,
+    event: "pre_tool_use",
+  });
+  expect(preHooks.map((h) => h.fileName)).toEqual(["a-guard.py", "b-guard.py"]);
+
+  expect(
+    await HookFileModel.listEnabledByAgentAndEvent({
+      agentId: agent.id,
+      organizationId: org.id,
+      event: "session_start",
+    }),
+  ).toHaveLength(0);
 });
 
 test("every method is org-scoped — a foreign org cannot read or mutate", async ({
@@ -58,14 +123,18 @@ test("every method is org-scoped — a foreign org cannot read or mutate", async
     requirements: [],
   });
 
-  // findById / listByAgent / listEnabledByAgent must not leak across orgs.
+  // findById / listByAgent / listEnabledByAgentAndEvent must not leak across orgs.
   expect(await HookFileModel.findById(hook.id, org.id)).not.toBeNull();
   expect(await HookFileModel.findById(hook.id, otherOrg.id)).toBeNull();
   expect(await HookFileModel.listByAgent(agent.id, otherOrg.id)).toHaveLength(
     0,
   );
   expect(
-    await HookFileModel.listEnabledByAgent(agent.id, otherOrg.id),
+    await HookFileModel.listEnabledByAgentAndEvent({
+      agentId: agent.id,
+      organizationId: otherOrg.id,
+      event: "post_tool_use",
+    }),
   ).toHaveLength(0);
 
   // update / delete scoped to the wrong org are no-ops.

@@ -4,12 +4,12 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Microsoft Entra ID — SSO sign-in plus On-Behalf-Of token exchange for downstream MCP tool calls"
 order: 8
-lastUpdated: 2026-05-07
+lastUpdated: 2026-07-03
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 Six top-level sections, in order:
 1. Register Entra App for SSO          (minimum app reg for sign-in)
 2. Configure SSO in Archestra          (paste values into IdP form)
@@ -19,8 +19,7 @@ Six top-level sections, in order:
 6. Connect MCP Server                  (Multitenant Authorization, Resolve at call time)
 
 Keep it short. No "Best Practices" or "Future Considerations". Replace the
-[screenshot: ...] markers with real screenshots from the running platform per
-docs_writer_prompt.md.
+[screenshot: ...] markers with real screenshots captured from the running platform.
 -->
 
 This guide configures Microsoft Entra ID with Archestra end-to-end. After you finish, your users will sign in once with their work Microsoft account and the agents and MCP servers they use will act on their own behalf — reading their mailbox, calendar, files, or any Entra-protected API as them, not as a shared service account.
@@ -95,9 +94,9 @@ Then in Archestra:
 
 # Configuring OBO for Enterprise MCP Auth
 
-Without OBO, MCP servers typically authenticate to downstream APIs with a shared secret — every user's tool call hits Microsoft Graph as the same robot. That breaks audit trails, ignores per-user permissions, and is a non-starter for regulated environments.
+Without OBO, MCP servers authenticate to downstream APIs with a shared secret — every user's tool call reaches Microsoft Graph as the same account, so logs cannot attribute the call to the user and per-user permissions are not applied.
 
-With OBO, each tool call carries the **caller's own identity** all the way down. If Alice doesn't have access to a calendar, the tool call fails for Alice. Logs in Microsoft 365 show *Alice* read the message, not "the Archestra service account."
+With OBO, each tool call carries the **caller's own identity** to the downstream API. If Alice does not have access to a calendar, the tool call fails for Alice. Logs in Microsoft 365 record *Alice*, not a shared service account.
 
 ```mermaid
 sequenceDiagram

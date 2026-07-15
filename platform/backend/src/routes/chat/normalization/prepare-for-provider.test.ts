@@ -130,3 +130,139 @@ describe("prepareMessagesForProvider — generic and gemini providers", () => {
     );
   });
 });
+
+describe("prepareMessagesForProvider — tool-call id sanitization", () => {
+  function toolConversation(toolCallId: string): ChatMessage[] {
+    return [
+      { role: "user", parts: [{ type: "text", text: "look this up" }] },
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "search",
+            toolCallId,
+            state: "output-available",
+            input: { q: "x" },
+            output: { hits: 1 },
+          },
+        ],
+      },
+    ];
+  }
+
+  function extractToolCallId(messages: ChatMessage[]): string | undefined {
+    return messages[1].parts?.[0]?.toolCallId as string | undefined;
+  }
+
+  it.each([
+    "anthropic",
+    "bedrock",
+  ] as const)("%s: rewrites a foreign tool id into the accepted character set, deterministically", (provider) => {
+    const prepare = () =>
+      extractToolCallId(
+        prepareMessagesForProvider({
+          messages: toolConversation("functions.search:0"),
+          provider,
+        }),
+      );
+
+    const sanitized = prepare();
+    expect(sanitized).toMatch(/^[a-zA-Z0-9_-]+$/);
+    // Deterministic: the same original id maps to the same sanitized id on
+    // every request, so tool-call/result pairing survives across turns.
+    expect(prepare()).toBe(sanitized);
+  });
+
+  it("keeps already-valid tool ids untouched", () => {
+    const messages = prepareMessagesForProvider({
+      messages: toolConversation("toolu_01AbCdEfGh"),
+      provider: "anthropic",
+    });
+    expect(extractToolCallId(messages)).toBe("toolu_01AbCdEfGh");
+  });
+
+  it("two distinct raw ids that clean to the same string stay distinct", () => {
+    const first = extractToolCallId(
+      prepareMessagesForProvider({
+        messages: toolConversation("call.0"),
+        provider: "anthropic",
+      }),
+    );
+    const second = extractToolCallId(
+      prepareMessagesForProvider({
+        messages: toolConversation("call:0"),
+        provider: "anthropic",
+      }),
+    );
+    expect(first).not.toBe(second);
+  });
+
+  it("sanitizes on the anthropic-compatible (non-native) endpoint branch too", () => {
+    const messages = prepareMessagesForProvider({
+      messages: toolConversation("functions.search:0"),
+      provider: "anthropic",
+      anthropicNativeEndpoint: false,
+    });
+    expect(extractToolCallId(messages)).toMatch(/^[a-zA-Z0-9_-]+$/);
+  });
+
+  it("leaves other providers' tool ids alone", () => {
+    const messages = prepareMessagesForProvider({
+      messages: toolConversation("functions.search:0"),
+      provider: "openai",
+    });
+    expect(extractToolCallId(messages)).toBe("functions.search:0");
+  });
+});
+
+describe("prepareMessagesForProvider — bedrock empty-content padding", () => {
+  const NO_CONTENT = "(no content)";
+
+  function hasNoContentPlaceholder(message: ChatMessage): boolean {
+    return Boolean(
+      message.parts?.some((p) => p.type === "text" && p.text === NO_CONTENT),
+    );
+  }
+
+  it("does not pad an assistant message whose only part is a dynamic-tool (e.g. the render_app seed)", () => {
+    // The owned-app render_app seed is a single `dynamic-tool` part. It is real
+    // provider-visible content (a tool_use block), so Bedrock must not treat the
+    // message as empty and append a bogus "(no content)" text part.
+    const [message] = prepareMessagesForProvider({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "dynamic-tool",
+              toolName: "archestra__render_app",
+              toolCallId: "call_render_1",
+              state: "output-available",
+              input: { appId: "402e041f-a78c-40a0-b8b3-a14d91633fce" },
+              output: { content: [{ type: "text", text: "app rendered" }] },
+            },
+          ],
+        },
+      ] as unknown as ChatMessage[],
+      provider: "bedrock",
+    });
+
+    expect(hasNoContentPlaceholder(message)).toBe(false);
+    expect(message.parts).toHaveLength(1);
+    expect(message.parts?.[0]?.type).toBe("dynamic-tool");
+  });
+
+  it("still pads a genuinely empty assistant message with a placeholder", () => {
+    // Regression guard: the dynamic-tool fix must not disable the workaround for
+    // an assistant turn that really has no provider-visible content.
+    const [message] = prepareMessagesForProvider({
+      messages: [
+        { role: "assistant", parts: [{ type: "text", text: "" }] },
+      ] as unknown as ChatMessage[],
+      provider: "bedrock",
+    });
+
+    expect(hasNoContentPlaceholder(message)).toBe(true);
+  });
+});

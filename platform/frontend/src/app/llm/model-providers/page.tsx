@@ -59,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -72,6 +73,7 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
+import { isEditApiKeyFormValid } from "./edit-key-form.utils";
 
 const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
@@ -283,7 +285,7 @@ export default function ApiKeysPage() {
 
   // Validation for edit form
   const editFormValues = editForm.watch();
-  const isEditValid = Boolean(editFormValues.name);
+  const isEditValid = isEditApiKeyFormValid(editFormValues);
 
   const addApiKeyButton = (
     <PermissionButton
@@ -559,6 +561,7 @@ export default function ApiKeysPage() {
           description="Update the name, API key value, or scope"
           size="small"
           className="sm:max-w-xl"
+          isDirty={editForm.formState.isDirty}
         >
           <DialogForm
             onSubmit={handleEdit}
@@ -577,13 +580,7 @@ export default function ApiKeysPage() {
               )}
             </DialogBody>
             <DialogStickyFooter className="mt-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsEditDialogOpen(false)}
-              >
-                Cancel
-              </Button>
+              <DialogCancelButton>Cancel</DialogCancelButton>
               <Button
                 type="submit"
                 disabled={!isEditValid || updateMutation.isPending}
@@ -674,7 +671,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">Virtual API keys</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/llm/credentials/virtual-keys?providerApiKeyId=${encodedApiKeyId}`}
+              href={`/credentials/virtual-keys?providerApiKeyId=${encodedApiKeyId}`}
             >
               View all
             </Link>
@@ -707,7 +704,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">OAuth clients</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/llm/credentials/oauth-clients?providerApiKeyId=${encodedApiKeyId}`}
+              href={`/credentials/oauth-clients?providerApiKeyId=${encodedApiKeyId}`}
             >
               View all
             </Link>

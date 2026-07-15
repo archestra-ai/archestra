@@ -112,27 +112,10 @@ export default function ModelsPage() {
     null,
   );
 
-  const availableApiKeys = useMemo(() => {
-    const keyMap = new Map<
-      string,
-      { name: string; provider: keyof typeof PROVIDER_CONFIG }
-    >();
-    for (const model of models) {
-      for (const key of model.apiKeys) {
-        keyMap.set(key.id, {
-          name: key.name,
-          provider: key.provider as keyof typeof PROVIDER_CONFIG,
-        });
-      }
-    }
-    return Array.from(keyMap.entries()).sort((a, b) =>
-      a[1].name.localeCompare(b[1].name),
-    );
-  }, [models]);
-
   const canFilterFreeModels = useMemo(
-    () => canFilterFreeModelsForApiKey({ availableApiKeys, apiKeyFilter }),
-    [availableApiKeys, apiKeyFilter],
+    () =>
+      canFilterFreeModelsForApiKey({ availableApiKeys: apiKeys, apiKeyFilter }),
+    [apiKeys, apiKeyFilter],
   );
 
   useEffect(() => {
@@ -404,19 +387,7 @@ export default function ModelsPage() {
               syncQueryParams={false}
             />
             <LlmProviderApiKeyDropdown
-              availableKeys={availableApiKeys.flatMap(
-                ([id, { name, provider }]) => {
-                  const config = PROVIDER_CONFIG[provider];
-                  if (!config) return [];
-                  return [
-                    {
-                      id,
-                      name,
-                      provider,
-                    },
-                  ];
-                },
-              )}
+              availableKeys={apiKeys}
               selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
               open={apiKeyFilterOpen}
               onOpenChange={setApiKeyFilterOpen}
@@ -560,7 +531,9 @@ type UpdateModelEmbeddingDimensions = NonNullable<
 >;
 
 const EMBEDDING_DIMENSION_MAP = {
+  "384": 384,
   "768": 768,
+  "1024": 1024,
   "1536": 1536,
   "3072": 3072,
 } satisfies Record<string, UpdateModelEmbeddingDimensions>;
@@ -1004,6 +977,42 @@ function EditModelDialog({
               </FormItem>
             )}
           />
+
+          {model.provider === "ollama" &&
+            model.defaultParameters &&
+            Object.keys(model.defaultParameters).length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">
+                    Default parameters
+                  </span>
+                  <p className="text-sm text-muted-foreground">
+                    Defaults reported by Ollama for this model, shown for
+                    reference. {appName} does not apply them to requests.
+                  </p>
+                  <dl className="divide-y rounded-lg border text-sm">
+                    {Object.entries(model.defaultParameters).map(
+                      ([key, value]) => (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between gap-4 px-3 py-2"
+                        >
+                          <dt className="font-mono text-muted-foreground">
+                            {key}
+                          </dt>
+                          <dd className="font-mono">
+                            {Array.isArray(value)
+                              ? value.join(", ")
+                              : String(value)}
+                          </dd>
+                        </div>
+                      ),
+                    )}
+                  </dl>
+                </div>
+              </>
+            )}
         </div>
       </Form>
     </StandardFormDialog>
@@ -1075,6 +1084,7 @@ function ModalitySelectField<T extends string>(params: {
               {option.label}
               <Button
                 type="button"
+                aria-label="Remove option"
                 variant="ghost"
                 size="icon"
                 className="h-4 w-4"
@@ -1150,7 +1160,9 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
 function getEmbeddingDimensionsString(
   value: UpdateModelEmbeddingDimensions,
 ): EditModelEmbeddingDimensionsValue {
+  if (value === 384) return "384";
   if (value === 768) return "768";
+  if (value === 1024) return "1024";
   if (value === 1536) return "1536";
   if (value === 3072) return "3072";
   return "";

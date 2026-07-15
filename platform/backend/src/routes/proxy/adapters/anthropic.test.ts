@@ -1,4 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { Anthropic } from "@/types";
@@ -707,24 +708,120 @@ describe("AnthropicStreamAdapter content block forwarding", () => {
   });
 });
 
+describe("AnthropicStreamAdapter policy refusal terminal", () => {
+  type Chunk = Parameters<
+    ReturnType<
+      typeof anthropicAdapterFactory.createStreamAdapter
+    >["processChunk"]
+  >[0];
+
+  // Reproduces the reported incident: a blocked tool-call turn must not end the
+  // stream with the upstream "tool_use" stop reason, or Claude Code reads the
+  // text-only refusal as a malformed tool call and retries it.
+  function streamBlockedToolTurn() {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    // A text block streams live at index 0...
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "let me check" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_stop",
+      index: 0,
+    } as Chunk);
+    // ...then a tool_use block at index 1 is buffered (held back)...
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 1,
+      content_block: {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "list",
+        input: {},
+      },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "input_json_delta", partial_json: '{"a":1}' },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_stop",
+      index: 1,
+    } as Chunk);
+    // ...and the upstream turn ends with a tool_use stop reason.
+    adapter.processChunk({
+      type: "message_delta",
+      delta: { stop_reason: "tool_use", stop_sequence: null },
+      usage: { output_tokens: 5 },
+    } as Chunk);
+    return adapter;
+  }
+
+  test("formatEndSSE closes a refused stream as end_turn, not the upstream tool_use", () => {
+    const adapter = streamBlockedToolTurn();
+
+    adapter.formatCompleteTextSSE(
+      "Archestra LLM Proxy blocked unsafe tool call",
+    );
+    const endEvents = adapter.formatEndSSE();
+
+    expect(endEvents).toContain('"stop_reason":"end_turn"');
+    expect(endEvents).not.toContain('"stop_reason":"tool_use"');
+  });
+
+  test("refusal text block is placed after already-streamed blocks (no index reuse)", () => {
+    const adapter = streamBlockedToolTurn();
+
+    const refusalEvents = adapter.formatCompleteTextSSE("blocked").join("");
+
+    // index 0 was already streamed (the text block); the refusal must use index 1.
+    expect(refusalEvents).toContain('"index":1');
+    expect(refusalEvents).not.toContain('"index":0');
+  });
+
+  test("toProviderResponse persists the refusal, not the blocked tool call", () => {
+    const adapter = streamBlockedToolTurn();
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    expect(response.stop_reason).toBe("end_turn");
+    expect(response.content).toEqual([
+      { type: "text", text: "blocked message", citations: null },
+    ]);
+    expect(response.content.some((block) => block.type === "tool_use")).toBe(
+      false,
+    );
+  });
+});
+
 describe("anthropicAdapterFactory.execute", () => {
-  // The SDK refuses non-streaming requests whose max_tokens implies a >10 min
-  // completion ("Streaming is required for operations that may take longer
-  // than 10 minutes") unless the client carries an explicit timeout. Claude
-  // Code sends max_tokens=32000 non-streaming; the proxy must forward it,
-  // not 500.
-  test("forwards large non-streaming max_tokens instead of tripping the SDK guard", async () => {
+  // Claude Code sends large max_tokens (e.g. 32000) non-streaming. Such a
+  // request would exceed the SDK's ~10-minute non-streaming limit, so — rather
+  // than attempt it non-streaming (which the client's explicit timeout would
+  // cap) — the proxy serves it over the streaming Messages API and returns the
+  // accumulated final Message. The result is forwarded, never 500-ed. Uses the
+  // real client so the real routing decision runs; only the stream transport is
+  // stubbed.
+  test("serves a large-max_tokens request over the streaming API and forwards the result", async () => {
     const client = anthropicAdapterFactory.createClient("test-key", {
       source: "api",
     }) as AnthropicProvider;
 
-    // Stub the transport: the guard under test runs synchronously inside
-    // messages.create before any network I/O.
-    const post = vi
-      .spyOn(client as unknown as { post: () => unknown }, "post")
-      .mockResolvedValue(
-        createMockResponse([{ type: "text", text: "ok", citations: null }]),
-      );
+    const finalMessage = createMockResponse([
+      { type: "text", text: "ok", citations: null },
+    ]);
+    const stream = vi.spyOn(client.messages, "stream").mockReturnValue({
+      finalMessage: () => Promise.resolve(finalMessage),
+    } as unknown as ReturnType<typeof client.messages.stream>);
+    const create = vi.spyOn(client.messages, "create");
 
     const response = await anthropicAdapterFactory.execute(
       client,
@@ -734,7 +831,199 @@ describe("anthropicAdapterFactory.execute", () => {
       }),
     );
 
-    expect(post).toHaveBeenCalled();
+    // Routed to streaming (max_tokens=64000 > the ~21k non-streaming limit),
+    // never the non-streaming path.
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
     expect(response.content[0]).toMatchObject({ type: "text", text: "ok" });
+  });
+});
+
+describe("anthropicAdapterFactory balance-too-low message", () => {
+  // The SDK nests the provider body as error.error.{type,message}.
+  function sdkError(
+    status: number,
+    type: string,
+    message: string,
+  ): { status: number; error: { error: { type: string; message: string } } } {
+    return { status, error: { error: { type, message } } };
+  }
+
+  test("returns one unified message for both out-of-credit and usage-limit blocks", () => {
+    const creditError = sdkError(
+      402,
+      "billing_error",
+      "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+    );
+    // A usage/spend cap: HTTP 400 with a non-standard `api_validation_error`
+    // type, so it's detected off the body message.
+    const limitError = sdkError(
+      400,
+      "api_validation_error",
+      "You have reached your specified API usage limits.",
+    );
+
+    for (const error of [creditError, limitError]) {
+      expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
+        ArchestraInternalErrorCode.ProviderInsufficientBalance,
+      );
+    }
+
+    const creditMessage =
+      anthropicAdapterFactory.extractErrorMessage(creditError);
+    const limitMessage =
+      anthropicAdapterFactory.extractErrorMessage(limitError);
+
+    // Same message for both; no Anthropic raw text / Console steering.
+    expect(creditMessage).toBe(limitMessage);
+    expect(creditMessage).toMatch(/remaining usage balance is too low/i);
+    expect(creditMessage).toMatch(/please contact your administrator/i);
+    expect(creditMessage).not.toMatch(/Plans & Billing/i);
+  });
+
+  test("does not flag an ordinary error, relays its message verbatim", () => {
+    const error = sdkError(
+      400,
+      "invalid_request_error",
+      'messages: roles must alternate between "user" and "assistant"',
+    );
+    expect(anthropicAdapterFactory.extractInternalCode(error)).toBeUndefined();
+    expect(anthropicAdapterFactory.extractErrorMessage(error)).toContain(
+      "roles must alternate",
+    );
+  });
+});
+
+describe("anthropicAdapterFactory.execute - long-request routing", () => {
+  const messages = [
+    { role: "user", content: "hi" },
+  ] as Anthropic.Types.MessagesRequest["messages"];
+
+  test("routes to non-streaming create() when the request fits the non-streaming limit", async () => {
+    const response = createMockResponse([{ type: "text", text: "ok" }]);
+    const create = vi.fn().mockResolvedValue(response);
+    const stream = vi.fn();
+    // The SDK guard returns a timeout (does not throw) → request fits.
+    const calculateNonstreamingTimeout = vi.fn().mockReturnValue(600000);
+    const client = {
+      calculateNonstreamingTimeout,
+      messages: { create, stream },
+    };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages, { max_tokens: 1024 }),
+    );
+
+    expect(result).toBe(response);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(stream).not.toHaveBeenCalled();
+    // The routing decision is keyed on the request's own max_tokens.
+    expect(calculateNonstreamingTimeout).toHaveBeenCalledWith(1024);
+  });
+
+  test("routes to the streaming API and returns the final message when the request is too long for non-streaming", async () => {
+    const response = createMockResponse([{ type: "text", text: "done" }]);
+    const create = vi.fn();
+    const finalMessage = vi.fn().mockResolvedValue(response);
+    const stream = vi.fn().mockReturnValue({ finalMessage });
+    // The SDK guard throws → max_tokens implies a >10-minute completion.
+    const calculateNonstreamingTimeout = vi.fn(() => {
+      throw new Error(
+        "Streaming is required for operations that may take longer than 10 minutes",
+      );
+    });
+    const client = {
+      calculateNonstreamingTimeout,
+      messages: { create, stream },
+    };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages, { max_tokens: 64000 }),
+    );
+
+    // Same shape a non-streaming create() would have returned.
+    expect(result).toBe(response);
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(finalMessage).toHaveBeenCalledTimes(1);
+    // The non-streaming path is skipped entirely for long requests.
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("anthropicAdapterFactory - unsupported sampling params", () => {
+  const messages = [
+    { role: "user", content: "hi" },
+  ] as Anthropic.Types.MessagesRequest["messages"];
+
+  // Shape of the Anthropic 400 for a model that rejects a sampling param.
+  function deprecatedTemperatureError() {
+    return new Error(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_x"}',
+    );
+  }
+
+  test("execute strips the rejected param and retries once, preserving others", async () => {
+    const response = createMockResponse([{ type: "text", text: "ok" }]);
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(deprecatedTemperatureError())
+      .mockResolvedValueOnce(response);
+    const client = { messages: { create } };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages, { temperature: 0.7, top_p: 0.9 }),
+    );
+
+    expect(result).toBe(response);
+    expect(create).toHaveBeenCalledTimes(2);
+    // First attempt carried temperature; the retry dropped it.
+    expect(create.mock.calls[0][0]).toMatchObject({ temperature: 0.7 });
+    expect(create.mock.calls[1][0]).not.toHaveProperty("temperature");
+    // top_p wasn't named in the error, so it survives the retry.
+    expect(create.mock.calls[1][0]).toMatchObject({ top_p: 0.9 });
+  });
+
+  test("execute does not retry when the rejected param wasn't set", async () => {
+    const create = vi.fn().mockRejectedValue(deprecatedTemperatureError());
+    const client = { messages: { create } };
+
+    await expect(
+      anthropicAdapterFactory.execute(client, createMockRequest(messages)),
+    ).rejects.toThrow("temperature");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test("execute rethrows unrelated errors without retrying", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("overloaded_error"));
+    const client = { messages: { create } };
+
+    await expect(
+      anthropicAdapterFactory.execute(
+        client,
+        createMockRequest(messages, { temperature: 0.5 }),
+      ),
+    ).rejects.toThrow("overloaded_error");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test("executeStream applies the same fallback and keeps stream: true", async () => {
+    async function* emptyStream(): AsyncGenerator<never> {}
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(deprecatedTemperatureError())
+      .mockResolvedValueOnce(emptyStream());
+    const client = { messages: { create } };
+
+    await anthropicAdapterFactory.executeStream(
+      client,
+      createMockRequest(messages, { temperature: 0.7 }),
+    );
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[1][0]).not.toHaveProperty("temperature");
+    expect(create.mock.calls[1][0]).toMatchObject({ stream: true });
   });
 });

@@ -54,7 +54,6 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
-import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
@@ -153,10 +152,11 @@ const navigationItems = [
   },
   {
     icon: Key,
-    label: "Credentials",
+    label: "Client Credentials",
     value: "credentials",
-    keywords: "virtual keys oauth clients client credentials llm",
-    href: "/llm/credentials/virtual-keys",
+    keywords:
+      "virtual keys oauth clients client credentials llm mcp gateways agents a2a",
+    href: "/credentials",
   },
   {
     icon: MessagesSquare,
@@ -202,13 +202,6 @@ const navigationItems = [
   },
 ];
 
-// With ARCHESTRA_BETA on, these nav items point at their beta routes (keyed by
-// navigationItems `value`).
-const betaNavHrefs: Record<string, string> = {
-  connect: "/connection_beta",
-  "mcp-registry": "/mcp/registry/beta",
-};
-
 interface ConversationSearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -222,8 +215,6 @@ export function ConversationSearchPalette({
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
-  // ARCHESTRA_BETA master switch — Connect points at the new connection page.
-  const betaEnabled = useFeature("betaEnabled") === true;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedValue, setSelectedValue] = useState("");
   const [isPendingDeletion, setIsPendingDeletion] = useState<string | null>(
@@ -566,10 +557,7 @@ export function ConversationSearchPalette({
                             key={item.value}
                             value={`${item.value} ${item.keywords} ${item.label}`}
                             onSelect={() => {
-                              const betaHref = betaEnabled
-                                ? betaNavHrefs[item.value]
-                                : undefined;
-                              router.push(betaHref ?? item.href);
+                              router.push(item.href);
                               onOpenChange(false);
                             }}
                             className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"

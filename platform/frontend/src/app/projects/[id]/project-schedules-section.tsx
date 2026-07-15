@@ -14,12 +14,12 @@ import {
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { AgentSelector } from "@/components/agent-selector";
 import {
   DEFAULT_FORM_STATE,
   isValidCronExpression,
   type ScheduleTriggerFormState,
-} from "@/app/scheduled-tasks/schedule-trigger.utils";
-import { AgentSelector } from "@/components/agent-selector";
+} from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";

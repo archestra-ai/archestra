@@ -9,9 +9,11 @@ import {
   getMediaType,
   getModelReadableMimeTypes,
   INLINE_TEXT_MAX_BYTES,
+  parseSandboxCommand,
   supportsFileUploads,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
+import { XIcon } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -35,15 +37,27 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
+import {
+  chatMessageQueue,
+  useConversationMessageQueue,
+} from "@/lib/chat/chat-message-queue";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import {
   chatDraftStorageKey,
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
 import { useFeature } from "@/lib/config/config.query";
+import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
@@ -72,8 +86,21 @@ function formatBytes(bytes: number): string {
     : `${Math.round(bytes / 1024)} KB`;
 }
 
+/**
+ * Options riding alongside a submitted message. At most one is set: a `/`
+ * slash command activates a skill, a `!` prefix marks the message for direct
+ * sandbox execution (the marker lands in `metadata.sandboxCommand`).
+ */
+export type ChatSubmitOptions = {
+  skill?: ChatSkillMetadata;
+  sandboxCommand?: true;
+};
+
 export interface ArchestraPromptInputProps
-  extends Omit<ChatPromptInputToolsProps, "textareaRef"> {
+  extends Omit<
+    ChatPromptInputToolsProps,
+    "textareaRef" | "isNarrow" | "toolbarRef"
+  > {
   /**
    * Handle a submit. The textarea and the saved draft are cleared only when
    * this resolves/returns without throwing. Throw (or reject) to reject the
@@ -82,8 +109,15 @@ export interface ArchestraPromptInputProps
   onSubmit: (
     message: PromptInputMessage,
     e: FormEvent<HTMLFormElement>,
-    options?: { skill?: ChatSkillMetadata },
+    options?: ChatSubmitOptions,
   ) => void | Promise<void>;
+  /**
+   * Stop the in-flight response. When set, the submit button acts as a Stop
+   * button while a response is streaming (a click stops instead of
+   * submitting), so submits during a stream only come from Enter — which
+   * onSubmit queues rather than sends.
+   */
+  onStop?: () => void;
   status: ChatStatus;
   // Tools integration props
   agentId: string;
@@ -105,6 +139,13 @@ export interface ArchestraPromptInputProps
   onCompactConversation?: () => Promise<void> | void;
   /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
   isPlaywrightSetupVisible: boolean;
+  /**
+   * One-shot composer prefill (e.g. a skill slash command from a deep link).
+   * Applied to the controller-owned input, then acknowledged via
+   * onPrefillApplied so the owner can clear it and it is never re-applied.
+   */
+  prefillText?: string | null;
+  onPrefillApplied?: () => void;
 }
 
 type SlashCommand = {
@@ -124,6 +165,7 @@ const COMPACT_COMMAND: SlashCommand = {
 // Inner component that has access to the controller context
 const PromptInputContent = ({
   onSubmit,
+  onStop,
   status,
   selectedModel,
   onModelChange,
@@ -152,10 +194,13 @@ const PromptInputContent = ({
   selectorAgentName,
   onAgentChange,
   modelSource,
+  toolsUnavailable,
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   sandboxAvailable,
+  prefillText,
+  onPrefillApplied,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -163,6 +208,20 @@ const PromptInputContent = ({
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
+
+  // Collapse the toolbar based on whether its inline controls actually fit —
+  // measured on the footer, not the viewport — so it reacts when the right-side
+  // panel squeezes the input while the window stays wide, and only collapses
+  // when the controls genuinely no longer fit.
+  const footerRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const trailingRef = useRef<HTMLDivElement>(null);
+  const isNarrow = useToolbarCollapse({
+    availableRef: footerRef,
+    contentRef: toolbarRef,
+    trailingRef,
+  });
+
   const commandItemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [dismissedSlashCommandValue, setDismissedSlashCommandValue] = useState<
@@ -187,8 +246,9 @@ const PromptInputContent = ({
     placeholders: orgData?.chatPlaceholders,
   });
 
-  // Skills exposed as slash commands, gated by the org flag.
-  const skillSlashCommandsEnabled = orgData?.skillSlashCommandsEnabled ?? false;
+  // Skills exposed as slash commands whenever the org's skill tools are on —
+  // the same flag that gates the backend's activation injection.
+  const skillSlashCommandsEnabled = orgData?.skillToolsEnabled ?? false;
   const { data: skillsData } = useSkillsPaginated(
     { limit: 100 },
     { enabled: skillSlashCommandsEnabled },
@@ -277,6 +337,22 @@ const PromptInputContent = ({
     }
   }, [controller.textInput.value, storageKey]);
 
+  // Apply a one-shot prefill from the page (e.g. a skill deep link). The
+  // controller stays the single owner of the input value — the page hands the
+  // text over once and clears its request via onPrefillApplied, so editing or
+  // deleting the text afterwards behaves exactly like typed input.
+  useEffect(() => {
+    if (prefillText == null) return;
+    controller.textInput.setInput(prefillText);
+    onPrefillApplied?.();
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [
+    prefillText,
+    onPrefillApplied,
+    controller.textInput.setInput,
+    textareaRef,
+  ]);
+
   // Handle speech transcription by updating controller state
   const handleTranscriptionChange = useCallback(
     (text: string) => {
@@ -284,6 +360,12 @@ const PromptInputContent = ({
     },
     [controller.textInput],
   );
+
+  // Subtle affordance for the `!` convention: shown while the typed text
+  // starts with `!` on a sandbox-equipped agent, i.e. whenever submitting
+  // could run it as a sandbox command instead of sending it to the model.
+  const isSandboxCommandHintVisible =
+    sandboxAvailable && controller.textInput.value.trimStart().startsWith("!");
 
   // The picker stays open while the user is still typing the command token;
   // once a space is entered they have moved on to the prompt body.
@@ -377,60 +459,13 @@ const PromptInputContent = ({
     [controller.textInput, runCompactCommand, runDebugCommand, textareaRef],
   );
 
-  const handleTextareaKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (!isSlashCommandOpen || visibleSlashCommands.length === 0) {
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setActiveCommandIndex(
-          (current) => (current + 1) % visibleSlashCommands.length,
-        );
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setActiveCommandIndex(
-          (current) =>
-            (current - 1 + visibleSlashCommands.length) %
-            visibleSlashCommands.length,
-        );
-        return;
-      }
-
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        const command = visibleSlashCommands[selectedCommandIndex];
-        if (command) {
-          selectSlashCommand(command);
-        }
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setDismissedSlashCommandValue(controller.textInput.value);
-      }
-    },
-    [
-      controller.textInput.value,
-      isSlashCommandOpen,
-      selectSlashCommand,
-      selectedCommandIndex,
-      visibleSlashCommands,
-    ],
-  );
-
   const sensitiveDataDetectionEnabled =
     useFeature("chatSecretScanEnabled") ?? false;
   const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
   const pendingSubmissionRef = useRef<{
     outgoing: PromptInputMessage;
     e: FormEvent<HTMLFormElement>;
-    options?: { skill: ChatSkillMetadata };
+    options?: ChatSubmitOptions;
     resolve: () => void;
     reject: (reason?: unknown) => void;
   } | null>(null);
@@ -444,7 +479,7 @@ const PromptInputContent = ({
     (
       outgoing: PromptInputMessage,
       e: FormEvent<HTMLFormElement>,
-      options?: { skill: ChatSkillMetadata },
+      options?: ChatSubmitOptions,
     ): void | Promise<void> => {
       const result = onSubmit(outgoing, e, options);
       if (result instanceof Promise) {
@@ -473,6 +508,13 @@ const PromptInputContent = ({
         return;
       }
 
+      // a `!`-prefixed message runs directly in the conversation's sandbox —
+      // disjoint from the `/`-commands above and the skill commands below,
+      // since those require a `/` prefix. The text is sent exactly as typed;
+      // only a metadata marker rides along.
+      const isSandboxCommand =
+        sandboxAvailable && parseSandboxCommand(trimmed) !== null;
+
       // a skill command activates the skill; any text after the token is an
       // optional prompt — a bare skill command sends with an empty prompt
       let outgoing = message;
@@ -483,7 +525,11 @@ const PromptInputContent = ({
         outgoing = { ...message, text: parsed.remaining };
       }
 
-      const options = skill ? { skill } : undefined;
+      const options: ChatSubmitOptions | undefined = skill
+        ? { skill }
+        : isSandboxCommand
+          ? { sandboxCommand: true }
+          : undefined;
 
       if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
         const findings = scanText(outgoing.text);
@@ -511,6 +557,7 @@ const PromptInputContent = ({
       onCompactConversation,
       runCompactCommand,
       runDebugCommand,
+      sandboxAvailable,
       sensitiveDataDetectionEnabled,
       skillCommands,
     ],
@@ -567,9 +614,155 @@ const PromptInputContent = ({
   );
 
   const submitStatus = status === "error" ? "ready" : status;
+  const isResponseInFlight = status === "submitted" || status === "streaming";
+
+  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
+  // When off, the composer behaves as before: Enter is blocked while a
+  // response streams and the submit button stops via the form-submit path.
+  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
+  // Messages queued while a response was in-flight; sent automatically (in
+  // order) by the conversation's chat session once each turn settles.
+  const queuedMessages = useConversationMessageQueue(
+    isMessageQueueEnabled ? conversationId : undefined,
+  );
+
+  // Composer keyboard shortcuts layered on top of the primitive textarea:
+  //   • Esc — stop the in-flight response (mirrors the Stop button).
+  //   • ArrowUp on an empty composer — pop the most recently queued message
+  //     back into the input to edit / resend (like shell history recall).
+  // Both defer to the slash-command menu when it is open: Esc dismisses that
+  // menu and ArrowUp navigates it (handled further down).
+  const handleTextareaKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        event.key === "Escape" &&
+        !isSlashCommandOpen &&
+        isResponseInFlight &&
+        onStop
+      ) {
+        event.preventDefault();
+        onStop();
+        return;
+      }
+
+      if (
+        event.key === "ArrowUp" &&
+        !isSlashCommandOpen &&
+        isMessageQueueEnabled &&
+        conversationId &&
+        controller.textInput.value === "" &&
+        queuedMessages.length > 0
+      ) {
+        event.preventDefault();
+        const mostRecent = queuedMessages[queuedMessages.length - 1];
+        if (mostRecent) {
+          chatMessageQueue.remove(conversationId, mostRecent.id);
+          const restored = `${
+            mostRecent.skill ? `/${mostRecent.skill.name} ` : ""
+          }${mostRecent.text}`;
+          controller.textInput.setInput(restored);
+          // Caret to the end so the user can append / edit immediately.
+          requestAnimationFrame(() => {
+            const element = textareaRef.current;
+            element?.focus();
+            element?.setSelectionRange(restored.length, restored.length);
+          });
+        }
+        return;
+      }
+
+      if (!isSlashCommandOpen || visibleSlashCommands.length === 0) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveCommandIndex(
+          (current) => (current + 1) % visibleSlashCommands.length,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveCommandIndex(
+          (current) =>
+            (current - 1 + visibleSlashCommands.length) %
+            visibleSlashCommands.length,
+        );
+        return;
+      }
+
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const command = visibleSlashCommands[selectedCommandIndex];
+        if (command) {
+          selectSlashCommand(command);
+        }
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissedSlashCommandValue(controller.textInput.value);
+      }
+    },
+    [
+      conversationId,
+      controller.textInput,
+      isMessageQueueEnabled,
+      isResponseInFlight,
+      isSlashCommandOpen,
+      onStop,
+      queuedMessages,
+      selectSlashCommand,
+      selectedCommandIndex,
+      textareaRef,
+      visibleSlashCommands,
+    ],
+  );
 
   return (
     <div className="relative">
+      {isMessageQueueEnabled && conversationId && queuedMessages.length > 0 && (
+        <div
+          className="mb-2 flex max-h-40 flex-col gap-1 overflow-y-auto"
+          data-testid={E2eTestId.ChatMessageQueue}
+        >
+          {queuedMessages.map((queued) => (
+            <div
+              key={queued.id}
+              className="group flex items-center gap-2 rounded-md bg-muted/50 py-1 pr-1 pl-3 text-muted-foreground text-sm transition-colors hover:bg-muted"
+              data-testid={E2eTestId.ChatMessageQueueItem}
+            >
+              <span className="min-w-0 grow truncate">
+                {queued.skill ? `/${queued.skill.name} ` : ""}
+                {queued.text}
+              </span>
+              <Button
+                aria-label="Remove queued message"
+                className="size-auto shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                data-testid={E2eTestId.ChatMessageQueueRemoveButton}
+                onClick={() =>
+                  chatMessageQueue.remove(conversationId, queued.id)
+                }
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      {isSandboxCommandHintVisible && (
+        <div className="absolute inset-x-0 bottom-full mb-2 px-3 text-xs text-muted-foreground">
+          Messages starting with{" "}
+          <span className="font-mono font-medium">!</span> run as commands in
+          the sandbox
+        </div>
+      )}
       {isSlashCommandOpen && (
         <div className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
           <PromptInputCommand className="h-auto rounded-none bg-transparent">
@@ -649,16 +842,23 @@ const PromptInputContent = ({
               className="px-4"
               autoFocus
               disabled={submitDisabled || isContextCompacting}
+              // With queueing on and a live conversation, Enter during a
+              // stream submits and the submit handler queues the message.
+              // Otherwise (queueing off, or the new-chat composer while the
+              // conversation is being created) Enter stays blocked.
               disableEnterSubmit={
-                status === "submitted" || status === "streaming"
+                isResponseInFlight &&
+                (!isMessageQueueEnabled || !conversationId)
               }
               onKeyDown={handleTextareaKeyDown}
               data-testid={E2eTestId.ChatPromptTextarea}
             />
           )}
         </PromptInputBody>
-        <PromptInputFooter>
+        <PromptInputFooter ref={footerRef}>
           <ChatPromptInputTools
+            isNarrow={isNarrow}
+            toolbarRef={toolbarRef}
             selectedModel={selectedModel}
             onModelChange={onModelChange}
             conversationId={conversationId}
@@ -679,6 +879,7 @@ const PromptInputContent = ({
             selectorAgentName={selectorAgentName}
             onAgentChange={onAgentChange}
             modelSource={modelSource}
+            toolsUnavailable={toolsUnavailable}
             onResetModelOverride={onResetModelOverride}
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
             agentModelDisplayName={agentModelDisplayName}
@@ -686,16 +887,43 @@ const PromptInputContent = ({
             contextWindow={contextWindow}
             lastCompaction={lastCompaction}
           />
-          <div className="flex items-center gap-2">
+          <div ref={trailingRef} className="flex items-center gap-2">
             <PromptInputSpeechButton
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
             />
-            <PromptInputSubmit
-              className="!h-8"
-              status={submitStatus}
-              disabled={submitDisabled || isContextCompacting}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PromptInputSubmit
+                  className="!h-8"
+                  status={submitStatus}
+                  disabled={submitDisabled || isContextCompacting}
+                  onClick={(event) => {
+                    // While a response is in-flight the button shows Stop; a
+                    // click stops the stream instead of submitting the form
+                    // (which would queue the typed text — see onStop docs).
+                    // With queueing off, the click falls through to the form
+                    // submit, whose handler stops the stream (pre-queue
+                    // behavior).
+                    if (isMessageQueueEnabled && onStop && isResponseInFlight) {
+                      event.preventDefault();
+                      onStop();
+                    }
+                  }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {isResponseInFlight && onStop ? (
+                  <span className="flex items-center gap-1.5">
+                    Stop <Kbd>Esc</Kbd>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    Send <Kbd>Enter</Kbd>
+                  </span>
+                )}
+              </TooltipContent>
+            </Tooltip>
           </div>
         </PromptInputFooter>
       </PromptInput>
@@ -710,6 +938,7 @@ const PromptInputContent = ({
 
 const ArchestraPromptInput = ({
   onSubmit,
+  onStop,
   status,
   selectedModel,
   onModelChange,
@@ -738,9 +967,12 @@ const ArchestraPromptInput = ({
   selectorAgentName,
   onAgentChange,
   modelSource,
+  toolsUnavailable,
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
+  prefillText,
+  onPrefillApplied,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -801,6 +1033,7 @@ const ArchestraPromptInput = ({
       >
         <PromptInputContent
           onSubmit={onSubmit}
+          onStop={onStop}
           status={status}
           selectedModel={selectedModel}
           onModelChange={onModelChange}
@@ -829,10 +1062,13 @@ const ArchestraPromptInput = ({
           selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
+          toolsUnavailable={toolsUnavailable}
           onResetModelOverride={onResetModelOverride}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}
+          prefillText={prefillText}
+          onPrefillApplied={onPrefillApplied}
         />
       </PromptInputProvider>
     </div>

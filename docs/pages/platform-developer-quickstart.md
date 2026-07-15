@@ -4,11 +4,7 @@ category: Development
 order: 1
 ---
 
-<!-- 
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ## Prerequisites
 

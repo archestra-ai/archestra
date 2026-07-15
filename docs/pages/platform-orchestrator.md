@@ -6,14 +6,7 @@ description: Running self-hosted MCP servers in Kubernetes
 lastUpdated: 2026-04-20
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
-
-Exception:
-- Screenshot
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 The MCP Orchestrator runs self-hosted MCP servers inside your Kubernetes cluster. It creates the deployment, injects configuration and secrets, exposes logs and status in Archestra, and connects those servers to Agents and MCP Gateways.
 

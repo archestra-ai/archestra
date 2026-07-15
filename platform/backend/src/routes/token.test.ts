@@ -1,7 +1,12 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { Permissions } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
-import { TeamModel, TeamTokenModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  TeamModel,
+  TeamTokenModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 
 // Mock the hasPermission function
@@ -239,7 +244,7 @@ describe("Token Route Authorization", () => {
       expect(teamTokens.length).toBe(2);
     });
 
-    test("literal team admin sees only administered team tokens", async ({
+    test("team member sees only tokens for teams they belong to", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -259,8 +264,8 @@ describe("Token Route Authorization", () => {
 
       setupPermissions({ team: ["read"] });
 
-      // Get user's teams
-      const userTeamIds = await TeamModel.getUserAdminTeamIds(user.id);
+      // Get user's teams (membership, any role — same as the route)
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
       expect(userTeamIds).toEqual([team1.id]);
 
       // Simulate filtering logic
@@ -361,7 +366,7 @@ describe("Token Route Authorization", () => {
       );
     });
 
-    test("user without team:update sees no team tokens", async ({
+    test("plain team member without team management permissions still sees their team's token listed", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -374,7 +379,9 @@ describe("Token Route Authorization", () => {
 
       await TeamTokenModel.createTeamToken(team.id, team.name);
 
-      // Grant only team:read
+      // Grant only team:read — the member can list the token's metadata,
+      // while the value endpoint stays admin-gated (see checkTokenAccess
+      // tests above).
       setupPermissions({ team: ["read"] });
 
       const { success: hasTeamUpdate } = await hasPermission(
@@ -383,15 +390,128 @@ describe("Token Route Authorization", () => {
       );
       expect(hasTeamUpdate).toBe(false);
 
-      // Simulate filtering logic - no team tokens visible
+      // Simulate filtering logic — membership grants listing visibility
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
       const tokens = await TeamTokenModel.findAllWithTeam();
-      const visibleTokens = hasTeamUpdate
-        ? tokens
-        : tokens.filter((t) => t.isOrganizationToken);
+      const visibleTokens = tokens.filter(
+        (t) =>
+          t.isOrganizationToken || (t.teamId && userTeamIds.includes(t.teamId)),
+      );
 
       expect(visibleTokens.filter((t) => !t.isOrganizationToken).length).toBe(
-        0,
+        1,
       );
+    });
+  });
+  describe("GET /api/tokens worksWithProfile annotation", () => {
+    // Mirrors the route's rule (and AgentTeamModel.teamHasAgentAccess):
+    // org-scoped agents accept any team token, team-scoped agents only
+    // their assigned teams' tokens, personal agents none. Tokens are
+    // annotated (not filtered) so the UI can grey out the rest.
+    const annotateForAgent = async (
+      profileId: string,
+      tokens: Awaited<ReturnType<typeof TeamTokenModel.findAllWithTeam>>,
+    ) => {
+      const agent = await AgentModel.findAccessContextById(profileId);
+      const profileTeamIds =
+        agent?.scope === "team"
+          ? await AgentTeamModel.getTeamsForAgent(profileId)
+          : [];
+      return tokens.map((t) => ({
+        ...t,
+        worksWithProfile:
+          t.isOrganizationToken ||
+          agent?.scope === "org" ||
+          (agent?.scope === "team" &&
+            !!t.teamId &&
+            profileTeamIds.includes(t.teamId)),
+      }));
+    };
+
+    test("org-scoped agent offers every team token, even without team assignments", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Team 1" });
+      await TeamTokenModel.createTeamToken(team.id, team.name);
+
+      const agent = await makeAgent({
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const tokens = await TeamTokenModel.findAllWithTeam();
+      const annotated = await annotateForAgent(agent.id, tokens);
+
+      expect(
+        annotated.filter((t) => !t.isOrganizationToken && t.worksWithProfile)
+          .length,
+      ).toBe(1);
+    });
+
+    test("team-scoped agent only offers its assigned teams' tokens", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
+      await TeamTokenModel.createTeamToken(team1.id, team1.name);
+      await TeamTokenModel.createTeamToken(team2.id, team2.name);
+
+      const agent = await makeAgent({
+        organizationId: org.id,
+        scope: "team",
+        teams: [team1.id],
+      });
+
+      const tokens = await TeamTokenModel.findAllWithTeam();
+      const annotated = await annotateForAgent(agent.id, tokens);
+
+      const workingTeamTokens = annotated.filter(
+        (t) => !t.isOrganizationToken && t.worksWithProfile,
+      );
+      expect(workingTeamTokens.length).toBe(1);
+      expect(workingTeamTokens[0].teamId).toBe(team1.id);
+      // The other team's token stays listed, just marked unusable
+      expect(annotated.filter((t) => !t.isOrganizationToken).length).toBe(2);
+    });
+
+    test("personal agent offers no team tokens", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id, { name: "Team 1" });
+      await TeamTokenModel.createTeamToken(team.id, team.name);
+
+      const agent = await makeAgent({
+        organizationId: org.id,
+        scope: "personal",
+        teams: [],
+        authorId: user.id,
+      });
+
+      const tokens = await TeamTokenModel.findAllWithTeam();
+      const annotated = await annotateForAgent(agent.id, tokens);
+
+      // Still listed, but no team token is usable against a personal agent
+      expect(annotated.filter((t) => !t.isOrganizationToken).length).toBe(1);
+      expect(
+        annotated.filter((t) => !t.isOrganizationToken && t.worksWithProfile)
+          .length,
+      ).toBe(0);
     });
   });
 });

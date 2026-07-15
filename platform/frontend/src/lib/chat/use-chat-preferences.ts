@@ -264,6 +264,30 @@ export function agentRequiresPerUserConnect(params: {
   return !isModelAvailable;
 }
 
+/**
+ * True when the selected model can't take tools (supportsToolCalling is
+ * synced as false, e.g. Microsoft 365 Copilot) while the selected agent
+ * brings some (Auto mode or assigned tools). The chat still works — the
+ * backend omits tools for such models — but the pairing deserves an up-front
+ * notice instead of the agent's tools silently never firing.
+ */
+export function agentToolsUnavailableForModel(params: {
+  /** Structural subset of the agents-API row (AgentLlmConfig). */
+  agent: { accessAllTools: boolean; tools: readonly unknown[] } | undefined;
+  selectedModelId: string | null | undefined;
+  models: Array<{
+    dbId: string;
+    capabilities?: { supportsToolCalling?: boolean | null } | null;
+  }>;
+}): boolean {
+  const { agent, selectedModelId, models } = params;
+  if (!agent) return false;
+  if (!agent.accessAllTools && agent.tools.length === 0) return false;
+  if (!selectedModelId) return false;
+  const model = models.find((m) => m.dbId === selectedModelId);
+  return model?.capabilities?.supportsToolCalling === false;
+}
+
 // ===== Model source =====
 
 /**

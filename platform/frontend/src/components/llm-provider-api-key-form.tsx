@@ -14,6 +14,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
+import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -26,6 +27,7 @@ import { LlmProviderSelectItems } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { SecretInput } from "./ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -269,6 +271,18 @@ const PROVIDER_CONFIG: Record<
     // Copilot only exposes chat-completion models through Archestra.
     supportsEmbeddings: false,
   },
+  "microsoft-365-copilot": {
+    name: "Microsoft 365 Copilot",
+    icon: "/icons/microsoft-365-copilot.png",
+    placeholder: "Auto-filled after sign in",
+    enabled: true,
+    consoleUrl: "https://m365.cloud.microsoft/chat",
+    consoleName: "Microsoft 365 Copilot",
+    description:
+      "No API key to find — just use Sign in with Microsoft below to connect your work account. Requires a Microsoft 365 Copilot license; keys are per-user, so everyone using Microsoft 365 Copilot signs in with their own account.",
+    // The Graph Chat API is text-only chat; no embeddings.
+    supportsEmbeddings: false,
+  },
 } as const;
 
 export { PROVIDER_CONFIG };
@@ -460,8 +474,11 @@ export function LlmProviderApiKeyForm({
   }, [form, hasAnyKeyForProvider, isEditMode]);
 
   // Default the Name field to the provider's display name so it's one less
-  // field to fill. Only fill while the name is empty or still the previously
-  // auto-filled provider name — never clobber a name the user typed.
+  // field to fill, suffixed with a counter when that name is already taken by
+  // a visible key of the same provider — sign-in providers (GitHub/Microsoft
+  // Copilot) otherwise mint identically-named keys on every reconnect. Only
+  // fill while the name is empty or still the previously auto-filled name —
+  // never clobber a name the user typed.
   const autoFilledNameRef = useRef<string | null>(null);
   useEffect(() => {
     if (isEditMode) {
@@ -470,10 +487,19 @@ export function LlmProviderApiKeyForm({
 
     const currentName = form.getValues("name");
     if (currentName === "" || currentName === autoFilledNameRef.current) {
-      form.setValue("name", providerConfig.name);
-      autoFilledNameRef.current = providerConfig.name;
+      const takenNames = new Set(
+        (existingKeys ?? [])
+          .filter((key) => key.provider === provider)
+          .map((key) => key.name),
+      );
+      let defaultName = providerConfig.name;
+      for (let suffix = 2; takenNames.has(defaultName); suffix++) {
+        defaultName = `${providerConfig.name} (${suffix})`;
+      }
+      form.setValue("name", defaultName);
+      autoFilledNameRef.current = defaultName;
     }
-  }, [form, isEditMode, providerConfig.name]);
+  }, [form, isEditMode, providerConfig.name, existingKeys, provider]);
 
   // Force personal scope when the provider requires a per-user credential.
   useEffect(() => {
@@ -503,23 +529,55 @@ export function LlmProviderApiKeyForm({
     form.setValue("vaultSecretKey", null);
   }, [form, scope]);
 
+  // Clear provider-specific credentials when the provider changes, so a key (or
+  // base URL / AWS credential) typed for one provider can't be submitted against
+  // another. Create only — the provider picker is disabled while editing. Skips
+  // the initial render via the ref so it never wipes prefilled defaults.
+  const prevProviderRef = useRef(provider);
+  useEffect(() => {
+    if (isEditMode || prevProviderRef.current === provider) return;
+    prevProviderRef.current = provider;
+    form.setValue("apiKey", null);
+    form.setValue("baseUrl", null);
+    form.setValue("inferenceBaseUrl", null);
+    form.setValue("extraHeaders", []);
+    form.setValue("vaultSecretPath", null);
+    form.setValue("vaultSecretKey", null);
+    form.setValue("awsAccessKeyId", null);
+    form.setValue("awsSecretAccessKey", null);
+    form.setValue("awsSessionToken", null);
+    // Reset the Bedrock auth method too: a stale "iam" would otherwise keep the
+    // API key input hidden after switching to a non-Bedrock provider.
+    form.setValue("bedrockAuthMethod", "api-key");
+  }, [form, isEditMode, provider]);
+
   const vaultSecretSelector =
     scope === "team" ? (
       <InlineVaultSecretSelector
         teamId={teamId}
         selectedSecretPath={form.getValues("vaultSecretPath")}
         selectedSecretKey={form.getValues("vaultSecretKey")}
-        onSecretPathChange={(value) => form.setValue("vaultSecretPath", value)}
-        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
+        onSecretPathChange={(value) =>
+          form.setValue("vaultSecretPath", value, { shouldDirty: true })
+        }
+        onSecretKeyChange={(value) =>
+          form.setValue("vaultSecretKey", value, { shouldDirty: true })
+        }
       />
     ) : (
       <ExternalSecretSelector
         selectedTeamId={teamId}
         selectedSecretPath={form.getValues("vaultSecretPath")}
         selectedSecretKey={form.getValues("vaultSecretKey")}
-        onTeamChange={(value) => form.setValue("teamId", value)}
-        onSecretChange={(value) => form.setValue("vaultSecretPath", value)}
-        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
+        onTeamChange={(value) =>
+          form.setValue("teamId", value, { shouldDirty: true })
+        }
+        onSecretChange={(value) =>
+          form.setValue("vaultSecretPath", value, { shouldDirty: true })
+        }
+        onSecretKeyChange={(value) =>
+          form.setValue("vaultSecretKey", value, { shouldDirty: true })
+        }
       />
     );
 
@@ -620,6 +678,7 @@ export function LlmProviderApiKeyForm({
                   form.setValue(
                     "bedrockAuthMethod",
                     value as "api-key" | "sigv4" | "iam",
+                    { shouldDirty: true },
                   )
                 }
               >
@@ -690,9 +749,13 @@ export function LlmProviderApiKeyForm({
 
             {!isBedrockSigV4 &&
               bedrockAuthMethod !== "iam" &&
-              (provider === "github-copilot" ? (
+              (isPerUserProvider ? (
                 <>
-                  <Label>GitHub Copilot account</Label>
+                  <Label>
+                    {provider === "github-copilot"
+                      ? "GitHub Copilot account"
+                      : "Microsoft 365 Copilot account"}
+                  </Label>
                   {providerConfig.description && (
                     <p className="text-xs text-muted-foreground">
                       {providerConfig.description}
@@ -703,11 +766,14 @@ export function LlmProviderApiKeyForm({
                       <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
                       <div>
                         <p className="font-medium text-green-600 dark:text-green-400">
-                          GitHub account connected
+                          {provider === "github-copilot"
+                            ? "GitHub account connected"
+                            : "Microsoft account connected"}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          Your Copilot subscription is linked through your
-                          GitHub account.
+                          {provider === "github-copilot"
+                            ? "Your Copilot subscription is linked through your GitHub account."
+                            : "Your Microsoft 365 Copilot license is linked through your Microsoft account."}
                           {isEditMode
                             ? " Sign in again below to refresh the token."
                             : ""}
@@ -715,12 +781,21 @@ export function LlmProviderApiKeyForm({
                       </div>
                     </div>
                   )}
-                  <GithubCopilotSignIn
-                    disabled={isPending}
-                    onToken={(token) =>
-                      form.setValue("apiKey", token, { shouldDirty: true })
-                    }
-                  />
+                  {provider === "github-copilot" ? (
+                    <GithubCopilotSignIn
+                      disabled={isPending}
+                      onToken={(token) =>
+                        form.setValue("apiKey", token, { shouldDirty: true })
+                      }
+                    />
+                  ) : (
+                    <Microsoft365CopilotSignIn
+                      disabled={isPending}
+                      onToken={(token) =>
+                        form.setValue("apiKey", token, { shouldDirty: true })
+                      }
+                    />
+                  )}
                 </>
               ) : (
                 <>
@@ -748,14 +823,16 @@ export function LlmProviderApiKeyForm({
                     </p>
                   )}
                   <div className="relative">
-                    <Input
+                    <SecretInput
                       id="llm-provider-api-key-value"
-                      type="password"
                       placeholder={providerConfig.placeholder}
                       disabled={isPending}
-                      autoComplete="new-password"
-                      data-1p-ignore
-                      data-lpignore="true"
+                      // Offer the reveal toggle when adding a key so the user
+                      // can verify what they typed or pasted. Editing keeps the
+                      // "configured" check in that same corner instead, and
+                      // gating on the (constant) edit mode avoids remounting the
+                      // input mid-edit when the check would otherwise toggle.
+                      revealable={!isEditMode}
                       className={
                         showConfiguredStyling ? "border-green-500 pr-10" : ""
                       }
@@ -787,11 +864,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-aws-access-key-id">
                     Access Key ID
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-access-key-id"
-                    type="password"
                     placeholder="AKIA..."
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsAccessKeyId")}
                   />
@@ -800,11 +875,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-aws-secret-access-key">
                     Secret Access Key
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-secret-access-key"
-                    type="password"
                     placeholder="••••••••"
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsSecretAccessKey")}
                   />
@@ -816,11 +889,9 @@ export function LlmProviderApiKeyForm({
                       (optional)
                     </span>
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-session-token"
-                    type="password"
                     placeholder="Required for temporary credentials (STS / AssumeRole)"
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsSessionToken")}
                   />
@@ -851,9 +922,9 @@ export function LlmProviderApiKeyForm({
               value={scope}
               options={visibilityOptions}
               onValueChange={(nextScope) => {
-                form.setValue("scope", nextScope);
+                form.setValue("scope", nextScope, { shouldDirty: true });
                 if (nextScope !== "team") {
-                  form.setValue("teamId", null);
+                  form.setValue("teamId", null, { shouldDirty: true });
                 }
               }}
             >
@@ -878,7 +949,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-api-key-team">Team</Label>
                   <Select
                     value={teamId ?? undefined}
-                    onValueChange={(value) => form.setValue("teamId", value)}
+                    onValueChange={(value) =>
+                      form.setValue("teamId", value, { shouldDirty: true })
+                    }
                     disabled={isPending || !canReadTeams || teams.length === 0}
                   >
                     <SelectTrigger
@@ -914,7 +987,7 @@ export function LlmProviderApiKeyForm({
                 id="llm-provider-api-key-is-primary"
                 checked={form.watch("isPrimary")}
                 onCheckedChange={(checked) =>
-                  form.setValue("isPrimary", checked)
+                  form.setValue("isPrimary", checked, { shouldDirty: true })
                 }
                 disabled={isPending || Boolean(existingPrimaryKey)}
               />
@@ -1037,12 +1110,14 @@ export function LlmProviderApiKeyForm({
               {extraHeadersFieldArray.fields.map((field, index) => (
                 <div key={field.id} className="flex items-start gap-2">
                   <Input
+                    aria-label="Header name"
                     placeholder="Header name"
                     disabled={isPending}
                     className="flex-1"
                     {...form.register(`extraHeaders.${index}.name` as const)}
                   />
                   <Input
+                    aria-label="Header value"
                     placeholder="Header value"
                     disabled={isPending}
                     className="flex-1"

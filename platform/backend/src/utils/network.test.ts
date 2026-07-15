@@ -59,6 +59,14 @@ describe("isLoopbackAddress", () => {
     expect(isLoopbackAddress("not-an-ip")).toBe(false);
     expect(isLoopbackAddress("127.0.0")).toBe(false);
   });
+
+  // Fastify types request.ip as string but it can be undefined at runtime
+  // (socket with no remote address, empty X-Forwarded-For under trustProxy).
+  // An unknown origin must be treated as non-loopback, not throw.
+  test("returns false for undefined or null", () => {
+    expect(isLoopbackAddress(undefined)).toBe(false);
+    expect(isLoopbackAddress(null)).toBe(false);
+  });
 });
 
 describe("isLoopbackRedirectUri", () => {

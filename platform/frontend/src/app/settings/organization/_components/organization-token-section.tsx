@@ -1,7 +1,8 @@
 "use client";
 
 import { Key } from "lucide-react";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
 import { PlatformTokenCard } from "@/components/tokens/platform-token-card";
@@ -13,6 +14,18 @@ export function OrganizationTokenSection() {
   const tokens = tokensData?.tokens;
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const highlight = searchParams.get("highlight");
+  const orgTokenExists = !!orgToken;
+
+  // Deep link from connection instructions ("Manage your organization
+  // token"): ?highlight=organization-token opens the token dialog once the
+  // token loads.
+  useEffect(() => {
+    if (highlight === "organization-token" && orgTokenExists) {
+      setTokenDialogOpen(true);
+    }
+  }, [highlight, orgTokenExists]);
 
   return (
     <WithPermissions

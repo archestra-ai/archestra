@@ -1,5 +1,6 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
+  ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
@@ -9,6 +10,7 @@ import {
   InternalMcpCatalogModel,
   OrganizationModel,
 } from "@/models";
+import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { createEnvironment } from "@/services/environments/environment";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -520,6 +522,79 @@ describe("deploy_mcp_server", () => {
     expect(result.isError).toBe(false);
   });
 
+  test("shared team install of a use-level team item is rejected", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const teamAdmin = await makeUser();
+    await makeMember(teamAdmin.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, teamAdmin.id);
+    await makeTeamMember(team.id, teamAdmin.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: teamAdmin.id,
+      organizationId: org.id,
+    };
+    // Team-scoped item where the admin's team holds only `use`.
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "team",
+      teams: [{ id: team.id, level: "use" }],
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "team", teamId: team.id },
+      ctx,
+    );
+
+    // A shared team install is the connection others resolve through — a write.
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toMatch(/write access/i);
+  });
+
+  test("shared team install of a write-level team item succeeds", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const teamAdmin = await makeUser();
+    await makeMember(teamAdmin.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, teamAdmin.id);
+    await makeTeamMember(team.id, teamAdmin.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: teamAdmin.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "team",
+      teams: [{ id: team.id, level: "write" }],
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "team", teamId: team.id },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
   test("team install: member of team and non-editor is rejected", async ({
     makeAgent,
     makeCustomRole,
@@ -880,12 +955,14 @@ describe("mcp-server tools — team-scope RBAC", () => {
     return (result.content[0] as any).text as string;
   }
 
-  test("editor creates a team-scoped server for a team they belong to", async ({
+  test("editor creates a team-scoped server for a team they administer", async ({
     makeTeam,
     makeTeamMember,
   }) => {
     const team = await makeTeam(organizationId, ctx.userId as string);
-    await makeTeamMember(team.id, ctx.userId as string);
+    await makeTeamMember(team.id, ctx.userId as string, {
+      role: ADMIN_ROLE_NAME,
+    });
 
     const result = await executeArchestraTool(
       CREATE,
@@ -919,12 +996,14 @@ describe("mcp-server tools — team-scope RBAC", () => {
     expect(result.isError).toBe(true);
   });
 
-  test("editor promotes their own personal server to a member team via edit", async ({
+  test("editor promotes their own personal server to a team they administer via edit", async ({
     makeTeam,
     makeTeamMember,
   }) => {
     const team = await makeTeam(organizationId, ctx.userId as string);
-    await makeTeamMember(team.id, ctx.userId as string);
+    await makeTeamMember(team.id, ctx.userId as string, {
+      role: ADMIN_ROLE_NAME,
+    });
 
     const created = await executeArchestraTool(CREATE, remoteArgs(), ctx);
     expect(created.isError).toBe(false);
@@ -938,6 +1017,56 @@ describe("mcp-server tools — team-scope RBAC", () => {
     );
     expect(promoted.isError).toBe(false);
     expect(bodyText(promoted)).toContain("Scope: team");
+  });
+
+  test("an id-only team edit preserves each team's stored access level", async ({
+    makeTeam,
+    makeTeamMember,
+    makeInternalMcpCatalog,
+  }) => {
+    const writeTeam = await makeTeam(organizationId, ctx.userId as string);
+    const useTeam = await makeTeam(organizationId, ctx.userId as string);
+    const addedTeam = await makeTeam(organizationId, ctx.userId as string);
+    for (const team of [writeTeam, useTeam, addedTeam]) {
+      await makeTeamMember(team.id, ctx.userId as string, {
+        role: ADMIN_ROLE_NAME,
+      });
+    }
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: ctx.userId as string,
+      scope: "team",
+      teams: [
+        { id: writeTeam.id, level: "write" },
+        { id: useTeam.id, level: "use" },
+      ],
+      serverType: "remote",
+      serverUrl: "https://example.test/mcp",
+    });
+
+    // The agent tool's schema carries bare team ids and cannot express a level.
+    // Adding a team rewrites the assignments, and the level-less ids of the
+    // teams already assigned must not silently promote `use` to `write`.
+    const edited = await executeArchestraTool(
+      EDIT_DESC,
+      {
+        id: catalog.id,
+        description: "touched",
+        teams: [writeTeam.id, useTeam.id, addedTeam.id],
+      },
+      ctx,
+    );
+    expect(edited.isError).toBe(false);
+
+    const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(
+      catalog.id,
+    );
+    expect(Object.fromEntries(teams.map((t) => [t.id, t.level]))).toEqual({
+      [writeTeam.id]: "write",
+      [useTeam.id]: "use",
+      // A team assigned for the first time without a level defaults to `write`.
+      [addedTeam.id]: "write",
+    });
   });
 
   test("editor cannot edit-promote to a team they are not in", async ({

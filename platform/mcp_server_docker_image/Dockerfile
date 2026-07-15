@@ -96,10 +96,13 @@ RUN apk add --no-cache \
    # CVE-2026-22184: zlib vulnerability fixed in 1.3.2-r0
    # CVE-2026-32767: expat XML parser vulnerability
    # CVE-2026-40200 (musl 1.2.5-r23) is covered by the pinned base image digest
+   # CVE-2026-6276, CVE-2026-5773: curl/libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
+   # The base image ships 8.19.0-r0; the explicit `apk add curl` above installs it, so
+   # curl/libcurl must be listed here to be upgraded to the fixed version.
    # Go runtime is copied from the golang:1.25.11-alpine image below to pick up the
    # Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811) and
    # 1.25.11 (CVE-2026-42504) that Alpine's apk index has not yet shipped.
-   apk upgrade --no-cache nodejs bind openssl zlib expat
+   apk upgrade --no-cache nodejs bind openssl zlib expat curl libcurl
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

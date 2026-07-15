@@ -305,6 +305,32 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
   },
+  // Member overrides change who a connector's grants resolve to. Explicit
+  // entries pin both mutations to connector.updated — a walk-up to
+  // /api/connectors/:id would otherwise log the mapping DELETE as
+  // connector.deleted.
+  "/api/connectors/:id/member-overrides": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  "/api/connectors/:id/member-overrides/:externalAccountId": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  // Recomputes who can read every document the connector has ingested, so the
+  // operator who forced the pass is an audit-relevant fact. Registered
+  // explicitly: a POST resolved by walk-up is dropped, and the parent's
+  // create semantics would be wrong anyway — nothing is created.
+  "/api/connectors/:id/permission-sync": {
+    resourceType: "connector",
+    action: "connector.permission_sync_triggered",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
 
   // GitHub App configs
   "/api/github-app-configs": {

@@ -1,10 +1,15 @@
 import {
+  type ArchestraToolShortName,
   DEFAULT_LLM_PROXY_NAME,
+  getCreationDefaultArchestraToolShortNames,
   type PaginationQuery,
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
+  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
+  TimeInMs,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   urlSlugify,
 } from "@archestra/shared";
@@ -18,6 +23,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  max,
   min,
   ne,
   notInArray,
@@ -25,8 +31,10 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { LRUCacheManager } from "@/cache-manager";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
-import db, { schema, type Transaction } from "@/database";
+import config from "@/config";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
@@ -34,12 +42,14 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type {
   Agent,
   AgentScope,
   AgentScopeFilter,
   AgentType,
+  GatewayAgent,
   InsertAgent,
   SortingQuery,
   UpdateAgent,
@@ -47,15 +57,42 @@ import type {
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
+import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
 class AgentModel {
+  /**
+   * Process-local cache for {@link AgentModel.resolveIdFromIdOrSlug}. The
+   * lookup runs on every MCP-gateway request before auth, so under load it is
+   * both a meaningful share of pool traffic and the first query to surface
+   * pool starvation. id/slug → id mappings change rarely; the short TTL bounds
+   * staleness after a slug change or deletion (requests for a just-deleted
+   * agent still fail downstream where the agent row is actually loaded).
+   */
+  private static readonly resolveIdCache = registerProcessLocalCache(
+    new LRUCacheManager<string>({
+      maxSize: 10_000,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
+  /**
+   * Reset the resolve cache. The shared test setup clears it between tests
+   * via the process-local cache registry; tests that exercise post-deletion
+   * staleness clear it explicitly through this hook.
+   */
+  static clearResolveIdCache(): void {
+    AgentModel.resolveIdCache.clear();
+  }
+
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];
@@ -80,7 +117,7 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
   }
 
   static async activeNameExistsInOrganization(params: {
@@ -182,6 +219,21 @@ class AgentModel {
     const promptsMap = await AgentSuggestedPromptModel.getForAgents(agentIds);
     for (const agent of agents) {
       agent.suggestedPrompts = promptsMap.get(agent.id) ?? [];
+    }
+  }
+
+  /**
+   * Populate lastUsedAt on agents from the MCP tool-call log: the most recent
+   * request (any JSON-RPC method) routed through each agent's MCP gateway
+   * endpoint. Null when nothing was ever routed through the agent.
+   */
+  private static async populateLastUsedAt(agents: Agent[]): Promise<void> {
+    const agentIds = agents.map((a) => a.id);
+    if (agentIds.length === 0) return;
+
+    const lastCallMap = await McpToolCallModel.getLastCallAtForAgents(agentIds);
+    for (const agent of agents) {
+      agent.lastUsedAt = lastCallMap.get(agent.id) ?? null;
     }
   }
 
@@ -300,6 +352,23 @@ class AgentModel {
       ...agent
     }: InsertAgent & { isPersonalGateway?: boolean; slug?: string },
     authorId?: string,
+    options?: {
+      /**
+       * Skip the All-tools exclusion pre-fill. Used by agent import, which
+       * assigns the payload's tools AFTER create and then runs the pre-fill
+       * itself so those assignments are not pre-excluded.
+       */
+      skipExclusionPrefill?: boolean;
+      /**
+       * Skip auto-assigning the creation-default built-in tool set. Used by
+       * clone and import, which set their own authoritative assignment set
+       * right after create (a verbatim copy of the source agent, or the import
+       * payload's tools). Without this, the additive default assignment would
+       * force built-ins the source/payload deliberately lacked (e.g. todo_write)
+       * onto the new agent.
+       */
+      skipCreationDefaultTools?: boolean;
+    },
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
     let organizationId = agent.organizationId;
@@ -318,6 +387,13 @@ class AgentModel {
       agent.toolExposureMode = "search_and_run_only";
     }
 
+    // All-tools agents are inserted with the toggle OFF and flipped on at the
+    // end, in one transaction with the exclusion pre-fill (see below), so a
+    // committed agent can never sit in Auto mode without its pre-filled
+    // exclusions — a failure between insert and flip leaves it in Custom mode
+    // (fail-closed) instead of fail-open.
+    const enableAccessAllTools = agent.accessAllTools === true;
+
     const slug =
       agent.agentType === "mcp_gateway"
         ? agent.slug || (await AgentModel.generateUniqueSlug(agent.name))
@@ -325,6 +401,7 @@ class AgentModel {
 
     const [createdAgent] = await AgentModel.insertWithSlugRetry({
       ...agent,
+      ...(enableAccessAllTools && { accessAllTools: false }),
       organizationId,
       ...(slug && { slug }),
       ...(authorId && { authorId }),
@@ -369,17 +446,74 @@ class AgentModel {
       await ToolModel.findOrCreateDelegationTool(createdAgent.id);
     }
 
-    // Auto-assign Agent Skill tools if the org has opted in via the
-    // "Enable and create a new skill" empty-state action.
-    await ToolModel.assignSkillToolsToAgent(createdAgent.id, organizationId);
+    // Auto-assign the creation-default built-in tool set. Which groups apply
+    // is composed by the shared getCreationDefaultArchestraToolShortNames from
+    // the same flags the frontend create form reads, so the pre-selected set
+    // in the form and the server-side assignment cannot drift. Skipped by
+    // clone/import, which install their own authoritative assignment set.
+    if (!options?.skipCreationDefaultTools) {
+      const organization = await OrganizationModel.getById(organizationId);
+      const creationDefaultShortNames = new Set<ArchestraToolShortName>(
+        getCreationDefaultArchestraToolShortNames({
+          skillsEnabled: organization?.skillToolsEnabled === true,
+          sandboxEnabled: config.skillsSandbox.enabled,
+        }),
+      );
+      const composesGroup = (group: readonly ArchestraToolShortName[]) =>
+        group.every((shortName) => creationDefaultShortNames.has(shortName));
 
-    // Auto-assign the MCP App management tools when the apps feature is
-    // enabled, so new agents can build and use apps without per-agent setup.
-    await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
+      // Always-on defaults (todo_write, query_knowledge_sources).
+      await ToolModel.assignDefaultArchestraToolsToAgent(createdAgent.id);
 
-    // Auto-assign the code-execution sandbox + Projects file tools based on the
-    // runtime/Projects flags, so new agents can use them without manual setup.
-    await ToolModel.assignSandboxToolsToAgent(createdAgent.id, organizationId);
+      // Agent Skill tools — org opted in via the "Enable and create a new
+      // skill" empty-state action.
+      if (composesGroup(SKILL_ARCHESTRA_TOOL_SHORT_NAMES)) {
+        await ToolModel.assignSkillToolsToAgent(
+          createdAgent.id,
+          organizationId,
+        );
+      }
+
+      // MCP App management tools — always on, so new agents can build and use
+      // apps without per-agent setup.
+      await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
+
+      // Code-execution sandbox + persistent-files tools — gated on the sandbox
+      // runtime flag, same as the composer.
+      if (composesGroup(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES)) {
+        await ToolModel.assignSandboxToolsToAgent(
+          createdAgent.id,
+          organizationId,
+        );
+      }
+    }
+
+    // Flip All-tools mode on last, atomically with the exclusion pre-fill.
+    // Running after the auto-assignments above means the pre-fill sees the
+    // final assignment state (assigned tools are never pre-excluded), and a
+    // pre-fill failure rolls the flip back rather than committing an All-mode
+    // agent without its exclusion baseline.
+    if (enableAccessAllTools) {
+      const [flipped] = await withDbTransaction(async (tx) => {
+        if (!options?.skipExclusionPrefill) {
+          await AgentExcludedToolModel.prefillForAllToolsMode(
+            createdAgent.id,
+            tx,
+          );
+        }
+        return tx
+          .update(schema.agentsTable)
+          .set({
+            accessAllTools: true,
+            toolExposureMode: "search_and_run_only",
+          })
+          .where(eq(schema.agentsTable.id, createdAgent.id))
+          .returning();
+      });
+      if (flipped) {
+        Object.assign(createdAgent, flipped);
+      }
+    }
 
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
@@ -568,7 +702,7 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .where(and(...whereConditions))
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
 
     // Get tools, teams, and labels for all agents
     const agentIds = agents.map((a) => a.id);
@@ -656,7 +790,7 @@ class AgentModel {
       .select()
       .from(schema.agentsTable)
       .where(and(...whereConditions))
-      .orderBy(desc(schema.agentsTable.createdAt));
+      .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
 
     const agentIds = agents.map((a) => a.id);
 
@@ -1030,6 +1164,28 @@ class AgentModel {
             sql`COALESCE(${knowledgeSourcesCountSubquery.knowledgeSourcesCount}, 0)`,
           ),
         );
+    } else if (sorting?.sortBy === "lastUsedAt") {
+      const lastUsedAtSubquery = db
+        .select({
+          agentId: schema.mcpToolCallsTable.agentId,
+          lastUsedAt: max(schema.mcpToolCallsTable.createdAt).as("lastUsedAt"),
+        })
+        .from(schema.mcpToolCallsTable)
+        .groupBy(schema.mcpToolCallsTable.agentId)
+        .as("lastUsedAts");
+
+      query = query
+        .leftJoin(
+          lastUsedAtSubquery,
+          eq(schema.agentsTable.id, lastUsedAtSubquery.agentId),
+        )
+        .orderBy(
+          ...personalAgentPriorityOrderClauses,
+          // Never-used agents sort as oldest (asc first / desc last).
+          direction(
+            sql`COALESCE(${lastUsedAtSubquery.lastUsedAt}, '-infinity'::timestamp)`,
+          ),
+        );
     } else if (sorting?.sortBy === "team") {
       const teamNameSubquery = db
         .select({
@@ -1145,6 +1301,7 @@ class AgentModel {
       AgentModel.populateConnectorIds(agents),
       AgentModel.populateSuggestedPrompts(agents),
       AgentModel.populateResolvedLlm(agents),
+      AgentModel.populateLastUsedAt(agents),
     ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
@@ -1166,8 +1323,9 @@ class AgentModel {
       case "subagentsCount":
       case "knowledgeSourcesCount":
       case "team":
-        // toolsCount, subagentsCount, knowledgeSourcesCount, and team sorting use a separate query path.
-        // This fallback should never be reached for these sort types.
+      case "lastUsedAt":
+        // These sort keys use a separate query path with a dedicated subquery join.
+        // This fallback should never be reached for them.
         return direction(schema.agentsTable.createdAt); // Fallback
       default:
         // Default: newest first
@@ -1287,6 +1445,34 @@ class AgentModel {
     return result?.accessAllTools ?? false;
   }
 
+  /**
+   * Single-column agentType lookup for per-call dispatch gates, avoiding
+   * findById's multi-table join. Null when the agent is missing or deleted.
+   */
+  static async getAgentType(id: string): Promise<AgentType | null> {
+    const [result] = await db
+      .select({ agentType: schema.agentsTable.agentType })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.agentType ?? null;
+  }
+
+  /**
+   * Lock the agent row (SELECT ... FOR UPDATE) inside a transaction,
+   * serializing writers that maintain the agent's child tables (e.g. the
+   * tool-exclusions full replace) so concurrent replaces cannot interleave
+   * their delete+insert phases into a merged state.
+   */
+  static async lockRowForUpdate(id: string, tx: Transaction): Promise<void> {
+    await tx
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, id))
+      .for("update");
+  }
+
   static async findIdsByOrganizationId(
     organizationId: string,
   ): Promise<string[]> {
@@ -1308,6 +1494,28 @@ class AgentModel {
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
       .where(notDeleted(schema.agentsTable));
+
+    return agents.map((agent) => agent.id);
+  }
+
+  /**
+   * Ids of the org's non-deleted agents that go through the create-time
+   * default tool hooks — i.e. excluding built-in system agents, which are
+   * seeded via raw insert and deliberately bypass them.
+   */
+  static async findNonBuiltInIdsByOrganizationId(
+    organizationId: string,
+  ): Promise<string[]> {
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+          isNull(schema.agentsTable.builtInAgentConfig),
+        ),
+      );
 
     return agents.map((agent) => agent.id);
   }
@@ -1528,6 +1736,29 @@ class AgentModel {
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
+  }
+
+  /**
+   * Hot-path agent lookup for the MCP gateway: the raw agents row plus labels,
+   * skipping the tools join and the team/knowledge/connector/author/prompt/
+   * resolved-LLM hydration {@link findById} performs. The gateway loads the
+   * agent on every JSON-RPC request only for scalar config (agent type, tool
+   * exposure, passthrough headers, identity provider) and trace-span labels,
+   * so this must stay at two index lookups.
+   */
+  static async findGatewayAgentById(id: string): Promise<GatewayAgent | null> {
+    const [agent] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    if (!agent) {
+      return null;
+    }
+
+    const labels = await AgentLabelModel.getLabelsForAgent(id);
+    return { ...agent, labels };
   }
 
   /**
@@ -1792,6 +2023,14 @@ class AgentModel {
       suggestedPrompts,
       ...agent
     }: Partial<UpdateAgent>,
+    options?: {
+      /**
+       * Skip the off→on All-tools exclusion pre-fill. Used by clone, which
+       * copies the source's exclusion rows verbatim and must not have the
+       * additive pre-fill re-add built-ins the source had un-excluded.
+       */
+      skipExclusionPrefill?: boolean;
+    },
   ): Promise<Agent | null> {
     let updatedAgent:
       | Omit<
@@ -1846,15 +2085,41 @@ class AgentModel {
         );
     }
 
+    // Switching accessAllTools off→on pre-fills the agent's exclusion list
+    // with every unassigned built-in tool outside the exempt set. Flip and
+    // pre-fill commit in ONE transaction (serialized by the same row lock the
+    // exclusions full-replace takes) so the agent can never sit in Auto mode
+    // without its pre-fill; every off→on switch re-runs it (additively).
+    // on→on or →off updates never touch the exclusion rows.
+    const prefillsExclusions =
+      agent.accessAllTools === true &&
+      !existingAgent.accessAllTools &&
+      !options?.skipExclusionPrefill;
+
     // Only update agent table if there are fields to update
     if (Object.keys(agent).length > 0) {
-      const [row] = await db
-        .update(schema.agentsTable)
-        .set(agent)
-        .where(
-          and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
-        )
-        .returning();
+      const updateWhere = and(
+        eq(schema.agentsTable.id, id),
+        notDeleted(schema.agentsTable),
+      );
+      const [row] = prefillsExclusions
+        ? await withDbTransaction(async (tx) => {
+            await AgentModel.lockRowForUpdate(id, tx);
+            const rows = await tx
+              .update(schema.agentsTable)
+              .set(agent)
+              .where(updateWhere)
+              .returning();
+            if (rows.length > 0) {
+              await AgentExcludedToolModel.prefillForAllToolsMode(id, tx);
+            }
+            return rows;
+          })
+        : await db
+            .update(schema.agentsTable)
+            .set(agent)
+            .where(updateWhere)
+            .returning();
 
       if (!row) {
         return null;
@@ -2141,7 +2406,9 @@ class AgentModel {
       userId,
     );
 
-    await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+    // The default built-in tools (artifact_write, todo_write,
+    // query_knowledge_sources) are assigned inside AgentModel.create along
+    // with the rest of the creation-default set.
     await MemberModel.setDefaultAgent(userId, organizationId, agent.id);
 
     logger.info(
@@ -2302,17 +2569,29 @@ class AgentModel {
       };
     });
 
-    const inserted = await db
-      .insert(schema.agentsTable)
-      .values(rows)
-      .onConflictDoNothing({
-        target: [
-          schema.agentsTable.organizationId,
-          schema.agentsTable.authorId,
-        ],
-        where: sql`${schema.agentsTable.agentType} = 'mcp_gateway' AND ${schema.agentsTable.isPersonalGateway} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
-      })
-      .returning({ id: schema.agentsTable.id });
+    const inserted = await withDbTransaction(async (tx) => {
+      const insertedRows = await tx
+        .insert(schema.agentsTable)
+        .values(rows)
+        .onConflictDoNothing({
+          target: [
+            schema.agentsTable.organizationId,
+            schema.agentsTable.authorId,
+          ],
+          where: sql`${schema.agentsTable.agentType} = 'mcp_gateway' AND ${schema.agentsTable.isPersonalGateway} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
+        })
+        .returning({ id: schema.agentsTable.id });
+
+      // This raw INSERT creates the gateways directly in All-tools mode, so
+      // pre-fill their exclusion lists in the same transaction — none of them
+      // may commit in Auto mode without the pre-fill.
+      await AgentExcludedToolModel.prefillManyForAllToolsMode(
+        insertedRows.map((row) => row.id),
+        tx,
+      );
+
+      return insertedRows;
+    });
 
     if (inserted.length < missing.length) {
       logger.warn(
@@ -2512,6 +2791,11 @@ class AgentModel {
    * Checks both the id and slug columns in a single query.
    */
   static async resolveIdFromIdOrSlug(idOrSlug: string): Promise<string | null> {
+    const cached = AgentModel.resolveIdCache.get(idOrSlug);
+    if (cached !== undefined) {
+      return cached;
+    }
+
     // `agents.id` is a uuid column. Casting it to text (`id::text = $1`) so it
     // can be compared against a possibly-non-uuid slug defeats the primary-key
     // index and forces a sequential scan. Instead, only compare against `id`
@@ -2530,6 +2814,13 @@ class AgentModel {
       .where(and(matchesIdOrSlug, notDeleted(schema.agentsTable)))
       .limit(1);
 
+    // Only positive results are cached: a missing mapping must become visible
+    // as soon as the agent is created, while a cached hit for a just-deleted
+    // agent fails downstream anyway.
+    if (row) {
+      AgentModel.resolveIdCache.set(idOrSlug, row.id);
+    }
+
     return row?.id ?? null;
   }
 
@@ -2540,6 +2831,10 @@ class AgentModel {
   static async cloneAgent(params: {
     sourceId: string;
     userId: string;
+    /** Visibility for the clone; defaults to copying the source's scope. */
+    scope?: AgentScope;
+    /** Teams for a team-scoped clone; defaults to the source's teams. */
+    teams?: string[];
   }): Promise<Agent> {
     const { sourceId, userId } = params;
 
@@ -2548,9 +2843,12 @@ class AgentModel {
       throw new Error("Source agent not found");
     }
 
+    const cloneScope = params.scope ?? sourceAgent.scope;
     // Omit teams if scope is not 'team' — scope takes precedence
     const cloneTeams =
-      sourceAgent.scope === "team" ? sourceAgent.teams.map((t) => t.id) : [];
+      cloneScope === "team"
+        ? (params.teams ?? sourceAgent.teams.map((t) => t.id))
+        : [];
 
     let created: Agent | null = null;
     try {
@@ -2558,7 +2856,7 @@ class AgentModel {
         {
           organizationId: sourceAgent.organizationId,
           agentType: sourceAgent.agentType,
-          scope: sourceAgent.scope,
+          scope: cloneScope,
           teams: cloneTeams,
           labels: sourceAgent.labels,
           knowledgeBaseIds: sourceAgent.knowledgeBaseIds ?? [],
@@ -2569,7 +2867,10 @@ class AgentModel {
           description: sourceAgent.description,
           icon: sourceAgent.icon,
           toolExposureMode: sourceAgent.toolExposureMode,
-          accessAllTools: sourceAgent.accessAllTools,
+          // Clone in Custom mode first and flip below, so a crash before the
+          // exclusions are copied can only leave a fail-closed (assigned-tools-
+          // only) clone, never one wide open in Auto mode with no exclusions.
+          accessAllTools: false,
           considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
@@ -2579,13 +2880,35 @@ class AgentModel {
           identityProviderId: null,
           passthroughHeaders: null,
         },
-        sourceAgent.scope === "personal" ? userId : undefined,
+        cloneScope === "personal" ? userId : undefined,
+        // Copy the source's assignments verbatim below; don't let create's
+        // default assignment force built-ins the source lacked onto the clone.
+        { skipCreationDefaultTools: true },
       );
 
       await AgentToolModel.cloneAssignments({
         fromAgentId: sourceAgent.id,
         toAgentId: created.id,
       });
+
+      // Copy Auto-tool-mode exclusions. Clones are same-org, so tool ids stay
+      // valid; like assignments, exclusions travel with the agent.
+      const excludedToolIds = await AgentExcludedToolModel.findToolIdsByAgent(
+        sourceAgent.id,
+      );
+      await AgentExcludedToolModel.replaceForAgent(created.id, excludedToolIds);
+
+      // Now that the verbatim exclusions exist, flip an All-tools source's
+      // clone on. Skip the pre-fill: the copy above is the authoritative set,
+      // and an additive pre-fill would re-add built-ins the source had
+      // un-excluded.
+      if (sourceAgent.accessAllTools) {
+        await AgentModel.update(
+          created.id,
+          { accessAllTools: true },
+          { skipExclusionPrefill: true },
+        );
+      }
 
       const clonedAgent = await AgentModel.findById(created.id, userId, true);
       if (!clonedAgent) {

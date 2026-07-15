@@ -69,6 +69,7 @@ class PostHogErrorTrackingService {
     private readonly options: {
       analyticsConfig?: AnalyticsConfig;
       appVersion?: string;
+      environment?: string;
       createClient?: (params: {
         key: string;
         host: string;
@@ -135,6 +136,7 @@ class PostHogErrorTrackingService {
       this.client.captureException(error, resolvedDistinctId, {
         source: "backend",
         app_version: this.getAppVersion(),
+        environment: this.getEnvironment(),
         ...(this.instanceId && {
           instance_id: this.instanceId,
           $groups: { instance: this.instanceId },
@@ -176,6 +178,10 @@ class PostHogErrorTrackingService {
 
   private getAppVersion(): string {
     return this.options.appVersion ?? config.api.version;
+  }
+
+  private getEnvironment(): string {
+    return this.options.environment ?? (config.environment || "development");
   }
 
   private createClient(params: {

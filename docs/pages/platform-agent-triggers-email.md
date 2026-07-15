@@ -1,10 +1,12 @@
 ---
 title: Incoming Email
 category: Agents
-order: 6
+order: 8
 description: Invoke agents by sending emails to auto-generated addresses
-lastUpdated: 2026-03-27
+lastUpdated: 2026-07-03
 ---
+
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Incoming Email lets users invoke agents by sending mail to agent-specific aliases. Archestra watches a shared mailbox, extracts the target agent from the alias, and turns the email body into the agent's first message.
 
@@ -101,7 +103,7 @@ When security validation fails, the email is rejected with an appropriate error 
 
 ## Attachments
 
-Emails sent to agents can include file attachments (both inline images and attached files). Attachments are automatically extracted and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user.
+Emails sent to agents can include file attachments (both inline images and attached files). Attachments are automatically extracted and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a [code sandbox](./platform-code-sandbox), other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user.
 
 **Limits:**
 - Max 20 attachments per email

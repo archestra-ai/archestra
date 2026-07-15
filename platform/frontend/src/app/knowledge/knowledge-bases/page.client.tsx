@@ -8,7 +8,9 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Database,
   Link2,
+  MessageSquare,
   Pencil,
   Plus,
   Trash2,
@@ -18,11 +20,11 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
+import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
   type TableRowAction,
@@ -42,11 +44,13 @@ import {
   useKnowledgeBasesPaginated,
 } from "@/lib/knowledge/knowledge-base.query";
 import { cn, formatDate } from "@/lib/utils";
+import { formatCronSchedule } from "@/lib/utils/format-cron";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
 import { CreateKnowledgeBaseDialog } from "./_parts/create-knowledge-base-dialog";
 import { EditConnectorDialog } from "./_parts/edit-connector-dialog";
 import { EditKnowledgeBaseDialog } from "./_parts/edit-knowledge-base-dialog";
+import { useChatWithKnowledgeBase } from "./_parts/use-chat-with-knowledge-base";
 
 type KnowledgeBaseItem =
   archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
@@ -93,6 +97,7 @@ function KnowledgeBasesList() {
     null,
   );
   const [addConnectorKbId, setAddConnectorKbId] = useState<string | null>(null);
+  const { startChat, isCreating: isChatCreating } = useChatWithKnowledgeBase();
 
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
@@ -117,6 +122,7 @@ function KnowledgeBasesList() {
             e.stopPropagation();
             row.toggleExpanded();
           }}
+          aria-label="Toggle row"
         >
           {row.getIsExpanded() ? (
             <ChevronDown className="h-4 w-4" />
@@ -159,7 +165,17 @@ function KnowledgeBasesList() {
       header: "Actions",
       cell: ({ row }) => {
         const kb = row.original;
+        const hasDocs = kb.totalDocsIndexed > 0;
         const actions: TableRowAction[] = [
+          {
+            icon: <MessageSquare className="h-4 w-4" />,
+            label: "Talk to Knowledge Base",
+            onClick: () => startChat(kb),
+            disabled: isChatCreating || !hasDocs,
+            disabledTooltip: hasDocs
+              ? "Starting chat..."
+              : "Add a connector and index documents to chat with this knowledge base",
+          },
           {
             icon: <Plus className="h-4 w-4" />,
             label: "Add connector",
@@ -207,7 +223,6 @@ function KnowledgeBasesList() {
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !knowledgeBases}
     >
-      <SmallTeamTierBanner featureName="Knowledge Base with access control" />
       <div>
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">
@@ -301,44 +316,75 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
 
   const columns: ColumnDef<ConnectorItem>[] = [
     {
+      id: "icon",
+      size: 40,
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <ConnectorTypeIcon
+            type={row.original.connectorType}
+            className="h-5 w-5"
+          />
+        </div>
+      ),
+    },
+    {
       id: "name",
+      accessorKey: "name",
       header: "Connector",
       cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
-            <ConnectorTypeIcon
-              type={row.original.connectorType}
-              className="h-5 w-5"
-            />
-          </div>
-          <div className="min-w-0">
-            <div className="font-medium truncate">{row.original.name}</div>
+        <div className="min-w-0">
+          <div className="font-medium truncate">{row.original.name}</div>
+          {row.original.description && (
             <div className="text-xs text-muted-foreground truncate">
-              {row.original.description || row.original.connectorType}
+              {row.original.description}
             </div>
-          </div>
+          )}
         </div>
       ),
     },
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) =>
-        row.original.lastSyncAt ? (
-          <div className="flex items-center gap-2">
-            <ConnectorStatusBadge status={row.original.lastSyncStatus} />
-            <span
-              className="text-xs text-muted-foreground"
-              title={formatDate({ date: row.original.lastSyncAt })}
-            >
-              {formatDistanceToNow(new Date(row.original.lastSyncAt), {
-                addSuffix: true,
-              })}
-            </span>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">Never synced</span>
-        ),
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          {row.original.lastSyncAt ? (
+            <>
+              <ConnectorStatusBadge status={row.original.lastSyncStatus} />
+              <span
+                className="text-xs text-muted-foreground"
+                title={formatDate({ date: row.original.lastSyncAt })}
+              >
+                {formatDistanceToNow(new Date(row.original.lastSyncAt), {
+                  addSuffix: true,
+                })}
+              </span>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">Never synced</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "accessibleTo",
+      header: "Accessible to",
+      cell: ({ row }) => (
+        <ConnectorAccessBadge
+          visibility={row.original.visibility}
+          teamIds={row.original.teamIds}
+        />
+      ),
+    },
+    {
+      id: "schedule",
+      header: "Schedule",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Database className="h-3.5 w-3.5" />
+          <span>{formatCronSchedule(row.original.schedule)}</span>
+        </div>
+      ),
     },
     {
       id: "actions",
@@ -358,7 +404,6 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
               onClick: () => setRemovingConnectorId(row.original.id),
             },
           ]}
-          size="sm"
         />
       ),
     },
@@ -504,6 +549,7 @@ function AddConnectorDialog({
                   setStep("choose");
                   setSelectedIds(new Set());
                 }}
+                aria-label="Go back"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>

@@ -14,6 +14,7 @@ import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
 import GroqChatCompletionInteraction from "./llmProviders/groq";
+import Microsoft365CopilotChatCompletionInteraction from "./llmProviders/microsoft-365-copilot";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
@@ -51,6 +52,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
   "github-copilot:chatCompletions": (i) =>
     new GithubCopilotChatCompletionInteraction(i),
+  "microsoft-365-copilot:chatCompletions": (i) =>
+    new Microsoft365CopilotChatCompletionInteraction(i),
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
   "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
@@ -205,6 +208,11 @@ export class DynamicInteraction implements InteractionUtils {
       return (response as { error: string }).error;
     }
     return null;
+  }
+
+  /** True when the interaction is a persisted failure (`{ error }` response). */
+  hasErrorResponse(): boolean {
+    return this.getErrorResponseText() !== null;
   }
 
   isLastMessageToolCall(): boolean {

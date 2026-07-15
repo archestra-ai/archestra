@@ -22,15 +22,18 @@ ARG="${1:-}"
 # Newest by mtime, restricted to timestamp-named dirs so `repro_*` reproduction
 # dirs (which lexically sort after `2026…` and often have a null `outcome`) never win.
 RUN_DIR="$(realpath "$( [ -n "$ARG" ] && echo "$ARG" \
-  || ls -1dt "$ROOT"/archestra-bench/experiments/[0-9]*/ | head -1 )")"
+  || ls -1dt "$ROOT"/ai-labs/experiments/[0-9]*/ | head -1 )")"
 TS="$(date +%Y%m%d-%H%M%S)"
 TRIAGE_DIR="$RUN_DIR/_triage_claude"
 PREP="$RUN_DIR/_prep_claude"
+# A fresh prepare starts a fresh analysis: clear old triage judgments, or a rerun would let
+# render-triage.mjs silently consume stale <NN>.json files that happen to match the new order.tsv.
+rm -rf "$TRIAGE_DIR"
 mkdir -p "$TRIAGE_DIR" "$PREP"
 
 # --- Rust prepare (deterministic render + metrics + manifest), fail-fast ---
 MANIFEST="$PREP/manifest.json"
-if ! cargo run -q --manifest-path "$ROOT/archestra-bench/cli/Cargo.toml" -- \
+if ! cargo run -q --manifest-path "$ROOT/ai-labs/cli/Cargo.toml" -- \
        prepare --run-dir "$RUN_DIR" >"$MANIFEST" 2>"$PREP/prepare.err"; then
   echo "archestra-bench prepare failed:" >&2
   cat "$PREP/prepare.err" >&2
@@ -44,7 +47,8 @@ jq -r '.rollouts | to_entries[] | "\(.key)\t\(.value.id)\t\(.value.outcome)"' \
 
 # --- verbatim MAP prompt block from reference/prompts.md (the fenced block under "## MAP") ---
 MAP_TEMPLATE="$(awk '/^## MAP/{f=1} f&&/^```$/{c++; if(c==1)next; if(c==2)exit} f&&c==1{print}' "$PROMPTS")"
-if ! grep -qF '{ROLLOUT_ID}' <<<"$MAP_TEMPLATE" || ! grep -qF '{TRAJECTORY_MD_PATH}' <<<"$MAP_TEMPLATE"; then
+if ! grep -qF '{ROLLOUT_ID}' <<<"$MAP_TEMPLATE" || ! grep -qF '{OUTCOME_SUMMARY}' <<<"$MAP_TEMPLATE" \
+   || ! grep -qF '{TRAJECTORY_MD_PATH}' <<<"$MAP_TEMPLATE"; then
   echo "failed to extract the MAP prompt block from $PROMPTS (fence layout changed?)" >&2
   exit 1
 fi

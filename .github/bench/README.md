@@ -16,7 +16,8 @@ Files:
 - `Dockerfile` — bench runner image: the `archestra-bench` binary + `/bench` fixtures + reporting
   scripts + `uv` on top of the resolved `PLATFORM_IMAGE`.
 - `runner-entrypoint.sh` (`run-benchmark`) — writes `/app/.env`, runs the bench, then exports
-  TensorBoard, uploads to GCS, and posts Slack (`scripts/export_tensorboard.py`, `scripts/publish_run.py`).
+  TensorBoard, uploads to GCS, and posts Slack. The reporting scripts live in `ai-labs/scripts/` and
+  are copied into the image as `/bench/scripts/`.
 - `job.yaml` — the k8s Job (bench container + `pgvector` sidecar). `${...}` filled by `envsubst` in CI.
 
 ## One-time prerequisites (not automated)
@@ -50,11 +51,16 @@ gcloud storage buckets add-iam-policy-binding gs://archestra-bench-history \
 
 ### 2. GitHub secrets
 
-Both are synced into the `archestra-bench-secrets` k8s secret each run, where the pod reads them:
+All three are synced into the `archestra-bench-secrets` k8s secret each run, where the pod reads them:
 
-- `ZAI_API_KEY` — the glm lane key (`api_key_env = ZAI_API_KEY` in `archestra-bench/lanes.toml`).
+- `ZAI_API_KEY` — the glm lane key (`api_key_env = ZAI_API_KEY` in `ai-labs/lanes.toml`).
+- `OPENROUTER_API_KEY` — the key for every `provider = "openrouter"` lane in
+  `ai-labs/lanes.toml` (their default `api_key_env`).
 - `SLACK_BENCH_WEBHOOK_URL` — Slack incoming webhook for the summary message. If unset, the pod skips
   the Slack post.
+
+These cover every lane in `job.yaml`'s `BENCH_LANES` set. The `kimi` lane is not in that set and its
+`KIMI_API_KEY` is not synced — add both if you ever put it on the CI roster.
 
 The WIF auth and GKE creds reuse the existing
 `DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME` /

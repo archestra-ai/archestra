@@ -15,11 +15,13 @@ import {
   AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -36,14 +38,15 @@ import {
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
-  useProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -110,6 +113,7 @@ function McpGateways({
     | "toolsCount"
     | "subagentsCount"
     | "team"
+    | "lastUsedAt"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
     | "asc"
@@ -199,11 +203,11 @@ function McpGateways({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(
     searchParams.get("create") === "true",
   );
-  const editGatewayIdFromUrl = searchParams.get("edit");
+  const [postCreateGateway, setPostCreateGateway] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const openToolsFromUrl = searchParams.get("openTools") === "true";
-  const { data: editGatewayFromUrl } = useProfile(
-    editGatewayIdFromUrl ?? undefined,
-  );
   const navigateToConnection = useCallback(
     (agentId: string) => {
       router.push(
@@ -212,23 +216,11 @@ function McpGateways({
     },
     [router],
   );
-  const [editingGateway, setEditingGateway] = useState<GatewayData | null>(
+  const editDialog = useAgentDialogUrlParam("edit");
+  const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
-  const [autoOpenedEditGatewayId, setAutoOpenedEditGatewayId] = useState<
-    string | null
-  >(null);
-  useEffect(() => {
-    if (
-      editGatewayIdFromUrl &&
-      editGatewayFromUrl &&
-      editGatewayFromUrl.id !== autoOpenedEditGatewayId
-    ) {
-      setEditingGateway(editGatewayFromUrl as unknown as GatewayData);
-      setAutoOpenedEditGatewayId(editGatewayFromUrl.id);
-    }
-  }, [editGatewayIdFromUrl, editGatewayFromUrl, autoOpenedEditGatewayId]);
-  const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
+  const [cloningGateway, setCloningGateway] = useState<GatewayData | null>(
     null,
   );
   const restoreGateway = useRestoreProfile();
@@ -369,6 +361,33 @@ function McpGateways({
         return <div>{subagentsCount}</div>;
       },
     },
+    {
+      id: "lastUsedAt",
+      accessorKey: "lastUsedAt",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Last used
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const lastUsedAt = row.original.lastUsedAt;
+        return (
+          <span
+            className="text-sm text-muted-foreground"
+            title={
+              lastUsedAt ? new Date(lastUsedAt).toLocaleString() : undefined
+            }
+          >
+            {formatRelativeTimeFromNow(lastUsedAt ?? null)}
+          </span>
+        );
+      },
+    },
     ...(isAdmin
       ? [
           {
@@ -411,9 +430,7 @@ function McpGateways({
             agent={agent}
             canModify={canModify}
             onConnect={(a) => navigateToConnection(a.id)}
-            onEdit={(agentData) => {
-              setEditingGateway(agentData);
-            }}
+            onEdit={editDialog.open}
             onDelete={setDeletingGatewayId}
             onRestore={(agentId) => {
               restoreGateway.mutate(agentId, {
@@ -423,6 +440,7 @@ function McpGateways({
                 },
               });
             }}
+            onClone={setCloningGateway}
           />
         );
       },
@@ -575,20 +593,34 @@ function McpGateways({
               onOpenChange={setIsCreateDialogOpen}
               agentType="mcp_gateway"
               defaultIconType="mcp_gateway"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                setPostCreateGateway(created);
+              }}
+            />
+
+            <PostCreateConnectDialog
+              created={postCreateGateway}
+              agentType="mcp_gateway"
+              onOpenChange={(open) => {
+                if (!open) setPostCreateGateway(null);
               }}
             />
 
             <AgentDialog
-              open={!!editingGateway}
-              onOpenChange={(open) => !open && setEditingGateway(null)}
-              agent={editingGateway}
-              agentType={editingGateway?.agentType || "mcp_gateway"}
+              open={!!editDialog.agent}
+              onOpenChange={(open) => !open && editDialog.close()}
+              agent={editDialog.agent}
+              agentType={editDialog.agent?.agentType || "mcp_gateway"}
               defaultIconType="mcp_gateway"
               openToolsCombobox={
                 openToolsFromUrl &&
-                editingGateway?.id === autoOpenedEditGatewayId
+                editDialog.openedFromUrl &&
+                // "All" gateways hide the tool editor (there is nothing to
+                // pick), so its search combobox would open inside a
+                // display:none subtree and render unanchored in the corner.
+                // Only auto-open the picker for Custom gateways.
+                !editDialog.agent?.accessAllTools
               }
             />
 
@@ -599,6 +631,17 @@ function McpGateways({
                 onOpenChange={(open) => !open && setDeletingGatewayId(null)}
               />
             )}
+
+            <CloneAgentDialog
+              agent={cloningGateway}
+              onOpenChange={(open) => {
+                if (!open) setCloningGateway(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the clone so user can rename immediately
+                editDialog.open(cloned as GatewayData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

@@ -1,11 +1,13 @@
 import {
   AnthropicErrorTypes,
+  ArchestraInternalErrorCode,
   BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
   GeminiErrorCodes,
   GeminiErrorReasons,
   OpenAIErrorTypes,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -18,8 +20,10 @@ vi.mock("@sentry/node", () => ({
 }));
 
 import { NoSuchToolError, UnsupportedFunctionalityError } from "ai";
+import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
+  buildAbortiveTurnError,
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -246,10 +250,12 @@ describe("mapProviderError - OpenAI", () => {
     });
 
     it("marks usage-limit budget overages from the proxy", () => {
+      // The proxy returns Archestra budget blocks as 402 with type
+      // usage_limit_exceeded (deliberately NOT a 429/rate-limit shape).
       const error = createOpenAIError(
-        429,
-        OpenAIErrorTypes.RATE_LIMIT,
-        "I cannot process this request because the organization-level token cost limit has been exceeded.",
+        402,
+        "usage_limit_exceeded",
+        "This request was blocked by Archestra (not the AI provider): the organization-level cost limit has been reached.",
         "token_cost_limit_exceeded",
         undefined,
         {
@@ -259,11 +265,15 @@ describe("mapProviderError - OpenAI", () => {
       );
       const result = mapProviderError(error, "openai");
 
-      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      // An Archestra budget block gets the dedicated, non-retryable
+      // UsageLimitExceeded code so the UI attributes it to Archestra and
+      // drops the retry affordance.
+      expect(result.code).toBe(ChatErrorCode.UsageLimitExceeded);
+      expect(result.isRetryable).toBe(false);
       expect(result.usageLimitExceeded).toBe(true);
       expect(result.usageLimitEntityType).toBe("organization");
       expect(result.message).toBe(
-        "The organization usage limit budget has been exceeded.",
+        "Archestra blocked this request because the organization usage limit has been reached.",
       );
     });
   });
@@ -366,6 +376,22 @@ describe("mapProviderError - Anthropic", () => {
       expect(result.code).toBe(ChatErrorCode.InvalidRequest);
       expect(result.isRetryable).toBe(false);
       expect(result.originalError?.provider).toBe("anthropic");
+    });
+
+    it("reclassifies a balance-too-low envelope (internal_code) to a non-retryable ProviderInsufficientBalance card", () => {
+      const error = createAnthropicError(
+        400,
+        "api_validation_error",
+        "Provider API key remaining usage balance is too low. Please contact your administrator or try again later.",
+        ArchestraInternalErrorCode.ProviderInsufficientBalance,
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.ProviderInsufficientBalance);
+      expect(result.isRetryable).toBe(false);
+      expect(result.message).toBe(
+        ChatErrorMessages[ChatErrorCode.ProviderInsufficientBalance],
+      );
     });
   });
 
@@ -1593,6 +1619,63 @@ describe("mapProviderError - Fallback behavior", () => {
 
     expect(result.originalError?.message).toBe("Simple string error");
   });
+
+  it("should map OpenRouter upstream provider failures to retryable server errors", () => {
+    // Faithful to the real shape: a mid-stream SSE error part reaches the
+    // mapper as a bare `{ message, type }` object with no status code, so the
+    // per-provider mapper would land on the dead-end Unknown card.
+    const error = {
+      message: "Upstream error from SomeInferenceHost: undefined",
+      type: "api_error",
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.originalError?.message).toBe(
+      "Upstream error from SomeInferenceHost: undefined",
+    );
+    // A transient provider-side failure is expected noise, not a bug.
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("should map a mid-stream upstream empty response to a retryable empty-response card", () => {
+    // The proxy surfaces its empty-completion detection mid-stream as a bare
+    // SSE error part carrying the normalized internal code.
+    const error = {
+      message:
+        "OpenRouter returned an empty response without content or tool calls",
+      type: "api_error",
+      internal_code: ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.EmptyResponse]);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("should map a pre-stream upstream empty response 503 to a retryable empty-response card", () => {
+    // The other delivery shape: detection before headers commit arrives as an
+    // HTTP 503 whose body carries the normalized internal code.
+    const error = {
+      statusCode: 503,
+      responseBody: JSON.stringify({
+        error: {
+          message:
+            "OpenRouter returned an empty response without content or tool calls",
+          type: "unknown_api_error",
+          internal_code: ArchestraInternalErrorCode.UpstreamEmptyResponse,
+        },
+      }),
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
 });
 
 // =============================================================================
@@ -1600,7 +1683,44 @@ describe("mapProviderError - Fallback behavior", () => {
 // =============================================================================
 
 describe("mapProviderError - Sentry raw error capture", () => {
-  it("captures a Sentry exception event for rawErrorJson provider errors", () => {
+  it("captures errors that fail classification (Unknown)", () => {
+    const error = {
+      name: "AI_APICallError",
+      responseBody: JSON.stringify({
+        error: { message: "novel provider failure shape" },
+      }),
+    };
+
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.Unknown);
+    expect(mockSentryCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "RawProviderError",
+        message: "novel provider failure shape",
+      }),
+      expect.objectContaining({
+        level: "error",
+        fingerprint: [
+          "chat-provider-error-raw-error-json",
+          "openai",
+          "unknown",
+          ChatErrorCode.Unknown,
+        ],
+        tags: expect.objectContaining({
+          provider: "openai",
+          mapped_code: ChatErrorCode.Unknown,
+          raw_error_json: "true",
+        }),
+        extra: expect.objectContaining({
+          errorMessage: "novel provider failure shape",
+          rawErrorJson: expect.stringContaining("AI_APICallError"),
+        }),
+      }),
+    );
+  });
+
+  it("does not capture transient retryable provider-side errors", () => {
     const error = {
       name: "AI_APICallError",
       statusCode: 500,
@@ -1613,33 +1733,43 @@ describe("mapProviderError - Sentry raw error capture", () => {
       isRetryable: true,
     };
 
-    mapProviderError(error, "openai");
+    const result = mapProviderError(error, "openai");
 
-    expect(mockSentryCaptureException).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "RawProviderError",
-        message: "Provider failed",
-      }),
-      expect.objectContaining({
-        level: "error",
-        fingerprint: [
-          "chat-provider-error-raw-error-json",
-          "openai",
-          "500",
-          ChatErrorCode.ServerError,
-        ],
-        tags: expect.objectContaining({
-          provider: "openai",
-          mapped_code: ChatErrorCode.ServerError,
-          raw_error_json: "true",
-          status_code: "500",
-        }),
-        extra: expect.objectContaining({
-          errorMessage: "Provider failed",
-          rawErrorJson: expect.stringContaining("AI_APICallError"),
-        }),
-      }),
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("does not capture approval-gated tool blocks in autonomous sessions", () => {
+    // Thrown by the chat tool builder when a "Require approval" policy fires
+    // in a session with no human to approve (A2A, Slack, MS Teams,
+    // sub-agents). Policy enforcement working as designed, not a provider
+    // failure — it must stay out of error tracking.
+    const error = new Error(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
     );
+
+    mapProviderError(error, "bedrock");
+
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("does not capture client-class 4xx provider rejections", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          type: "api_validation_error",
+          message: "Provider returned error",
+        },
+      }),
+      isRetryable: false,
+    };
+
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 });
 
@@ -1803,9 +1933,10 @@ describe("ProviderError", () => {
   it("preserves usage-limit metadata in the frontend error payload", () => {
     expect(
       sanitizeChatErrorForFrontend({
-        code: ChatErrorCode.RateLimit,
-        message: "The organization usage limit budget has been exceeded.",
-        isRetryable: true,
+        code: ChatErrorCode.UsageLimitExceeded,
+        message:
+          "Archestra blocked this request because the organization usage limit has been reached.",
+        isRetryable: false,
         usageLimitExceeded: true,
         usageLimitEntityType: "organization",
         originalError: {
@@ -1815,9 +1946,10 @@ describe("ProviderError", () => {
         },
       }),
     ).toEqual({
-      code: ChatErrorCode.RateLimit,
-      message: "The organization usage limit budget has been exceeded.",
-      isRetryable: true,
+      code: ChatErrorCode.UsageLimitExceeded,
+      message:
+        "Archestra blocked this request because the organization usage limit has been reached.",
+      isRetryable: false,
       usageLimitExceeded: true,
       usageLimitEntityType: "organization",
     });
@@ -1985,5 +2117,141 @@ describe("getUnavailableToolErrorDetails", () => {
     expect(getUnavailableToolErrorDetails("some other failure")).toBeNull();
     expect(getUnavailableToolErrorDetails(undefined)).toBeNull();
     expect(getUnavailableToolErrorDetails({ code: -32601 })).toBeNull();
+  });
+
+  it("steers to search_tools/run_tool when the tool list carries the dispatch pair", () => {
+    // search_and_run_only exposure: the live tool list holds only Archestra
+    // built-ins, so "copy an exact name from the list" would be a dead end —
+    // the message must state the run_tool calling convention instead.
+    const details = getUnavailableToolErrorDetails(
+      new NoSuchToolError({
+        toolName: "acme_hr__list_notes",
+        availableTools: [
+          "archestra__search_tools",
+          "archestra__run_tool",
+          "archestra__run_command",
+        ],
+      }),
+    );
+
+    expect(details).not.toBeNull();
+    expect(details?.message).toContain(
+      "cannot be called directly in this chat",
+    );
+    expect(details?.message).toContain("archestra__search_tools");
+    expect(details?.message).toContain(
+      "archestra__run_tool with tool_name set to that exact name",
+    );
+    expect(details?.message).not.toContain("Copy an exact name from the list");
+  });
+
+  it("steers to the dispatch pair for the stringified duplicate too", () => {
+    const details = getUnavailableToolErrorDetails(
+      "Model tried to call unavailable tool 'ghost_tool'. Available tools: archestra__search_tools, archestra__run_tool.",
+    );
+
+    expect(details?.message).toContain("archestra__run_tool");
+    expect(details?.message).not.toContain("Copy an exact name from the list");
+  });
+
+  it("keeps the copy-a-name steer when the dispatch pair is absent or partial", () => {
+    const withoutDispatch = getUnavailableToolErrorDetails(
+      new NoSuchToolError({
+        toolName: "ghost_tool",
+        availableTools: ["real_tool", "other_tool"],
+      }),
+    );
+    expect(withoutDispatch?.message).toContain(
+      "Copy an exact name from the list",
+    );
+
+    // run_tool alone is not a discovery surface; the pair is required
+    const partialDispatch = getUnavailableToolErrorDetails(
+      new NoSuchToolError({
+        toolName: "ghost_tool",
+        availableTools: ["archestra__run_tool", "real_tool"],
+      }),
+    );
+    expect(partialDispatch?.message).toContain(
+      "Copy an exact name from the list",
+    );
+  });
+});
+
+describe("buildAbortiveTurnError", () => {
+  it("maps a `length` truncation to a non-retryable ToolCallOutputTruncated", () => {
+    const result = buildAbortiveTurnError("anthropic", "length");
+    expect(result.code).toBe(ChatErrorCode.ToolCallOutputTruncated);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("keeps a non-length abortive turn as a retryable IncompleteToolCall", () => {
+    for (const finishReason of ["tool-calls", "unknown", null, undefined]) {
+      const result = buildAbortiveTurnError("anthropic", finishReason);
+      expect(result.code).toBe(ChatErrorCode.IncompleteToolCall);
+      expect(result.isRetryable).toBe(true);
+    }
+  });
+});
+
+// =============================================================================
+// Microsoft 365 Copilot — tools rejection (ToolsUnsupported)
+// =============================================================================
+
+describe("mapProviderError - Microsoft 365 Copilot tools rejection", () => {
+  it("maps a mid-stream upstream timeout to a retryable network error", () => {
+    // Once streaming headers are committed the HTTP 504 cannot be changed;
+    // this is the bare SSE error shape delivered by the AI SDK instead.
+    const error = {
+      message:
+        "Microsoft 365 Copilot upstream idle timeout after 120 seconds without new response text.",
+      type: "api_error",
+      internal_code: ArchestraInternalErrorCode.UpstreamTimeout,
+    };
+    const result = mapProviderError(error, "microsoft-365-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.originalError?.message).toContain("upstream idle timeout");
+  });
+
+  it("maps the proxy adapter's tools rejection to ToolsUnsupported", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          message: MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE,
+          type: "invalid_request_error",
+        },
+      }),
+      isRetryable: false,
+    };
+    const result = mapProviderError(error, "microsoft-365-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.ToolsUnsupported);
+    expect(result.isRetryable).toBe(false);
+    // The headline must be the actionable copy, not the generic
+    // invalid-request one whose details only admins can expand.
+    expect(result.message).toBe(
+      ChatErrorMessages[ChatErrorCode.ToolsUnsupported],
+    );
+  });
+
+  it("keeps other microsoft-365-copilot 400s on the generic invalid-request code", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          message: "additionalContext exceeds the allowed size",
+          type: "invalid_request_error",
+        },
+      }),
+      isRetryable: false,
+    };
+    const result = mapProviderError(error, "microsoft-365-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.InvalidRequest);
   });
 });

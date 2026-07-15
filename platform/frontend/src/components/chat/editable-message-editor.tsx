@@ -155,6 +155,7 @@ export function EditableMessageEditor({
             className={textareaClassName}
             disabled={isSaving}
             placeholder={placeholder}
+            aria-label={placeholder || "Edit message"}
           />
           <div className="flex gap-2 py-3 justify-between items-start">
             {banner}

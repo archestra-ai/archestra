@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useTeams } from "@/lib/teams/team.query";
 import { ConnectorDocumentsTable } from "./connector-documents-table";
 
 const mockSetPagination = vi.fn();
@@ -32,6 +33,7 @@ const mockLongContentDocument = {
   ...mockDocument,
   id: "doc-2",
   title: "Long Doc",
+  acl: ["group:jira_engineers", "user_email:alice@example.com"],
 };
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
@@ -43,6 +45,12 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
     setPagination: mockSetPagination,
     updateQueryParams: mockUpdateQueryParams,
   }),
+}));
+
+vi.mock("@/lib/teams/team.query");
+
+vi.mock("@/lib/knowledge/connector.query", () => ({
+  useConnectorUserGroups: () => ({ data: null, isPending: false }),
 }));
 
 vi.mock("@/lib/knowledge/kb-document.query", () => ({
@@ -88,6 +96,9 @@ describe("ConnectorDocumentsTable", () => {
       new URLSearchParams("") as unknown as ReturnType<typeof useSearchParams>,
     );
     vi.mocked(usePathname).mockReturnValue("/knowledge/connectors/connector-1");
+    vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
+      typeof useTeams
+    >);
     mockDeleteMutateAsync.mockResolvedValue({ success: true });
   });
 
@@ -96,6 +107,14 @@ describe("ConnectorDocumentsTable", () => {
     expect(screen.getByText("Quarterly Plan")).toBeInTheDocument();
     expect(screen.queryByText("jira")).not.toBeInTheDocument();
     expect(screen.getByText("Long Doc")).toBeInTheDocument();
+  });
+
+  it("renders the Access column from each document's own ACL", () => {
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
+    // Only the wiring — that the column reads the row's acl. How each entry
+    // kind is worded is AclBadges' contract, pinned in acl-badges.test.tsx.
+    expect(screen.getByText("Everyone in org")).toBeInTheDocument();
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
   });
 
   it("opens preview dialog from row action", async () => {

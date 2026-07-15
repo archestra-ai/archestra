@@ -4,12 +4,12 @@ category: Administration
 subcategory: Identity Providers
 description: "Per-user identity for downstream MCP tool calls — OBO, ID-JAG, Cross-App Access, and RFC 8693 token exchange"
 order: 5
-lastUpdated: 2026-06-09
+lastUpdated: 2026-07-03
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 Provider-agnostic concept page covering downstream-credential strategies:
 - Microsoft Entra OBO
 - Okta-managed token exchange
@@ -25,11 +25,11 @@ SSO gets the user signed in. **Enterprise-Managed Auth** is what happens after �
 
 > **Enterprise feature** — see the [Pricing Model](/docs/platform-pricing-model).
 
-## Why this matters
+## How Token Exchange Works
 
-When Alice asks an agent to *"summarize my unread emails"*, the agent has to call Microsoft Graph somewhere. The naive way is to give the MCP server a single shared secret. Every user's request hits Graph as the same robot account — audit logs show "the Archestra service account" read the email, not Alice. If Alice doesn't have access to a particular mailbox, the tool reads it anyway because it's running as the robot.
+A shared service-account secret makes every user's downstream call arrive as the same account. Audit logs cannot attribute the call to the user, and the downstream system cannot apply that user's own permissions.
 
-Enterprise-Managed Auth solves this. When Alice signs in, Archestra holds her identity-provider token. The moment a tool needs to call a downstream API, Archestra hands that token back to the IdP and asks for a *new* one — same user, scoped narrowly to the API the tool needs. The downstream call carries Alice's real identity. If she's not allowed, it fails. If she is, the audit trail shows it was her.
+Enterprise-Managed Auth exchanges the user's identity-provider token at call time. Archestra hands the user's token back to the IdP and requests a new token scoped to the API the tool needs. The downstream call carries the user's identity, so the downstream system enforces that user's permissions and the audit trail records the user.
 
 ```mermaid
 sequenceDiagram

@@ -47,7 +47,9 @@ describe("config routes", () => {
     expect(response.json()).toEqual({
       disableBasicAuth: expect.any(Boolean),
       disableInvitations: expect.any(Boolean),
+      devAutoLoginEnabled: expect.any(Boolean),
       maintenanceMode: null,
+      siteNotificationMessage: null,
       enterpriseCoreActive: expect.any(Boolean),
       analytics: {
         enabled: expect.any(Boolean),
@@ -98,10 +100,8 @@ describe("config routes", () => {
       ngrokDomain: expect.any(String),
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
       chatSecretScanEnabled: true,
+      kbAutoSyncPermissionsEnabled: expect.any(Boolean),
     });
-    expect(["permissive", "restrictive"]).toContain(
-      payload.features.globalToolPolicy,
-    );
     expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");
     expect(["string", "undefined"]).toContain(
@@ -128,6 +128,7 @@ describe("config routes", () => {
       "gemini",
       "github-copilot",
       "groq",
+      "microsoft-365-copilot",
       "minimax",
       "mistral",
       "ollama",

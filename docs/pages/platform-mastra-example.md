@@ -2,13 +2,10 @@
 title: Secure Agent with Mastra.ai
 category: Examples
 order: 3
+lastUpdated: 2026-07-03
 ---
 
-<!-- 
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ## Overview
 
@@ -16,7 +13,7 @@ Mastra is a TypeScript framework that helps developers build AI agents and workf
 
 ## Security challenges with Mastra agents
 
-Because Mastra agents are built with code, they can have unlimited access to your systems and data. This power creates serious security risks when agents process content from untrusted sources. Mastra agents are vulnerable to the [lethal trifecta](/docs/platform-lethal-trifecta), a dangerous combination of:
+Because Mastra agents are built with code, they can have broad access to your systems and data. That access becomes a risk when agents process content from untrusted sources. Mastra agents are vulnerable to the [lethal trifecta](/docs/platform-ai-tool-guardrails#the-lethal-trifecta), a dangerous combination of:
 
 1. **Access to private data**: The agent can access all your GitHub repositories, including private ones
 2. **Processing untrusted content**: The agent can read public issues created by any user

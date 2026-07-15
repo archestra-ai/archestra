@@ -4,12 +4,12 @@ category: Administration
 subcategory: Identity Providers
 description: "End-to-end setup for Okta — SSO sign-in plus Okta-managed token exchange for downstream MCP tool calls"
 order: 9
-lastUpdated: 2026-05-07
+lastUpdated: 2026-07-03
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 Six top-level sections, mirroring the Entra page structure:
 1. Register Okta App for SSO
 2. Configure SSO in Archestra
@@ -19,19 +19,18 @@ Six top-level sections, mirroring the Entra page structure:
 6. Connect MCP Server
 
 Keep it short. No "Best Practices" or "Future Considerations". Replace the
-[screenshot: ...] markers with real screenshots from the running platform per
-docs_writer_prompt.md.
+[screenshot: ...] markers with real screenshots captured from the running platform.
 -->
 
 This guide configures Okta with Archestra end-to-end. After you finish, your users will sign in once with their Okta account and the agents and MCP servers they use will act on their own behalf — calling downstream APIs as them, not as a shared service account.
 
 <!-- video-placeholder: full-walkthrough screencast. Replace with <video> tag or YouTube/Loom embed once recorded. Suggested filename: /docs/assets/videos/platform-okta-setup_full-walkthrough.mp4 -->
 
-## What is Okta-managed token exchange and why does it matter?
+## How Okta-Managed Token Exchange Works
 
-When someone like Alice asks an agent to call a downstream API, Archestra needs to make that call on Alice's behalf. The naive way is to give the MCP server a single shared secret. Every user's request hits the API as the same robot. Audit logs show "the Archestra service account" did the work, not Alice. If Alice doesn't have access to a particular resource, the tool reads it anyway.
+A shared service-account secret makes every user's downstream call arrive as the same account. Audit logs cannot attribute the call to the user, and the downstream system cannot apply that user's own permissions.
 
-Okta solves this through its **AI agent token exchange** flow. When Alice signs in, Archestra holds her ID token. The moment a tool needs to call a downstream API, Archestra hands that token to Okta and asks for a *new* token — same user, scoped to the API the tool actually needs. The downstream call carries Alice's real identity. If she's not allowed, it fails. If she is, the audit trail shows it was her. ([Okta docs](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/))
+Okta's **AI agent token exchange** flow exchanges the user's token at call time. Archestra holds the user's ID token from sign-in and, when a tool needs to call a downstream API, hands that token to Okta for a new token scoped to the API the tool needs. The downstream call carries the user's identity, so the downstream system enforces that user's permissions and the audit trail records the user. ([Okta docs](https://developer.okta.com/docs/guides/ai-agent-token-exchange/authserver/main/))
 
 Here is what that looks like end-to-end:
 

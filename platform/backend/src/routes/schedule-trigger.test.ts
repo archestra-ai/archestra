@@ -149,7 +149,7 @@ describe("schedule trigger routes", () => {
     );
   });
 
-  test("POST create requires a project when the projects feature is on", async ({
+  test("POST create rejects a payload without a project", async ({
     makeInternalAgent,
   }) => {
     const agent = await makeInternalAgent({
@@ -169,9 +169,7 @@ describe("schedule trigger routes", () => {
       },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain(
-      "A project is required for scheduled tasks",
-    );
+    expect(response.json().error.message).toContain("projectId");
   });
 
   test("POST create associates the trigger with its project", async ({

@@ -78,15 +78,9 @@ export function TokenSelect({
   // biome-ignore lint/correctness/useExhaustiveDependencies: it's expected here to avoid unneeded invocations
   useEffect(() => {
     if (shouldSetDefaultValue && !value) {
-      if (prefersEnterpriseManaged) {
-        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
-      } else if (mcpServers.length > 0) {
-        // Default to the first credential
-        onValueChange(mcpServers[0].id);
-      } else {
-        // Default to dynamic credential when no static credentials available
-        onValueChange(DYNAMIC_CREDENTIAL_VALUE);
-      }
+      // Resolve-at-call-time is the default; pinning a static credential is an
+      // explicit choice.
+      onValueChange(DYNAMIC_CREDENTIAL_VALUE);
     }
   }, []);
 
@@ -128,7 +122,7 @@ export function TokenSelect({
           description={
             prefersEnterpriseManaged
               ? "Ask your identity provider for a runtime credential for this server."
-              : "Use the caller's available runtime credential instead of a fixed connection."
+              : "Follow the server's default credential setting — the caller's own connection, unless the server always uses one account."
           }
         >
           <div className="flex items-center gap-1">
@@ -136,7 +130,7 @@ export function TokenSelect({
             <span>Resolve at call time</span>
           </div>
         </SelectItem>
-        {mcpServers.length > 0 && (
+        {mcpServers.length > 0 ? (
           <>
             {organizationCredentials.length > 0 && (
               <>
@@ -193,6 +187,15 @@ export function TokenSelect({
                 ))}
               </>
             )}
+          </>
+        ) : (
+          <>
+            <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+              Static
+            </div>
+            <div className="px-2 pb-2 text-xs text-muted-foreground">
+              No saved credentials for this server.
+            </div>
           </>
         )}
       </SelectContent>

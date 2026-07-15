@@ -8,11 +8,13 @@
 // the external-IdP session token resolver (IdP network call).
 import {
   getArchestraToolFullName,
+  TOOL_GET_AGENT_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
 } from "@archestra/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "ai";
 import { afterEach, vi } from "vitest";
+import { getArchestraToolInputSchema } from "@/archestra-mcp-server";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { ToolModel } from "@/models";
 import { metrics } from "@/observability";
@@ -87,14 +89,25 @@ const buildMockGatewayClient = (
   } as unknown as Client;
 };
 
-const externalTool = (name: string, description = "") => ({
+const externalTool = (
+  name: string,
+  description = "",
+  meta?: Record<string, unknown>,
+) => ({
   name,
   description,
   inputSchema: {
     type: "object",
     properties: { query: { type: "string" } },
   },
+  ...(meta ? { _meta: meta } : {}),
 });
+
+// A UI-providing launch tool as the gateway lists it: the `_meta.ui.resourceUri`
+// it carries top-level (mcp-gateway.utils.ts sets `_meta` on every listed tool)
+// is what marks it directly dispatchable while unassigned.
+const uiLaunchTool = (name: string) =>
+  externalTool(name, "", { ui: { resourceUri: `ui://app/${name}` } });
 
 interface Fixtures {
   makeOrganization: (
@@ -124,6 +137,13 @@ interface Fixtures {
     toolId: string,
     overrides: Record<string, unknown>,
   ) => Promise<unknown>;
+  makeApp: (
+    overrides?: Record<string, unknown>,
+  ) => Promise<{ id: string; name: string }>;
+  makeMcpServer: (
+    overrides?: Record<string, unknown>,
+  ) => Promise<{ id: string }>;
+  seedAndAssignArchestraTools: (agentId: string) => Promise<void>;
 }
 
 // Test-context fixtures, captured once per test (vitest only hands fixtures to
@@ -145,6 +165,9 @@ beforeEach(
     makeInternalMcpCatalog,
     makeTool,
     makeToolPolicy,
+    makeApp,
+    makeMcpServer,
+    seedAndAssignArchestraTools,
   }) => {
     f = {
       makeOrganization,
@@ -156,6 +179,9 @@ beforeEach(
       makeInternalMcpCatalog,
       makeTool,
       makeToolPolicy,
+      makeApp,
+      makeMcpServer,
+      seedAndAssignArchestraTools,
     };
     vi.restoreAllMocks();
     vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
@@ -485,6 +511,104 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
   });
 });
 
+describe("getChatMcpTools dynamic UI tool dispatch (all-tools agents)", () => {
+  async function setupAllToolsAgent() {
+    const org = await f.makeOrganization();
+    const user = await f.makeUser();
+    await f.makeMember(user.id, org.id, { role: "admin" });
+    const agent = await f.makeAgent({
+      organizationId: org.id,
+      name: "All Tools Agent",
+      accessAllTools: true,
+    });
+    const conversation = await f.makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache();
+    cleanupAgentIds.push(agent.id);
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as never);
+    const wireGateway = (gatewayTools: Array<Record<string, unknown>>) =>
+      chatClient.__test.setCachedClient(
+        chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
+        buildMockGatewayClient(gatewayTools),
+      );
+    return {
+      org,
+      user,
+      agent,
+      wireGateway,
+      baseParams: {
+        agentName: agent.name,
+        agentId: agent.id,
+        userId: user.id,
+        organizationId: org.id,
+        conversationId: conversation.id,
+      },
+    };
+  }
+
+  const lastAvailableTool = () => {
+    const calls = vi.mocked(mcpClient.executeToolCallForOwner).mock.calls;
+    const options = calls.at(-1)?.[3] as
+      | { availableTool?: { name: string } }
+      | undefined;
+    return options?.availableTool;
+  };
+
+  test("passes a resolved availableTool for a direct call to an unassigned owned-app launch tool", async () => {
+    const { org, user, wireGateway, baseParams } = await setupAllToolsAgent();
+    // The owned app's __open launch tool is advertised top-level (a UI host
+    // renders from the definition) but has no agent_tools row for this agent.
+    await f.makeApp({ organizationId: org.id, authorId: user.id });
+    const [launchTool] = await ToolModel.getMcpToolsAccessibleToUser({
+      userId: user.id,
+      organizationId: org.id,
+      isAdmin: true,
+      environmentId: null,
+      requireUiResource: true,
+    });
+    expect(launchTool?.name).toBeDefined();
+
+    wireGateway([uiLaunchTool(launchTool.name)]);
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    await tools[launchTool.name].execute?.({}, execOptions("call-open"));
+
+    // Without the pre-resolution the dispatch layer rejects the unassigned tool
+    // as unknown_tool; with it the launch tool is handed through as availableTool.
+    expect(lastAvailableTool()?.name).toBe(launchTool.name);
+  });
+
+  test("does not pass availableTool for a direct call to an unassigned NON-UI tool", async () => {
+    // Security guard: only UI-providing tools are advertised top-level, so only
+    // they become directly callable. A plain accessible-but-unassigned tool must
+    // stay behind search_tools/run_tool — resolving it here would make every
+    // hidden tool name directly executable.
+    const { org, user, wireGateway, baseParams } = await setupAllToolsAgent();
+    const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
+    await f.makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      ownerId: user.id,
+    });
+    await f.makeTool({
+      catalogId: catalog.id,
+      name: "plainsrv__do_thing",
+      parameters: { type: "object", properties: {} },
+    });
+
+    wireGateway([externalTool("plainsrv__do_thing")]);
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    await tools.plainsrv__do_thing.execute?.({}, execOptions("call-plain"));
+
+    expect(lastAvailableTool()).toBeUndefined();
+  });
+});
+
 describe("getChatMcpTools agent delegation execute pipeline", () => {
   test("executes a delegation tool via the child-agent boundary without firing hooks", async () => {
     const { agent, org, baseParams, conversation } = await setupChatToolEnv();
@@ -530,12 +654,269 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
       }),
     );
   });
+
+  test("a run reuses the cached tool set instead of refetching from the gateway", async () => {
+    const { agent, org, baseParams, gatewayClient } = await setupChatToolEnv();
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    const params = { ...baseParams, delegationChain: agent.id };
+    await chatClient.getChatMcpTools(params);
+    await chatClient.getChatMcpTools(params);
+
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
+  });
+
+  test("clearChatMcpClient purges tool entries whose key carries a delegation chain", async () => {
+    const { agent, user, org, conversation, baseParams, gatewayClient } =
+      await setupChatToolEnv();
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    const params = {
+      ...baseParams,
+      delegationChain: `root-agent:${agent.id}`,
+    };
+    await chatClient.getChatMcpTools(params);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
+
+    // Invalidation matches tool-cache keys by their `<agentId>:` prefix, so a
+    // chain appended to the key must not push the agent id out of that prefix.
+    chatClient.clearChatMcpClient(agent.id);
+    chatClient.__test.setCachedClient(
+      chatClient.__test.getCacheKey(agent.id, user.id, conversation?.id),
+      gatewayClient,
+    );
+
+    await chatClient.getChatMcpTools(params);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+  });
+
+  test("closeChatMcpClient purges tool entries for every chain in the execution", async () => {
+    const isolationKey = "headless-exec-close";
+    const { agent, user, org, baseParams, gatewayClient } =
+      await setupChatToolEnv({ isolationKey });
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    // One execution reaches this agent at two depths, so the execution owns two
+    // tool-cache entries. Cleanup must reclaim both, not just a chainless key.
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+    });
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: `root-agent:${agent.id}`,
+    });
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+
+    chatClient.closeChatMcpClient(agent.id, user.id, isolationKey);
+    chatClient.__test.setCachedClient(
+      chatClient.__test.getCacheKey(agent.id, user.id, isolationKey),
+      gatewayClient,
+    );
+
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+    });
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(3);
+  });
+
+  test("__test.clearToolCache(cacheKey) drops every chain variant for that scope", async () => {
+    const { agent, user, org, conversation, baseParams, gatewayClient } =
+      await setupChatToolEnv();
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: `root-agent:${agent.id}`,
+    });
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
+
+    // Scoped clearing must reclaim chain variants too, or a case leaks tool
+    // entries into the next one.
+    await chatClient.__test.clearToolCache(
+      chatClient.__test.getCacheKey(agent.id, user.id, conversation?.id),
+    );
+
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: `root-agent:${agent.id}`,
+    });
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+  });
+
+  test("clearing one scope leaves a sibling scope whose key is a string prefix of it", async () => {
+    const { agent, user, org, baseParams, gatewayClient } =
+      await setupChatToolEnv({ isolationKey: "exec-1" });
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    // "exec-1" is a string prefix of "exec-10", so a prefix delete that does not
+    // stop at the ":" separator would reclaim the sibling execution's tools too.
+    const seedClient = (key: string) =>
+      chatClient.__test.setCachedClient(
+        chatClient.__test.getCacheKey(agent.id, user.id, key),
+        gatewayClient,
+      );
+    seedClient("exec-10");
+
+    const chain = `root-agent:${agent.id}`;
+    const shortScope = {
+      ...baseParams,
+      isolationKey: "exec-1",
+      delegationChain: chain,
+    };
+    const longScope = {
+      ...baseParams,
+      isolationKey: "exec-10",
+      delegationChain: chain,
+    };
+
+    await chatClient.getChatMcpTools(shortScope);
+    await chatClient.getChatMcpTools(longScope);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+
+    chatClient.closeChatMcpClient(agent.id, user.id, "exec-1");
+
+    // The sibling execution keeps its cached tools.
+    await chatClient.getChatMcpTools(longScope);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+
+    // The cleared execution refetches.
+    seedClient("exec-1");
+    await chatClient.getChatMcpTools(shortScope);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(3);
+  });
+
+  test("tools cached for one delegation chain never serve another chain", async () => {
+    const { agent, org, baseParams } = await setupChatToolEnv();
+    const { targetAgent, delegationTool } = await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "child-msg-1",
+      text: "child says hi",
+      finishReason: "stop",
+    });
+
+    // The same agent, at two depths of one delegation tree. Both share an
+    // isolation key, so a chain-agnostic cache would hand the second run the
+    // first run's ancestors — hiding them from the executor's cycle check.
+    const shallowChain = agent.id;
+    const deeperChain = `root-agent:middle-agent:${agent.id}`;
+
+    const shallowTools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: shallowChain,
+    });
+    const deeperTools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: deeperChain,
+    });
+
+    await deeperTools[delegationTool.name].execute?.(
+      { message: "do the work" },
+      execOptions("call-deep-chain"),
+    );
+    expect(mockExecuteA2AMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentId: targetAgent.id,
+        parentDelegationChain: deeperChain,
+      }),
+    );
+
+    // The shallow run's tools still carry their own ancestors: the two runs
+    // hold separate contexts rather than overwriting a shared one.
+    await shallowTools[delegationTool.name].execute?.(
+      { message: "do the work" },
+      execOptions("call-shallow-chain"),
+    );
+    expect(mockExecuteA2AMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentId: targetAgent.id,
+        parentDelegationChain: shallowChain,
+      }),
+    );
+  });
+
+  test("a delegation dispatched through run_tool carries the caller's chain", async () => {
+    const { agent, org, baseParams } = await setupChatToolEnv({
+      gatewayTools: [
+        {
+          name: getArchestraToolFullName("run_tool"),
+          description: "Run tool",
+          inputSchema: {
+            type: "object",
+            properties: {
+              tool_name: { type: "string" },
+              tool_args: { type: "object" },
+            },
+            required: ["tool_name"],
+          },
+        },
+      ],
+    });
+    const { targetAgent, delegationTool } = await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "child-msg-1",
+      text: "child says hi",
+      finishReason: "stop",
+    });
+
+    const chain = `root-agent:${agent.id}`;
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: chain,
+    });
+    await tools[getArchestraToolFullName("run_tool")].execute?.(
+      {
+        tool_name: delegationTool.name,
+        tool_args: { message: "do the work" },
+      },
+      execOptions("call-run-tool-delegation"),
+    );
+
+    // run_tool dispatches delegations too, so its context must name the
+    // caller's ancestors — otherwise the chain restarts and cycles go unseen.
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: targetAgent.id,
+        parentDelegationChain: chain,
+      }),
+    );
+  });
 });
 
 describe("getChatMcpTools approval gating", () => {
   test("blockOnApprovalRequired removes needsApproval and blocks approval-required execution", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv({
-      orgOverrides: { globalToolPolicy: "restrictive" },
       isolationKey: "headless-exec-1",
       gatewayTools: [externalTool("extsrv__restricted_export")],
     });
@@ -624,9 +1005,7 @@ describe("getChatMcpTools approval gating", () => {
   });
 
   test("delegation needsApproval targets the delegation tool itself, not a tool_name in args", async () => {
-    const { agent, org, baseParams } = await setupChatToolEnv({
-      orgOverrides: { globalToolPolicy: "restrictive" },
-    });
+    const { agent, org, baseParams } = await setupChatToolEnv();
     const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
     const guardedTool = await f.makeTool({
       name: "extsrv__guarded_export",
@@ -699,6 +1078,34 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(
       MAX_IDENTICAL_TOOL_CALLS,
     );
+  });
+
+  test("an empty-args call repeating a validation error is fast-nudged on the third issue", async () => {
+    // An Archestra tool's validation error is args-deterministic, so the
+    // breaker nudges a step sooner than the generic threshold: the first two
+    // {} calls execute (each returning the actionable Zod error naming the
+    // missing fields), the third identical call is nudged without executing.
+    const toolName = getArchestraToolFullName(TOOL_GET_AGENT_SHORT_NAME);
+    const { agent, baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool(toolName)],
+    });
+    await f.seedAndAssignArchestraTools(agent.id);
+
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+
+    const first = await tools[toolName].execute?.({}, execOptions("empty-1"));
+    expect(toolResultContent(first)).toContain("Validation error");
+    const second = await tools[toolName].execute?.({}, execOptions("empty-2"));
+    expect(toolResultContent(second)).toContain("Validation error");
+
+    const third = await tools[toolName].execute?.({}, execOptions("empty-3"));
+    expect(toolResultContent(third)).toContain("identical arguments");
+    expect(toolResultContent(third)).not.toContain("Validation error");
   });
 
   test("a different call resets the streak so a repeated call executes again", async () => {
@@ -844,6 +1251,82 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(
       MAX_IDENTICAL_TOOL_CALLS,
     );
+  });
+});
+
+describe("getChatMcpTools validation-error parameter skeleton", () => {
+  const runToolName = getArchestraToolFullName("run_tool");
+  const editAppName = getArchestraToolFullName("edit_app");
+  const runToolGatewayDef = {
+    name: runToolName,
+    description: "Run tool",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool_name: { type: "string" },
+        tool_args: { type: "object" },
+      },
+      required: ["tool_name"],
+    },
+  };
+
+  /** edit_app args that fail validation (non-numeric baseVersion). */
+  const invalidEditArgs = () => ({
+    appId: crypto.randomUUID(),
+    baseVersion: "one",
+    edits: [{ old_str: "x", new_str: "y" }],
+  });
+
+  /**
+   * The skeleton is schema-derived, so the behavioral pin is that the error
+   * result surfaces every top-level parameter key of the TARGET tool's
+   * published schema — not any particular wording around them.
+   */
+  const expectEditAppSkeleton = (result: unknown) => {
+    const text = toolResultContent(result);
+    const editAppSchema = getArchestraToolInputSchema(editAppName);
+    expect(editAppSchema).toBeDefined();
+    for (const key of Object.keys(
+      editAppSchema?.properties as Record<string, unknown>,
+    )) {
+      expect(text).toContain(`"${key}"`);
+    }
+  };
+
+  async function setupSkeletonEnv(
+    gatewayTools: Array<Record<string, unknown>>,
+  ) {
+    const { agent, baseParams } = await setupChatToolEnv({ gatewayTools });
+    await f.seedAndAssignArchestraTools(agent.id);
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    return chatClient.getChatMcpTools(baseParams);
+  }
+
+  test("a run_tool-wrapped edit_app failure carries the TARGET's parameter skeleton on the first failure", async () => {
+    const tools = await setupSkeletonEnv([runToolGatewayDef]);
+    const result = await tools[runToolName].execute?.(
+      { tool_name: "edit_app", tool_args: invalidEditArgs() },
+      execOptions("wrapped-1"),
+    );
+    expectEditAppSkeleton(result);
+  });
+
+  test("a directly-called archestra tool failure carries its own skeleton on the first failure", async () => {
+    const tools = await setupSkeletonEnv([
+      {
+        name: editAppName,
+        description: "Edit app",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+    const result = await tools[editAppName].execute?.(
+      invalidEditArgs(),
+      execOptions("direct-1"),
+    );
+    expectEditAppSkeleton(result);
   });
 });
 

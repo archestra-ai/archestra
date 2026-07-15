@@ -45,6 +45,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  "connector.permission_sync_triggered": "Connector permission sync triggered",
   // Default user limit
   "defaultUserLimit.created": "Default user limit created",
   "defaultUserLimit.updated": "Default user limit updated",
@@ -140,6 +141,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "trustedDataPolicy.updated": "Trusted data policy updated",
   "trustedDataPolicy.deleted": "Trusted data policy deleted",
   "trustedDataPolicy.bulk_defaulted": "Trusted data policies bulk defaulted",
+  // User
+  "user.password_reset": "Password reset",
   // User token
   "userToken.rotated": "Personal token rotated",
   // Virtual API key
@@ -269,6 +272,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "tool",
   "toolInvocationPolicy",
   "trustedDataPolicy",
+  "user",
   "userToken",
   "virtualApiKey",
 ];

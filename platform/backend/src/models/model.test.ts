@@ -297,6 +297,7 @@ describe("ModelModel", () => {
         modelId: "gpt-4o-mini",
         description: "Initial description",
         contextLength: 128000,
+        outputLength: 16384,
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: false,
@@ -312,6 +313,7 @@ describe("ModelModel", () => {
         modelId: "gpt-4o-mini",
         description: "Updated description",
         contextLength: 256000,
+        outputLength: 32000,
         inputModalities: ["text", "image"],
         outputModalities: ["text"],
         supportsToolCalling: true,
@@ -322,11 +324,14 @@ describe("ModelModel", () => {
 
       expect(updated.id).toBe(initial.id);
       expect(updated.description).toBe("Updated description");
-      // contextLength, inputModalities, supportsToolCalling are NOT updated on conflict
-      // to preserve user-edited values
+      // contextLength, inputModalities, supportsToolCalling are NOT updated on
+      // conflict to preserve user-edited values
       expect(updated.contextLength).toBe(128000);
       expect(updated.inputModalities).toEqual(["text"]);
       expect(updated.supportsToolCalling).toBe(false);
+      // outputLength is not user-editable and tracks the provider cap, so a
+      // fresh synced value overwrites the previous one.
+      expect(updated.outputLength).toBe(32000);
     });
   });
 
@@ -456,6 +461,50 @@ describe("ModelModel", () => {
       expect(updated?.supportsToolCalling).toBe(false);
     });
 
+    test("updates outputLength to the freshly synced cap, keeping it only when the sync omits it", async () => {
+      const base = (modelId: string, outputLength: number | null) => ({
+        externalId: `openai/${modelId}`,
+        provider: "openai" as const,
+        modelId,
+        description: modelId,
+        contextLength: 128000,
+        outputLength,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      });
+
+      await ModelModel.bulkUpsert([
+        base("cap-lowered", 64000),
+        base("cap-null", null),
+        base("cap-cleared", 16384),
+      ]);
+      await ModelModel.bulkUpsert([
+        base("cap-lowered", 4096), // provider corrected the cap downward
+        base("cap-null", 8192), // backfills the previously-null cap
+        base("cap-cleared", null), // sync omits it → last known value kept
+      ]);
+
+      const lowered = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "cap-lowered",
+      );
+      const filled = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "cap-null",
+      );
+      const cleared = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "cap-cleared",
+      );
+      expect(lowered?.outputLength).toBe(4096);
+      expect(filled?.outputLength).toBe(8192);
+      expect(cleared?.outputLength).toBe(16384);
+    });
+
     test("preserves manual embedding dimension overrides on non-full sync", async () => {
       const [created] = await ModelModel.bulkUpsert([
         {
@@ -498,6 +547,104 @@ describe("ModelModel", () => {
         "custom-embed-toggle",
       );
       expect(updated?.embeddingDimensions).toBe(1536);
+    });
+
+    const ollamaBase = {
+      externalId: "ollama/llama3",
+      provider: "ollama" as const,
+      modelId: "llama3",
+      description: "Llama 3",
+      contextLength: 8192,
+      inputModalities: ["text" as const],
+      outputModalities: ["text" as const],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      lastSyncedAt: new Date(),
+    };
+
+    test("keeps the last known default parameters when a non-full sync omits them", async () => {
+      await ModelModel.bulkUpsert([
+        { ...ollamaBase, defaultParameters: { num_ctx: 4096 } },
+      ]);
+      await ModelModel.bulkUpsert([{ ...ollamaBase, defaultParameters: null }]);
+
+      const updated = await ModelModel.findByProviderAndModelId(
+        "ollama",
+        "llama3",
+      );
+      expect(updated?.defaultParameters).toEqual({ num_ctx: 4096 });
+    });
+
+    test("refreshes default parameters on non-full sync when the provider reports new values", async () => {
+      await ModelModel.bulkUpsert([
+        { ...ollamaBase, defaultParameters: { num_ctx: 4096 } },
+      ]);
+      await ModelModel.bulkUpsert([
+        { ...ollamaBase, defaultParameters: { num_ctx: 8192 } },
+      ]);
+
+      const updated = await ModelModel.findByProviderAndModelId(
+        "ollama",
+        "llama3",
+      );
+      expect(updated?.defaultParameters).toEqual({ num_ctx: 8192 });
+    });
+  });
+
+  describe("bulkUpsertFull", () => {
+    test("overwrites an existing outputLength with the provider value", async () => {
+      const model = {
+        externalId: "openai/full-refresh",
+        provider: "openai" as const,
+        modelId: "full-refresh",
+        description: "Full Refresh",
+        contextLength: 128000,
+        outputLength: 16384,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        lastSyncedAt: new Date(),
+      };
+
+      await ModelModel.bulkUpsert([model]);
+      await ModelModel.bulkUpsertFull([{ ...model, outputLength: 64000 }]);
+
+      const refreshed = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "full-refresh",
+      );
+      expect(refreshed?.outputLength).toBe(64000);
+    });
+
+    test("overwrites default parameters on full refresh", async () => {
+      const base = {
+        externalId: "ollama/llama3-full",
+        provider: "ollama" as const,
+        modelId: "llama3-full",
+        description: "Llama 3",
+        contextLength: 8192,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      };
+      await ModelModel.bulkUpsert([
+        { ...base, defaultParameters: { num_ctx: 4096 } },
+      ]);
+      await ModelModel.bulkUpsertFull([
+        { ...base, defaultParameters: { num_ctx: 8192 } },
+      ]);
+
+      const refreshed = await ModelModel.findByProviderAndModelId(
+        "ollama",
+        "llama3-full",
+      );
+      expect(refreshed?.defaultParameters).toEqual({ num_ctx: 8192 });
     });
   });
 

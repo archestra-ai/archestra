@@ -43,6 +43,27 @@ assert.equal(
   undefined,
 );
 
+// lintAppHtml: an off-allowlist host and a storage API are reported as
+// structured lists; a clean document yields empty lists.
+const lintConfig = {
+  resourceHostAllowlist: ["cdn.jsdelivr.net"],
+  sdkTopLevelMembers: ["ready", "storage", "tools"],
+  sdkStoragePartitions: ["user", "shared"],
+};
+const linted = appRuntime.lintAppHtml(
+  '<html><head><script src="https://evil.example.com/a.js"></script><script>localStorage.x; archestra.storage.get("k");</script></head></html>',
+  lintConfig,
+);
+assert.deepEqual(linted.offAllowlistHosts, ["evil.example.com"]);
+assert.deepEqual(linted.browserStorageApis, ["localStorage"]);
+assert.deepEqual(linted.storageMisuse, ["archestra.storage.get"]);
+const cleanLint = appRuntime.lintAppHtml(
+  "<html><head></head><body></body></html>",
+  lintConfig,
+);
+assert.deepEqual(cleanLint.offAllowlistHosts, []);
+assert.deepEqual(cleanLint.unknownTopLevel, []);
+
 // Diagnostics: angle brackets escaped, forged type sanitized, lines formatted,
 // dedup by type+prefix. Caps are passed in by the caller.
 assert.equal(appRuntime.escapeAngleBrackets("</x>"), "&lt;/x&gt;");

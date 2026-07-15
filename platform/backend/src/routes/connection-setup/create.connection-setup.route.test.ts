@@ -157,6 +157,71 @@ describe("POST /api/connection-setups", () => {
     ).toBe(400);
   });
 
+  test("allowlist: accepts the origin the browser reached the app on (Origin header)", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const post = (baseUrl: string, origin?: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        headers: origin ? { origin } : {},
+        payload: { clientId: "claude-code", baseUrl, mcpGatewayId: gateway.id },
+      });
+
+    // the zero-config path: the page derives its endpoint from
+    // window.location.origin, which only the request itself can vouch for
+    const origin = "https://selfhosted.example.com";
+    expect((await post(`${origin}/v1`, origin)).statusCode).toBe(200);
+    expect((await post(origin, origin)).statusCode).toBe(200);
+    const created = await post(`${origin}/v1`, origin);
+    expect(created.json().command).toContain(
+      `${origin}/api/connection-setups/script/`,
+    );
+
+    // only the exact ""/"/v1" paths are trusted at origin level
+    expect((await post(`${origin}/v1/evil`, origin)).statusCode).toBe(400);
+    // a different origin than the one the browser used never passes
+    expect(
+      (await post("https://other.example.com/v1", origin)).statusCode,
+    ).toBe(400);
+    // port counts as part of the origin
+    expect((await post(`${origin}:8443/v1`, origin)).statusCode).toBe(400);
+    // a forged Origin header carrying a path is not origin-shaped — rejected
+    expect((await post(`${origin}/app/v1`, `${origin}/app`)).statusCode).toBe(
+      400,
+    );
+    // no Origin header, no origin-level trust
+    expect((await post(`${origin}/v1`)).statusCode).toBe(400);
+  });
+
+  test("allowlist: accepts the in-cluster internal API base URL", async ({
+    makeAgent,
+  }) => {
+    vi.stubEnv(
+      "ARCHESTRA_INTERNAL_API_BASE_URL",
+      "http://archestra.default.svc:9000",
+    );
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://archestra.default.svc:9000/v1",
+        mcpGatewayId: gateway.id,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+  });
+
   test("allowlist: accepts admin-curated org connection URLs incl. /v1 suffix", async ({
     makeAgent,
   }) => {

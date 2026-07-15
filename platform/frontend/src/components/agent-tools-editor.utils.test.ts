@@ -1,17 +1,132 @@
 import {
+  APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  getCreationDefaultArchestraToolShortNames,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   computeMcpEnvConflicts,
+  getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
   isCatalogInEnvironment,
+  shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
 
 const OTHER_CATALOG_ID = "other-catalog-id";
+
+describe("getCatalogAssignmentGate", () => {
+  // Install state does not gate assignment: a catalog item with discovered
+  // tools but no install the caller can resolve stays assignable (as a dynamic
+  // assignment) and is surfaced as unavailable.
+  it("keeps a catalog with discovered tools but no resolvable install assignable", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: false,
+      isEnvIncompatible: false,
+    });
+
+    expect(gate.disabled).toBe(false);
+    expect(gate.disabledReason).toBeUndefined();
+    expect(gate.unavailable).toBe(true);
+  });
+
+  it("keeps a fully-installed catalog assignable and available", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: true,
+      isEnvIncompatible: false,
+    });
+
+    expect(gate.disabled).toBe(false);
+    expect(gate.unavailable).toBe(false);
+  });
+
+  it("refuses a catalog with no discovered tool — nothing to assign", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: false,
+      hasResolvableInstall: true,
+      isEnvIncompatible: false,
+    });
+
+    expect(gate.disabled).toBe(true);
+    expect(gate.disabledReason).toBe("Not installed");
+    expect(gate.unavailable).toBe(false);
+  });
+
+  it("refuses an environment-incompatible catalog with a named-environment reason", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: false,
+      isEnvIncompatible: true,
+      environmentName: "Staging",
+    });
+
+    expect(gate.disabled).toBe(true);
+    expect(gate.disabledReason).toBe('Not in the "Staging" environment');
+  });
+
+  it("refuses an environment-incompatible catalog in the Default environment", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: true,
+      isEnvIncompatible: true,
+    });
+
+    expect(gate.disabled).toBe(true);
+    expect(gate.disabledReason).toBe("Not in the Default environment");
+  });
+});
+
+describe("shouldResetCredentialPin", () => {
+  const base = {
+    credentialsLoaded: true,
+    selectionIsDynamic: false,
+    pinnedServerId: "srv-1",
+    resolvableServerIds: ["srv-2", "srv-3"],
+  };
+
+  it("resets a stale pin absent from a non-empty resolvable set", () => {
+    expect(shouldResetCredentialPin(base)).toBe(true);
+  });
+
+  // Regression: an assignment persists independently of install state. When no
+  // connection resolves for the caller, preserve the pin instead of coercing it
+  // to dynamic — coercing would silently rewrite the pin on the next save.
+  it("preserves the pin when no connection resolves for the caller", () => {
+    expect(shouldResetCredentialPin({ ...base, resolvableServerIds: [] })).toBe(
+      false,
+    );
+  });
+
+  it("keeps a pin that still resolves", () => {
+    expect(shouldResetCredentialPin({ ...base, pinnedServerId: "srv-2" })).toBe(
+      false,
+    );
+  });
+
+  it("does nothing for a dynamic selection", () => {
+    expect(
+      shouldResetCredentialPin({
+        ...base,
+        selectionIsDynamic: true,
+        pinnedServerId: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("waits until credentials have loaded", () => {
+    expect(
+      shouldResetCredentialPin({ ...base, credentialsLoaded: false }),
+    ).toBe(false);
+  });
+});
 
 function makeCatalog(id: string, name: string) {
   return { id, name };
@@ -107,6 +222,103 @@ describe("getDefaultArchestraToolIds", () => {
     expect(result?.toolIds).toEqual(
       new Set(brandedDefaultTools.map((tool) => tool.id)),
     );
+  });
+
+  describe("feature-flag composition (shared composer)", () => {
+    const catalogs = [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Archestra")];
+    // One catalog tool per short name across every composable group, so the
+    // expected pre-selection can be derived from the composer output.
+    const groupShortNames = [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+    ];
+    const allGroupTools = groupShortNames.map((shortName) =>
+      makeTool(`tool-${shortName}`, `archestra__${shortName}`),
+    );
+
+    function idsForShortNames(shortNames: readonly string[]): Set<string> {
+      return new Set(shortNames.map((shortName) => `tool-${shortName}`));
+    }
+
+    it("pre-selects the defaults and app tools when every flag is off", () => {
+      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {});
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames([
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ]),
+      );
+    });
+
+    it("adds the skill tools when skillsEnabled", () => {
+      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {
+        skillsEnabled: true,
+      });
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames([
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ]),
+      );
+    });
+
+    it("adds the sandbox runtime and persistent-files tools when sandboxEnabled", () => {
+      const result = getDefaultArchestraToolIds(catalogs, [allGroupTools], {
+        sandboxEnabled: true,
+      });
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames([
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+        ]),
+      );
+    });
+
+    it("pre-selects exactly the shared composer output with every flag on", () => {
+      const flags = {
+        skillsEnabled: true,
+        sandboxEnabled: true,
+      };
+
+      const result = getDefaultArchestraToolIds(
+        catalogs,
+        [allGroupTools],
+        flags,
+      );
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames(getCreationDefaultArchestraToolShortNames(flags)),
+      );
+    });
+
+    it("matches branded group tool names under white-labeling", () => {
+      const brandedTools = groupShortNames.map((shortName) =>
+        makeTool(`tool-${shortName}`, `sparky__${shortName}`),
+      );
+
+      const result = getDefaultArchestraToolIds(
+        [makeCatalog(ARCHESTRA_MCP_CATALOG_ID, "Sparky")],
+        [brandedTools],
+        { skillsEnabled: true },
+      );
+
+      expect(result?.toolIds).toEqual(
+        idsForShortNames([
+          ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ]),
+      );
+    });
   });
 });
 

@@ -1,7 +1,7 @@
 import type { ModelMessage } from "ai";
 import { describe, expect, test } from "vitest";
 import {
-  parseMaxInputTokens,
+  parseContextLengthError,
   shouldProbeTextStreamForContextTrimRetry,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
@@ -9,22 +9,47 @@ import {
 const msg = (role: ModelMessage["role"], content: string): ModelMessage =>
   ({ role, content }) as ModelMessage;
 
-describe("parseMaxInputTokens", () => {
-  test("parses limit from LiteLLM error message", () => {
+describe("parseContextLengthError", () => {
+  test("parses limit and requested tokens from LiteLLM error message", () => {
     const error = new Error(
       'litellm.BadRequestError: Hosted_vllmException - {"error":{"message":"You passed 8193 input tokens and requested 0 output tokens. However, the model\'s context length is only 8192 tokens, resulting in a maximum input length of 8192 tokens.","type":"BadRequestError","param":"input_tokens","code":400}}',
     );
-    expect(parseMaxInputTokens(error)).toBe(8192);
+    expect(parseContextLengthError(error)).toEqual({
+      maxInputTokens: 8192,
+      requestedTokens: 8193,
+    });
+  });
+
+  test("parses limit and requested tokens from OpenRouter-style error message", () => {
+    const error = new Error(
+      "This endpoint's maximum context length is 262144 tokens. However, you requested about 285869 tokens (279144 of text input, 6725 of tool input). Please reduce the length of either one.",
+    );
+    expect(parseContextLengthError(error)).toEqual({
+      maxInputTokens: 262144,
+      requestedTokens: 285869,
+    });
+  });
+
+  test("parses limit alone when the requested count is absent", () => {
+    const error = new Error(
+      "the model supports a maximum context length is 128000 tokens",
+    );
+    expect(parseContextLengthError(error)).toEqual({
+      maxInputTokens: 128000,
+      requestedTokens: undefined,
+    });
   });
 
   test("returns null for unrelated errors", () => {
-    expect(parseMaxInputTokens(new Error("rate limit exceeded"))).toBeNull();
+    expect(
+      parseContextLengthError(new Error("rate limit exceeded")),
+    ).toBeNull();
   });
 
   test("returns null for non-error values", () => {
-    expect(parseMaxInputTokens(null)).toBeNull();
-    expect(parseMaxInputTokens(undefined)).toBeNull();
-    expect(parseMaxInputTokens(42)).toBeNull();
+    expect(parseContextLengthError(null)).toBeNull();
+    expect(parseContextLengthError(undefined)).toBeNull();
+    expect(parseContextLengthError(42)).toBeNull();
   });
 });
 
@@ -168,6 +193,80 @@ describe("trimMessagesToTokenLimit", () => {
     // the text request survives as string content; no oversized image part.
     const surviving = result.find((m) => m.role === "user");
     expect(surviving?.content).toBe("summarize this screenshot");
+  });
+
+  test("trims token-dense payloads when the provider reported the request's token count", () => {
+    // A payload at ~2 chars/token: the 4-chars/token default budget
+    // (maxTokens * 4 = 400 chars) exceeds the 300-char payload, so without the
+    // provider-reported count nothing would be trimmed and the retry would
+    // fail identically.
+    const messages = [
+      msg("user", "a".repeat(100)),
+      msg("tool" as ModelMessage["role"], "b".repeat(100)),
+      msg("user", "c".repeat(100)),
+    ];
+    const untrimmed = trimMessagesToTokenLimit({ messages, maxTokens: 100 });
+    expect(untrimmed).toBe(messages);
+
+    // Provider says the 300-char payload was 150 tokens (2 chars/token) against
+    // a 100-token limit — the derived budget forces a real trim.
+    const trimmed = trimMessagesToTokenLimit({
+      messages,
+      maxTokens: 100,
+      requestedTokens: 150,
+    });
+    expect(trimmed.some((m) => m.content === "a".repeat(100))).toBe(false);
+    expect(trimmed[trimmed.length - 1].content).toBe("c".repeat(100));
+  });
+
+  test("drops tool results orphaned by trimming their assistant tool call", () => {
+    // The oldest (assistant tool-call) message gets dropped by the budget;
+    // its tool-result message must go with it or providers reject the payload.
+    const assistantToolCall = {
+      role: "assistant",
+      content: [
+        { type: "text", text: "x".repeat(300) },
+        {
+          type: "tool-call",
+          toolCallId: "call_1",
+          toolName: "search",
+          input: {},
+        },
+      ],
+    } as ModelMessage;
+    const toolResult = {
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "call_1",
+          toolName: "search",
+          output: { type: "text", value: "result" },
+        },
+      ],
+    } as ModelMessage;
+    const messages = [
+      assistantToolCall,
+      toolResult,
+      msg("user", "z".repeat(100)),
+    ];
+    // 300-char budget: dropping the ~410-char assistant message brings the
+    // total under budget while the small tool result itself survives — only
+    // the orphan cleanup removes it.
+    const result = trimMessagesToTokenLimit({ messages, maxTokens: 75 });
+    expect(result.some((m) => m === assistantToolCall)).toBe(false);
+    expect(
+      result.some(
+        (m) =>
+          m.role === "tool" &&
+          Array.isArray(m.content) &&
+          m.content.some(
+            (part) =>
+              part.type === "tool-result" && part.toolCallId === "call_1",
+          ),
+      ),
+    ).toBe(false);
+    expect(result[result.length - 1].content).toBe("z".repeat(100));
   });
 
   test("never returns undefined entries when only system messages exist", () => {

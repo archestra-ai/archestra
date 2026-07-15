@@ -17,7 +17,7 @@ const EMPTY_MESSAGE = (
 
 /**
  * Bare full-page MCP App runtime, shared by the owned-app standalone run page
- * (`/a/[appId]`) and the external catalog run page (`/apps/catalog/[id]/run`).
+ * (`/a/[appId]`) and the external catalog run page (`/a/catalog/[catalogId]`).
  * Wires the shared runtime-frame state (display mode / reload / resource state)
  * around {@link McpAppRuntime} with no Archestra chrome — each run page owns its
  * own header.
@@ -46,7 +46,7 @@ export function AppFrame({
   } = useAppRuntimeControls();
 
   const appId = endpoint.kind === "app" ? endpoint.appId : null;
-  const { data: app } = useApp(appId);
+  const { data: app } = useApp(appId, { toastOnError: false });
   const resolvedResourceUri = appId
     ? getArchestraAppResourceUri(appId)
     : resourceUri;

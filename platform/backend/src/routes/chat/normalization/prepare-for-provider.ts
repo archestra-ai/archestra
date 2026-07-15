@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   isInlineableTextMimeType,
   type SupportedProvider,
@@ -36,14 +37,18 @@ export function prepareMessagesForProvider(params: {
   const { messages, provider, anthropicNativeEndpoint = true } = params;
 
   if (provider === "anthropic" && anthropicNativeEndpoint) {
-    return messages.map(normalizeAnthropicMessageFileParts);
+    return messages
+      .map(normalizeAnthropicMessageFileParts)
+      .map(sanitizeMessageToolCallIds);
   }
 
   if (provider === "anthropic") {
     // Anthropic-compatible third-party endpoint: inline text documents as
     // decoded text (content preserved — the data: bytes are decoded into the
     // message, not dropped) so the upstream doesn't reject a `document` block.
-    return messages.map(inlineTextDocumentMessageFileParts);
+    return messages
+      .map(inlineTextDocumentMessageFileParts)
+      .map(sanitizeMessageToolCallIds);
   }
 
   if (provider === "bedrock") {
@@ -53,10 +58,51 @@ export function prepareMessagesForProvider(params: {
         ensureBedrockMessageHasContent(
           ensureBedrockUserMessageHasTextPart(message),
         ),
-      );
+      )
+      .map(sanitizeMessageToolCallIds);
   }
 
   return messages.map(inlineTextDocumentMessageFileParts);
+}
+
+// ===== Tool-call id sanitization (Anthropic / Bedrock) =====
+
+// Anthropic (tool_use.id) and Bedrock (toolUseId) both require tool ids to
+// match this pattern and reject the whole request otherwise. Ids minted by
+// other providers can violate it (e.g. containing dots or colons), and they
+// live on in a conversation's history when the user switches models — so a
+// single foreign tool call in history would permanently break the
+// conversation on these providers. Retrying can't help: the id is persisted.
+const SAFE_TOOL_CALL_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function sanitizeMessageToolCallIds(message: ChatMessage): ChatMessage {
+  if (!message.parts?.length) {
+    return message;
+  }
+
+  let changed = false;
+  const parts = message.parts.map((part) => {
+    if (
+      typeof part.toolCallId !== "string" ||
+      SAFE_TOOL_CALL_ID_PATTERN.test(part.toolCallId)
+    ) {
+      return part;
+    }
+    changed = true;
+    return { ...part, toolCallId: sanitizeToolCallId(part.toolCallId) };
+  });
+
+  return changed ? { ...message, parts } : message;
+}
+
+// Deterministic, so the same original id maps to the same sanitized id on
+// every request (tool-call/tool-result pairing survives across turns). The
+// digest suffix keeps two distinct raw ids that clean to the same string
+// (e.g. "call.0" vs "call:0") from colliding.
+function sanitizeToolCallId(id: string): string {
+  const cleaned = id.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const digest = createHash("sha256").update(id).digest("hex").slice(0, 8);
+  return `${cleaned.slice(0, 40) || "tool_call"}_${digest}`;
 }
 
 // ===== Inline-as-text path (providers that reject document file parts) =====
@@ -362,7 +408,13 @@ function producesBedrockContentBlock(part: ChatMessagePart): boolean {
       | undefined;
     return Boolean(bedrock?.signature || bedrock?.redactedData);
   }
-  if (part.type.startsWith("tool-")) {
+  // `dynamic-tool` is the shape MCP tools (and the seeded `render_app` app
+  // render) deserialize to; it is a real content-producing tool part, exactly
+  // as the sibling `isToolPart` in normalize-chat-messages.ts treats it. Without
+  // this, an assistant message whose only part is a `dynamic-tool` (e.g. the
+  // owned-app render_app seed) is judged empty and padded with a bogus
+  // "(no content)" text block.
+  if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
     return part.state !== "input-streaming";
   }
   return false;

@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/microsoft-login/organizations/oauth2/v2.0/token"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "token_type": "Bearer",
+      "scope": "https://graph.microsoft.com/Sites.Read.All",
+      "expires_in": 3600,
+      "access_token": "e2e-graph-access-token",
+      "refresh_token": "e2e-entra-refresh-token"
+    }
+  }
+}

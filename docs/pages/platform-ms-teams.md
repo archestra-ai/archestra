@@ -1,14 +1,12 @@
 ---
 title: MS Teams
 category: Agents
-order: 5
+order: 7
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-06-12
+lastUpdated: 2026-07-12
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Archestra can connect directly to Microsoft Teams channels. When users mention the bot in a channel, messages are routed to your configured agent and responses appear directly in Teams.
 
@@ -46,7 +44,7 @@ The bot responds with an **Adaptive Card dropdown** to select which agent handle
 
 In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages and group chats always get a reply, no mention required.
 
-To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. As a reminder, the bot adds a short hint about this to its first reply in each thread.
+To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. Muting also cancels any reply the bot is already working on, so a late answer never lands after you ask for quiet. As a reminder, the bot adds a short hint about this to its first reply in each thread.
 
 ### Commands
 

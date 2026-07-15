@@ -1,6 +1,5 @@
 import { E2eTestId } from "@archestra/shared";
 import {
-  Clock,
   Copy,
   Download,
   Eye,
@@ -29,7 +28,7 @@ type AgentActionsProps = {
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
-  onClone: (agentId: string) => void;
+  onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
 };
@@ -99,29 +98,9 @@ export function AgentActions({
       href: `/chat/new?agent_id=${agent.id}`,
     },
     editOrViewAction,
-    {
-      icon: <Sparkles className="h-4 w-4" />,
-      label: "Convert to skill",
-      permissions: { skill: ["create"] },
-      disabled: isBuiltIn || agent.agentType !== "agent",
-      disabledTooltip: isBuiltIn
-        ? "Built-in agents cannot be converted"
-        : agent.agentType !== "agent"
-          ? "Only internal agents can be converted to skills"
-          : undefined,
-      onClick: () => onConvertToSkill(agent),
-    },
   ];
 
   const dropdownActions: TableRowAction[] = [
-    {
-      icon: <Clock className="h-4 w-4" />,
-      label: "Schedule",
-      disabled: isBuiltIn,
-      disabledTooltip: "Built-in agents cannot be scheduled",
-      permissions: { scheduledTask: ["read"] },
-      href: `/scheduled-tasks?agentId=${agent.id}`,
-    },
     {
       icon: <Copy className="h-4 w-4" />,
       label: "Clone",
@@ -130,7 +109,7 @@ export function AgentActions({
         ? "Built-in agents cannot be cloned"
         : undefined,
       permissions: { agent: ["create"] },
-      onClick: () => onClone(agent.id),
+      onClick: () => onClone(agent),
       testId: `${E2eTestId.CloneAgentButton}-${agent.name}`,
     },
     {
@@ -144,6 +123,18 @@ export function AgentActions({
           ? "Only internal agents can be exported"
           : undefined,
       onClick: () => onExport(agent),
+    },
+    {
+      icon: <Sparkles className="h-4 w-4" />,
+      label: "Convert to skill",
+      permissions: { skill: ["create"] },
+      disabled: isBuiltIn || agent.agentType !== "agent",
+      disabledTooltip: isBuiltIn
+        ? "Built-in agents cannot be converted"
+        : agent.agentType !== "agent"
+          ? "Only internal agents can be converted to skills"
+          : undefined,
+      onClick: () => onConvertToSkill(agent),
     },
     {
       icon: <Trash2 className="h-4 w-4" />,

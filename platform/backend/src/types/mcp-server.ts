@@ -47,6 +47,18 @@ export const SelectMcpServerSchema = createSelectSchema(
     })
     .nullable()
     .optional(),
+  /**
+   * Agents (profiles / MCP gateways) with tools explicitly assigned from this
+   * server — statically pinned to it, or unpinned on a tool of its catalog.
+   */
+  assignedAgents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
 });
@@ -64,6 +76,15 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    // Server-owned OAuth refresh-failure state, written only by the refresh
+    // subsystem (routes/oauth.ts) — a freshly installed server has never
+    // attempted a refresh, and accepting these from install input would let
+    // a caller seed arbitrary (including unsanitized) diagnostic text shown
+    // to other users with access to the install.
+    oauthRefreshError: true,
+    oauthRefreshErrorMessage: true,
+    oauthRefreshErrorDescription: true,
+    oauthRefreshFailedAt: true,
   });
 
 export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)

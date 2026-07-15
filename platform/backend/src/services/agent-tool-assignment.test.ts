@@ -679,23 +679,25 @@ describe("assignToolToApp", () => {
 });
 
 describe("resolveAppToolsByName", () => {
-  // The file tools are registered (and so seedable) only with the flags on;
-  // config is restored pristine before every test, so flags are set per test.
+  // The file tools are registered (and so seedable) only with the sandbox flag
+  // on; config is restored pristine before every test, so it is set per test.
   const enableFileToolFlags = () => {
-    (config.apps as { enabled: boolean }).enabled = true;
-    (config.projects as { enabled: boolean }).enabled = true;
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
   };
 
-  test("resolves the app-assignable file tools when the flags are on", async ({
-    makeOrganization,
+  test("resolves the app-assignable file tools when the flag is on", async ({
+    makeAgent,
+    makeUser,
   }) => {
-    const organization = await makeOrganization();
+    const agent = await makeAgent();
+    const user = await makeUser();
     enableFileToolFlags();
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
 
     const result = await resolveAppToolsByName({
-      organizationId: organization.id,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: agent.organizationId,
       toolNames: [TOOL_SEARCH_FILES_FULL_NAME],
       environmentId: null,
     });
@@ -706,13 +708,17 @@ describe("resolveAppToolsByName", () => {
   });
 
   test("rejects other built-ins as unassignable to apps", async ({
-    makeOrganization,
+    makeAgent,
+    makeUser,
   }) => {
-    const organization = await makeOrganization();
+    const agent = await makeAgent();
+    const user = await makeUser();
     enableFileToolFlags();
 
     const result = await resolveAppToolsByName({
-      organizationId: organization.id,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: agent.organizationId,
       toolNames: [TOOL_SAVE_FILE_FULL_NAME],
       environmentId: null,
     });
@@ -725,15 +731,18 @@ describe("resolveAppToolsByName", () => {
     }
   });
 
-  test("rejects the file tools when the projects flag is off", async ({
-    makeOrganization,
+  test("rejects the file tools when the sandbox flag is off", async ({
+    makeAgent,
+    makeUser,
   }) => {
-    const organization = await makeOrganization();
-    enableFileToolFlags();
-    (config.projects as { enabled: boolean }).enabled = false;
+    const agent = await makeAgent();
+    const user = await makeUser();
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
 
     const result = await resolveAppToolsByName({
-      organizationId: organization.id,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: agent.organizationId,
       toolNames: [TOOL_SEARCH_FILES_FULL_NAME],
       environmentId: null,
     });

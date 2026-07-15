@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ChevronRight,
   Globe,
+  InfoIcon,
   Loader2,
   Plus,
   RotateCcw,
@@ -48,6 +49,10 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import {
+  AgentToolExclusionsEditor,
+  type AgentToolExclusionsEditorRef,
+} from "@/components/agent-tool-exclusions-editor";
 import {
   AgentToolsEditor,
   type AgentToolsEditorRef,
@@ -132,6 +137,7 @@ import {
   useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
+import type { AgentToolExclusions } from "@/lib/agent-tool-exclusions.query";
 import {
   useAgentDelegations,
   useSyncAgentDelegations,
@@ -156,6 +162,7 @@ import {
   getDescriptionPlaceholder,
   getNamePlaceholder,
   normalizeSuggestedPrompts,
+  shouldOfferAppCatalogs,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
 
@@ -270,6 +277,7 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
           size="sm"
           className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
           onClick={() => onToggle(agent.id)}
+          aria-label="Remove agent"
         >
           <X className="h-3 w-3" />
         </Button>
@@ -297,6 +305,7 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
             size="sm"
             className="h-6 w-6 p-0 shrink-0"
             onClick={() => setOpen(false)}
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -403,7 +412,7 @@ function getSuccessMessage(agentType: AgentType, isUpdate: boolean): string {
   return isUpdate ? messages[agentType].update : messages[agentType].create;
 }
 
-const agentTypeDisplayName: Record<string, string> = {
+export const agentTypeDisplayName: Record<string, string> = {
   agent: "agent",
   mcp_gateway: "MCP Gateway",
   llm_proxy: "LLM Proxy",
@@ -434,7 +443,7 @@ function getScopeOptions(agentType: string) {
   ];
 }
 
-function AccessLevelSelector({
+export function AccessLevelSelector({
   scope,
   onScopeChange,
   isAdmin,
@@ -574,7 +583,10 @@ export function AgentDialog({
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
   const shouldLoadIdentityProviders =
-    open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
+    open &&
+    (agentType === "mcp_gateway" ||
+      agentType === "llm_proxy" ||
+      agentType === "agent");
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -610,10 +622,6 @@ export function AgentDialog({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
-  // Sandbox environment binding (internal agents only): the agent's code sandbox
-  // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
-  // Gated behind a feature flag (off by default) until the per-env runtime ships.
-  const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
   // Environment isolation is always enforced by the backend for agents and MCP
   // gateways, so the tool picker reflects it (cross-environment catalogs are
   // shown disabled). When the org only has the Default environment, nothing is
@@ -660,6 +668,8 @@ export function AgentDialog({
   });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
+  const agentToolExclusionsEditorRef =
+    useRef<AgentToolExclusionsEditorRef>(null);
   // Snapshot of the form's pristine values, captured whenever the dialog
   // (re)populates from the loaded agent, so we can detect unsaved edits.
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
@@ -683,6 +693,12 @@ export function AgentDialog({
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
+  // The tools editor's live selection (pending edits included), so the
+  // exclusions editor's seed treats a just-checked-but-unsaved built-in as
+  // assigned instead of disabling it.
+  const [pendingSelectedToolIds, setPendingSelectedToolIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
@@ -701,16 +717,23 @@ export function AgentDialog({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
-  // New agents default to implicit ("All tools") access; editing an existing
-  // agent overwrites this from its stored value.
+  // New agents default to Auto mode (implicit access to all tools); editing an
+  // existing agent overwrites this from its stored value.
   const [accessAllTools, setAccessAllTools] = useState(true);
+  // Auto-mode exclusions dirty tracking: { initial, current } normalized
+  // payloads reported by the exclusions editor (null until it initializes and
+  // after it unmounts when the dialog closes).
+  const [exclusionsState, setExclusionsState] = useState<{
+    initial: AgentToolExclusions;
+    current: AgentToolExclusions;
+  } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
-  // environment. For agents it binds the code sandbox runtime (feature-flagged);
-  // for LLM proxies / MCP gateways it is an attribution label so their
+  // environment. For agents it binds the code sandbox runtime; for LLM proxies
+  // / MCP gateways it is an attribution label so their
   // inference/usage falls under environment-scoped cost limits.
   const supportsEnvironment =
     isInternalAgent || agentType === "llm_proxy" || agentType === "mcp_gateway";
@@ -722,10 +745,19 @@ export function AgentDialog({
         : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
-  // "All tools" (implicit access) is the default for new agents; admins can
-  // switch an agent to "Custom" (explicitly assigned tools). Implicit access is
-  // scoped to tools/knowledge visible to the user AND in the agent's environment.
-  const allToolsMode = accessAllTools;
+  // "Auto" (implicit access to all tools) is the default for new agents; admins
+  // can switch an agent to "Custom" (explicitly assigned tools). Implicit access
+  // is scoped to tools/knowledge visible to the user AND in the agent's
+  // environment.
+  const autoToolsMode = accessAllTools;
+  // Seed the exclusions editor with the backend's Auto-mode pre-fill whenever
+  // saving would put the agent into Auto mode from scratch: creating a new
+  // agent on the Auto tab, or editing an agent whose SAVED accessAllTools is
+  // off while the Auto tab is selected. An agent already saved in Auto mode has
+  // its pre-fill persisted server-side, so the editor just loads it.
+  const savedAccessAllTools = (freshAgent || agent)?.accessAllTools ?? false;
+  const seedDefaultExclusions =
+    autoToolsMode && (agent ? !savedAccessAllTools : true);
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -735,7 +767,9 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
-    agentType === "mcp_gateway" || agentType === "llm_proxy";
+    agentType === "mcp_gateway" ||
+    agentType === "llm_proxy" ||
+    agentType === "agent";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
@@ -820,8 +854,8 @@ export function AgentDialog({
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: "5",
             passthroughHeaders: [],
-            // New agents default to "All tools" (implicit access); admins can
-            // switch to "Custom" (explicitly assigned tools).
+            // New agents default to "Auto" (implicit access to all tools);
+            // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
             accessAllTools: true,
           };
@@ -881,16 +915,27 @@ export function AgentDialog({
     [availableApiKeys, llmApiKeyId],
   );
 
-  // Derive provider from selected model (like prompt input's initialProvider/currentProvider)
-  const currentLlmProvider = useMemo((): SupportedProvider | null => {
+  // The selected model's row: source of the derived provider (like prompt
+  // input's initialProvider/currentProvider) and of the capability gating
+  // for the no-tools notice below.
+  const selectedLlmModelRow = useMemo(() => {
     if (!llmModel) return null;
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.dbId === llmModel)) {
-        return provider as SupportedProvider;
-      }
+    for (const models of Object.values(modelsByProvider)) {
+      const match = models?.find((m) => m.dbId === llmModel);
+      if (match) return match;
     }
     return null;
   }, [llmModel, modelsByProvider]);
+
+  const currentLlmProvider: SupportedProvider | null =
+    selectedLlmModelRow?.provider ?? null;
+
+  // Pairing a no-tools model (e.g. Microsoft 365 Copilot) with a tooled
+  // agent is allowed — chat omits the tools for that model — but the user
+  // must learn that before the first message, not from a silent no-op.
+  const showNoToolsModelNotice =
+    selectedLlmModelRow?.capabilities?.supportsToolCalling === false &&
+    (accessAllTools || selectedToolsCount > 0);
 
   // Track the provider that was active when auto-selection last ran,
   // so we only auto-select when the provider actually changes (not when the user clears the key).
@@ -1076,6 +1121,13 @@ export function AgentDialog({
           },
         });
         savedAgentId = updated?.id ?? agent.id;
+        // Auto-mode exclusions (full-replace PUT; no-op when unchanged). Runs
+        // AFTER the agent update so that when accessAllTools flips Custom→Auto,
+        // the backend's switch-time pre-fill lands first and this full replace
+        // is the authoritative last write of the set the user saw and edited.
+        if (!isBuiltIn) {
+          await agentToolExclusionsEditorRef.current?.saveChanges();
+        }
         if (updated?.id) {
           toast.success(getSuccessMessage(agentType, true));
         }
@@ -1124,6 +1176,10 @@ export function AgentDialog({
             await agentToolsEditorRef.current?.saveChanges({
               agentId: savedAgentId,
               resourceLabel: agentTypeDisplayName[agentType] || "resource",
+            });
+            // Auto-mode exclusions configured before the agent existed.
+            await agentToolExclusionsEditorRef.current?.saveChanges({
+              agentId: savedAgentId,
             });
           } catch (error) {
             await deleteAgent.mutateAsync(savedAgentId);
@@ -1213,8 +1269,9 @@ export function AgentDialog({
 
   // Detect unsaved edits so any close path (Esc, backdrop, the X button, or the
   // Cancel button) prompts before discarding. Covers every form field held here
-  // plus delegations; per-tool selections live in the tools editor child and
-  // are not part of this check (the All-tools/Custom switch below is, though).
+  // plus delegations and Auto-mode tool exclusions; per-tool selections live in
+  // the tools editor child and are not part of this check (the All-tools/Custom
+  // switch below is, though).
   const currentSnapshot = buildAgentFormSnapshot({
     name,
     icon,
@@ -1244,7 +1301,12 @@ export function AgentDialog({
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
         [...selectedDelegationTargetIds].sort(),
-      ));
+      ) ||
+      // Auto-mode exclusions load async, so they're diffed against the
+      // baseline the editor reports (same pattern as delegations above)
+      // rather than the open-time snapshot.
+      (exclusionsState !== null &&
+        hasUnsavedChanges(exclusionsState.initial, exclusionsState.current)));
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
 
   const handleClose = guard.requestClose;
@@ -1270,9 +1332,7 @@ export function AgentDialog({
                   <p className="pt-2 text-sm text-muted-foreground">
                     {agent.description}.{" "}
                     <ExternalDocsLink
-                      href={getDocsUrl(
-                        DocsPage.PlatformBuiltInAgentsPolicyConfig,
-                      )}
+                      href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
                       className="underline"
                       showIcon={false}
                     >
@@ -1356,11 +1416,11 @@ export function AgentDialog({
 
                     {/* Environment assignment (below description).
                       - Agent: binds the agent's code sandbox to a per-environment
-                        Dagger engine + egress policy (feature-flagged).
+                        Dagger engine + egress policy.
                       - LLM proxy / MCP gateway: assigns the deployment environment
                         so its usage falls under environment-scoped cost limits.
-                      Hidden when only the default environment is available. */}
-                    {((isInternalAgent && agentEnvironmentsEnabled) ||
+                      Renders disabled when only the default environment exists. */}
+                    {(isInternalAgent ||
                       agentType === "llm_proxy" ||
                       agentType === "mcp_gateway") && (
                       <EnvironmentSelector
@@ -1555,6 +1615,7 @@ export function AgentDialog({
                                 variant="ghost"
                                 size="icon"
                                 className="absolute top-2 right-2 h-6 w-6"
+                                aria-label="Remove suggested prompt"
                                 onClick={() => {
                                   setSuggestedPrompts((prev) => {
                                     const next = prev.filter(
@@ -1586,6 +1647,7 @@ export function AgentDialog({
                                   }
                                   placeholder="e.g. Summarize recent changes"
                                   maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+                                  aria-label="Button Label"
                                 />
                               </div>
                               <div className="space-y-1">
@@ -1604,6 +1666,7 @@ export function AgentDialog({
                                   placeholder="The full prompt sent when clicked"
                                   className="min-h-[60px]"
                                   maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+                                  aria-label="Suggested prompt"
                                 />
                               </div>
                             </div>
@@ -1626,39 +1689,43 @@ export function AgentDialog({
                     <div className="space-y-2">
                       <Label>Tools & Knowledge Sources</Label>
                       <Tabs
-                        value={allToolsMode ? "all" : "specific"}
+                        value={autoToolsMode ? "auto" : "custom"}
                         onValueChange={(value) => {
-                          const all = value === "all";
-                          setAccessAllTools(all);
+                          const auto = value === "auto";
+                          setAccessAllTools(auto);
                           // Dynamic access only works through the search/run
                           // dispatch surface, so picking it enables that mode.
-                          if (all) {
+                          if (auto) {
                             setToolExposureMode("search_and_run_only");
                           }
                         }}
                       >
                         <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="all">All</TabsTrigger>
-                          <TabsTrigger value="specific">Custom</TabsTrigger>
+                          <TabsTrigger value="auto">Auto</TabsTrigger>
+                          <TabsTrigger value="custom">Custom</TabsTrigger>
                         </TabsList>
                       </Tabs>
-                      {allToolsMode && (
+                      {autoToolsMode ? (
                         <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
                           <li className="flex gap-2">
                             <CheckIcon className="mt-px size-3.5 shrink-0" />
-                            Every MCP tool and knowledge source the chatting
-                            user can access, in this agent's environment
+                            Every MCP tool and knowledge source the calling user
+                            can access, in this{" "}
+                            {agentTypeDisplayName[agentType] || "agent"}'s
+                            environment — new servers included automatically
                           </li>
                           <li className="flex gap-2">
                             <CheckIcon className="mt-px size-3.5 shrink-0" />
-                            Connects per the server's policy — on behalf of the
-                            chatting user by default
+                            Credentials resolve at call time per each server's
+                            default credential setting — on behalf of the
+                            calling user unless the server always uses one
+                            account
                           </li>
                           <li className="flex gap-2">
                             <CheckIcon className="mt-px size-3.5 shrink-0" />
                             <span>
-                              Discovered on demand — the catalog never burns
-                              context tokens.{" "}
+                              Tools are discovered on demand — the catalog never
+                              burns context tokens.{" "}
                               <ExternalDocsLink
                                 href={toolExposureDocsUrl}
                                 className="underline"
@@ -1669,11 +1736,42 @@ export function AgentDialog({
                             </span>
                           </li>
                         </ul>
+                      ) : (
+                        <p className="pt-1 text-xs text-muted-foreground">
+                          Only the tools and knowledge sources you assign below
+                          are available to this{" "}
+                          {agentTypeDisplayName[agentType] || "agent"}.
+                        </p>
                       )}
-                      {/* Kept mounted while hidden so pending selections and the
-                        save-time ref survive switching to "All". */}
+                      {/* Auto-mode exclusions; kept mounted while hidden so
+                        pending edits and the save-time ref survive switching
+                        to "Custom". */}
                       <div
-                        className={cn("space-y-3", allToolsMode && "hidden")}
+                        className={cn(
+                          "space-y-2 pt-2",
+                          !autoToolsMode && "hidden",
+                        )}
+                      >
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Disabled tools
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          These tools stay disabled for this{" "}
+                          {agentTypeDisplayName[agentType] || "agent"} while
+                          Auto mode is on.
+                        </p>
+                        <AgentToolExclusionsEditor
+                          ref={agentToolExclusionsEditorRef}
+                          agentId={agent?.id}
+                          seedDefaultExclusions={seedDefaultExclusions}
+                          pendingAssignedToolIds={pendingSelectedToolIds}
+                          onStateChange={setExclusionsState}
+                        />
+                      </div>
+                      {/* Kept mounted while hidden so pending selections and the
+                        save-time ref survive switching to "Auto". */}
+                      <div
+                        className={cn("space-y-3", autoToolsMode && "hidden")}
                       >
                         <div className="space-y-2">
                           <p className="text-xs font-medium text-muted-foreground">
@@ -1706,6 +1804,7 @@ export function AgentDialog({
                             assignmentScope={scope}
                             assignmentTeamIds={assignedTeamIds}
                             onSelectedCountChange={setSelectedToolsCount}
+                            onSelectedToolIdsChange={setPendingSelectedToolIds}
                             environmentScopingEnabled={
                               environmentScopingEnabled
                             }
@@ -1713,7 +1812,9 @@ export function AgentDialog({
                             agentEnvironmentName={agentEnvironmentName}
                             onConflictsChange={setMcpEnvConflicts}
                             openComboboxOnMount={openToolsCombobox}
-                            includeAppCatalogs={agentType === "mcp_gateway"}
+                            includeAppCatalogs={shouldOfferAppCatalogs(
+                              agentType,
+                            )}
                           />
                         </div>
                         <div className="space-y-2">
@@ -1945,9 +2046,9 @@ export function AgentDialog({
                       </div>
                     </div>
 
-                    {/* Progressive loading is only a choice for custom tools —
-                      "All" requires the search/run dispatch surface. */}
-                    {!allToolsMode && (
+                    {/* Progressive loading is only a choice for Custom mode —
+                      "Auto" requires the search/run dispatch surface. */}
+                    {!autoToolsMode && (
                       <div className="flex items-center justify-between gap-4">
                         <div className="space-y-0.5">
                           <Label htmlFor="load-tools-when-needed">
@@ -1993,8 +2094,8 @@ export function AgentDialog({
                   </div>
                 )}
 
-                {/* Hooks (internal agents only, existing agents only; gated by
-                  the agent-hooks feature flag, which requires the agent runtime) */}
+                {/* Hooks (internal agents only, existing agents only; shown when
+                  the agent runtime is available, since hooks run in its sandbox) */}
                 {agentHooksEnabled &&
                   isInternalAgent &&
                   !isBuiltIn &&
@@ -2113,6 +2214,20 @@ export function AgentDialog({
                                 />
                               )}
                             </div>
+                            {showNoToolsModelNotice && (
+                              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                <InfoIcon
+                                  className="mt-0.5 size-3 shrink-0"
+                                  aria-hidden="true"
+                                />
+                                <span>
+                                  This model doesn&apos;t support tools, so this{" "}
+                                  {agentTypeDisplayName[agentType] || "agent"}
+                                  &apos;s tools won&apos;t be used in its chats.
+                                  Pick a different model to use tools.
+                                </span>
+                              </p>
+                            )}
                           </>
                         )}
                       </div>
@@ -2194,6 +2309,7 @@ export function AgentDialog({
                                       variant="ghost"
                                       size="icon"
                                       className="h-4 w-4 p-0 hover:bg-transparent"
+                                      aria-label="Remove header"
                                       onClick={() =>
                                         setPassthroughHeaders((prev) =>
                                           prev.filter((h) => h !== header),
@@ -2209,6 +2325,7 @@ export function AgentDialog({
                                 MAX_PASSTHROUGH_HEADERS && (
                                 <Input
                                   placeholder="Type header name and press Enter"
+                                  aria-label="Add passthrough header"
                                   onKeyDown={(e) => {
                                     if (e.key !== "Enter") return;
                                     e.preventDefault();
@@ -2252,14 +2369,17 @@ export function AgentDialog({
                             identityProviders.length > 0 && (
                               <div className="space-y-2">
                                 <Label>
-                                  {agentType === "llm_proxy"
+                                  {agentType === "llm_proxy" ||
+                                  agentType === "agent"
                                     ? "Identity Provider (JWKS)"
                                     : "Identity Provider (Enterprise/JWKS)"}
                                 </Label>
                                 <p className="text-sm text-muted-foreground">
                                   {agentType === "llm_proxy"
                                     ? `Select the OIDC identity provider this LLM Proxy should trust for JWKS JWT authentication. Leave this unset to keep using provider API keys and virtual keys without IdP JWT validation.`
-                                    : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
+                                    : agentType === "agent"
+                                      ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
+                                      : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                                   {mcpAuthDocsUrl ? (
                                     <>
                                       {" "}

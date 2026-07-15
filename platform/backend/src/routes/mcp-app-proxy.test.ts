@@ -50,14 +50,6 @@ vi.mock("@archestra/app-runtime-rs", () => ({
   prepareAppEnvelope: vi.fn((html: string) => `<!--app-envelope-->${html}`),
 }));
 
-const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
-  (config.apps as { enabled: boolean }).enabled = true;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
-});
-
 async function buildApp(
   userId: string,
   organizationId: string,
@@ -144,28 +136,6 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
 
   afterEach(async () => {
     if (app) await app.close();
-  });
-
-  test("returns 404 when the apps feature is disabled", async ({
-    makeApp,
-    makeUser,
-    makeMember,
-  }) => {
-    const created = await makeApp();
-    const user = await makeUser();
-    await makeMember(user.id, created.organizationId, { role: "member" });
-    (config.apps as { enabled: boolean }).enabled = false;
-    app = await buildApp(user.id, created.organizationId);
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/mcp/app/${created.id}`,
-      headers: JSON_RPC_HEADERS,
-      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
-    });
-
-    (config.apps as { enabled: boolean }).enabled = true;
-    expect(response.statusCode).toBe(404);
   });
 
   test("returns 403 when the user cannot access the app", async ({
@@ -697,32 +667,6 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     expect(response.statusCode).toBe(403);
   });
 
-  test("returns 404 on the Bearer path when the apps feature is disabled", async ({
-    makeApp,
-    makeUser,
-    makeMember,
-  }) => {
-    const created = await makeApp();
-    const user = await makeUser();
-    await makeMember(user.id, created.organizationId, { role: "member" });
-    const { value } = await UserTokenModel.create(
-      user.id,
-      created.organizationId,
-    );
-    (config.apps as { enabled: boolean }).enabled = false;
-    app = await buildBearerApp();
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/mcp/app/${created.id}`,
-      headers: bearer(value),
-      payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
-    });
-
-    (config.apps as { enabled: boolean }).enabled = true;
-    expect(response.statusCode).toBe(404);
-  });
-
   test("accepts an audience-bound OAuth token and hides llm_complete from the model", async ({
     makeApp,
     makeUser,
@@ -1137,16 +1081,12 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     );
     const READ_FILE_NAME = getArchestraToolFullName(TOOL_READ_FILE_SHORT_NAME);
 
-    // The file tools are registered (and seedable) only under
-    // projects + skillsSandbox; apps.enabled is already on file-wide.
-    const originalProjects = config.projects.enabled;
+    // The file tools are registered (and seedable) only under skillsSandbox.
     const originalSandbox = config.skillsSandbox.enabled;
     beforeAll(() => {
-      (config.projects as { enabled: boolean }).enabled = true;
       (config.skillsSandbox as { enabled: boolean }).enabled = true;
     });
     afterAll(() => {
-      (config.projects as { enabled: boolean }).enabled = originalProjects;
       (config.skillsSandbox as { enabled: boolean }).enabled = originalSandbox;
     });
 

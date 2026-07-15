@@ -16,12 +16,10 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import {
   AppModel,
-  OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
 } from "@/models";
-import type { GlobalToolPolicy } from "@/types";
 
 /**
  * The App Data Store tools are the ONLY Archestra built-ins an app runtime may
@@ -48,15 +46,12 @@ export const APP_RUNTIME_BUILTIN_SHORT_NAMES = new Set<string>([
  * the runtime gate, the dispatch re-check, tools/list, the SDK bootstrap, the
  * assignment paths, `preview_app_tool`, and the tools-editor candidate route —
  * asks it, so a dark flag turns the whole surface off at once. The file tools
- * are registered only under `skillsSandbox` + `projects` (see the backend
- * `getArchestraMcpTools` gate), and the app surface itself ships dark without
- * `apps`.
+ * are registered only under `skillsSandbox` (see the backend
+ * `getArchestraMcpTools` gate).
  */
 export function isAppAssignableArchestraTool(shortName: string): boolean {
   return (
     isAppAssignableArchestraToolShortName(shortName) &&
-    config.apps.enabled &&
-    config.projects.enabled &&
     config.skillsSandbox.enabled
   );
 }
@@ -114,8 +109,19 @@ export function redactAppBuiltinAuditResult(
   // Error results carry diagnostics (not-found, size caps), never file bytes —
   // keep them intact for the audit trail.
   if (response.isError) return response;
+  // structuredContent mirrors the read window in its `content` field — strip
+  // it the same way, keeping the metadata for the audit trail.
+  const structured =
+    response.structuredContent && typeof response.structuredContent === "object"
+      ? (() => {
+          const { content: _content, ...meta } =
+            response.structuredContent as Record<string, unknown>;
+          return meta;
+        })()
+      : response.structuredContent;
   return {
     ...response,
+    structuredContent: structured,
     content: [
       {
         type: "text",
@@ -147,9 +153,7 @@ type AppToolGateDecision =
  * `block_when_context_is_untrusted` policy still fires on the authoring path.
  * `require_approval` is enforced by the caller: the iframe runtime has no
  * approval UI so it sets `treatRequireApprovalAsBlock`, while `preview_app_tool`
- * carries its own human-approval gate and does not. As everywhere in the policy
- * engine, a permissive (`globalToolPolicy`) org short-circuits to allow — so
- * per-tool block policies do not apply on this path in permissive orgs either.
+ * carries its own human-approval gate and does not.
  */
 export async function gateAppToolCall(params: {
   appId: string;
@@ -160,7 +164,7 @@ export async function gateAppToolCall(params: {
   isContextTrusted: boolean;
   treatRequireApprovalAsBlock: boolean;
 }): Promise<AppToolGateDecision> {
-  const { appId, organizationId, userId, toolName, toolInput } = params;
+  const { appId, userId, toolName, toolInput } = params;
 
   // Archestra built-ins: two tiers. The reserved app-runtime tools (App Data
   // Store + the LLM completion) are always dispatchable; the app-assignable
@@ -248,9 +252,58 @@ export async function gateAppToolCall(params: {
   // Policy is keyed by the resolved (stored) name, so a suffix-addressed tool
   // cannot slip past a policy attached to its full name.
   const resolvedToolName = tool.toolName;
-  const organization = await OrganizationModel.getById(organizationId);
-  const globalToolPolicy: GlobalToolPolicy =
-    organization?.globalToolPolicy ?? "permissive";
+  const refusal = await enforceAppRuntimeInvocationPolicy({
+    resolvedToolName,
+    resolvedToolId: tool.id,
+    displayName: toolName,
+    toolInput,
+    userId,
+    isContextTrusted: params.isContextTrusted,
+    treatRequireApprovalAsBlock: params.treatRequireApprovalAsBlock,
+  });
+  if (refusal) {
+    return { allowed: false, ...refusal };
+  }
+
+  return { allowed: true, kind: "upstream", resolvedToolName };
+}
+
+/**
+ * Evaluate a resolved tool's invocation policy for an app-runtime call — shared
+ * by every app-runtime entrypoint (the owned-app gate above and the
+ * server-scoped app proxy) so they cannot diverge on enforcement.
+ *
+ * `resolvedToolName` must be the stored (slugified) name the policy is keyed by.
+ * `isContextTrusted` mirrors the caller's trust: iframe runtimes pass `true`, so
+ * only `block_always`/`require_approval` gate and a no-policy tool stays
+ * callable; `preview_app_tool` forwards the chat's real trust so
+ * `block_when_context_is_untrusted` still fires. `treatRequireApprovalAsBlock`
+ * blocks `require_approval` where the caller has no way to present the prompt
+ * (the sandbox runtimes). Returns a JSON-RPC refusal `{ code, reason }`, or `null`
+ * when the call is allowed.
+ */
+export async function enforceAppRuntimeInvocationPolicy(params: {
+  resolvedToolName: string;
+  // The id of the resolved tool row the caller will execute. Policy is evaluated
+  // against this exact row instead of a name lookup, which the app-runtime path
+  // (agentId "") could otherwise resolve to a different same-named row.
+  resolvedToolId: string;
+  displayName: string;
+  toolInput: Record<string, unknown>;
+  userId: string;
+  isContextTrusted: boolean;
+  treatRequireApprovalAsBlock: boolean;
+}): Promise<{ code: number; reason: string } | null> {
+  const {
+    resolvedToolName,
+    resolvedToolId,
+    displayName,
+    toolInput,
+    userId,
+    isContextTrusted,
+    treatRequireApprovalAsBlock,
+  } = params;
+
   // The viewer is the principal executing the call (as the app owner, with the
   // viewer's credentials), so a team-scoped policy is matched against the
   // viewer's teams — not an empty set, which would silently miss them.
@@ -260,33 +313,31 @@ export async function gateAppToolCall(params: {
     "",
     [{ toolCallName: resolvedToolName, toolInput }],
     policyContext,
-    params.isContextTrusted,
-    globalToolPolicy,
+    isContextTrusted,
+    new Map([[resolvedToolName, resolvedToolId]]),
   );
   if (!verdict.isAllowed) {
     return {
-      allowed: false,
       code: -32601,
-      reason: `Tool "${toolName}" is blocked by a tool-invocation policy: ${verdict.reason}`,
+      reason: `Tool "${displayName}" is blocked by a tool-invocation policy — a security guardrail enforced by ${archestraMcpBranding.catalogName}, not by the tool itself: ${verdict.reason}`,
     };
   }
 
-  if (params.treatRequireApprovalAsBlock) {
+  if (treatRequireApprovalAsBlock) {
     const requiresApproval =
       await ToolInvocationPolicyModel.checkApprovalRequired(
         resolvedToolName,
         toolInput,
         policyContext,
-        globalToolPolicy,
+        resolvedToolId,
       );
     if (requiresApproval) {
       return {
-        allowed: false,
         code: -32601,
-        reason: `Tool "${toolName}" requires human approval, which the app sandbox cannot present; an authoring agent can exercise it via preview_app_tool.`,
+        reason: `Tool "${displayName}" requires human approval, which the app sandbox cannot present; an authoring agent can exercise it via preview_app_tool.`,
       };
     }
   }
 
-  return { allowed: true, kind: "upstream", resolvedToolName };
+  return null;
 }

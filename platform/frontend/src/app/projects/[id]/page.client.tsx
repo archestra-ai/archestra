@@ -395,7 +395,8 @@ function ChatsList({
     id: string;
     title: string | null;
     authorName: string | null;
-    origin: "user" | "schedule_trigger";
+    /** Conversation origin; only `schedule_trigger` is special here. */
+    origin: string;
     lastMessageAt: string;
     readOnly: boolean;
     scheduleTriggerId: string | null;
@@ -572,7 +573,7 @@ function ProjectFilesSidebar({
     <ResizableRightPanel>
       <FileDropZone
         onDropFiles={(droppedFiles) => uploadProjectFiles.mutate(droppedFiles)}
-        disabled={uploadProjectFiles.isPending}
+        uploading={uploadProjectFiles.isPending}
         className="flex-1 min-h-0 flex flex-col gap-0"
       >
         <div className="flex-1 min-h-0 overflow-hidden relative">

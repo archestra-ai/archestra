@@ -2,10 +2,50 @@ import { z } from "zod";
 import { describe, expect, test } from "@/test";
 import {
   deduplicateLabels,
+  fencedBlock,
   formatAssignmentSummary,
   formatZodErrorWithSchema,
   isAbortLikeError,
 } from "./helpers";
+
+describe("fencedBlock", () => {
+  test("wraps plain content in a three-backtick fence with the language", () => {
+    expect(fencedBlock("<h1>hi</h1>", "html")).toBe(
+      "```html\n<h1>hi</h1>\n```",
+    );
+  });
+
+  test("picks a fence longer than the longest backtick run so content can't escape", () => {
+    // Content holds a ``` line; a 3-backtick fence would let it close early.
+    const content = "before\n```\nafter";
+    const wrapped = fencedBlock(content, "html");
+    expect(wrapped).toBe("````html\nbefore\n```\nafter\n````");
+    // The content is fully enclosed: it appears between the opening and closing
+    // fence, and no line in it equals the chosen fence.
+    const fence = "````";
+    expect(wrapped.startsWith(`${fence}html\n`)).toBe(true);
+    expect(wrapped.endsWith(`\n${fence}`)).toBe(true);
+    expect(content.split("\n").some((line) => line === fence)).toBe(false);
+  });
+
+  test("grows the fence past even longer runs", () => {
+    expect(fencedBlock("a\n`````\nb").startsWith("``````\n")).toBe(true);
+  });
+
+  test("defaults to no language", () => {
+    expect(fencedBlock("x")).toBe("```\nx\n```");
+  });
+
+  test("does not overflow on content with a huge number of backtick runs", () => {
+    // Each `` `x` `` is a separate single-backtick run; spreading 200k of them
+    // into Math.max would exceed the argument limit. Must stay a 3-backtick
+    // fence (longest run is length 1) and not throw.
+    const content = "`x`".repeat(200_000);
+    const wrapped = fencedBlock(content, "html");
+    expect(wrapped.startsWith("```html\n")).toBe(true);
+    expect(wrapped.endsWith("\n```")).toBe(true);
+  });
+});
 
 describe("isAbortLikeError", () => {
   test("returns true for AbortError", () => {

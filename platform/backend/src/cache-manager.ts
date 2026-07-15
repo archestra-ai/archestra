@@ -44,10 +44,17 @@ export const CacheKey = {
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
+  /** Microsoft 365 Copilot device-flow sign-in rate limiting per user */
+  Microsoft365CopilotDeviceAuthRateLimit:
+    "microsoft-365-copilot-device-auth-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
+  /** Per-user group-token resolution for auto-sync-permissions KB connectors */
+  KbGroupTokens: "kb-group-tokens",
+  /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */
+  KbConnectorIdentity: "kb-connector-identity",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
@@ -56,6 +63,14 @@ export const CacheKey = {
   TeamsThreadMuteHint: "teams-thread-mute-hint",
   /** Slack channel threads that already got the one-time "you can mute me" hint */
   SlackThreadMuteHint: "slack-thread-mute-hint",
+  /** Latest mute token per MS Teams channel thread (cross-pod in-flight reply suppression) */
+  TeamsThreadMuteMarker: "teams-thread-mute-marker",
+  /** Latest mute token per Slack channel thread (cross-pod in-flight reply suppression) */
+  SlackThreadMuteMarker: "slack-thread-mute-marker",
+  /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
+  TelegramApprovalCallback: "chatops-telegram-approval",
+  /** One-shot codes linking a Telegram chat to a signed-in user */
+  TelegramLinkCode: "chatops-telegram-link",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -301,24 +316,6 @@ class CacheManager {
   }
 
   /**
-   * Wrap a function with caching. If the key exists and hasn't expired,
-   * return the cached value. Otherwise, call the function and cache the result.
-   */
-  async wrap<T>(
-    key: AllowedCacheKey,
-    fnc: () => Promise<T>,
-    { ttl }: { ttl?: number; refreshThreshold?: number } = {},
-  ): Promise<T> {
-    const cached = await this.get<T>(key);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const result = await fnc();
-    await this.set(key, result, ttl);
-    return result;
-  }
-
-  /**
    * Stop the cache manager and close connections.
    * Should be called during graceful shutdown.
    */
@@ -437,7 +434,9 @@ export class LRUCacheManager<T = unknown> {
    * Check if a key exists in the cache (and is not expired).
    */
   has(key: string): boolean {
-    const entry = this.lruStore.get(key);
+    // peek, not get: a pure existence check must not promote the entry's
+    // recency, or has()-only keys outlive keys that are actually read.
+    const entry = this.lruStore.peek(key);
     if (!entry) {
       return false;
     }

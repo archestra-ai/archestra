@@ -4,7 +4,9 @@ import {
   type ErrorExtended,
 } from "@archestra/shared";
 
+import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { ServerErrorFallback } from "@/components/error-fallback";
+import { serverCanAccessPage } from "@/lib/auth/auth.server";
 import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import McpRegistryClient from "./page.client";
@@ -21,6 +23,10 @@ export default async function McpRegistryPage() {
   };
 
   try {
+    if (!(await serverCanAccessPage("/mcp/registry"))) {
+      return <ForbiddenPage />;
+    }
+
     const headers = await getServerApiHeaders();
     const [catalogResponse, serversResponse] = await Promise.all([
       archestraApiSdk.getInternalMcpCatalog({ headers }),

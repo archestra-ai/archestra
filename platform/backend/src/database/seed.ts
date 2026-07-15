@@ -29,6 +29,7 @@ import config, {
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
+  AgentExcludedToolModel,
   AgentModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
@@ -250,8 +251,6 @@ export async function syncBuiltInSkillsForOrganization(
   archestraMcpBranding.syncFromOrganization(organization);
 
   for (const builtInSkill of BUILT_IN_SKILLS) {
-    // Skills tied to a dark feature stay out of the catalog until it ships.
-    if (builtInSkill.requiresAppsFeature && !config.apps.enabled) continue;
     const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
     const shipped = builtInSkillShippedWrite(builtInSkill);
 
@@ -345,6 +344,24 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
+  await ToolModel.backfillNewSandboxToolsToAgents(newlyCreatedToolNames);
+  // A brand-new built-in tool must not silently reach existing Auto-mode
+  // agents: pre-exclude it for them. Runs after the assignment backfills above
+  // so a tool those just assigned is skipped (assignments beat the pre-fill);
+  // exempt short names are skipped inside the model method.
+  const newlyCreatedToolIds = await ToolModel.findBuiltInToolIdsByNames(
+    newlyCreatedToolNames,
+  );
+  const excludedRowCount =
+    await AgentExcludedToolModel.prefillNewBuiltInToolsForAllToolsAgents(
+      newlyCreatedToolIds,
+    );
+  if (excludedRowCount > 0) {
+    logger.info(
+      { excludedRowCount, newToolCount: newlyCreatedToolIds.length },
+      "Pre-excluded new built-in tools for Auto-mode agents",
+    );
+  }
   logger.info("Seeded Archestra catalog and tools");
 }
 
@@ -690,6 +707,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     zhipuai: "ZhipuAI",
     deepseek: "DeepSeek",
     "github-copilot": "GitHub Copilot",
+    "microsoft-365-copilot": "Microsoft 365 Copilot",
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
     azure: "Azure AI Foundry",
@@ -847,14 +865,12 @@ async function ensureExistingUsersHavePersonalLlmProxies(): Promise<void> {
 }
 
 /**
- * When the skills feature flag is enabled, turn on the Agent Skill tools for
- * every organization that hasn't already opted in. This makes skills a default
- * capability: newly created agents inherit the model-facing skill tools and the
- * slash-command toggle unlocks without an admin first clicking "enable".
- * Pre-existing agents are not retrofitted. No-op when the flag is off.
+ * Turn on the Agent Skill tools for every organization that hasn't already
+ * opted in. Skills are a default capability: newly created agents inherit the
+ * model-facing skill tools and the slash-command toggle unlocks without an
+ * admin first clicking "enable". Pre-existing agents are not retrofitted.
  */
-async function enableSkillToolsWhenFeatureEnabled(): Promise<void> {
-  if (!config.agents.skillsEnabled) return;
+async function enableSkillToolsForExistingOrgs(): Promise<void> {
   try {
     const enabled = await OrganizationModel.enableSkillToolsForAllOrgs();
     if (enabled > 0) {
@@ -880,7 +896,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await syncBuiltInAgents();
   await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
-  await enableSkillToolsWhenFeatureEnabled();
+  await enableSkillToolsForExistingOrgs();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();

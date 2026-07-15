@@ -215,11 +215,19 @@ test.describe("MCP environment validation rule", () => {
       url: "/api/internal_mcp_catalog",
       body: created,
     });
+    // Creating the item routes to /mcp/registry/:id/edit?step=test, which
+    // resolves the item from the catalog list.
+    await mswControl.use({
+      method: "get",
+      url: "/api/internal_mcp_catalog",
+      body: [created],
+    });
 
     await mcpRegistryPage.goto();
     await expect(mcpRegistryPage.heading).toBeVisible();
 
     await page.getByRole("button", { name: "Add MCP Server" }).click();
+    await page.getByRole("button", { name: "Start from scratch" }).click();
     await page.getByRole("button", { name: /^Remote/ }).click();
     await page.getByRole("textbox", { name: "Name *" }).fill("install-test");
     await page
@@ -227,10 +235,22 @@ test.describe("MCP environment validation rule", () => {
       .fill("https://example.test/mcp");
     await page.getByRole("button", { name: "Add Server" }).click();
 
+    // The setup wizard's "Test connection" step opens the install dialog to
+    // collect the prompted field. Retry the click — a click landing before
+    // React attaches the handler is silently lost (same next-dev quirk
+    // skill-share.spec works around).
     const installDialog = page
       .getByRole("dialog")
       .filter({ hasText: /Install Server/ });
-    await expect(installDialog).toBeVisible();
+    const stepInstallButton = page.getByRole("button", {
+      name: "Install",
+      exact: true,
+    });
+    await expect(stepInstallButton).toBeVisible();
+    await expect(async () => {
+      await stepInstallButton.click();
+      await expect(installDialog).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 30_000 });
 
     const endpoint = installDialog.getByRole("textbox", { name: /Endpoint/ });
     await endpoint.fill("https://prod.example.com");

@@ -94,6 +94,12 @@ export type AgentToolFilters = z.infer<typeof AgentToolFilterSchema>;
 
 export type McpToolAssignment = {
   toolName: string;
+  /**
+   * Raw upstream tool name (tools.raw_name). Preferred over splitting `toolName`
+   * when dispatching to the upstream server. Null for legacy rows not yet
+   * re-synced; callers fall back to splitting `toolName`.
+   */
+  rawName: string | null;
   mcpServerId: string | null;
   credentialResolutionMode: z.infer<typeof CredentialResolutionModeSchema>;
   catalogId: string | null;

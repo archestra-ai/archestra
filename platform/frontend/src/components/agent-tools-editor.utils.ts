@@ -1,25 +1,18 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  getCreationDefaultArchestraToolShortNames,
   parseFullToolName,
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 
-const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
-  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-);
-const SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
-  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-);
-
 /**
- * Given catalog items and a parallel array of tool lists, find the default
- * Archestra tools and return their IDs plus the catalog index.
+ * Given catalog items and a parallel array of tool lists, find the
+ * creation-default Archestra tools and return their IDs plus the catalog
+ * index.
  *
- * Pass `includeSkillTools: true` when the org has opted in (via the skills
- * empty-state enable action) so the skill tools also appear pre-selected on
- * the new agent form, mirroring the server-side `assignSkillToolsToAgent`
- * behavior on save.
+ * The set is composed by the shared
+ * `getCreationDefaultArchestraToolShortNames` from the same feature flags
+ * `AgentModel.create` reads server-side, so the new agent form pre-selects
+ * exactly what the backend assigns at creation.
  *
  * Returns null if the Archestra catalog isn't found, tools aren't loaded,
  * or no default tools match.
@@ -28,7 +21,8 @@ export function getDefaultArchestraToolIds(
   catalogItems: { id: string; name: string }[],
   toolsByCatalogIndex: ({ id: string; name: string }[] | undefined)[],
   options: {
-    includeSkillTools?: boolean;
+    skillsEnabled?: boolean;
+    sandboxEnabled?: boolean;
   } = {},
 ): { toolIds: Set<string>; catalogIndex: number } | null {
   const catalogIndex = catalogItems.findIndex(
@@ -39,19 +33,18 @@ export function getDefaultArchestraToolIds(
   const tools = toolsByCatalogIndex[catalogIndex];
   if (!tools || tools.length === 0) return null;
 
+  const creationDefaultShortNames = new Set<string>(
+    getCreationDefaultArchestraToolShortNames({
+      skillsEnabled: options.skillsEnabled === true,
+      sandboxEnabled: options.sandboxEnabled === true,
+    }),
+  );
+
   const toolIds = new Set(
     tools
       .filter((t) => {
         const shortName = parseFullToolName(t.name).toolName;
-        if (shortName === null) return false;
-        if (DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)) return true;
-        if (
-          options.includeSkillTools &&
-          SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)
-        ) {
-          return true;
-        }
-        return false;
+        return shortName !== null && creationDefaultShortNames.has(shortName);
       })
       .map((t) => t.id),
   );
@@ -81,6 +74,78 @@ export function isCatalogInEnvironment(
     catalog.serverType === "builtin" ||
     (catalog.environmentId ?? null) === (agentEnvironmentId ?? null)
   );
+}
+
+/**
+ * Whether a catalog item may be assigned to an agent in the tools picker, and
+ * how it should read when it is.
+ *
+ * A catalog item is assignable when it has at least one **discovered** tool; an
+ * install the assigning caller can resolve is NOT required. A discovered tool
+ * with no resolvable install stays assignable as a dynamic assignment — its
+ * connection resolved per caller at call time — and is surfaced as `unavailable`,
+ * prompting install/reconnect when invoked. A catalog item with no discovered
+ * tool has nothing to assign. Environment incompatibility is a separate,
+ * orthogonal gate.
+ */
+export function getCatalogAssignmentGate(params: {
+  hasDiscoveredTools: boolean;
+  hasResolvableInstall: boolean;
+  isEnvIncompatible: boolean;
+  environmentName?: string | null;
+}): { disabled: boolean; disabledReason?: string; unavailable: boolean } {
+  const { hasDiscoveredTools, hasResolvableInstall, isEnvIncompatible } =
+    params;
+
+  if (isEnvIncompatible) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: `Not in ${
+        params.environmentName
+          ? `the "${params.environmentName}" environment`
+          : "the Default environment"
+      }`,
+    };
+  }
+
+  if (!hasDiscoveredTools) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: "Not installed",
+    };
+  }
+
+  return { disabled: false, unavailable: !hasResolvableInstall };
+}
+
+/**
+ * Whether the tools picker should drop a per-server credential pin back to
+ * resolve-at-call-time.
+ *
+ * Only a genuinely stale pin — one absent from a non-empty set of connections
+ * that resolve for the caller — is reset. When no connection resolves at all,
+ * the pin is preserved: the assignment persists independently of install state,
+ * so coercing it here would register a pending change and silently rewrite the
+ * pin to dynamic on the next save. A dynamic/unset selection has nothing to
+ * reset.
+ */
+export function shouldResetCredentialPin(params: {
+  credentialsLoaded: boolean;
+  selectionIsDynamic: boolean;
+  pinnedServerId: string | null;
+  resolvableServerIds: readonly string[];
+}): boolean {
+  const { credentialsLoaded, selectionIsDynamic, pinnedServerId } = params;
+
+  if (!credentialsLoaded || selectionIsDynamic || pinnedServerId === null) {
+    return false;
+  }
+  if (params.resolvableServerIds.includes(pinnedServerId)) {
+    return false;
+  }
+  return params.resolvableServerIds.length > 0;
 }
 
 /**

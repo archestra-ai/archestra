@@ -1,6 +1,5 @@
 import { ADMIN_ROLE_NAME, getArchestraAppResourceUri } from "@archestra/shared";
 import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
 import {
   AgentModel,
   AppModel,
@@ -10,29 +9,13 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("MCP backing for apps", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
@@ -288,6 +271,12 @@ describe("MCP backing for apps", () => {
     const [toolAfter] = await ToolModel.findByCatalogIdWithMeta(catalogId);
     expect(toolAfter.name).toBe(toolBefore.name);
     expect(toolAfter.name.endsWith("__open")).toBe(true);
+    // The launch tool's derived description IS refreshed on rename, so stored
+    // metadata never keeps a stale (or pre-sanitization) app name.
+    expect(toolAfter.description).toBe(
+      'Open the "Renamed Dashboard" app and render its UI.',
+    );
+    expect(toolAfter.description).not.toBe(toolBefore.description);
   });
 
   test("deleting an app tears down its backing catalog and server", async () => {

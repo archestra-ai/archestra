@@ -2,7 +2,7 @@ import {
   DEFAULT_THEME_ID,
   type OrganizationCustomFont,
 } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -166,9 +166,32 @@ class OrganizationModel {
   }
 
   /**
+   * Atomically record that the first-login onboarding survey was submitted for
+   * this organization. Returns true only for the call that actually flipped the
+   * flag (it was previously null), so the caller can forward the survey exactly
+   * once even when two admins submit concurrently. Never shown again once set.
+   */
+  static async markOnboardingSurveyCompleted(id: string): Promise<boolean> {
+    const rows = await db
+      .update(schema.organizationsTable)
+      .set({ onboardingSurveyCompletedAt: new Date() })
+      .where(
+        and(
+          eq(schema.organizationsTable.id, id),
+          isNull(schema.organizationsTable.onboardingSurveyCompletedAt),
+        ),
+      )
+      .returning({ id: schema.organizationsTable.id });
+    if (rows.length > 0) {
+      await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+    }
+    return rows.length > 0;
+  }
+
+  /**
    * Turn on the Agent Skill tools for every organization that hasn't already
-   * opted in. Run at startup when the skills feature flag is enabled so the
-   * model-facing skill tools are on by default — newly created agents then
+   * opted in. Run at startup so the model-facing skill tools are on by default
+   * — newly created agents then
    * inherit them via `ToolModel.assignSkillToolsToAgent`, and the
    * slash-command toggle unlocks. Pre-existing agents are not retrofitted;
    * admins add skill tools to them via the agent tools editor if needed.
@@ -199,9 +222,8 @@ class OrganizationModel {
   }
 
   /**
-   * List every organization id. Used to backfill globally-enabled built-in
-   * tools (e.g. the MCP App tools, gated by `ARCHESTRA_APPS_ENABLED` rather
-   * than a per-org opt-in).
+   * List every organization id. Used to backfill built-in tools that every org
+   * gets (e.g. the MCP App tools).
    */
   static async findAllIds(): Promise<string[]> {
     const rows = await db
@@ -341,7 +363,6 @@ class OrganizationModel {
       defaultUserLimitCleanupInterval:
         org.defaultUserLimitCleanupInterval ?? null,
       onboardingComplete: org.onboardingComplete,
-      globalToolPolicy: org.globalToolPolicy,
       compressionScope: org.compressionScope,
       convertToolResultsToToon: org.convertToolResultsToToon,
       allowChatFileUploads: org.allowChatFileUploads,

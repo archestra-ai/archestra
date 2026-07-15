@@ -30,17 +30,12 @@ export function makeConfig(
       orchestratorK8sRuntime: false,
       sandbox: false,
       sandboxArtifactBytesLimit: 16 * 1024 * 1024,
-      agentSkillsEnabled: false,
-      agentEnvironmentsEnabled: false,
-      appsEnabled: false,
-      projectsEnabled: false,
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,
       anthropicWifEnabled: false,
       bedrockIamAuthEnabled: false,
       geminiVertexAiEnabled: false,
-      globalToolPolicy: "permissive",
       incomingEmail: { enabled: false },
       mcpServerBaseImage: "",
       orchestratorK8sNamespace: "",
@@ -51,6 +46,8 @@ export function makeConfig(
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
       agentHooksEnabled: false,
+      chatopsTelegramEnabled: false,
+      kbAutoSyncPermissionsEnabled: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },
@@ -68,6 +65,7 @@ export function makePublicConfig(
   return {
     disableBasicAuth: false,
     disableInvitations: false,
+    devAutoLoginEnabled: false,
     enterpriseCoreActive: false,
     analytics: {
       enabled: false,
@@ -76,6 +74,7 @@ export function makePublicConfig(
     },
     ...overrides,
     maintenanceMode: overrides.maintenanceMode ?? null,
+    siteNotificationMessage: overrides.siteNotificationMessage ?? null,
   };
 }
 

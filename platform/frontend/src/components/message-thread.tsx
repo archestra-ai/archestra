@@ -44,6 +44,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { isBlankReasoningPart } from "@/components/chat/chat-messages.utils";
 import { InlineChatError } from "@/components/chat/inline-chat-error";
 import {
   hasKnowledgeBaseToolCall,
@@ -265,6 +266,12 @@ const MessageThread = ({
 
                         switch (part.type) {
                           case "text": {
+                            // Some models emit whitespace-only text alongside
+                            // tool calls (e.g. a lone " "); rendering it would
+                            // produce an empty message bubble
+                            if (!part.text.trim()) {
+                              return null;
+                            }
                             const policyDenied = parsePolicyDenied(part.text);
                             const shouldRenderUnsafeContextDivider =
                               message.role === "assistant" &&
@@ -547,6 +554,12 @@ const MessageThread = ({
                             );
                           }
                           case "reasoning":
+                            // Empty reasoning parts (redacted/signature-only
+                            // thinking, kept for provider replay) must not render
+                            // as empty "Thinking…" accordions.
+                            if (isBlankReasoningPart(part)) {
+                              return null;
+                            }
                             return (
                               <Reasoning
                                 key={partKey}

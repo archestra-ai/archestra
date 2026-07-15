@@ -45,6 +45,7 @@ export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-req
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
+export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
@@ -53,6 +54,7 @@ export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
 export { default as appsTable } from "./app";
 export { default as appDataTable } from "./app-data";
+export { default as appPinsTable } from "./app-pin";
 export { default as appRenderDiagnosticsTable } from "./app-render-diagnostics";
 export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";
@@ -93,7 +95,10 @@ export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
 export { default as kbChunksTable } from "./kb-chunk";
+export { default as kbContainerAclsTable } from "./kb-container-acl";
 export { default as kbDocumentsTable } from "./kb-document";
+export { default as kbExternalUserGroupsTable } from "./kb-external-user-group";
+export { default as kbMemberOverridesTable } from "./kb-member-override";
 export { default as knowledgeBasesTable } from "./knowledge-base";
 export {
   default as knowledgeBaseConnectorsTable,
@@ -118,6 +123,7 @@ export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";
 export { default as oauthClientsTable } from "./oauth-client";
+export { default as oauthClientTeamsTable } from "./oauth-client-team";
 export { default as oauthConsentsTable } from "./oauth-consent";
 export { default as oauthRefreshTokensTable } from "./oauth-refresh-token";
 export { default as optimizationRulesTable } from "./optimization-rule";
@@ -163,6 +169,7 @@ export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
+export { default as userOnboardingSeenItemsTable } from "./user-onboarding-seen-item";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";
 export { default as virtualApiKeysTable } from "./virtual-api-key";

@@ -16,7 +16,7 @@
 import { streamText } from "ai";
 import logger from "@/logging";
 import {
-  parseMaxInputTokens,
+  parseContextLengthError,
   trimMessagesToTokenLimit,
 } from "@/routes/chat/context-trimming";
 import { EmptyModelResponseError } from "@/routes/chat/errors";
@@ -73,9 +73,24 @@ export async function runAgentStream(params: {
 }): Promise<{
   result: ReturnType<typeof streamText>;
   getCapturedStreamError: () => unknown;
+  /**
+   * The committed turn's finishReason when it was abortive (a tool call started
+   * but never completed), else null. The probe observes this before the caller
+   * commits, so onStepFinish may not have recorded it yet — the abortive-turn
+   * tracker uses this as the authoritative source for a `length` truncation.
+   */
+  getAbortiveFinishReason: () => string | null;
 }> {
   const { config, recovery } = params;
   const logContext = recovery?.logContext ?? {};
+  // Set when the committed attempt is abortive; read by the abortive-turn
+  // tracker to classify a `length` truncation as non-retryable.
+  let abortiveFinishReason: string | null = null;
+  const finalize = (result: ReturnType<typeof streamText>) => ({
+    result,
+    getCapturedStreamError: () => capturedStreamError,
+    getAbortiveFinishReason: () => abortiveFinishReason,
+  });
 
   const MAX_EMPTY_RESPONSE_ATTEMPTS = 3;
   // a still-too-long trimmed payload reproduces the same context error (trim
@@ -128,27 +143,29 @@ export async function runAgentStream(params: {
     );
 
     if (probe.kind === "renderable" || probe.kind === "aborted") {
-      return { result, getCapturedStreamError: () => capturedStreamError };
+      return finalize(result);
     }
 
     if (probe.kind === "error") {
-      const maxTokens = parseMaxInputTokens(probe.error);
+      const contextError = parseContextLengthError(probe.error);
       if (
-        maxTokens !== null &&
+        contextError !== null &&
         Array.isArray(config.messages) &&
         contextTrimAttempts < MAX_CONTEXT_TRIM_ATTEMPTS
       ) {
         contextTrimAttempts++;
         const trimmed = trimMessagesToTokenLimit({
           messages: config.messages,
-          maxTokens,
+          maxTokens: contextError.maxInputTokens,
+          requestedTokens: contextError.requestedTokens,
           systemPrompt:
             typeof config.system === "string" ? config.system : undefined,
         });
         logger.info(
           {
             ...logContext,
-            maxTokens,
+            maxTokens: contextError.maxInputTokens,
+            requestedTokens: contextError.requestedTokens,
             originalMessages: config.messages.length,
             trimmedMessages: trimmed.length,
           },
@@ -165,12 +182,19 @@ export async function runAgentStream(params: {
         result = runAttempt();
         continue;
       }
-      return { result, getCapturedStreamError: () => capturedStreamError };
+      return finalize(result);
     }
 
     if (probe.kind === "abortive") {
       abortiveToolCallAttempts++;
-      if (abortiveToolCallAttempts < MAX_ABORTIVE_TOOL_CALL_ATTEMPTS) {
+      // A `length` truncation is deterministic in the tool-call payload size —
+      // retrying re-truncates. Only retry a non-length abortive turn (a
+      // transient mid-stream drop); surface a `length` one immediately.
+      const isDeterministicTruncation = probe.finishReason === "length";
+      if (
+        !isDeterministicTruncation &&
+        abortiveToolCallAttempts < MAX_ABORTIVE_TOOL_CALL_ATTEMPTS
+      ) {
         logger.warn(
           {
             ...logContext,
@@ -183,16 +207,24 @@ export async function runAgentStream(params: {
         result = runAttempt();
         continue;
       }
-      // Exhausted: surface the abortive turn through the merge so the
-      // abortive-turn tracker emits IncompleteToolCall (unchanged end state).
+      // Exhausted (or a deterministic `length` truncation): surface the abortive
+      // turn through the merge so the abortive-turn tracker emits the mapped
+      // error (ToolCallOutputTruncated for `length`, else IncompleteToolCall).
       logger.warn(
         {
           ...logContext,
+          finishReason: probe.finishReason,
+          rawFinishReason: probe.rawFinishReason,
           attempts: abortiveToolCallAttempts,
+          deterministicTruncation: isDeterministicTruncation,
         },
-        "[AbortiveToolCall] retries exhausted, surfacing incomplete tool call",
+        "[AbortiveToolCall] surfacing incomplete tool call",
       );
-      return { result, getCapturedStreamError: () => capturedStreamError };
+      // The probe already observed the terminal finishReason; expose it so the
+      // tracker classifies a `length` truncation even when the committed turn's
+      // onStepFinish fired during the probe (before hasCommittedResult).
+      abortiveFinishReason = probe.finishReason;
+      return finalize(result);
     }
 
     // probe.kind === "empty": the provider finished with no content.

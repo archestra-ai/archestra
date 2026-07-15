@@ -3,7 +3,6 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
-import { afterAll } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -11,16 +10,11 @@ import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 
 // these suites assert exact assigned-tool sets after agent creation; pin the
-// apps feature off so a local ARCHESTRA_APPS_ENABLED=true does not leak
-// auto-assigned app tools into them (app-tool assignment is covered in
-// tool-archestra-assignment.test.ts)
-const originalAppsEnabled = config.apps.enabled;
+// sandbox runtime off so its tools do not leak into the default-assignment
+// counts. App tools are seeded and auto-assigned to every agent; their
+// assignment is covered in tool-archestra-assignment.test.ts.
 beforeEach(() => {
-  (config.apps as { enabled: boolean }).enabled = false;
   (config.skillsSandbox as { enabled: boolean }).enabled = false;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
 });
 
 describe("AgentToolModel.findById", () => {
@@ -136,6 +130,102 @@ describe("AgentToolModel delegation queries", () => {
       sourceAgentId: activeSource.id,
       targetAgentId: activeTarget.id,
     });
+  });
+});
+
+describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
+  test("returns distinct agents assigned tools from each server's catalog, sorted by name", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const server = await makeMcpServer({ catalogId: catalog.id });
+    const toolA = await makeTool({ catalogId: catalog.id });
+    const toolB = await makeTool({ catalogId: catalog.id });
+
+    const agentZed = await makeAgent({ name: "Zed Agent" });
+    const agentAda = await makeAgent({ name: "Ada Agent" });
+    // Two assignments for the same agent must collapse to one entry
+    await makeAgentTool(agentZed.id, toolA.id);
+    await makeAgentTool(agentZed.id, toolB.id);
+    await makeAgentTool(agentAda.id, toolA.id);
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      server.id,
+    ]);
+
+    expect(result.get(server.id)).toEqual([
+      { id: agentAda.id, name: "Ada Agent" },
+      { id: agentZed.id, name: "Zed Agent" },
+    ]);
+  });
+
+  test("counts pinned assignments only toward the pinned install; unpinned toward every install of the catalog", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const serverOne = await makeMcpServer({ catalogId: catalog.id });
+    const serverTwo = await makeMcpServer({ catalogId: catalog.id });
+    const tool = await makeTool({ catalogId: catalog.id });
+
+    const pinnedAgent = await makeAgent({ name: "Pinned Agent" });
+    const dynamicAgent = await makeAgent({ name: "Dynamic Agent" });
+    await makeAgentTool(pinnedAgent.id, tool.id, {
+      mcpServerId: serverOne.id,
+    });
+    await makeAgentTool(dynamicAgent.id, tool.id);
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      serverOne.id,
+      serverTwo.id,
+    ]);
+
+    expect(result.get(serverOne.id)).toEqual([
+      { id: dynamicAgent.id, name: "Dynamic Agent" },
+      { id: pinnedAgent.id, name: "Pinned Agent" },
+    ]);
+    expect(result.get(serverTwo.id)).toEqual([
+      { id: dynamicAgent.id, name: "Dynamic Agent" },
+    ]);
+  });
+
+  test("excludes soft-deleted agents and returns empty arrays for unused servers", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const server = await makeMcpServer({ catalogId: catalog.id });
+    const unusedServer = await makeMcpServer();
+    const tool = await makeTool({ catalogId: catalog.id });
+
+    const agent = await makeAgent();
+    await makeAgentTool(agent.id, tool.id);
+    await AgentModel.delete(agent.id);
+
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+      server.id,
+      unusedServer.id,
+    ]);
+
+    expect(result.get(server.id)).toEqual([]);
+    expect(result.get(unusedServer.id)).toEqual([]);
+  });
+
+  test("returns an empty map for empty input", async () => {
+    const result = await AgentToolModel.getAssignedAgentDetailsForMcpServers(
+      [],
+    );
+    expect(result.size).toBe(0);
   });
 });
 
@@ -710,7 +800,6 @@ describe("AgentToolModel.findAll", () => {
       expect(excludedToolNames).toContain("archestra__exclude_test_tool_2");
       expect(excludedToolNames).toContain("archestra_single_underscore_test");
       expect(excludedToolNames).toContain("archestranounderscore_test");
-      expect(excludedToolNames).not.toContain("archestra__artifact_write");
       expect(excludedToolNames).not.toContain("archestra__todo_write");
 
       // Without excludeArchestraTools - should include all tools including archestra__ ones
@@ -1225,10 +1314,6 @@ describe("AgentToolModel.findAll", () => {
       makeTool,
       makeAgentTool,
     }) => {
-      archestraMcpBranding.syncFromOrganization({
-        appName: "Acme Copilot",
-        iconLogo: null,
-      });
       const brandedKbToolName = getArchestraToolFullName(
         TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
         {
@@ -1236,11 +1321,27 @@ describe("AgentToolModel.findAll", () => {
           fullWhiteLabeling: true,
         },
       );
+      // Create the agent first: AgentModel.create assigns the default
+      // built-ins, which re-syncs the branding singleton from the first org
+      // (unbranded here) and would wipe a manually-set branding.
       const agent = await makeAgent();
+      archestraMcpBranding.syncFromOrganization({
+        appName: "Acme Copilot",
+        iconLogo: null,
+      });
       const regularTool = await makeTool({ name: "regular-tool" });
       const kbTool = await makeTool({ name: brandedKbToolName });
       await makeAgentTool(agent.id, regularTool.id);
       await makeAgentTool(agent.id, kbTool.id);
+
+      // Set the branding after agent creation: creating an agent re-syncs the
+      // branding singleton to its (default-named) org, which would otherwise
+      // clobber this branded name before findAll's archestra-tool filter reads
+      // it.
+      archestraMcpBranding.syncFromOrganization({
+        appName: "Acme Copilot",
+        iconLogo: null,
+      });
 
       const result = await AgentToolModel.findAll({
         filters: { agentId: agent.id, excludeArchestraTools: true },

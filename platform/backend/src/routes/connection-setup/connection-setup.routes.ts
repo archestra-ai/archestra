@@ -24,6 +24,7 @@ import {
 } from "@/models";
 import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
 import {
+  type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
@@ -99,11 +100,25 @@ const CreateConnectionSetupBodySchema = z.object({
     .optional(),
 });
 
+/**
+ * Non-fatal signal that the bound Anthropic key couldn't be confirmed to have a
+ * usable balance. `insufficient_balance` = remaining usage balance is too low,
+ * whether out of credit or over a usage/spend limit (do-not-retry); `unverified`
+ * = the check itself failed transiently (retry-friendly).
+ */
+const ConnectionCreditWarningSchema = z.object({
+  kind: z.enum(["insufficient_balance", "unverified"]),
+  /** Display name of the provider API key the warning is about. */
+  keyName: z.string(),
+});
+
 const CreateConnectionSetupResponseSchema = z.object({
   id: z.string().uuid(),
   command: z.string(),
   expiresAt: z.date(),
   tokenStart: z.string(),
+  /** Present when the bound Anthropic key has no (confirmable) credit. */
+  creditWarning: ConnectionCreditWarningSchema.optional(),
 });
 
 const CreateConnectionVirtualKeyBodySchema = z.object({
@@ -115,6 +130,8 @@ const CreateConnectionVirtualKeyResponseSchema = z.object({
   value: z.string(),
   /** Display name of the key (for revocation guidance). */
   name: z.string(),
+  /** Present when the bound Anthropic key has no (confirmable) credit. */
+  creditWarning: ConnectionCreditWarningSchema.optional(),
 });
 
 const CreateConnectionPassthroughKeyBodySchema = z.object({
@@ -143,7 +160,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(CreateConnectionSetupResponseSchema),
       },
     },
-    async ({ body, organizationId, user }, reply) => {
+    async ({ body, headers, organizationId, user }, reply) => {
       const {
         clientId,
         platform,
@@ -176,7 +193,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const organization = await OrganizationModel.getById(organizationId);
-      if (!organization || !isAllowedBaseUrl({ baseUrl, organization })) {
+      if (
+        !organization ||
+        !isAllowedBaseUrl({
+          baseUrl,
+          organization,
+          requestOrigin: headers.origin,
+        })
+      ) {
         throw new ApiError(
           400,
           "baseUrl is not an allowed connection endpoint",
@@ -193,6 +217,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       let virtualApiKeyId: string | null = null;
+      let creditWarning: ConnectionCreditWarning | undefined;
       if (llmProxyId && provider) {
         await requireAgentAccess({
           agentId: llmProxyId,
@@ -215,24 +240,26 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "You need llmVirtualKey:create permission to use a virtual key. Choose the provider-key option instead.",
             );
           }
-          virtualApiKeyId = await ensureConnectionVirtualKey({
-            organizationId,
-            userId: user.id,
-            userEmail: user.email,
-            userTeamIds: await TeamModel.getUserTeamIds(user.id),
-            provider,
-            preferredProviderKeyId:
-              organization.connectionDefaultProviderKeys?.[provider] ?? null,
-          });
+          ({ virtualApiKeyId, creditWarning } =
+            await ensureConnectionVirtualKey({
+              organizationId,
+              userId: user.id,
+              userEmail: user.email,
+              userTeamIds: await TeamModel.getUserTeamIds(user.id),
+              provider,
+              preferredProviderKeyId:
+                organization.connectionDefaultProviderKeys?.[provider] ?? null,
+            }));
         } else if (
           // provider-key mode is passthrough: the script only rewires the base
-          // URL. For Claude Code's Anthropic subscription passthrough we also
-          // attribute requests to the user via X-Archestra-Virtual-Key, reusing
-          // the (otherwise-null) virtualApiKeyId column to carry the passthrough
-          // key id. Best-effort: silently skipped without llmVirtualKey:create.
+          // URL. For Claude Code passthrough (Anthropic subscription or the
+          // user's own Bedrock credentials) we also attribute requests to the
+          // user via X-Archestra-Virtual-Key, reusing the (otherwise-null)
+          // virtualApiKeyId column to carry the passthrough key id.
+          // Best-effort: silently skipped without llmVirtualKey:create.
           attributePassthrough &&
           clientId === "claude-code" &&
-          provider === "anthropic"
+          (provider === "anthropic" || provider === "bedrock")
         ) {
           const canCreateVirtualKey = await userHasPermission(
             user.id,
@@ -284,6 +311,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         expiresAt: setup.expiresAt,
         tokenStart: setup.tokenStart,
+        creditWarning,
       });
     },
   );
@@ -328,15 +356,16 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      const virtualApiKeyId = await ensureConnectionVirtualKey({
-        organizationId,
-        userId: user.id,
-        userEmail: user.email,
-        userTeamIds: await TeamModel.getUserTeamIds(user.id),
-        provider,
-        preferredProviderKeyId:
-          organization.connectionDefaultProviderKeys?.[provider] ?? null,
-      });
+      const { virtualApiKeyId, creditWarning } =
+        await ensureConnectionVirtualKey({
+          organizationId,
+          userId: user.id,
+          userEmail: user.email,
+          userTeamIds: await TeamModel.getUserTeamIds(user.id),
+          provider,
+          preferredProviderKeyId:
+            organization.connectionDefaultProviderKeys?.[provider] ?? null,
+        });
 
       const value = await readVirtualKeyValue(virtualApiKeyId);
       const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
@@ -344,7 +373,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(500, "Failed to provision a virtual key");
       }
 
-      return reply.send({ value, name: virtualKey.name });
+      return reply.send({ value, name: virtualKey.name, creditWarning });
     },
   );
 
@@ -743,21 +772,40 @@ async function assertSkillsBelongToOrg(params: {
  * baseUrl ends up verbatim in a script served from a public endpoint AND in
  * the copy-pasted curl one-liner, so it must EXACTLY match (normalized full
  * URL, not just host) a URL the deployment already trusts: the env-configured
- * public URLs, the admin-curated connection URLs (each optionally with the
- * /v1 suffix the connection page appends), or localhost with no path beyond
- * /v1. Host-only matching would let a crafted path smuggle shell syntax into
- * the rendered script.
+ * public/internal URLs, the admin-curated connection URLs (each optionally
+ * with the /v1 suffix the connection page appends), or — with no path beyond
+ * /v1 — localhost or the origin the browser reached the app on (the request's
+ * Origin header). The Origin match is what keeps zero-config deployments
+ * working: without ARCHESTRA_API_BASE_URL/ARCHESTRA_FRONTEND_URL the
+ * connection page derives its endpoint from window.location.origin, which no
+ * env-derived source can know. Restricting origin-level matches to the exact
+ * ""/"/v1" paths the page generates prevents a crafted path from smuggling
+ * shell syntax into the rendered script, and URL parsing confines the origin
+ * itself to the host/port charset.
  */
 function isAllowedBaseUrl(params: {
   baseUrl: string;
   organization: Organization;
+  requestOrigin: string | undefined;
 }): boolean {
   const normalized = normalizeBaseUrl(params.baseUrl);
   if (!normalized) return false;
 
-  const localHostnames = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-  if (localHostnames.has(normalized.hostname)) {
-    return normalized.path === "" || normalized.path === "/v1";
+  if (normalized.path === "" || normalized.path === "/v1") {
+    const localHostnames = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+    if (localHostnames.has(normalized.hostname)) return true;
+
+    const requestOrigin = params.requestOrigin
+      ? normalizeBaseUrl(params.requestOrigin)
+      : null;
+    // A browser Origin header is origin-only; a path means it was forged.
+    if (
+      requestOrigin &&
+      requestOrigin.path === "" &&
+      requestOrigin.url === normalized.origin
+    ) {
+      return true;
+    }
   }
 
   const allowed = new Set<string>();
@@ -782,7 +830,7 @@ function isAllowedBaseUrl(params: {
  */
 function normalizeBaseUrl(
   raw: string,
-): { url: string; hostname: string; path: string } | null {
+): { url: string; origin: string; hostname: string; path: string } | null {
   let parsed: URL;
   try {
     parsed = new URL(raw);
@@ -796,8 +844,10 @@ function normalizeBaseUrl(
 
   const path = parsed.pathname.replace(/\/+$/, "");
   const hostname = parsed.hostname.toLowerCase();
+  const origin = `${parsed.protocol}//${parsed.host.toLowerCase()}`;
   return {
-    url: `${parsed.protocol}//${parsed.host.toLowerCase()}${path}`,
+    url: `${origin}${path}`,
+    origin,
     hostname,
     path,
   };

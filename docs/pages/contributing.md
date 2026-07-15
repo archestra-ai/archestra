@@ -2,19 +2,16 @@
 title: How to Contribute
 category: Development
 order: 1
+lastUpdated: 2026-07-03
 ---
 
-<!-- 
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ![Contributing](/docs/one-person-is-handling-a-box-for-the-other-over.webp)
 
-If you're reading this, you're likely an open source fan, which is awesome. Thank you for your interest in contributing to our project. ❤️
+Thank you for your interest in contributing to Archestra.
 
-## 👋 Talk to Us First!
+## Talk to Us First
 
 Archestra is a project with a full-time core team. While we work hard to make our plans and ideas public, we highly recommend saying "Hi!" to us before you start working on the codebase. There are two main reasons for this:
 
@@ -25,13 +22,13 @@ You can find the entire development team in our [Slack Community](https://arches
 
 > Hey, my name is {your name}, and I would love to work on {your idea}!
 
-That's it! Taking this simple first step gets you 95% of the way there. Our engineers will jump into the conversation, greet you, and share any relevant context to get you started.
+Our engineers will join the conversation, greet you, and share the context you need to get started.
 
 Before you can comment, open issues, or open PRs, go through [contributor onboarding](https://archestra.ai/contributor-onboard). Takes about 60 seconds.
 
-## 🤝 Contribute Responsibly
+## Contribute Responsibly
 
-We encourage the use of AI tools while working on your contribution! However, as always, and especially in the AI era, it's essential to emphasize that the project benefits only from contributions made at a certain level of quality.
+You are welcome to use AI tools on your contribution. The project only benefits from contributions that meet its quality bar.
 
 We sometimes have to reject contributions that show signs of unreviewed AI-generated code, such as:
 
@@ -49,4 +46,4 @@ We use bounties as an optional way to thank contributors for meaningful work. Th
 
 Respect assigned work. If an issue already has an assigned contributor, do not open a competing pull request, comment `/attempt`, or otherwise try to take over the bounty. Bots or users that try to steal already assigned bounties will be banned from the repository.
 
-We have to enforce this because irresponsible use of AI bots has made it much easier to spam issues and disrupt contributors who are already doing the work. We wrote more about this in [Let's talk about AI slop](https://archestra.ai/blog/only-responsible-ai). Use AI responsibly, communicate clearly, and help keep the project a high-effort engineering space. ❤️
+We have to enforce this because irresponsible use of AI bots has made it much easier to spam issues and disrupt contributors who are already doing the work. We wrote more about this in [Let's talk about AI slop](https://archestra.ai/blog/only-responsible-ai). Use AI responsibly, communicate clearly, and help keep the project a high-effort engineering space.

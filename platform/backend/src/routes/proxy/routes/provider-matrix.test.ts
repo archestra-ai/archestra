@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  MICROSOFT_365_COPILOT_MODELS,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
 import Fastify, {
   type FastifyInstance,
@@ -36,6 +39,7 @@ import { deepseekAdapterFactory } from "../adapters/deepseek";
 import { geminiAdapterFactory } from "../adapters/gemini";
 import { githubCopilotAdapterFactory } from "../adapters/github-copilot";
 import { groqAdapterFactory } from "../adapters/groq";
+import { microsoft365CopilotAdapterFactory } from "../adapters/microsoft-365-copilot";
 import { minimaxAdapterFactory } from "../adapters/minimax";
 import { mistralAdapterFactory } from "../adapters/mistral";
 import { ollamaAdapterFactory } from "../adapters/ollama";
@@ -55,6 +59,7 @@ import deepseekProxyRoutes from "./deepseek";
 import geminiProxyRoutes from "./gemini";
 import githubCopilotProxyRoutes from "./github-copilot";
 import groqProxyRoutes from "./groq";
+import microsoft365CopilotProxyRoutes from "./microsoft-365-copilot";
 import minimaxProxyRoutes from "./minimax";
 import mistralProxyRoutes from "./mistral";
 import ollamaProxyRoutes from "./ollama";
@@ -1900,6 +1905,31 @@ const providerConfigsByProvider = {
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
+  // The matrix mocks createClient, so it exercises the OpenAI-shaped inbound
+  // wire format this provider exposes — the Graph translation and its
+  // tool-rejection behavior are covered in microsoft-365-copilot.test.ts.
+  "microsoft-365-copilot": makeConfig({
+    providerName: "Microsoft 365 Copilot",
+    providerSlug: "microsoft-365-copilot",
+    provider: "microsoft-365-copilot",
+    family: "openai",
+    routePlugin: microsoft365CopilotProxyRoutes,
+    adapterFactory: microsoft365CopilotAdapterFactory,
+    endpoint: (agentId) =>
+      `/v1/microsoft-365-copilot/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-refresh-token",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder(
+      MICROSOFT_365_COPILOT_MODELS[0].id,
+    ),
+    model: MICROSOFT_365_COPILOT_MODELS[0].id,
+    optimizedModel: MICROSOFT_365_COPILOT_MODELS[0].id,
+    supportsDeclaredTools: false,
+    supportsStreamingToolCalls: false,
+    supportsCompression: true,
+  }),
 } satisfies Record<SupportedProvider, ProviderTestConfig>;
 
 const azureResponsesConfig = makeConfig({
@@ -2204,7 +2234,7 @@ describe("LLM proxy provider matrix", () => {
           }),
         });
 
-        expect(blockedResponse.statusCode).toBe(429);
+        expect(blockedResponse.statusCode).toBe(402);
         expect(blockedResponse.json()).toMatchObject({
           error: {
             code: "token_cost_limit_exceeded",

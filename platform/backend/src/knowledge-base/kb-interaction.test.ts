@@ -1,5 +1,8 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type { InteractionSource, SupportedProvider } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import db, { schema } from "@/database";
+import { InteractionModel, ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import {
   getProviderChatInteractionType,
@@ -22,38 +25,6 @@ vi.mock("@/observability/tracing/llm", () => ({
   ),
 }));
 
-const mockCreate = vi.fn((_data: unknown) =>
-  Promise.resolve({ id: "test-interaction-id" }),
-);
-const mockFindByProviderAndModelId = vi.fn(
-  (_provider: unknown, _model: unknown) =>
-    Promise.resolve({
-      id: "model-1",
-      modelId: "text-embedding-3-small",
-      provider: "openai",
-      customPricePerMillionInput: null,
-      customPricePerMillionOutput: null,
-      promptPricePerToken: null,
-      completionPricePerToken: null,
-    }),
-);
-const mockGetEffectivePricing = vi.fn(() => ({
-  pricePerMillionInput: "0.02",
-  pricePerMillionOutput: "0.02",
-  source: "default",
-}));
-vi.mock("@/models", () => ({
-  InteractionModel: {
-    create: (data: unknown) => mockCreate(data),
-  },
-  ModelModel: {
-    findByProviderAndModelId: (_provider: unknown, _model: unknown) =>
-      mockFindByProviderAndModelId(_provider, _model),
-    getEffectivePricing: (_model: unknown, _modelId?: unknown) =>
-      mockGetEffectivePricing(),
-  },
-}));
-
 vi.mock("@/observability");
 
 vi.mock("@/config", async () =>
@@ -61,6 +32,13 @@ vi.mock("@/config", async () =>
     observability: { otel: { captureContent: false, contentMaxLength: 10000 } },
   }),
 );
+
+async function kbInteractions(source: InteractionSource) {
+  return db
+    .select()
+    .from(schema.interactionsTable)
+    .where(eq(schema.interactionsTable.source, source));
+}
 
 // ===== Tests =====
 
@@ -156,21 +134,20 @@ describe("withKbObservability", () => {
       }),
     });
 
-    // Give the fire-and-forget promise time to execute
-    await vi.waitFor(() => {
-      expect(mockCreate).toHaveBeenCalledOnce();
+    // The interaction is persisted fire-and-forget.
+    await vi.waitFor(async () => {
+      expect(await kbInteractions("knowledge:embedding")).toHaveLength(1);
     });
 
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        profileId: null,
-        source: "knowledge:embedding",
-        type: "openai:embeddings",
-        model: "text-embedding-3-small",
-        inputTokens: 5,
-        outputTokens: 0,
-      }),
-    );
+    const [row] = await kbInteractions("knowledge:embedding");
+    expect(row).toMatchObject({
+      profileId: null,
+      source: "knowledge:embedding",
+      type: "openai:embeddings",
+      model: "text-embedding-3-small",
+      inputTokens: 5,
+      outputTokens: 0,
+    });
   });
 
   it("sets span attributes for source and token usage", async () => {
@@ -223,11 +200,13 @@ describe("withKbObservability", () => {
       }),
     ).rejects.toThrow("API failed");
 
-    expect(mockCreate).not.toHaveBeenCalled();
+    expect(await kbInteractions("knowledge:embedding")).toHaveLength(0);
   });
 
   it("still returns result when InteractionModel.create fails", async () => {
-    mockCreate.mockRejectedValueOnce(new Error("DB error"));
+    vi.spyOn(InteractionModel, "create").mockRejectedValueOnce(
+      new Error("DB error"),
+    );
 
     const result = await withKbObservability({
       ...baseParams,
@@ -245,10 +224,15 @@ describe("withKbObservability", () => {
   });
 
   it("calculates cost from model pricing and stores it", async () => {
-    mockGetEffectivePricing.mockReturnValueOnce({
-      pricePerMillionInput: "3.00",
-      pricePerMillionOutput: "15.00",
-      source: "custom",
+    // Admin-set custom pricing on the real model row drives the cost.
+    await ModelModel.create({
+      externalId: "openai/text-embedding-3-small",
+      provider: "openai",
+      modelId: "text-embedding-3-small",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "3.00",
+      customPricePerMillionOutput: "15.00",
     });
 
     await withKbObservability({
@@ -263,22 +247,21 @@ describe("withKbObservability", () => {
       }),
     });
 
-    await vi.waitFor(() => {
-      expect(mockCreate).toHaveBeenCalledOnce();
+    await vi.waitFor(async () => {
+      expect(await kbInteractions("knowledge:embedding")).toHaveLength(1);
     });
 
     // Cost = (1M / 1M) * 3.00 + (0 / 1M) * 15.00 = 3.00
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cost: "3.0000000000",
-      }),
-    );
-
+    const [row] = await kbInteractions("knowledge:embedding");
+    expect(row.cost).toBe("3.0000000000");
     expect(mockSpan.setAttribute).toHaveBeenCalledWith("archestra.cost", 3);
   });
 
   it("stores null cost when pricing lookup fails", async () => {
-    mockFindByProviderAndModelId.mockRejectedValueOnce(new Error("DB down"));
+    // Simulate the pricing lookup throwing (calculateKbCost swallows → cost null).
+    vi.spyOn(ModelModel, "findByProviderAndModelId").mockRejectedValueOnce(
+      new Error("DB down"),
+    );
 
     await withKbObservability({
       ...baseParams,
@@ -292,24 +275,15 @@ describe("withKbObservability", () => {
       }),
     });
 
-    await vi.waitFor(() => {
-      expect(mockCreate).toHaveBeenCalledOnce();
+    await vi.waitFor(async () => {
+      expect(await kbInteractions("knowledge:embedding")).toHaveLength(1);
     });
 
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cost: null,
-      }),
-    );
+    const [row] = await kbInteractions("knowledge:embedding");
+    expect(row.cost).toBeNull();
   });
 
   it("emits Prometheus metrics via reportKbLlmCall", async () => {
-    mockGetEffectivePricing.mockReturnValueOnce({
-      pricePerMillionInput: "2.00",
-      pricePerMillionOutput: "10.00",
-      source: "default",
-    });
-
     await withKbObservability({
       ...baseParams,
       callback: async () => "result",
@@ -333,7 +307,7 @@ describe("withKbObservability", () => {
         source: "knowledge:embedding",
       }),
     );
-    // Should include durationSeconds (number >= 0) and cost
+    // Should include durationSeconds (number >= 0)
     const call = reportKbLlmCall.mock.calls[0][0];
     expect(typeof call.durationSeconds).toBe("number");
     expect(call.durationSeconds).toBeGreaterThanOrEqual(0);
@@ -356,18 +330,17 @@ describe("withKbObservability", () => {
       }),
     });
 
-    await vi.waitFor(() => {
-      expect(mockCreate).toHaveBeenCalledOnce();
+    await vi.waitFor(async () => {
+      expect(await kbInteractions("knowledge:reranker")).toHaveLength(1);
     });
 
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: "knowledge:reranker",
-        type: "anthropic:messages",
-        model: "claude-haiku-4-5-20251001",
-        inputTokens: 100,
-        outputTokens: 20,
-      }),
-    );
+    const [row] = await kbInteractions("knowledge:reranker");
+    expect(row).toMatchObject({
+      source: "knowledge:reranker",
+      type: "anthropic:messages",
+      model: "claude-haiku-4-5-20251001",
+      inputTokens: 100,
+      outputTokens: 20,
+    });
   });
 });

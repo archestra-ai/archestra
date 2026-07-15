@@ -40,6 +40,24 @@ describe("llm proxy tool execution", () => {
     );
   });
 
+  test("create_llm_proxy attributes the calling user as author", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_llm_proxy`,
+      { name: "Attributed LLM Proxy" },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const created = await AgentModel.findById(
+      extractCreatedId(result),
+      mockContext.userId,
+      true,
+    );
+    expect(created?.scope).toBe("org");
+    expect(created?.authorId).toBe(mockContext.userId);
+  });
+
   test("edit_llm_proxy updates an llm proxy successfully", async ({
     makeAgent,
   }) => {
@@ -80,3 +98,18 @@ describe("llm proxy tool execution", () => {
     );
   });
 });
+
+function extractCreatedId(
+  result: Awaited<ReturnType<typeof executeArchestraTool>>,
+) {
+  const createdId = ((result.content[0] as any).text as string)
+    .split("\n")
+    .find((line) => line.startsWith("ID: "))
+    ?.replace("ID: ", "");
+
+  if (!createdId) {
+    throw new Error("Expected created resource id in tool output");
+  }
+
+  return createdId;
+}

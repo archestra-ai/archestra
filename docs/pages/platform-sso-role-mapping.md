@@ -7,9 +7,9 @@ order: 6
 lastUpdated: 2026-05-05
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+<!--
 Provider-agnostic page covering role mapping for any OIDC or SAML SSO provider.
 Linked from per-provider pages (Entra, Okta, etc.) and from the parent
 Identity Providers index.

@@ -11,7 +11,10 @@ import { hasPermission } from "@/auth";
 import {
   assertMcpCatalogTeams,
   authorizeMcpCatalogScope,
+  type CatalogTeamAccess,
+  getCatalogWriteMembershipTeamIds,
   getMcpCatalogPermissionChecker,
+  requireMcpCatalogDeletePermission,
   requireMcpCatalogModifyPermission,
   withCatalogTeamFkErrorMapped,
 } from "@/auth/mcp-catalog-permissions";
@@ -52,6 +55,7 @@ import {
 } from "@/services/mcp-reinstall";
 import {
   ApiError,
+  type CatalogTeamAssignment,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -59,6 +63,7 @@ import {
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
+  normalizeCatalogTeamInput,
   PartialUpdateInternalMcpCatalogSchema,
   SelectInternalMcpCatalogSchema,
   UuidIdSchema,
@@ -204,31 +209,38 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       restBody.localConfigSecretId = undefined;
 
       // Enforce scope restrictions (3-tier model shared with agents/skills):
-      // org → admin only; team → mcpRegistry:team-admin + membership in the
-      // assigned teams; personal → the author.
+      // org → admin only; team → admin of one of the assigned teams, and
+      // membership in all of them; personal → the author.
       const checker = await getMcpCatalogPermissionChecker({
         userId: request.user.id,
         organizationId: request.organizationId,
       });
 
       restBody.scope = restBody.scope ?? "personal";
-      const requestedTeamIds =
-        restBody.scope === "team" ? dedupeTeamIds(restBody.teams ?? []) : [];
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(request.user.id);
+      const requestedTeams =
+        restBody.scope === "team"
+          ? normalizeCatalogTeamInput(restBody.teams ?? [])
+          : [];
+      const requestedTeamIds = requestedTeams.map((team) => team.id);
+      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
+        ? [[], []]
+        : await Promise.all([
+            TeamModel.getUserTeamIds(request.user.id),
+            getCatalogWriteMembershipTeamIds(request.user.id),
+          ]);
       authorizeMcpCatalogScope({
         checker,
         scope: restBody.scope,
         authorId: request.user.id,
         requestedTeamIds,
         userTeamIds,
+        writeMembershipTeamIds,
         userId: request.user.id,
       });
       if (restBody.scope !== "team") {
         delete restBody.teams;
       } else {
-        restBody.teams = requestedTeamIds;
+        restBody.teams = requestedTeams;
       }
       await assertMcpCatalogTeams({
         scope: restBody.scope,
@@ -655,39 +667,44 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(request.user.id);
-      const existingTeamIds = originalCatalogItem.teams.map((t) => t.id);
+      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
+        ? [[], []]
+        : await Promise.all([
+            TeamModel.getUserTeamIds(request.user.id),
+            getCatalogWriteMembershipTeamIds(request.user.id),
+          ]);
+      const existingTeams = originalCatalogItem.teams;
 
-      // Gate the right to modify this item at its CURRENT scope. This both lets
-      // a team-admin member edit a team-scoped item and still blocks editing
-      // someone else's personal item.
+      // Gate the right to modify this item at its CURRENT scope. This lets an
+      // admin of one of the item's `write` teams edit it, and still blocks
+      // editing someone else's personal item or a `use`-only team's item.
       requireMcpCatalogModifyPermission({
         checker,
         scope: originalCatalogItem.scope,
         authorId: originalCatalogItem.authorId,
-        catalogTeamIds: existingTeamIds,
-        userTeamIds,
+        catalogTeams: existingTeams,
+        writeMembershipTeamIds,
         userId: request.user.id,
       });
 
-      // Re-authorize and re-sync teams only when scope or team assignments
-      // actually change. A content-only edit that echoes the existing teams
-      // must not 403 a non-admin author/team-admin or needlessly rewrite rows.
+      // Re-authorize and re-sync teams only when scope, team assignments, or
+      // their access levels actually change. A content-only edit that echoes
+      // the existing teams must not 403 a non-admin author/team-admin or
+      // needlessly rewrite rows.
       const newScope = restBody.scope ?? originalCatalogItem.scope;
       // Shared items are one-way: demoting team/org back to personal would yank
       // the item from everyone it was shared with. Mirrors the agent route.
       if (newScope === "personal" && originalCatalogItem.scope !== "personal") {
         throw new ApiError(400, "Shared catalog items cannot be made personal");
       }
-      const newTeamIds =
+      const newTeams: CatalogTeamAssignment[] =
         newScope === "team"
-          ? dedupeTeamIds(restBody.teams ?? existingTeamIds)
+          ? normalizeCatalogTeamInput(restBody.teams ?? existingTeams)
           : [];
+      const newTeamIds = newTeams.map((team) => team.id);
       const scopeChanged = newScope !== originalCatalogItem.scope;
       const teamsChanged =
-        newScope === "team" && !sameTeamSet(newTeamIds, existingTeamIds);
+        newScope === "team" && !sameTeamAssignments(newTeams, existingTeams);
       if (scopeChanged || teamsChanged) {
         authorizeMcpCatalogScope({
           checker,
@@ -695,6 +712,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorId: originalCatalogItem.authorId,
           requestedTeamIds: newTeamIds,
           userTeamIds,
+          writeMembershipTeamIds,
           userId: request.user.id,
         });
         await assertMcpCatalogTeams({
@@ -704,9 +722,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Only rewrite team assignments when scope/teams actually change;
+      // Only rewrite team assignments when scope/teams/levels actually change;
       // undefined leaves the existing rows untouched.
-      restBody.teams = scopeChanged || teamsChanged ? newTeamIds : undefined;
+      restBody.teams = scopeChanged || teamsChanged ? newTeams : undefined;
 
       let clientSecretId = originalCatalogItem.clientSecretId;
       let localConfigSecretId = originalCatalogItem.localConfigSecretId;
@@ -1190,16 +1208,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Mirror the catalog-edit ownership check: only users who could have
-      // edited the catalog (admins, the personal-scope owner, or a team-admin
-      // member of the item's teams) can trigger the reinstall.
+      // edited the catalog (admins, the author, or an admin of one of the
+      // item's `write` teams) can trigger the reinstall.
       requireMcpCatalogModifyPermission({
         checker,
         scope: catalogItem.scope,
         authorId: catalogItem.authorId,
-        catalogTeamIds: catalogItem.teams.map((t) => t.id),
-        userTeamIds: checker.isAdmin
+        catalogTeams: catalogItem.teams,
+        writeMembershipTeamIds: checker.isAdmin
           ? []
-          : await TeamModel.getUserTeamIds(request.user.id),
+          : await getCatalogWriteMembershipTeamIds(request.user.id),
         userId: request.user.id,
       });
 
@@ -1251,10 +1269,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         checker,
         scope: catalogItem.scope,
         authorId: catalogItem.authorId,
-        catalogTeamIds: catalogItem.teams.map((t) => t.id),
-        userTeamIds: checker.isAdmin
+        catalogTeams: catalogItem.teams,
+        writeMembershipTeamIds: checker.isAdmin
           ? []
-          : await TeamModel.getUserTeamIds(request.user.id),
+          : await getCatalogWriteMembershipTeamIds(request.user.id),
         userId: request.user.id,
       });
 
@@ -1390,17 +1408,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Enforce ownership: non-admins can only delete own personal items
-      if (
-        !isAdmin &&
-        (catalogItem.scope !== "personal" ||
-          catalogItem.authorId !== request.user.id)
-      ) {
-        throw new ApiError(
-          403,
-          "You can only delete your own personal catalog items",
-        );
-      }
+      // Deletion cascades to every install and secret bag: reserved for admins
+      // and a personal item's author, never conferred by a team `write` level.
+      requireMcpCatalogDeletePermission({
+        checker: { isAdmin },
+        scope: catalogItem.scope,
+        authorId: catalogItem.authorId,
+        userId: request.user.id,
+      });
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(id),
@@ -1443,21 +1458,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Enforce ownership: non-admins can only delete own personal items
+      // Deletion cascades to every install and secret bag: reserved for admins
+      // and a personal item's author, never conferred by a team `write` level.
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         request.headers,
       );
-      if (
-        !isAdmin &&
-        (catalogItem.scope !== "personal" ||
-          catalogItem.authorId !== request.user.id)
-      ) {
-        throw new ApiError(
-          403,
-          "You can only delete your own personal catalog items",
-        );
-      }
+      requireMcpCatalogDeletePermission({
+        checker: { isAdmin },
+        scope: catalogItem.scope,
+        authorId: catalogItem.authorId,
+        userId: request.user.id,
+      });
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(catalogItem.id),
@@ -1788,15 +1800,22 @@ async function getCatalogClientSecretValues(
   );
 }
 
-function dedupeTeamIds(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-/** Whether two team-id lists contain the same set of ids. */
-function sameTeamSet(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const setB = new Set(b);
-  return a.every((id) => setB.has(id));
+/**
+ * Whether a requested team list leaves the stored assignments untouched. An
+ * entry carrying no level cannot change one (the sync preserves what is
+ * stored), so only an explicit, differing level counts as a change.
+ */
+function sameTeamAssignments(
+  requested: CatalogTeamAssignment[],
+  current: CatalogTeamAccess[],
+): boolean {
+  if (requested.length !== current.length) return false;
+  const currentLevels = new Map(current.map((team) => [team.id, team.level]));
+  return requested.every((team) => {
+    const currentLevel = currentLevels.get(team.id);
+    if (currentLevel === undefined) return false;
+    return team.level === undefined || team.level === currentLevel;
+  });
 }
 
 /**

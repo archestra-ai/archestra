@@ -1,0 +1,29 @@
+[package]
+name = "bench-dashboard"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+archestra-bench-core = { path = "../core" }
+axum = "0.8"
+askama = "0.14"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tower-http = { version = "0.6", features = ["trace"] }
+tracing = "0.1"
+eyre = "0.6"
+glob = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+percent-encoding = "2"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+filetime = "0.2"
+tempfile = "3"

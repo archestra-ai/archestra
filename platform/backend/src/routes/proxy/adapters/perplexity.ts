@@ -4,7 +4,10 @@
  * Perplexity uses an OpenAI-compatible API at https://api.perplexity.ai
  *
  * Key differences from OpenAI:
- * - No external tool calling support (returns empty for tool methods)
+ * - No external tool calling support (returns empty for tool methods).
+ *   Perplexity's tool calling (2026) is exclusive to its separate Agent API
+ *   (/responses/create, a Responses-style wire format) — the chat-completions
+ *   endpoint this adapter targets still takes no `tools` parameter.
  * - Returns search_results and citations from internal web search
  * - Has Perplexity-specific usage metrics
  *
@@ -480,7 +483,6 @@ export const perplexityAdapterFactory: LLMProvider<
           "perplexity",
           options.agent,
           options.source,
-          options.externalAgentId,
         )
       : undefined;
 

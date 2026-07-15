@@ -410,13 +410,46 @@ export type ChatAppDiagnosticsMetadata = z.infer<
   typeof ChatAppDiagnosticsMetadataSchema
 >;
 
+export const ChatMessageFeedbackSchema = z.enum(["up", "down"]);
+export type ChatMessageFeedback = z.infer<typeof ChatMessageFeedbackSchema>;
+
 /** Chat message metadata. Permissive — only the keys we own are typed. */
 export const ChatMessageMetadataSchema = z
   .object({
     skill: ChatSkillMetadataSchema.optional(),
     appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
+    /**
+     * Owner's thumbs verdict on an assistant message. Projected from the
+     * `messages.feedback` column on read — the column is authoritative, any
+     * value embedded in persisted content JSON is overridden.
+     */
+    feedback: ChatMessageFeedbackSchema.optional(),
+    /**
+     * Marks a `!`-prefixed user message the composer submitted for direct
+     * sandbox execution (no LLM turn). A marker only — the command is always
+     * re-derived server-side from the message text via `parseSandboxCommand`,
+     * so a forged marker can never execute anything other than what the
+     * transcript shows.
+     */
+    sandboxCommand: z.literal(true).optional(),
   })
   .passthrough();
+
+/**
+ * Parse a `!`-prefixed chat message into the shell command it requests
+ * (Claude Code's `!` convention). Returns null for anything else, including a
+ * bare `!` — those submit as ordinary messages. Used by the composer to decide
+ * whether to mark a message and by the chat route to derive the command to
+ * execute; both sides must agree, which is why it lives in shared.
+ */
+export function parseSandboxCommand(text: string): { command: string } | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("!")) {
+    return null;
+  }
+  const command = trimmed.slice(1).trim();
+  return command.length > 0 ? { command } : null;
+}
 
 // ============================================================================
 // Zod Schemas for Model Modalities

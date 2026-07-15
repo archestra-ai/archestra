@@ -34,7 +34,10 @@ import { CatalogDocsLink } from "@/components/catalog-docs-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
-import { TokenSelect } from "@/components/token-select";
+import {
+  DYNAMIC_CREDENTIAL_VALUE,
+  TokenSelect,
+} from "@/components/token-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -280,7 +283,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             <span className="truncate flex-1 text-left">
               {displayAgentName}
             </span>
-            {/* In "All tools" mode the agent reaches everything dynamically,
+            {/* In Auto mode the agent reaches everything dynamically,
                 so the per-server avatar group + its tool selector are
                 meaningless — hide them. */}
             {!currentAgent?.accessAllTools && (
@@ -305,6 +308,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search..."
+                aria-label="Search agents"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-8 pl-8 text-sm rounded-lg border-0 bg-muted/50 focus-visible:ring-1"
@@ -739,6 +743,7 @@ function AgentSettingsView({
           ) : (
             <button
               type="button"
+              aria-label="Edit agent icon"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted cursor-pointer"
               onDoubleClick={() => setIsEditingIcon(true)}
             >
@@ -749,6 +754,7 @@ function AgentSettingsView({
             {isEditingName ? (
               <Input
                 ref={nameInputRef}
+                aria-label="Agent name"
                 value={editedName}
                 onChange={(e) => setEditedName(e.target.value)}
                 onBlur={() => saveName(editedName)}
@@ -830,9 +836,11 @@ function AgentSettingsView({
             <Label className="mb-1.5">Tools &amp; Knowledge Sources</Label>
             <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
               This agent uses{" "}
-              <span className="font-medium text-foreground">All tools</span> —
-              every MCP tool and knowledge source the chatting user can access,
-              discovered on demand.
+              <span className="font-medium text-foreground">
+                Auto tool access
+              </span>{" "}
+              — every MCP tool and knowledge source the chatting user can
+              access, discovered on demand.
             </p>
           </div>
         ) : (
@@ -1257,6 +1265,7 @@ function AddToolView({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search MCP servers..."
+            aria-label="Search MCP servers"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -1453,8 +1462,10 @@ function ConfigureToolView({
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     new Set(),
   );
+  // Resolve-at-call-time is the default; pinning a static credential is an
+  // explicit choice.
   const [credential, setCredential] = useState<string | null>(
-    mcpServers[0]?.id ?? null,
+    DYNAMIC_CREDENTIAL_VALUE,
   );
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1469,13 +1480,6 @@ function ConfigureToolView({
     }
   }, [allTools, assignedToolIds]);
 
-  // Auto-set default credential once loaded
-  useEffect(() => {
-    if (!credential && mcpServers.length > 0) {
-      setCredential(mcpServers[0].id);
-    }
-  }, [credential, mcpServers]);
-
   const isBuiltin = catalog.serverType === "builtin";
   const showCredentialSelector = !isBuiltin && mcpServers.length > 0;
 
@@ -1489,12 +1493,24 @@ function ConfigureToolView({
         (id) => !selectedToolIds.has(id),
       );
 
+      const useDynamicCredential =
+        !credential || credential === DYNAMIC_CREDENTIAL_VALUE;
+
       await Promise.all([
         ...toAdd.map((toolId) =>
           assignTool.mutateAsync({
             agentId,
             toolId,
-            mcpServerId: !isBuiltin ? (credential ?? undefined) : undefined,
+            mcpServerId:
+              !isBuiltin && !useDynamicCredential
+                ? (credential ?? undefined)
+                : undefined,
+            ...(!isBuiltin && {
+              resolveAtCallTime: useDynamicCredential,
+              credentialResolutionMode: useDynamicCredential
+                ? ("dynamic" as const)
+                : ("static" as const),
+            }),
             skipInvalidation: true,
           }),
         ),
@@ -1678,6 +1694,7 @@ function AddDelegationView({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search agents..."
+            aria-label="Search agents"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -1883,6 +1900,7 @@ function EditKnowledgeSourcesView({
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search knowledge sources..."
+                aria-label="Search knowledge sources"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"

@@ -17,10 +17,6 @@ describe("GET /api/apps/assignable-builtin-tools", () => {
   let user: User;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    // Config is restored pristine before every test; the flag tweaks below are
-    // therefore per test, and the flag-off test overrides them itself.
-    (config.apps as { enabled: boolean }).enabled = true;
-
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
@@ -45,11 +41,10 @@ describe("GET /api/apps/assignable-builtin-tools", () => {
     await app.close();
   });
 
-  test("returns exactly the two read-only file tools when the flags are on", async () => {
-    (config.projects as { enabled: boolean }).enabled = true;
+  test("returns exactly the two read-only file tools when the flag is on", async () => {
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
     // Registration of the file tools is flag-gated, so seeding happens with
-    // the flags already on.
+    // the flag already on.
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
 
     const response = await app.inject({
@@ -65,9 +60,8 @@ describe("GET /api/apps/assignable-builtin-tools", () => {
     ).toEqual([TOOL_READ_FILE_FULL_NAME, TOOL_SEARCH_FILES_FULL_NAME].sort());
   });
 
-  test("returns an empty list when the projects flag is off", async () => {
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
-    (config.projects as { enabled: boolean }).enabled = false;
+  test("returns an empty list when the sandbox flag is off", async () => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
 
     const response = await app.inject({
       method: "GET",

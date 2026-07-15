@@ -45,17 +45,17 @@ class HookDispatcherService {
    * Cheap no-op when the agent has no matching hooks. Runner fails open —
    * errors and timeouts map to outcome "error" → proceed.
    *
-   * Scripts run in fileName order (the order `listEnabledByAgent` returns).
-   * First "blocked" outcome short-circuits; remaining hooks are not run.
+   * Scripts run in fileName order (the order `listEnabledByAgentAndEvent`
+   * returns). First "blocked" outcome short-circuits; remaining hooks are not run.
    */
   async fire(params: FireParams): Promise<FireResult> {
     if (!this.isEnabled) return { decision: "proceed", runs: [] };
 
-    const enabled = await HookFileModel.listEnabledByAgent(
-      params.agentId,
-      params.organizationId,
-    );
-    const scripts = enabled.filter((h) => h.event === params.event);
+    const scripts = await HookFileModel.listEnabledByAgentAndEvent({
+      agentId: params.agentId,
+      organizationId: params.organizationId,
+      event: params.event,
+    });
     if (scripts.length === 0) return { decision: "proceed", runs: [] };
 
     const sandbox = await SkillSandboxModel.findOrCreateDefault({

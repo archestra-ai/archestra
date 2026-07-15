@@ -12,16 +12,29 @@ import { z } from "zod";
  */
 export const AppSpecSchema = z
   .object({
-    /** One-line summary of what the app is for. */
-    summary: z.string(),
-    /** Concrete capabilities the app should provide. */
-    features: z.array(z.string()),
-    /** What the app reads/persists via the App Data Store (free-form). */
-    data: z.string().nullable().optional(),
-    /** UI / style direction (free-form). */
-    ui: z.string().nullable().optional(),
-    /** Full names of the MCP tools the app calls through `window.archestra`. */
-    tools: z.array(z.string()),
+    summary: z.string().describe("One-line summary of what the app is for."),
+    features: z
+      .array(z.string())
+      .describe("Concrete capabilities the app should provide."),
+    data: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
+      ),
+    ui: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "UI / style direction as a free-form prose string, not a structured object.",
+      ),
+    tools: z
+      .array(z.string())
+      .describe(
+        "Full names of the MCP tools the app calls through window.archestra.",
+      ),
   })
   .strict();
 

@@ -36,7 +36,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
-  llmOauthClient: ["read", "create", "update", "delete", "admin"],
+  llmOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -44,7 +44,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
-  mcpOauthClient: ["read", "create", "update", "delete", "admin"],
+  mcpOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
@@ -54,10 +54,12 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
+  knowledgeSourceAutoSync: ["read", "create", "update", "delete"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete", "admin"],
+  file: ["manage"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -101,7 +103,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
   llmProviderApiKey: ["read", "create", "update", "delete"],
   llmVirtualKey: ["read", "create", "update", "delete"],
-  llmOauthClient: ["read", "create", "update", "delete"],
+  llmOauthClient: ["read", "create", "update", "delete", "team-admin"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -109,7 +111,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin"],
-  mcpOauthClient: ["read", "create", "update", "delete"],
+  mcpOauthClient: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
@@ -119,10 +121,12 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
+  knowledgeSourceAutoSync: [],
 
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
+  file: ["manage"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -190,10 +194,12 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "query"],
+  knowledgeSourceAutoSync: [],
 
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
+  file: ["manage"],
   log: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -292,7 +298,10 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpOauthClient:create": "Create MCP OAuth client registrations",
   "mcpOauthClient:update": "Modify MCP OAuth client registrations",
   "mcpOauthClient:delete": "Delete MCP OAuth client registrations",
-  "mcpOauthClient:admin": "Manage all MCP OAuth client registrations",
+  "mcpOauthClient:team-admin":
+    "Manage team assignments for MCP OAuth client registrations",
+  "mcpOauthClient:admin":
+    "Manage all MCP OAuth client registrations, bypassing team restrictions",
   "mcpGateway:admin":
     "Full administrative control over all MCP gateways, bypassing team restrictions",
   "toolPolicy:read":
@@ -352,7 +361,10 @@ export const permissionDescriptions: Record<string, string> = {
   "llmOauthClient:create": "Create LLM OAuth client registrations",
   "llmOauthClient:update": "Modify LLM OAuth client registrations",
   "llmOauthClient:delete": "Delete LLM OAuth client registrations",
-  "llmOauthClient:admin": "Manage all LLM OAuth client registrations",
+  "llmOauthClient:team-admin":
+    "Manage team assignments for LLM OAuth client registrations",
+  "llmOauthClient:admin":
+    "Manage all LLM OAuth client registrations, bypassing team restrictions",
   "llmModel:read": "View synced LLM models and capabilities",
   "llmModel:update": "Modify LLM model pricing and modality settings",
   "llmLimit:read": "View token usage limits",
@@ -366,9 +378,9 @@ export const permissionDescriptions: Record<string, string> = {
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
   "agentSettings:read":
-    "View agent settings (default model, default agent, security engine, file uploads)",
+    "View agent settings (default model, default agent, default tool guardrails, file uploads)",
   "agentSettings:update":
-    "Modify agent settings (default model, default agent, security engine, file uploads)",
+    "Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other
@@ -382,6 +394,7 @@ export const permissionDescriptions: Record<string, string> = {
   "project:delete": "Delete projects",
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
+  "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration
@@ -424,7 +437,14 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:delete": "Delete Knowledge Bases and Connectors",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
-    "View all Knowledge Bases and Connectors, bypassing visibility restrictions",
+    "View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions",
+  "knowledgeSourceAutoSync:read":
+    "View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings",
+  "knowledgeSourceAutoSync:create":
+    "Create connectors with auto-sync permissions (access mirrors the source system)",
+  "knowledgeSourceAutoSync:update":
+    "Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs",
+  "knowledgeSourceAutoSync:delete": "Delete auto-sync-permissions connectors",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
@@ -454,11 +474,13 @@ export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
   /**
-   * Getting basic info about the organization and marking onboarding as complete
-   * require the user to be authenticated but don't require any specific permissions.
+   * Getting basic info about the organization requires the user to be
+   * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
-  [RouteId.CompleteOnboarding]: {},
+  // Completing onboarding flips an org-wide flag, so gate it on admin-level
+  // organization-settings update, like the other org-settings routes.
+  [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
 
   // Connection setup: resource-level checks (mcpGateway/llmProxy read access,
   // skill admin) are conditional on what the setup includes and enforced in
@@ -486,6 +508,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
+  // Tool exclusions: agent-type read/update permission checked dynamically in handler
+  [RouteId.GetAgentToolExclusions]: {},
+  [RouteId.UpdateAgentToolExclusions]: {},
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -525,6 +550,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.RotateToken]: {
     team: ["read"],
+  },
+  [RouteId.GetTool]: {
+    toolPolicy: ["read"],
   },
   [RouteId.GetTools]: {
     toolPolicy: ["read"],
@@ -674,6 +702,12 @@ export const requiredEndpointPermissionsMap: Partial<
     // does the finer-grained check (owner-only for personal, team-admin for team,
     // admin for org), so a member can reinstall their OWN connection and nothing
     // more. Requiring :update here locked owners out of reinstalling their own.
+    mcpServerInstallation: ["create"],
+  },
+  [RouteId.ReloadMcpServerTools]: {
+    // Reloading tools is a strict subset of reinstalling (tool re-sync with no
+    // redeploy), so it is gated identically; the handler's
+    // assertScopedLifecycleAuthorization does the same finer-grained scope check.
     mcpServerInstallation: ["create"],
   },
   [RouteId.GetMcpServerInstallationStatus]: {
@@ -868,6 +902,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateChatMessage]: {
     chat: ["update"],
   },
+  [RouteId.SetChatMessageFeedback]: {
+    chat: ["update"],
+  },
   [RouteId.GetConversationEnabledTools]: {
     chat: ["read"],
   },
@@ -908,6 +945,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // personal github-copilot key, so it's self-service like the create route.
   [RouteId.GithubCopilotDeviceAuthStart]: {},
   [RouteId.GithubCopilotDeviceAuthPoll]: {},
+  // Same self-service rationale for Microsoft 365 Copilot's Entra device flow.
+  [RouteId.Microsoft365CopilotDeviceAuthStart]: {},
+  [RouteId.Microsoft365CopilotDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },
@@ -1156,9 +1196,19 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviderIdpLogoutUrl]: {},
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
+  [RouteId.GetOnboardingSeenNavItems]: {}, // Per-user onboarding red-dot state - available to all authenticated users
+  [RouteId.MarkOnboardingNavItemsSeen]: {}, // Per-user onboarding red-dot state - available to all authenticated users
+  [RouteId.GetOnboardingSurveyEligibility]: {
+    organizationSettings: ["update"],
+  }, // First-login survey - admins only (same gate as appearance settings)
+  [RouteId.SubmitOnboardingSurvey]: { organizationSettings: ["update"] }, // First-login survey - admins only
+  [RouteId.GetFeedbackPopupActivation]: { organizationSettings: ["update"] }, // Feedback pop-up activation signal - admins only (the pop-up is admin-only)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
-  [RouteId.GetOrganizationMembers]: { member: ["read"] }, // List organization members
+  // Visibility is scoped in the handler: member:read sees the full roster,
+  // everyone else only the users they share a team with (the chat share
+  // recipient picker), so the route itself is open to any authenticated user.
+  [RouteId.GetOrganizationMembers]: {},
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
@@ -1239,6 +1289,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     agentTrigger: ["update"],
   },
+  [RouteId.UpdateTelegramChatOpsConfig]: {
+    agentTrigger: ["update"],
+  },
+  // Any authenticated user can link their own Telegram account
+  [RouteId.LinkTelegramChatOpsAccount]: {},
+  [RouteId.GenerateTelegramLinkCode]: {},
   [RouteId.ConnectNgrok]: {
     agentTrigger: ["update"],
   },
@@ -1304,6 +1360,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },
+  [RouteId.GetPermissionSyncCoverage]: { knowledgeSourceAutoSync: ["read"] },
+  [RouteId.GetConnectorUserGroups]: { knowledgeSourceAutoSync: ["read"] },
+  [RouteId.UpsertConnectorMemberOverride]: {
+    knowledgeSourceAutoSync: ["update"],
+  },
+  [RouteId.DeleteConnectorMemberOverride]: {
+    knowledgeSourceAutoSync: ["update"],
+  },
   [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
 
@@ -1354,18 +1419,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectShare]: { project: ["update"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
-  // The file list is part of the PFS surface, so it requires the same
-  // `sandbox:execute` as the byte endpoint that serves these files
-  // (GetSkillSandboxArtifact) — otherwise a role could list files marked
-  // `downloadable` and then 403 on every fetch. Project membership is still
-  // enforced in the handler (projectService.listFiles -> requireReadable).
-  [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
-  // Uploading a project file mirrors how files are produced in a project today
-  // (a sandbox run writing a result), so it carries the same `sandbox:execute`
-  // as the list/byte surfaces. Project membership (owner/shared, not admin
-  // oversight) is enforced in the handler (projectService.uploadFile ->
-  // requireReadable).
-  [RouteId.UploadProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  // Project file surfaces combine project-level access with the files gate:
+  // `file:manage` covers the file operations, while project membership is
+  // still enforced in the handler (projectService.listFiles/uploadFile ->
+  // requireReadable). Note the artifact byte endpoint that serves file
+  // contents (GetSkillSandboxArtifact) stays on `sandbox:execute`.
+  [RouteId.GetProjectFiles]: { project: ["read"], file: ["manage"] },
+  [RouteId.UploadProjectFiles]: { project: ["read"], file: ["manage"] },
   // Instructions are plain project metadata (not a sandbox byte surface), so the
   // GET needs only project read — every project reader can see the instructions
   // that steer the project's chats. Editing is owner-only, enforced in the
@@ -1409,6 +1469,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // Opens an app in chat: reads the app and creates a seeded conversation.
   [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
   [RouteId.OpenExternalAppInChat]: { app: ["read"], chat: ["create"] },
+  // Per-user app pins (mirrors PinProject/UnpinProject): any viewer may pin —
+  // the handlers gate per-instance visibility; unpin is intentionally
+  // unchecked there so stale pins can always be cleared.
+  [RouteId.PinApp]: { app: ["read"] },
+  [RouteId.UnpinApp]: { app: ["read"] },
+  [RouteId.PinExternalApp]: { app: ["read"] },
+  [RouteId.UnpinExternalApp]: { app: ["read"] },
   // The trusted host page reports a viewer's render diagnostics; the handler
   // re-checks app-visibility, so app:read is the right coarse gate.
   [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },
@@ -1482,11 +1549,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxies": { llmProxy: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
-  "/llm/credentials/virtual-keys": {
-    llmVirtualKey: ["read"],
-    llmProviderApiKey: ["read"],
-  },
-  "/llm/credentials/oauth-clients": { llmOauthClient: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
   "/llm/optimization-rules": { optimizationRule: ["read"] },
@@ -1494,7 +1556,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
-  "/mcp/credentials/oauth-clients": { mcpOauthClient: ["read"] },
+
+  // Credentials (unified — OAuth clients across agents/gateways/proxies +
+  // LLM virtual keys). The predefined member/admin roles grant
+  // mcpOauthClient:read, so this gates the shared Credentials nav item; the
+  // page itself only lists the client types the caller can read.
+  "/credentials/oauth-clients": { mcpOauthClient: ["read"] },
+  "/credentials/virtual-keys": { llmVirtualKey: ["read"] },
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
   "/mcp/registry/installation-requests": {

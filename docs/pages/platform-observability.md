@@ -4,11 +4,7 @@ category: Archestra Platform
 order: 4
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 # Observability
 
@@ -20,23 +16,23 @@ Archestra exposes Prometheus metrics and OpenTelemetry traces for monitoring sys
 
 The web process exposes Prometheus-formatted metrics at `http://localhost:9050/metrics`.
 
-When the separate worker deployment is enabled (`ARCHESTRA_PROCESS_TYPE=worker`, which is the default for [Helm deployments](/docs/platform-deployment)), the worker process exposes its own metrics endpoint at `http://<worker-host>:9000/metrics`. Task queue metrics and background [Knowledge Base](/docs/platform-knowledge-bases) pipeline metrics such as connector syncs and embedding batches are emitted from the worker process, so production scrape configs should collect both endpoints.
+When the separate worker deployment is enabled (`ARCHESTRA_PROCESS_TYPE=worker`, which is the default for [Helm deployments](/docs/platform-deployment)), the worker process exposes its own metrics endpoint at `http://<worker-host>:9000/metrics`. Task queue metrics and background [Knowledge Base](/docs/platform-knowledge) pipeline metrics such as connector syncs and embedding batches are emitted from the worker process, so production scrape configs should collect both endpoints.
 
 Combined, these endpoints expose metrics including:
 
 ### LLM Metrics
 
-- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and status code
-- `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and type (input/output)
-- `llm_cache_tokens_total` - Prompt-cache tokens by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and cache_type (read/write). Read is a reused prefix, write is a newly cached prefix; both are separate from `llm_tokens_total` so existing input/output aggregates are unaffected.
-- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source. Requires token pricing to be configured in Archestra.
-- `llm_cache_cost_total` - Estimated cost in USD attributable to prompt-cache tokens (reads plus writes, including the higher 1-hour-TTL write surcharge), by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source. Lets you chart caching spend separately from total cost.
-- `llm_cache_savings_total` - Gross estimated USD saved by cache reads being billed at a discount versus the full input price, by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source. Read-side only (always non-negative); the signed net-of-write-surcharge savings is persisted per interaction rather than as a counter.
-- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source
-- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, external_agent_id, source, and model. Helps developers choose models with lower initial response latency.
-- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, external_agent_id, source, and model. Allows comparing model response speeds for latency-sensitive applications.
+- `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, source, and status code
+- `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, source, and type (input/output)
+- `llm_cache_tokens_total` - Prompt-cache tokens by provider, model, agent_id, agent_name, agent_type, source, and cache_type (read/write). Read is a reused prefix, write is a newly cached prefix; both are separate from `llm_tokens_total` so existing input/output aggregates are unaffected.
+- `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, agent_name, agent_type, and source. Requires token pricing to be configured in Archestra.
+- `llm_cache_cost_total` - Estimated cost in USD attributable to prompt-cache tokens (reads plus writes, including the higher 1-hour-TTL write surcharge), by provider, model, agent_id, agent_name, agent_type, and source. Lets you chart caching spend separately from total cost.
+- `llm_cache_savings_total` - Gross estimated USD saved by cache reads being billed at a discount versus the full input price, by provider, model, agent_id, agent_name, agent_type, and source. Read-side only (always non-negative); the signed net-of-write-surcharge savings is persisted per interaction rather than as a counter.
+- `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and source
+- `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, source, and model. Helps developers choose models with lower initial response latency.
+- `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, source, and model. Allows comparing model response speeds for latency-sensitive applications.
 
-> **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. `external_agent_id` contains the external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header — this allows clients to associate metrics with their own agent identifiers. If the header is not provided, Archestra auto-discovers known clients (Claude Code and Claude Desktop) and records a generic `anthropic_claude` id, so the label is populated for them; it is empty only for unrecognized clients. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`. Knowledge Base operations (embeddings, reranking) emit the same LLM metrics with `agent_name="Knowledge Base"` and empty `agent_id`.
+> **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. The external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header is not a metric label (client-supplied values would create unbounded label cardinality); it is recorded on interactions and available in [trace attributes](#distributed-tracing) as `archestra.external_agent_id`. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`. Knowledge Base operations (embeddings, reranking) emit the same LLM metrics with `agent_name="Knowledge Base"` and empty `agent_id`.
 
 ### MCP Metrics
 
@@ -215,7 +211,7 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.usage.cache_read.input_tokens` - Prompt-cache tokens served from a provider cache, a subset of `input_tokens` (set only when the response read from cache)
 - `gen_ai.usage.cache_creation.input_tokens` - Prompt-cache tokens written to a provider cache, a subset of `input_tokens` (set only when the response cached a prefix)
 - `archestra.usage.cache_creation.1h_input_tokens` - Portion of cache-creation tokens written at the 1-hour TTL (Anthropic/Bedrock), billed at a higher surcharge than the 5-minute default. Uses the `archestra.*` namespace because the GenAI semantic conventions have no per-TTL breakdown. The remainder of `gen_ai.usage.cache_creation.input_tokens` is the 5-minute portion.
-- `archestra.cost` - Estimated cost in USD (requires [token pricing](/docs/platform-cost-management#token-pricing) configuration)
+- `archestra.cost` - Estimated cost in USD (requires [model pricing](/docs/platform-costs-and-limits#model-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 
 **Error Attributes:**

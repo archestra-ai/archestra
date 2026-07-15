@@ -6,6 +6,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
@@ -351,7 +352,7 @@ export function useUpdateAppearanceSettings(
 }
 
 /**
- * Update security settings (global tool policy, chat file uploads)
+ * Update security settings (default tool guardrails, chat file uploads)
  */
 export function useUpdateSecuritySettings(
   onSuccessMessage: string,
@@ -512,16 +513,22 @@ export function useUpdateDefaultEnvironment(
  */
 export function useDefaultEnvironment() {
   const { data: organization } = useOrganization();
-  return {
-    name: organization?.defaultEnvironmentName ?? "Default",
-    namespace: organization?.defaultEnvironmentNamespace ?? null,
-    description: organization?.defaultEnvironmentDescription ?? null,
-    networkPolicy: organization?.defaultNetworkPolicy ?? null,
-    restricted: organization?.defaultEnvironmentRestricted ?? false,
-    validationRegex: organization?.defaultEnvironmentValidationRegex ?? null,
-    trustedImageRegistries:
-      organization?.defaultEnvironmentTrustedImageRegistries ?? null,
-  };
+  // Memoized on the query data so the object is reference-stable across renders:
+  // consumers seed a form off it in an effect, and a fresh object each render
+  // would re-run that effect on every background refetch and wipe unsaved edits.
+  return useMemo(
+    () => ({
+      name: organization?.defaultEnvironmentName ?? "Default",
+      namespace: organization?.defaultEnvironmentNamespace ?? null,
+      description: organization?.defaultEnvironmentDescription ?? null,
+      networkPolicy: organization?.defaultNetworkPolicy ?? null,
+      restricted: organization?.defaultEnvironmentRestricted ?? false,
+      validationRegex: organization?.defaultEnvironmentValidationRegex ?? null,
+      trustedImageRegistries:
+        organization?.defaultEnvironmentTrustedImageRegistries ?? null,
+    }),
+    [organization],
+  );
 }
 
 /**
@@ -644,7 +651,8 @@ export function useTestEmbeddingConnection() {
 }
 
 /**
- * Get all members of the organization (for admin filtering)
+ * Users the current caller can see: the full organization roster with
+ * member:read, otherwise only the caller's teammates (may be empty).
  */
 export function useOrganizationMembers(enabled = true) {
   return useQuery({

@@ -20,6 +20,11 @@ const nextConfig: NextConfig = {
   // alongside the main one without colliding on `.next/dev/lock`.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "standalone",
+  // CI runs the authoritative type check separately (`pnpm type-check`), so
+  // the in-build check is pure duplication — ~15s of every image build.
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   // Version skew protection during rolling deployments.
   // https://nextjs.org/docs/app/api-reference/config/next-config-js/deploymentId
   // VERSION is set as a build arg by CI and baked into the
@@ -59,6 +64,10 @@ const nextConfig: NextConfig = {
     // the backend's runtime value.) Anything the proxy lets through still gets
     // sized-checked by the backend's bodyLimit, which is the authoritative cap.
     proxyClientMaxBodySize: "200mb",
+    // React <ViewTransition> integration (animates the new-chat → conversation
+    // handoff; see src/lib/view-transition.tsx). Browsers without the View
+    // Transitions API just skip the animation.
+    viewTransition: true,
   },
   httpAgentOptions: {
     keepAlive: true,
@@ -86,6 +95,15 @@ const nextConfig: NextConfig = {
       {
         source: "/llm/model-providers/models",
         destination: "/llm/models",
+        permanent: true,
+      },
+      // The external app standalone surface moved under the chrome-less /a
+      // namespace (next to the owned /a/[appId]). Run links are meant to be
+      // shared (mcp-apps.md FR-31), so the old URL keeps working; the
+      // install/resource query params pass through automatically.
+      {
+        source: "/apps/catalog/:catalogId/run",
+        destination: "/a/catalog/:catalogId",
         permanent: true,
       },
     ];

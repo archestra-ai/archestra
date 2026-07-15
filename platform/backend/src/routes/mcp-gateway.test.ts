@@ -1,30 +1,21 @@
 import {
-  getArchestraToolFullName,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
-  TOOL_EDIT_APP_SHORT_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
-  TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
-  TOOL_PUBLISH_APP_SHORT_NAME,
-  TOOL_READ_APP_SHORT_NAME,
   TOOL_READ_FILE_FULL_NAME,
-  TOOL_REFINE_APP_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_FILE_FULL_NAME,
-  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
-  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -32,7 +23,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel, UserTokenModel } from "@/models";
+import { TeamTokenModel, ToolModel, UserTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
 
@@ -287,6 +278,136 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(remote).toBeDefined();
     // A non-app tool's title still falls back to its name — derivation is app-only.
     expect(remote?.title).toBe("linear_search_issues");
+  });
+
+  test("Auto-tool mode exclusions: tools/list drops excluded assigned tools and their catalog from the search_tools description", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    // accessAllTools forces search_and_run_only, so tools/list advertises the
+    // meta tools; the search_tools description names the assigned catalogs.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+
+    const keptCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Kept Server",
+    });
+    const keptTool = await makeTool({
+      catalogId: keptCatalog.id,
+      name: "kept__do_thing",
+    });
+    await makeAgentTool(agent.id, keptTool.id);
+
+    const excludedCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "Excluded Server",
+    });
+    const excludedTool = await makeTool({
+      catalogId: excludedCatalog.id,
+      name: "excluded__do_thing",
+    });
+    await makeAgentTool(agent.id, excludedTool.id);
+
+    const { agentToolExclusionsService } = await import(
+      "@/services/agent-tool-exclusions"
+    );
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: agent.id,
+      organizationId: org.id,
+      excludedToolIds: [excludedTool.id],
+    });
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    await initializeMcpSession({ app, agentId: agent.id, token: token.value });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const tools: Array<{ name: string; description?: string }> =
+      response.json().result.tools;
+    const names = tools.map((t) => t.name);
+    expect(names).toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
+    expect(names).not.toContain("excluded__do_thing");
+
+    const searchTool = tools.find(
+      (t) => t.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+    );
+    expect(searchTool?.description).toContain("Kept Server");
+    expect(searchTool?.description).not.toContain("Excluded Server");
+  });
+
+  test("Auto-tool mode exclusions: an excluded always-exposed built-in (load_skill) is dropped from tools/list", async ({
+    makeAgent,
+    makeOrganization,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    // accessAllTools forces search_and_run_only, where always-exposed
+    // built-ins like load_skill normally stay top-level in tools/list.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const loadSkill = await ToolModel.findByName(TOOL_LOAD_SKILL_FULL_NAME);
+    if (!loadSkill) {
+      throw new Error("Expected seeded load_skill tool");
+    }
+
+    const { agentToolExclusionsService } = await import(
+      "@/services/agent-tool-exclusions"
+    );
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: agent.id,
+      organizationId: org.id,
+      excludedToolIds: [loadSkill.id],
+    });
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    await initializeMcpSession({ app, agentId: agent.id, token: token.value });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const names = response
+      .json()
+      .result.tools.map((tool: { name: string }) => tool.name);
+    // The exclusion takes effect: the excluded always-exposed tool is gone,
+    // while its non-excluded sibling and the meta tools stay advertised.
+    expect(names).not.toContain(TOOL_LOAD_SKILL_FULL_NAME);
+    expect(names).toContain(TOOL_LIST_SKILLS_FULL_NAME);
+    expect(names).toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
+    expect(names).toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
   test("returns 401 with WWW-Authenticate header for missing authorization header", async ({
@@ -675,7 +796,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -720,7 +841,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -769,7 +890,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -813,7 +934,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -860,7 +981,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeOrganization,
     makeTool,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -900,7 +1021,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeOrganization,
     makeTool,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -948,7 +1069,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeToolPolicy,
     makeUser,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
     const team = await makeTeam(org.id, user.id);
@@ -1057,10 +1178,10 @@ describe("MCP Gateway (stateless mode)", () => {
         TOOL_SEARCH_TOOLS_FULL_NAME,
       ].sort(),
     );
-    expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+    expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
   });
 
-  test("also keeps sandbox runtime and app tools top-level in tools/list when their features are enabled", async ({
+  test("keeps sandbox runtime tools top-level in tools/list when the sandbox runtime is enabled", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1069,9 +1190,7 @@ describe("MCP Gateway (stateless mode)", () => {
   }) => {
     const config = (await import("@/config")).default;
     const originalSandboxEnabled = config.skillsSandbox.enabled;
-    const originalAppsEnabled = config.apps.enabled;
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
-    (config.apps as { enabled: boolean }).enabled = true;
 
     try {
       const org = await makeOrganization();
@@ -1121,6 +1240,8 @@ describe("MCP Gateway (stateless mode)", () => {
       const toolNames = response
         .json()
         .result.tools.map((tool: { name: string }) => tool.name);
+      // App tools are deliberately absent: in search_and_run_only mode the
+      // whole app surface is reached through search_tools/run_tool.
       expect(toolNames.sort()).toEqual(
         [
           TOOL_DELETE_FILE_FULL_NAME,
@@ -1135,100 +1256,11 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
-          getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_REFINE_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
         ].sort(),
       );
     } finally {
       (config.skillsSandbox as { enabled: boolean }).enabled =
         originalSandboxEnabled;
-      (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
-    }
-  });
-
-  test("hides the Projects file tools from tools/list when the Projects feature is off, keeping sandbox-runtime tools top-level", async ({
-    makeAgent,
-    makeMember,
-    makeOrganization,
-    makeUser,
-    seedAndAssignArchestraTools,
-  }) => {
-    const config = (await import("@/config")).default;
-    const originalSandboxEnabled = config.skillsSandbox.enabled;
-    const originalProjectsEnabled = config.projects.enabled;
-    // Runtime on, Projects off: run_command/upload_file/download_file stay
-    // top-level; the persistent-files tools follow the Projects flag and drop.
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
-    (config.projects as { enabled: boolean }).enabled = false;
-
-    try {
-      const org = await makeOrganization();
-      const adminUser = await makeUser();
-      await makeMember(adminUser.id, org.id, { role: "admin" });
-      const agent = await makeAgent({
-        organizationId: org.id,
-        agentType: "mcp_gateway",
-        toolExposureMode: "search_and_run_only",
-      });
-      await seedAndAssignArchestraTools(agent.id);
-
-      const token = await UserTokenModel.create(adminUser.id, org.id);
-
-      const initResponse = await app.inject({
-        method: "POST",
-        url: `/v1/mcp/${agent.id}`,
-        headers: makeMcpHeaders(token.value),
-        payload: {
-          jsonrpc: "2.0",
-          method: "initialize",
-          params: {
-            protocolVersion: "2024-11-05",
-            capabilities: {},
-            clientInfo: { name: "test-client", version: "1.0.0" },
-          },
-          id: 1,
-        },
-      });
-      expect(initResponse.statusCode).toBe(200);
-
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/mcp/${agent.id}`,
-        headers: makeMcpHeaders(token.value),
-        payload: {
-          jsonrpc: "2.0",
-          method: "tools/list",
-          params: {},
-          id: 2,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const toolNames: string[] = response
-        .json()
-        .result.tools.map((tool: { name: string }) => tool.name);
-
-      // Sandbox-runtime tools stay top-level (runtime flag on).
-      expect(toolNames).toContain(TOOL_RUN_COMMAND_FULL_NAME);
-      expect(toolNames).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
-      expect(toolNames).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
-      // Persistent-files tools are gated by the Projects flag — absent here.
-      expect(toolNames).not.toContain(TOOL_SEARCH_FILES_FULL_NAME);
-      expect(toolNames).not.toContain(TOOL_READ_FILE_FULL_NAME);
-      expect(toolNames).not.toContain(TOOL_SAVE_FILE_FULL_NAME);
-      expect(toolNames).not.toContain(TOOL_EDIT_FILE_FULL_NAME);
-      expect(toolNames).not.toContain(TOOL_DELETE_FILE_FULL_NAME);
-    } finally {
-      (config.skillsSandbox as { enabled: boolean }).enabled =
-        originalSandboxEnabled;
-      (config.projects as { enabled: boolean }).enabled =
-        originalProjectsEnabled;
     }
   });
 

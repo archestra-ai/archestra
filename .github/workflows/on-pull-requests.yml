@@ -109,20 +109,20 @@ jobs:
       - name: Generate full license report (on failure)
         if: failure()
         run: |
-          echo "## License Compliance Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "❌ License check failed. See details below:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          pnpm license-check 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## License Compliance Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "❌ License check failed. See details below:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          pnpm license-check 2>&1 | head -100 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Add success summary
         if: success()
         run: |
-          echo "## ✅ License Compliance Check Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ License Compliance Check Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No GPL/AGPL/Unknown licenses found in dependencies." >> "$GITHUB_STEP_SUMMARY"
 
   supply-chain-policy:
     name: Supply Chain Policy
@@ -137,7 +137,9 @@ jobs:
           fetch-depth: 1
 
       - name: Enforce image pinning and download verification policy
-        run: python3 .github/scripts/check-supply-chain-policy.py
+        run: |
+          python3 -m unittest discover -s .github/scripts -p "test_*.py"
+          python3 .github/scripts/check-supply-chain-policy.py
 
   docs-image-policy:
     name: Docs Image Policy
@@ -153,6 +155,21 @@ jobs:
 
       - name: Enforce docs asset format and size policy
         run: python3 .github/scripts/check-docs-image-policy.py
+
+  docs-links:
+    name: Docs Link Check
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check internal doc links and asset embeds resolve
+        run: python3 .github/scripts/check-docs-links.py
 
   migration-kit-checks:
     name: Migration Kit Checks
@@ -213,8 +230,31 @@ jobs:
   # Fast feedback on every PR push: lint + typecheck + unit tests.
   # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
   # or on-demand via the "run-e2e" PR label.
+  #
+  # bot-pr-guard: the expensive jobs below skip on automated bot PRs.
+  # release-please (archestra-ci[bot]) force-rewrites its PR branch on every
+  # merge to main — re-running the full suite dozens of times a day — and the
+  # contributor-onboarding bot (archestra-contributor-pr-bot[bot]) opens
+  # one-line docs PRs that auto-merge in seconds. Neither can surface real
+  # failures, and the merge queue re-runs all required checks for real on
+  # merge_group anyway. A job that skips under its own name still satisfies
+  # its required status check (see the required-check note in
+  # platform-e2e-tests.yml), so no placeholder twins are needed — a
+  # same-named twin would mask real failures on merge_group. The guard only
+  # bites on pull_request events: on merge_group, github.event.pull_request
+  # is null and the first clause short-circuits, so queue validation runs
+  # unchanged.
+  #
+  # EXCEPTION: platform-lint-and-unit-tests must still run on release-please
+  # PRs — it auto-commits the regenerated docs/openapi.json version bump onto
+  # the release branch ("chore: update docs/openapi.json version for
+  # release"). Without that commit the merge_group codegen check fails and
+  # the release cannot merge, so that job only skips the contributor bot.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
+    # bot-pr-guard (see above): contributor bot only — release-please PRs
+    # need this job's codegen auto-commit.
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # Backstop: every check here finishes in well under 10m, but leaked
     # test-runner processes (vitest fork workers / esbuild) occasionally orphan
@@ -245,14 +285,6 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Checkout project
-        if: ${{ steps.check-release-please.outputs.is-release-please != 'true' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Checkout project for release-please PR
-        if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
@@ -313,11 +345,6 @@ jobs:
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
           IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
-          # Generate the full Archestra MCP tool catalog and route surface
-          # (incl. flag-gated app tools and the Projects/My Files routes) so
-          # codegen matches the committed docs/spec; mirrors values-ci.yaml.
-          ARCHESTRA_APPS_ENABLED: "true"
-          ARCHESTRA_PROJECTS_ENABLED: "true"
         run: |
           set -e
 
@@ -392,6 +419,8 @@ jobs:
   # operates on the committed lockfile.
   platform-rust-checks:
     name: Platform Rust Checks
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     permissions:
@@ -425,11 +454,47 @@ jobs:
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+        run: cargo install cargo-deny --version 0.20.2 --locked
 
       - name: Rust dependency policy
         working-directory: ./platform/archestra-rs
-        run: cargo deny check --config deny.toml advisories bans licenses sources
+        run: cargo deny --config deny.toml check advisories bans licenses sources
+
+  ai-labs-rust-checks:
+    name: AI Labs Rust Checks
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./ai-labs
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Rust
+        run: rustup show
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Rust check
+        run: cargo check --workspace --locked
+
+      - name: Rust lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --workspace --locked
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the four
@@ -437,6 +502,8 @@ jobs:
   # takes the suite off the workflow's critical path.
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup. 15 minutes means something is hung.
@@ -467,21 +534,24 @@ jobs:
         with:
           working-directory: ./platform
 
-      # Fork PRs run without turbo remote caching (secrets are withheld), so
-      # the NAPI crate builds below actually invoke cargo. Sync the pinned
-      # toolchain (rust-toolchain.toml) serially first — otherwise turbo's
-      # parallel crate builds each trigger a concurrent rustup download of
-      # the same components, which races and fails with "could not rename
-      # downloaded file".
-      - name: Setup Rust
-        run: rustup show
-
       # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
       # which `turbo check:ci` builds implicitly via the task graph. Running
       # vitest directly skips that, so build backend's workspace deps here —
-      # turbo remote caching makes this seconds on a cache hit.
+      # turbo remote caching makes this seconds on a cache hit, and on a hit
+      # no cargo runs, so the pinned Rust toolchain isn't needed at all
+      # (an unconditional `rustup show` cost ~10s per shard). On a miss
+      # (fork PRs run without cache secrets, so cargo really builds), turbo's
+      # parallel crate builds each trigger a concurrent rustup download of
+      # the same toolchain, which races and fails with "could not rename
+      # downloaded file" — so on failure, sync the toolchain serially and
+      # retry once.
       - name: Build backend workspace dependencies
-        run: pnpm exec turbo build --filter="@backend^..."
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }
 
       - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
         working-directory: ./platform/backend
@@ -494,7 +564,12 @@ jobs:
   backend-unit-tests-gate:
     name: Backend Unit Tests
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    if: always()
+    # always() so the gate still runs (and turns red) when a shard fails,
+    # ANDed with the bot-pr-guard (see comment above
+    # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
+    # gate must skip too — with plain always() it would run and fail on the
+    # shards' "skipped" result.
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
     needs: [backend-unit-tests]
     permissions: {}
     steps:
@@ -510,6 +585,8 @@ jobs:
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW)
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read

@@ -28,6 +28,11 @@ const tasksTable = pgTable(
       .notNull()
       .defaultNow(),
     startedAt: timestamp("started_at", { mode: "date" }),
+    // Liveness of the executing worker, renewed every poll tick while the task
+    // is in flight. The stuck sweep keys off this (falling back to started_at
+    // for rows claimed before the column existed): a stale heartbeat means the
+    // worker died — started_at age alone cannot tell a crash from a long task.
+    heartbeatAt: timestamp("heartbeat_at", { mode: "date" }),
     completedAt: timestamp("completed_at", { mode: "date" }),
     lastError: text("last_error"),
     periodic: boolean("periodic").notNull().default(false),
@@ -43,6 +48,15 @@ const tasksTable = pgTable(
       .on(table.taskType)
       .where(
         sql`${table.periodic} = true AND ${table.status} IN ('pending', 'processing')`,
+      ),
+    // Lets the connector-run reaper ask "does this run still have live embedding
+    // work?" as an index lookup instead of a JSONB filter over every pending/
+    // processing batch_embedding task. Partial + expression: only in-flight
+    // embedding tasks are indexed, keyed by the connectorRunId in their payload.
+    index("tasks_batch_embedding_connector_run_idx")
+      .on(sql`(${table.payload} ->> 'connectorRunId')`)
+      .where(
+        sql`${table.taskType} = 'batch_embedding' AND ${table.status} IN ('pending', 'processing')`,
       ),
   ],
 );

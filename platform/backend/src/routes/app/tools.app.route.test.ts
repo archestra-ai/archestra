@@ -9,29 +9,13 @@ import EnvironmentModel from "@/models/environment";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("/api/apps/:appId/tools", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
@@ -249,10 +233,10 @@ describe("/api/apps/:appId/tools", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  // Registration of the built-in file tools is flag-gated, so the flags must
-  // be on before seeding. Config is restored pristine before every test.
+  // Registration of the built-in file tools is gated on the sandbox flag, so
+  // it must be on before seeding. Config is restored pristine before every
+  // test.
   async function seedAppAssignableBuiltins() {
-    (config.projects as { enabled: boolean }).enabled = true;
     (config.skillsSandbox as { enabled: boolean }).enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
   }

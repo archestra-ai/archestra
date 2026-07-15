@@ -13,6 +13,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import { LRUCacheManager } from "@/cache-manager";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -283,9 +284,35 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(ModelWithApiKeysSchema)),
       },
     },
-    async (_, reply) => {
-      const modelsWithApiKeys =
+    async ({ organizationId, user }, reply) => {
+      const allModelsWithApiKeys =
         await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
+
+      // The link table spans every org and user (models are global metadata),
+      // so restrict the attached keys to the caller's visibility — the same
+      // rules as the Model Providers page (own personal + team + org keys,
+      // other users' personal keys hidden even from admins). Without this,
+      // per-user providers leak every member's personal key as identical
+      // "Microsoft 365 Copilot" entries. Models keep showing with an empty
+      // key list, like the unlinked llm-proxy models below.
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+      const isLlmProviderApiKeyAdmin = await userHasPermission(
+        user.id,
+        organizationId,
+        "llmProviderApiKey",
+        "admin",
+      );
+      const visibleKeys = await LlmProviderApiKeyModel.getVisibleKeys(
+        organizationId,
+        user.id,
+        userTeamIds,
+        isLlmProviderApiKeyAdmin,
+      );
+      const visibleKeyIds = new Set(visibleKeys.map((key) => key.id));
+      const modelsWithApiKeys = allModelsWithApiKeys.map((item) => ({
+        ...item,
+        apiKeys: item.apiKeys.filter((key) => visibleKeyIds.has(key.id)),
+      }));
 
       const linkedModelIds = new Set(
         modelsWithApiKeys.map((item) => item.model.id),

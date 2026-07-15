@@ -60,12 +60,22 @@ export interface CreateClientOptions {
   baseUrl?: string;
   /** Agent for observability metrics (request duration, tokens) */
   agent?: Agent;
-  /** External agent ID from X-Archestra-Agent-Id header */
-  externalAgentId?: string;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
   /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */
   source: InteractionSource;
+  /**
+   * Id of the llm_provider_api_keys row the request's credential resolved
+   * from, when known. Adapters whose upstream rotates the stored credential
+   * (Microsoft 365 Copilot's Entra refresh tokens) use it to persist the rotated
+   * secret back to the key; other adapters ignore it.
+   */
+  llmProviderApiKeyId?: string;
+  /**
+   * Aborted when the downstream HTTP client disconnects before its response
+   * finishes. Provider clients may forward it to their upstream requests.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -356,6 +366,16 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
 
   /** Interaction type for database storage */
   readonly interactionType: SupportedProviderDiscriminator;
+
+  /**
+   * When true, the LLM proxy handler records the `llm_request_duration_seconds`
+   * metric for this provider. Leave unset for providers whose transport already
+   * self-instruments duration (fetch-based providers via getObservableFetch,
+   * Gemini via getObservableGenAI) to avoid double-counting. Bedrock sets this
+   * because its custom SigV4 client has no access to the profile/source labels
+   * the metric needs, so the handler records duration on its behalf.
+   */
+  readonly recordRequestDurationInHandler?: boolean;
 
   // ---------------------------------------------------------------------------
   // Adapter Creation

@@ -17,6 +17,7 @@ import {
   MCP_GATEWAY_URL_SUFFIX,
   UI_BASE_URL,
 } from "../consts";
+import { goToPage } from "../fixtures";
 import { closeOpenDialogs } from "./dialogs";
 
 export async function verifyToolCallResultViaApi({
@@ -53,6 +54,29 @@ export async function verifyToolCallResultViaApi({
     token = await getTeamTokenForProfile(request, MARKETING_TEAM_NAME);
   } else {
     token = await getOrgTokenForProfile(request);
+  }
+
+  // The assignment dialog's Save is not awaited by the UI helpers, and the
+  // gateway's enablement check reads agent_tools live — so a direct call can
+  // win the race against the assignment mutation and get the "not enabled"
+  // recovery text instead of the tool result. On the lite harness
+  // (frontend/backend/DB in one container, sub-ms latency) the call wins
+  // deterministically. Wait until the gateway itself lists the tool, which is
+  // the same assignment set the invocation policy checks. Skipped for "Error"
+  // expectations: there the tool may legitimately never appear for this token.
+  if (expectedResult !== "Error") {
+    await expect
+      .poll(
+        async () => {
+          const tools = await listMcpTools(request, {
+            profileId: effectiveProfileId,
+            token,
+          }).catch(() => [] as McpTool[]);
+          return tools.some((tool) => tool.name === toolName);
+        },
+        { timeout: 30_000, intervals: [250, 500, 1000, 2000, 4000] },
+      )
+      .toBe(true);
   }
 
   let toolResult: Awaited<ReturnType<typeof callMcpTool>>;
@@ -512,6 +536,10 @@ export async function openManageCredentialsDialog(
   page: Page,
   catalogItemName: string,
 ): Promise<void> {
+  // The card's credentials control navigates to the item detail page's
+  // Credentials tab; chat surfaces render the same content inside the
+  // standalone ManageCredentialsDialog. Both carry the same testids, so
+  // locate the credentials surface page-wide instead of scoping to a dialog.
   const searchInput = page.getByRole("textbox", {
     name: "Search MCP servers by name",
   });
@@ -522,20 +550,13 @@ export async function openManageCredentialsDialog(
   const targetCard = page.getByTestId(
     `${E2eTestId.McpServerCard}-${catalogItemName}`,
   );
-  const settingsDialog = page.getByRole("dialog", {
-    name: new RegExp(`^${escapeRegExp(catalogItemName)} Settings$`),
-  });
-  const connectionsNavButton = settingsDialog.getByTestId(
+  const connectionsNavButton = page.getByTestId(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
-  const connectionsContent = settingsDialog.getByTestId(
+  const connectionsContent = page.getByTestId(
     E2eTestId.McpServerSettingsConnectionsContent,
   );
-  if (await settingsDialog.isVisible().catch(() => false)) {
-    if (!(await connectionsContent.isVisible().catch(() => false))) {
-      await connectionsNavButton.click();
-    }
-    await expect(connectionsContent).toBeVisible({ timeout: 10_000 });
+  if (await connectionsContent.isVisible().catch(() => false)) {
     return;
   }
 
@@ -545,15 +566,18 @@ export async function openManageCredentialsDialog(
   }
 
   await expect(async () => {
-    if (await settingsDialog.isVisible().catch(() => false)) {
-      if (!(await connectionsContent.isVisible().catch(() => false))) {
-        await connectionsNavButton.click();
-      }
-      await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
+    if (await connectionsContent.isVisible().catch(() => false)) {
       return;
     }
 
     if (await standaloneDialog.isVisible().catch(() => false)) {
+      return;
+    }
+
+    // Already on the item detail page (another tab) — switch to Credentials.
+    if (await connectionsNavButton.isVisible().catch(() => false)) {
+      await connectionsNavButton.click();
+      await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
       return;
     }
 
@@ -563,9 +587,10 @@ export async function openManageCredentialsDialog(
     }
 
     if (!(await targetCard.isVisible().catch(() => false))) {
-      // Newly-installed servers may not be in the rendered list yet — re-fetch
-      // and re-apply the search filter rather than waiting on a stale page.
-      await page.reload();
+      // Newly-installed servers may not be in the rendered list yet (or the
+      // page is elsewhere) — go back to the registry list and re-apply the
+      // search filter.
+      await goToPage(page, "/mcp/registry");
       await page.waitForLoadState("domcontentloaded");
       if (await searchInput.isVisible().catch(() => false)) {
         await searchInput.fill(catalogItemName);
@@ -580,6 +605,7 @@ export async function openManageCredentialsDialog(
       name: /^\d+\/\d+$/,
     });
 
+    // Both controls navigate to the item detail page's Credentials tab.
     if (await manageButton.isVisible().catch(() => false)) {
       await manageButton.click({ force: true });
     } else {
@@ -587,20 +613,19 @@ export async function openManageCredentialsDialog(
       await deploymentButton.click();
     }
 
-    await expect(settingsDialog).toBeVisible({ timeout: 2_000 });
     if (!(await connectionsContent.isVisible().catch(() => false))) {
-      await connectionsNavButton.click();
+      if (await connectionsNavButton.isVisible().catch(() => false)) {
+        await connectionsNavButton.click();
+      }
     }
     await expect(connectionsContent).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
 }
 
 export async function getVisibleCredentials(page: Page): Promise<string[]> {
-  const visibleDialog = page
-    .getByRole("dialog")
-    .filter({ visible: true })
-    .last();
-  const connectionsNavButton = visibleDialog.getByTestId(
+  // Works on any credentials surface (item detail tab or dialog): the nav
+  // button/tab trigger carries the connection count, the content the rows.
+  const connectionsNavButton = page.getByTestId(
     E2eTestId.McpServerSettingsConnectionsNavButton,
   );
   const badgeText =
@@ -613,16 +638,13 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
   if (expectedConnectionCount > 0) {
     await expect
       .poll(
-        async () =>
-          await visibleDialog.getByTestId(E2eTestId.CredentialOwner).count(),
+        async () => await page.getByTestId(E2eTestId.CredentialOwner).count(),
         { timeout: 10_000, intervals: [250, 500, 1000] },
       )
       .toBeGreaterThan(0);
   }
 
-  return await visibleDialog
-    .getByTestId(E2eTestId.CredentialOwner)
-    .allTextContents();
+  return await page.getByTestId(E2eTestId.CredentialOwner).allTextContents();
 }
 
 export async function getVisibleStaticCredentials(
@@ -752,8 +774,4 @@ export async function createTeamMcpGatewayViaApi({
     );
   }
   return { id: createResponse.data.id, name: createResponse.data.name };
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

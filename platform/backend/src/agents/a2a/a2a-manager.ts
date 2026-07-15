@@ -94,16 +94,29 @@ export class A2AManager {
       chatOpsBindingId?: string;
       chatOpsThreadId?: string;
     };
+    /**
+     * When provided (SendStreamingMessage), forwarded to the executor so each
+     * incremental text delta is surfaced to the streaming caller. The buffered
+     * response returned here is unchanged and remains authoritative.
+     */
+    onTextDelta?: (delta: string) => void;
+    /**
+     * Cancellation signal forwarded into the agent run. SendStreamingMessage
+     * aborts when the SSE client disconnects; chatops aborts a muted thread's
+     * in-flight model requests instead of letting them finish and post a
+     * now-unwanted reply.
+     */
+    abortSignal?: AbortSignal;
   }): Promise<A2AProtocolSendMessageResponse> {
     try {
-      const { actor, agentId, request, systemParams } = params;
+      const { actor, agentId, request, systemParams, abortSignal } = params;
 
-      const a2aUser =
+      const [a2aUser, agent] = await Promise.all([
         actor.kind === "user" && actor.id !== "system"
-          ? await UserModel.getById(actor.id)
-          : null;
-
-      const agent = await AgentModel.findById(agentId);
+          ? UserModel.getById(actor.id)
+          : null,
+        AgentModel.findById(agentId),
+      ]);
       if (!agent) {
         throw new A2AError(A2AErrorKind.AgentNotFound);
       }
@@ -240,18 +253,22 @@ export class A2AManager {
       }
 
       const sessionId = systemParams?.sessionId ?? context?.id;
+      const [teams, userTeams] = await Promise.all([
+        AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+        a2aUser
+          ? TeamModel.getTeamLabelInfoForUser({
+              userId: a2aUser.id,
+              organizationId: agent.organizationId,
+            })
+          : [],
+      ]);
       const result = await startActiveChatSpan({
         agentName: agent.name,
         agentId,
         agentType: agent.agentType ?? undefined,
         sessionId,
-        teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
-        userTeams: a2aUser
-          ? await TeamModel.getTeamLabelInfoForUser({
-              userId: a2aUser.id,
-              organizationId: agent.organizationId,
-            })
-          : [],
+        teams,
+        userTeams,
         routeCategory: systemParams?.routeCategory ?? RouteCategory.A2A,
         user: a2aUser
           ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }
@@ -274,6 +291,8 @@ export class A2AManager {
             originalUiMessages: contextUiMessages,
             chatOpsBindingId: systemParams?.chatOpsBindingId,
             chatOpsThreadId: systemParams?.chatOpsThreadId,
+            onTextDelta: params.onTextDelta,
+            abortSignal,
           });
         },
       });

@@ -975,11 +975,14 @@ export const PromptInputTextarea = ({
       if (isComposing || e.nativeEvent.isComposing) {
         return;
       }
-      if (disableEnterSubmit) {
-        e.preventDefault();
+      // Shift+Enter always inserts a newline, even while submitting is
+      // blocked (e.g. a response is streaming) — checked before
+      // disableEnterSubmit so the newline is never swallowed.
+      if (e.shiftKey) {
         return;
       }
-      if (e.shiftKey) {
+      if (disableEnterSubmit) {
+        e.preventDefault();
         return;
       }
       e.preventDefault();
@@ -1139,7 +1142,7 @@ export const PromptInputFooter = ({
   />
 );
 
-export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>;
+export type PromptInputToolsProps = ComponentProps<"div">;
 
 export const PromptInputTools = ({
   className,

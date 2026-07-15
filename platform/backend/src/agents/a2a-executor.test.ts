@@ -2,6 +2,7 @@ import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError, type UIMessage } from "ai";
 import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
 import type { StageResult } from "./a2a/stage-attachments";
 import {
@@ -267,6 +268,30 @@ describe("buildUserContent", () => {
 
     // No filename, but the unreadable attachment is still surfaced (not dropped).
     expect(note).not.toBe("");
+  });
+
+  test("defaults a missing content type instead of crashing the classifier", async () => {
+    // An attachment can reach buildUserContent without a content type if an
+    // upstream ingestion path's `as string` cast is ever exercised with an
+    // undefined value. It must be normalized to a safe default rather than throw
+    // on the `image/` prefix check (or produce a `data:undefined;...` URL).
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: undefined as unknown as string,
+        contentBase64: "QUJD",
+        name: "mystery.bin",
+      },
+    ];
+
+    const { content } = await buildUserContent(
+      "Inspect",
+      attachments,
+      // Make the defaulted octet-stream readable so the normalized attachment is
+      // kept and its resolved mediaType is observable.
+      geminiOpts(new Set(["application/octet-stream"])),
+    );
+
+    expect(fileMediaTypes(content)).toContain("application/octet-stream");
   });
 
   test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", async () => {
@@ -615,6 +640,68 @@ describe("executeA2AMessage current turn assembly", () => {
     const config = mockStreamText.mock.calls[0]?.[0];
     expect(config.messages).toEqual(history);
   });
+
+  test("caps output tokens at the model's real ceiling, clamped by the operator ceiling", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-sonnet-4-6",
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      description: "Claude Sonnet 4.6",
+      contextLength: 200000,
+      outputLength: 64000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      lastSyncedAt: new Date(),
+    });
+    primeStreamMocks();
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "current question",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.maxOutputTokens).toBe(32768);
+  });
+
+  test("falls back to the unknown-model output budget when no model row exists", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeStreamMocks();
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "current question",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.maxOutputTokens).toBe(8192);
+  });
 });
 
 describe("executeA2AMessage model selection", () => {
@@ -688,6 +775,8 @@ describe("executeA2AMessage model selection", () => {
       },
       organizationId: org.id,
       userId: user.id,
+      // A2A runs never adopt the acting member's /chat default.
+      includeMemberChatDefault: false,
     });
     expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
       expect.objectContaining({

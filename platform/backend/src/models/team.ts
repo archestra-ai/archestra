@@ -592,7 +592,10 @@ class TeamModel {
 
     const [teams, totalResult] = await Promise.all([
       db
-        .select(getTableColumns(schema.teamsTable))
+        .select({
+          ...getTableColumns(schema.teamsTable),
+          myRole: schema.teamMembersTable.role,
+        })
         .from(schema.teamMembersTable)
         .innerJoin(
           schema.teamsTable,
@@ -816,6 +819,46 @@ class TeamModel {
       "TeamModel.getTeammateUserIds: completed",
     );
     return filteredIds;
+  }
+
+  /**
+   * Distinct user IDs sharing at least one team with `userId` within the given
+   * organization (self excluded). Org-scoped so a shared team in another org
+   * never surfaces someone as a teammate here.
+   */
+  static async getTeammateUserIdsInOrganization(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<string[]> {
+    const { userId, organizationId } = params;
+    const userTeamIds = (
+      await db
+        .select({ teamId: schema.teamMembersTable.teamId })
+        .from(schema.teamMembersTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.teamsTable.id, schema.teamMembersTable.teamId),
+        )
+        .where(
+          and(
+            eq(schema.teamMembersTable.userId, userId),
+            eq(schema.teamsTable.organizationId, organizationId),
+          ),
+        )
+    ).map((row) => row.teamId);
+
+    if (userTeamIds.length === 0) {
+      return [];
+    }
+
+    const teammates = await db
+      .select({ userId: schema.teamMembersTable.userId })
+      .from(schema.teamMembersTable)
+      .where(inArray(schema.teamMembersTable.teamId, userTeamIds));
+
+    return [...new Set(teammates.map((t) => t.userId))].filter(
+      (id) => id !== userId,
+    );
   }
 
   /**

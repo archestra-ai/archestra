@@ -1,31 +1,14 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("GET /api/app-templates", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
@@ -72,12 +55,5 @@ describe("GET /api/app-templates", () => {
     await expect(
       buildValidatedVersionPayload({ html: starter.html }),
     ).resolves.toMatchObject({ warnings: [] });
-  });
-
-  test("404s when the feature is disabled", async () => {
-    (config.apps as { enabled: boolean }).enabled = false;
-    const off = await app.inject({ method: "GET", url: "/api/app-templates" });
-    (config.apps as { enabled: boolean }).enabled = true;
-    expect(off.statusCode).toBe(404);
   });
 });

@@ -14,16 +14,22 @@ import type {
 } from "@modelcontextprotocol/ext-apps";
 import {
   AppBridge,
+  buildAllowAttribute,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
+import { McpAppAuthBanner } from "@/components/mcp-app/mcp-app-auth-banner";
 import {
   getAppDiagnostics,
   parseForwardedDiagnostic,
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
+import {
+  type ConnectableAuthState,
+  resolveMcpAppToolCallAuthState,
+} from "@/lib/chat/mcp-error-ui";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 
@@ -107,6 +113,7 @@ export const McpAppRuntime = function McpAppRuntime({
   containerDimensions,
   reloadNonce,
   inlineInitialHeight,
+  degradeResourceLoadError,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -133,6 +140,18 @@ export const McpAppRuntime = function McpAppRuntime({
   /** Last measured inline height; seeds the iframe + loading box so a fresh
    * mount (e.g. returning from the panel) doesn't collapse before the app loads. */
   inlineInitialHeight?: number;
+  /**
+   * Degrade silently instead of showing a "Failed to load app" card when the
+   * UI resource can't be read. Set for incidental chat renders of third-party
+   * apps: a tool advertises a `ui://` resource its upstream server may not
+   * actually serve (e.g. a server that added MCP-UI hints without implementing
+   * `resources/read`, which fails with -32601 Method not found), and the tool
+   * result is shown regardless — so a failed app load falls back to that plain
+   * result rather than a scary error. Left false where the app was opened
+   * deliberately (run pages) or is Archestra-authored (an authoring bug the
+   * author must see), so failures stay visible there.
+   */
+  degradeResourceLoadError?: boolean;
 }) {
   const { resolvedTheme } = useTheme();
   // The host only ever caps height (width is unbounded); unpack the SEP-shaped
@@ -143,6 +162,11 @@ export const McpAppRuntime = function McpAppRuntime({
     preloadedResource ?? null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Auth error from the app's most recent proxied tools/call — drives a
+  // host-side connect banner above the iframe (see McpAppAuthBanner).
+  const [toolCallAuthError, setToolCallAuthError] =
+    useState<McpAppToolCallAuthError | null>(null);
+  const dismissToolCallAuthErrorRef = useRef<() => void>(() => {});
 
   // Stable identity for the bridge-creation effect — re-run when the endpoint or
   // resource changes, never on unrelated re-renders. The effect derives its
@@ -178,6 +202,8 @@ export const McpAppRuntime = function McpAppRuntime({
   onSendMessageRef.current = onSendMessage;
   const onResourceStateChangeRef = useRef(onResourceStateChange);
   onResourceStateChangeRef.current = onResourceStateChange;
+  const degradeResourceLoadErrorRef = useRef(degradeResourceLoadError);
+  degradeResourceLoadErrorRef.current = degradeResourceLoadError;
   // Ref to the latest bridge for teardown — avoids capturing a stale closure
   const latestBridgeRef = useRef<AppBridge | null>(null);
   // Monotonic counter for JSON-RPC IDs to avoid collisions from Date.now() in rapid calls.
@@ -309,7 +335,12 @@ export const McpAppRuntime = function McpAppRuntime({
       {
         hostContext: {
           displayMode: displayModeRef.current,
-          theme: (resolvedThemeRef.current ?? "light") as "light" | "dark",
+          // Fall back to the <html> class when the theme hook hasn't hydrated
+          // yet (hard load): next-themes stamps the class pre-React, so a
+          // dark-mode page never announces itself as light.
+          theme: (resolvedThemeRef.current ?? readDocumentTheme()) as
+            | "light"
+            | "dark",
           platform: "web",
           availableDisplayModes: AVAILABLE_DISPLAY_MODES,
           containerDimensions: containerDimensionsHint(
@@ -381,6 +412,63 @@ export const McpAppRuntime = function McpAppRuntime({
       return json.result;
     };
 
+    // Proxy a tools/call and sniff the result for the gateway's auth-required /
+    // auth-expired refusal (structured `archestraError`, prose fallback). The
+    // result still flows to the app unchanged; the host additionally raises a
+    // connect banner OUTSIDE the iframe — the app may only print the error
+    // text, and the sandbox blocks popups so an in-app link couldn't open.
+    // A fresh render (endpoint/resource/reload change) starts with no banner.
+    let nextToolCallGeneration = 0;
+    const latestAuthoritativeGenerationByTool = new Map<string, number>();
+    let activeAuthError: ActiveMcpAppToolCallAuthError | null = null;
+    dismissToolCallAuthErrorRef.current = () => {
+      activeAuthError = null;
+      setToolCallAuthError(null);
+    };
+    setToolCallAuthError(null);
+    const proxyToolCall = async (params: {
+      name: string;
+      arguments?: unknown;
+    }) => {
+      const generation = ++nextToolCallGeneration;
+      const result = await mcpProxy("tools/call", params);
+      if (cancelled) return result;
+
+      const authState = resolveMcpAppToolCallAuthState(result);
+      if (authState) {
+        const latestGeneration =
+          latestAuthoritativeGenerationByTool.get(params.name) ?? 0;
+        if (generation < latestGeneration) return result;
+
+        latestAuthoritativeGenerationByTool.set(params.name, generation);
+        if (activeAuthError && generation < activeAuthError.generation) {
+          return result;
+        }
+
+        const next = { toolName: params.name, authState, generation };
+        activeAuthError = next;
+        // Keep the previous object when the same refusal repeats (an app retry
+        // loop) so the banner doesn't re-render on every failed call.
+        setToolCallAuthError((prev) =>
+          prev && isSameToolCallAuthError(prev, next) ? prev : next,
+        );
+      } else if (isSuccessfulMcpToolCallResult(result)) {
+        const latestGeneration =
+          latestAuthoritativeGenerationByTool.get(params.name) ?? 0;
+        if (generation < latestGeneration) return result;
+
+        latestAuthoritativeGenerationByTool.set(params.name, generation);
+        if (
+          activeAuthError?.toolName === params.name &&
+          generation > activeAuthError.generation
+        ) {
+          activeAuthError = null;
+          setToolCallAuthError(null);
+        }
+      }
+      return result;
+    };
+
     if (endpoint.kind === "agent") {
       const serverPrefix = endpoint.serverPrefix;
 
@@ -390,7 +478,7 @@ export const McpAppRuntime = function McpAppRuntime({
         const rawName = parseFullToolName(params.name).toolName;
         const toolName = buildFullToolName(serverPrefix, rawName);
 
-        return mcpProxy("tools/call", {
+        return proxyToolCall({
           name: toolName,
           arguments: params.arguments,
         });
@@ -460,7 +548,7 @@ export const McpAppRuntime = function McpAppRuntime({
       // list/template/prompt handlers return empty rather than hitting an
       // unimplemented method.
       appBridge.oncalltool = async (params) =>
-        mcpProxy("tools/call", {
+        proxyToolCall({
           name: params.name,
           arguments: params.arguments,
         });
@@ -556,9 +644,19 @@ export const McpAppRuntime = function McpAppRuntime({
       } catch (err) {
         if (!cancelled && !fetchCancelledRef.current) {
           const error = err instanceof Error ? err : new Error(String(err));
-          setLoadError(error.message);
-          onResourceStateChangeRef.current("renderable");
-          onErrorRef.current?.(error);
+          if (degradeResourceLoadErrorRef.current) {
+            // Incidental third-party app whose upstream couldn't serve the UI
+            // resource: fall back to the plain tool result (state "empty" folds
+            // the app away) rather than a "Failed to load app" card. The tool
+            // output itself is shown independently, so nothing is lost.
+            // biome-ignore lint/suspicious/noConsole: intentional — helps support diagnose a silently-skipped app
+            console.debug("[MCP App] resource unavailable, degrading", error);
+            onResourceStateChangeRef.current("empty");
+          } else {
+            setLoadError(error.message);
+            onResourceStateChangeRef.current("renderable");
+            onErrorRef.current?.(error);
+          }
         }
       }
     })();
@@ -618,9 +716,7 @@ export const McpAppRuntime = function McpAppRuntime({
     if (!bridge) return;
     const observer = new MutationObserver(() => {
       bridge.setHostContext({
-        theme: document.documentElement.classList.contains("dark")
-          ? "dark"
-          : "light",
+        theme: readDocumentTheme(),
         styles: { variables: buildMcpUiStyleVariables() },
       });
     });
@@ -664,6 +760,13 @@ export const McpAppRuntime = function McpAppRuntime({
 
   return (
     <div>
+      {toolCallAuthError && (
+        <McpAppAuthBanner
+          toolName={toolCallAuthError.toolName}
+          authState={toolCallAuthError.authState}
+          onDismiss={() => dismissToolCallAuthErrorRef.current()}
+        />
+      )}
       {loadError && (
         <div className="flex items-center justify-center rounded-lg bg-destructive/10 border border-destructive/20 min-h-[100px] p-4">
           <div className="flex flex-col items-center gap-2 text-center">
@@ -726,8 +829,41 @@ export const McpAppRuntime = function McpAppRuntime({
   );
 };
 
+/** An auth refusal from a proxied tools/call, plus the tool that hit it. */
+type McpAppToolCallAuthError = {
+  toolName: string;
+  authState: ConnectableAuthState;
+};
+
+type ActiveMcpAppToolCallAuthError = McpAppToolCallAuthError & {
+  generation: number;
+};
+
+/** Same auth refusal (tool + kind + action URL): the banner needn't update. */
+function isSameToolCallAuthError(
+  a: McpAppToolCallAuthError,
+  b: McpAppToolCallAuthError,
+): boolean {
+  const urlOf = (state: ConnectableAuthState) =>
+    state.kind === "auth-expired" ? state.reauthUrl : state.actionUrl;
+  return (
+    a.toolName === b.toolName &&
+    a.authState.kind === b.authState.kind &&
+    urlOf(a.authState) === urlOf(b.authState)
+  );
+}
+
+function isSuccessfulMcpToolCallResult(
+  result: unknown,
+): result is McpCallToolResult {
+  if (typeof result !== "object" || result === null) return false;
+  const candidate = result as { content?: unknown; isError?: unknown };
+  return Array.isArray(candidate.content) && candidate.isError !== true;
+}
+
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;
+
 // Coalesce a burst of render errors into one early server post.
 const RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS = 400;
 // Settle window after a resource becomes renderable before posting the snapshot
@@ -810,6 +946,16 @@ function SandboxIframe({
   // Read inside the (effect-bound) size handler; a ref keeps the latest cap
   // without re-binding onsizechange on every cap change.
   const maxHeightRef = useRef(maxHeight);
+  // Permissions-Policy delegation for the outer proxy iframe. The inner app
+  // frame is delegated the same way inside the sandbox proxy; both reuse the
+  // library's mapping so a feature must be granted on EVERY frame in the chain.
+  // Derived to a stable primitive so it can gate the iframe-creation effect
+  // without the raw `permissions` object (new reference each render) forcing
+  // needless remounts.
+  const allowAttribute = useMemo(
+    () => buildAllowAttribute(permissions),
+    [permissions],
+  );
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -831,6 +977,21 @@ function SandboxIframe({
     iframe.style.height = `${initialHeightRef.current}px`;
     iframe.style.border = "none";
     iframe.style.backgroundColor = "transparent";
+    // Propagate the host theme into the sandbox chain: per CSS Color
+    // Adjustment, the frame element's used color-scheme sets the embedded
+    // document's *preferred* color scheme, and the proxy hands it on to the
+    // app frame (`color-scheme: inherit` + its `light dark` meta). Apps that
+    // theme via `@media (prefers-color-scheme)` / `light-dark()` instead of
+    // the bridge's hostContext.theme then follow the app theme rather than
+    // the OS — matching how desktop MCP hosts render them.
+    iframe.style.colorScheme = readDocumentTheme();
+    const themeObserver = new MutationObserver(() => {
+      iframe.style.colorScheme = readDocumentTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
     // With dedicated subdomain: allow-same-origin is safe (different origin from backend).
     // Without: no allow-same-origin → opaque origin for security isolation.
     iframe.setAttribute(
@@ -839,6 +1000,22 @@ function SandboxIframe({
         ? "allow-scripts allow-same-origin allow-forms allow-popups"
         : "allow-scripts allow-forms allow-popups",
     );
+
+    // Delegate declared Permissions-Policy features (camera/mic/geo/clipboard)
+    // to the proxy frame so it can pass them on to the inner app frame — without
+    // this the inner frame's `allow` is inert. Powerful features cannot be
+    // delegated to an opaque origin, so they only take effect on a dedicated
+    // sandbox origin; warn rather than fail silently otherwise.
+    if (allowAttribute) {
+      iframe.setAttribute("allow", allowAttribute);
+      if (!useDedicatedOrigin) {
+        console.warn(
+          `MCP App requested permissions (${allowAttribute}) but the sandbox runs on an opaque origin; ` +
+            "browser Permissions-Policy cannot grant them. Configure a dedicated sandbox origin (mcpSandboxDomain).",
+        );
+      }
+    }
+
     iframe.src = sandboxUrl.href;
     iframeRef.current = iframe;
 
@@ -872,7 +1049,10 @@ function SandboxIframe({
         appBridge
           .connect(transport)
           .then(() => {
-            if (!cancelled) setConnectedBridge(appBridge);
+            if (!cancelled) {
+              setError(null);
+              setConnectedBridge(appBridge);
+            }
           })
           .catch((err) => {
             if (!cancelled) {
@@ -912,6 +1092,7 @@ function SandboxIframe({
     return () => {
       cancelled = true;
       clearTimeout(timeout);
+      themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onDiagnosticMessage);
       iframe.remove();
@@ -924,7 +1105,13 @@ function SandboxIframe({
       setConnectedBridge((current) => (current === appBridge ? null : current));
       setInitialized(false);
     };
-  }, [sandboxUrl.href, sandboxUrl.origin, appBridge, useDedicatedOrigin]);
+  }, [
+    sandboxUrl.href,
+    sandboxUrl.origin,
+    appBridge,
+    useDedicatedOrigin,
+    allowAttribute,
+  ]);
 
   // Set up size change and initialized handlers
   useEffect(() => {
@@ -1017,7 +1204,7 @@ function SandboxIframe({
       }}
     >
       {error && (
-        <div style={{ color: "red", padding: "1rem" }}>
+        <div role="alert" style={{ color: "red", padding: "1rem" }}>
           Error: {error.message}
         </div>
       )}
@@ -1080,6 +1267,15 @@ export function isRenderableMcpAppHtml(html: string): boolean {
 }
 
 // ── Host-theme bridging helpers ──────────────────────────────────────────────
+
+/**
+ * The host's light/dark theme, read from the class next-themes stamps on
+ * `<html>` (set synchronously by its inline script, so it's correct even
+ * before the `useTheme()` hook has hydrated).
+ */
+function readDocumentTheme(): "light" | "dark" {
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
 
 /** Reads a CSS custom property value from :root */
 function getCssVar(name: string): string {

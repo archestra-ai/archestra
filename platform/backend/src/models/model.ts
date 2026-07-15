@@ -305,6 +305,11 @@ class ModelModel {
           externalId: data.externalId,
           description: data.description,
           contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
+          // Unlike the other capability fields, outputLength has no admin editor
+          // and is used as an output-token safety cap, so prefer the freshly
+          // synced value (keeping the last known value only when the sync omits it)
+          // — a lowered provider cap must propagate, not be pinned forever.
+          outputLength: sql`COALESCE(excluded.output_length, ${schema.modelsTable.outputLength})`,
           inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
           outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
           supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
@@ -313,6 +318,10 @@ class ModelModel {
           cacheReadPricePerToken: data.cacheReadPricePerToken,
           cacheWritePricePerToken: data.cacheWritePricePerToken,
           embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
+          // Display-only provider metadata (not user-editable): prefer the fresh
+          // synced value so changed Ollama defaults show up, keeping the last
+          // known value only when a sync omits it (e.g. a transient /api/show miss).
+          defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
           // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
@@ -369,6 +378,9 @@ class ModelModel {
               externalId: sql`excluded.external_id`,
               description: sql`excluded.description`,
               contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
+              // See upsert(): outputLength prefers the fresh synced value so a
+              // lowered provider cap propagates instead of being pinned forever.
+              outputLength: sql`COALESCE(excluded.output_length, ${schema.modelsTable.outputLength})`,
               inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
               outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
               supportsToolCalling: sql`COALESCE(${schema.modelsTable.supportsToolCalling}, excluded.supports_tool_calling)`,
@@ -377,6 +389,10 @@ class ModelModel {
               cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
               cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
+              // Display-only provider metadata (not user-editable): prefer the
+              // fresh synced value so changed Ollama defaults show up, keeping
+              // the last known value only when a sync omits it.
+              defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
@@ -438,6 +454,7 @@ class ModelModel {
               externalId: sql`excluded.external_id`,
               description: sql`excluded.description`,
               contextLength: sql`excluded.context_length`,
+              outputLength: sql`excluded.output_length`,
               inputModalities: sql`excluded.input_modalities`,
               outputModalities: sql`excluded.output_modalities`,
               supportsToolCalling: sql`excluded.supports_tool_calling`,
@@ -446,6 +463,7 @@ class ModelModel {
               cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
               cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`excluded.embedding_dimensions`,
+              defaultParameters: sql`excluded.default_parameters`,
               customPricePerMillionInput: sql`NULL`,
               customPricePerMillionOutput: sql`NULL`,
               customPricePerMillionCacheRead: sql`NULL`,

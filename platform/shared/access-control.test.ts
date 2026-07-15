@@ -88,6 +88,27 @@ describe("access-control", () => {
     });
   });
 
+  describe("complete-onboarding route", () => {
+    // Completing onboarding flips the org-wide onboardingComplete flag, so it
+    // must require admin-level organizationSettings:update, not merely
+    // authentication — otherwise any member could flip it.
+    test("CompleteOnboarding requires organizationSettings:update", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.CompleteOnboarding];
+      expect(required?.organizationSettings).toContain("update");
+    });
+
+    test("the member role cannot complete onboarding", () => {
+      expect(memberPermissions.organizationSettings).not.toContain("update");
+    });
+
+    test("GetOrganization stays authenticated-only", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.GetOrganization]).toEqual(
+        {},
+      );
+    });
+  });
+
   describe("sandbox artifact route", () => {
     // the download_file tool (sandbox:execute) hands out this artifact URL, so
     // the fetch route must require the same permission — otherwise a role that
@@ -96,6 +117,32 @@ describe("access-control", () => {
       const required =
         requiredEndpointPermissionsMap[RouteId.GetSkillSandboxArtifact];
       expect(required?.sandbox).toContain("execute");
+    });
+  });
+
+  describe("project file routes", () => {
+    // Project file surfaces combine project-level access with the files gate;
+    // the sandbox permission is reserved for actual sandbox execution
+    // (run_command/upload_file/download_file).
+    test("GetProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
+      const required = requiredEndpointPermissionsMap[RouteId.GetProjectFiles];
+      expect(required?.project).toContain("read");
+      expect(required?.file).toContain("manage");
+      expect(required?.sandbox).toBeUndefined();
+    });
+
+    test("UploadProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.UploadProjectFiles];
+      expect(required?.project).toContain("read");
+      expect(required?.file).toContain("manage");
+      expect(required?.sandbox).toBeUndefined();
+    });
+
+    test("all predefined roles have file:manage", () => {
+      for (const permissions of Object.values(predefinedPermissionsMap)) {
+        expect(permissions.file).toContain("manage");
+      }
     });
   });
 

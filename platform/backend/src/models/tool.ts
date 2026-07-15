@@ -74,16 +74,75 @@ import OrganizationModel from "./organization";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
+/**
+ * Max tool-name length accepted by the OpenAI/Anthropic tool-calling APIs and
+ * the MCP tool schema. Namespaced tool names are trimmed to fit this.
+ */
+const MCP_TOOL_NAME_MAX_LENGTH = 64;
+
+/**
+ * Small deterministic hash (djb2, 8 hex chars) used only to disambiguate slugs
+ * that must be hard-truncated because the raw tool name alone exceeds the
+ * 64-char cap. Not security-sensitive: a 32-bit collision between two distinct
+ * over-long names on the same catalog would surface as a (catalog_id, name)
+ * unique-constraint insert failure, not silent data corruption — and the
+ * precondition (two >64-char raw names sharing a djb2 hash) is negligible.
+ */
+function shortSlugHash(value: string): string {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i++) {
+    hash = (Math.imul(hash, 33) + value.charCodeAt(i)) | 0;
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 class ToolModel {
   /**
    * Slugify a tool name to get a unique name for the MCP server's tool.
-   * Ensures the result matches the pattern ^[a-zA-Z0-9_-]{1,128}$ required by LLM providers.
+   * Ensures the result matches `^[a-z0-9_-]{1,64}$` — the 64-char function-name
+   * limit imposed by the OpenAI/Anthropic tool-calling APIs (and the MCP tool
+   * name cap). Over-long slugs are shortened by trimming ONLY the server-name
+   * prefix (before the last `__`), never the raw-tool-name suffix, so the raw
+   * upstream name stays recoverable (see {@link unslugifyName} and
+   * `tools.raw_name`).
    */
   static slugifyName(mcpServerName: string, toolName: string): string {
-    return `${mcpServerName}${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolName}`
-      .toLowerCase()
-      .replace(/\s+/g, "_") // Replace whitespace with underscores
-      .replace(/[^a-z0-9_-]/g, ""); // Remove any characters not allowed in tool names
+    // Per-character sanitization (lowercase, whitespace → `_`, strip the rest)
+    // is context-free, so sanitizing the two parts separately yields exactly the
+    // same string as sanitizing the joined name — but it lets us keep the whole
+    // raw-tool-name portion intact when trimming to fit.
+    const sanitize = (value: string): string =>
+      value
+        .toLowerCase()
+        .replace(/\s+/g, "_") // Replace whitespace with underscores
+        .replace(/[^a-z0-9_-]/g, ""); // Remove characters not allowed in tool names
+    const serverSlug = sanitize(mcpServerName);
+    const rawSlug = sanitize(toolName);
+    const suffix = `${MCP_SERVER_TOOL_NAME_SEPARATOR}${rawSlug}`;
+    const slug = `${serverSlug}${suffix}`;
+
+    if (slug.length <= MCP_TOOL_NAME_MAX_LENGTH) {
+      return slug;
+    }
+
+    // Over the provider tool-name limit. Preserve the raw-tool-name suffix (and
+    // its `__` separator) verbatim and trim only the server-name prefix to fit,
+    // so the stored name still ends with the exact raw tool name.
+    const prefixBudget = MCP_TOOL_NAME_MAX_LENGTH - suffix.length;
+    if (prefixBudget < 1) {
+      // The raw tool name alone exceeds the limit (an upstream name longer than
+      // the provider cap). It cannot be kept in the slug — the exact name is
+      // still recovered from tools.raw_name at dispatch — so append a
+      // deterministic hash so two distinct over-long names on the same server
+      // can't collide on the (catalog_id, name) unique constraint.
+      logger.warn(
+        { mcpServerName, toolName, slugLength: slug.length },
+        "Tool name exceeds the 64-char limit; truncating (raw name preserved in raw_name)",
+      );
+      const hash = shortSlugHash(slug);
+      return `${slug.slice(0, MCP_TOOL_NAME_MAX_LENGTH - hash.length - 1)}-${hash}`;
+    }
+    return `${serverSlug.slice(0, prefixBudget)}${suffix}`;
   }
 
   /**
@@ -107,6 +166,7 @@ class ToolModel {
     data: Partial<
       Pick<
         UpdateTool,
+        | "description"
         | "policiesAutoConfiguredAt"
         | "policiesAutoConfiguringStartedAt"
         | "policiesAutoConfiguredReasoning"
@@ -251,21 +311,23 @@ class ToolModel {
       return existingTool;
     }
 
-    // Create default policies for new tools
+    // Create default policies for new tools. This is a test-only path (see the
+    // TODO above), so it intentionally uses the hardcoded fallbacks rather than
+    // the org's configured defaults — the production paths
+    // (bulkCreateToolsIfNotExists / syncToolsForCatalog / proxy discovery) are
+    // the ones that honor getDefaultToolPolicies().
     await ToolModel.createDefaultPolicies(createdTool.id);
 
     return createdTool;
   }
 
   /**
-   * Create default policies for a newly created tool:
-   * - Default invocation policy: block_when_context_is_untrusted (empty conditions)
-   * - Default result policy: mark_as_untrusted (empty conditions)
-   *
-   * `options.invocationAction` / `options.resultAction` override those defaults —
-   * used by the LLM proxy discovery path to honor the org's configured defaults.
-   * When omitted, the original hardcoded defaults are used (MCP/catalog tools are
-   * unaffected).
+   * Create default policies for a newly created tool. Callers pass the org's
+   * configured "Default Guardrails for MCP Tools" via
+   * `options.invocationAction` / `options.resultAction` so every new tool —
+   * proxy-discovered and MCP-catalog alike — starts with the admin-chosen
+   * defaults. When omitted, the safe hardcoded fallbacks apply
+   * (block_when_context_is_untrusted / mark_as_untrusted).
    */
   static async createDefaultPolicies(
     toolId: string,
@@ -289,6 +351,27 @@ class ToolModel {
       action: options?.resultAction ?? "mark_as_untrusted",
       description: null,
     });
+  }
+
+  /**
+   * The org-configured default guardrail policies applied to every newly
+   * created tool ("Default Guardrails for MCP Tools" in Agent Settings). Tools
+   * are org-agnostic shared rows, so this reads the deployment's organization;
+   * it falls back to the safe hardcoded defaults only when no organization
+   * exists.
+   */
+  static async getDefaultToolPolicies(): Promise<{
+    invocationAction: ToolInvocation.ToolInvocationPolicyAction;
+    resultAction: TrustedData.TrustedDataPolicyAction;
+  }> {
+    const organization = await OrganizationModel.getFirst();
+    return {
+      invocationAction:
+        organization?.defaultDiscoveredToolInvocationPolicy ??
+        "block_when_context_is_untrusted",
+      resultAction:
+        organization?.defaultDiscoveredToolResultPolicy ?? "mark_as_untrusted",
+    };
   }
 
   static async findById(
@@ -318,6 +401,72 @@ class ToolModel {
     }
 
     return tool;
+  }
+
+  /**
+   * Read the fields the policy editor needs for a tool the caller can access.
+   * Unlike findById, catalog-backed tools (agentId null) are scoped by catalog
+   * access rather than returned to anyone, so this is safe for user-facing
+   * reads — including Auto-mode tools that have no agent_tools assignment.
+   */
+  static async findByIdForOrg(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    isAdmin: boolean;
+  }): Promise<Pick<Tool, "id" | "name" | "parameters"> | null> {
+    const [tool] = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        parameters: schema.toolsTable.parameters,
+        catalogId: schema.toolsTable.catalogId,
+        agentId: schema.toolsTable.agentId,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, params.id));
+
+    if (!tool) {
+      return null;
+    }
+
+    // Catalog-backed tools (including Auto-mode tools with no agent_tools row) are
+    // scoped by catalog access, which is org-scoped even for admins. Mirror the
+    // discovery path (getMcpToolsAccessibleToUser): catalog visibility is the
+    // gate — a visible catalog stays readable even when the caller has no
+    // connection of their own yet (execution is install-scoped at call time).
+    if (tool.catalogId) {
+      const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+        params.userId,
+        params.isAdmin,
+        params.organizationId,
+      );
+      if (!catalogIds.includes(tool.catalogId)) {
+        return null;
+      }
+    } else if (tool.agentId) {
+      // Proxy-sniffed row: scope by the owning agent's org, then by team access
+      // for non-admins.
+      const agent = await AgentModel.findById(tool.agentId);
+      if (agent?.organizationId !== params.organizationId) {
+        return null;
+      }
+      if (!params.isAdmin) {
+        const hasAccess = await AgentTeamModel.userHasAgentAccess(
+          params.userId,
+          tool.agentId,
+          false,
+        );
+        if (!hasAccess) {
+          return null;
+        }
+      }
+    } else {
+      // No catalog, no agent: no org linkage to scope by.
+      return null;
+    }
+
+    return { id: tool.id, name: tool.name, parameters: tool.parameters };
   }
 
   // Org-scoped audit snapshot via tool → agent_tools → agents.organizationId.
@@ -381,6 +530,7 @@ class ToolModel {
       .select({
         id: schema.toolsTable.id,
         name: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
         catalogId: schema.toolsTable.catalogId,
         parameters: schema.toolsTable.parameters,
         description: schema.toolsTable.description,
@@ -606,6 +756,11 @@ class ToolModel {
                 ),
               ),
               desc(schema.toolsTable.createdAt),
+              // Total order on ties (bulk-inserted tools share createdAt), so a
+              // duplicate assigned name resolves to the same row every time —
+              // matching getMcpToolsAccessibleToUser and keeping search_tools /
+              // app tool assignment deterministic.
+              asc(schema.toolsTable.id),
             )
         : [];
 
@@ -649,6 +804,13 @@ class ToolModel {
      * canonical/legacy meta keys as the external-apps listing.
      */
     uiResourceUri?: string;
+    /**
+     * Restrict to tools carrying any `ui://` resource, for widening a
+     * discovery listing (tools/list) to dynamically-accessible MCP Apps
+     * without loading the whole corpus. Combine with `uiResourceUri` only if
+     * both need to hold; they are independent filters.
+     */
+    requireUiResource?: boolean;
   }): Promise<Tool[]> {
     const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
       params.userId,
@@ -659,20 +821,16 @@ class ToolModel {
       return [];
     }
 
-    // Catalog visibility is broader than install access: an org-scoped catalog
-    // is visible to every member, but its only installs may be other users'
-    // personal servers. Narrow the discovery space to catalogs the caller has
-    // an accessible install of (own personal + team + org) so search_tools /
-    // run_tool cannot reach another user's personal server. The built-in
-    // Archestra catalog runs in-process with no install row, so it stays in.
-    const installedCatalogIds =
-      await McpServerModel.getAccessibleInstallCatalogIds(params.userId);
-    const scopedCatalogIds = catalogIds.filter(
-      (id) => id === ARCHESTRA_MCP_CATALOG_ID || installedCatalogIds.has(id),
-    );
-    if (scopedCatalogIds.length === 0) {
-      return [];
-    }
+    // Discovery deliberately follows catalog *visibility*, not install access.
+    // A visible catalog with no connection the caller can use (e.g. a per-user
+    // OAuth server the caller has not signed in to, even when other users
+    // have) must stay discoverable: dropping it here would silently hide the
+    // tool, so the model could never surface the actionable auth-required
+    // setup prompt. Execution stays install-scoped — the call-time resolver
+    // only routes through installs the caller can access (own personal, their
+    // teams', or org-scoped; see pickInstallForCaller in clients/mcp-client.ts)
+    // and otherwise returns the auth-required error with a self-service
+    // connect link — so another user's personal server is never reached.
 
     // Secondary sort on id keeps the ordering deterministic when createdAt
     // ties (bulk-inserted MCP tools share a timestamp), so search_tools and
@@ -682,7 +840,7 @@ class ToolModel {
       .from(schema.toolsTable)
       .where(
         and(
-          inArray(schema.toolsTable.catalogId, scopedCatalogIds),
+          inArray(schema.toolsTable.catalogId, catalogIds),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
           toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined
@@ -690,6 +848,9 @@ class ToolModel {
             : undefined,
           params.uiResourceUri !== undefined
             ? eq(toolUiResourceUriSql(), params.uiResourceUri)
+            : undefined,
+          params.requireUiResource
+            ? isNotNull(toolUiResourceUriSql())
             : undefined,
         ),
       )
@@ -718,6 +879,8 @@ class ToolModel {
       parameters: Record<string, unknown>;
       catalogId: string;
       meta?: Record<string, unknown>;
+      /** The original tool name from the MCP server (e.g., "generate_text"). */
+      rawToolName?: string;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -760,19 +923,34 @@ class ToolModel {
     const toolsToInsert: InsertTool[] = [];
     const resultTools: Tool[] = [];
 
-    // Collect meta-update promises so they run in parallel instead of N+1 sequential UPDATEs.
-    const metaUpdatePromises: Promise<Tool>[] = [];
+    // Collect update promises so they run in parallel instead of N+1 sequential UPDATEs.
+    const updatePromises: Promise<Tool>[] = [];
 
     for (const tool of tools) {
+      const rawName = tool.rawToolName ?? ToolModel.unslugifyName(tool.name);
       const existingTool = existingToolsByName.get(tool.name);
       if (existingTool) {
-        const metaChanged =
+        // Refresh cached schema fields when the upstream tool changed, so
+        // re-discovery (install/reinstall) propagates new descriptions and
+        // parameter schemas to agents instead of leaving them stale. Policies
+        // are untouched here — auto-config runs only on the insert path below.
+        const changed =
+          existingTool.rawName !== rawName ||
+          existingTool.description !== tool.description ||
+          JSON.stringify(existingTool.parameters) !==
+            JSON.stringify(tool.parameters) ||
           JSON.stringify(existingTool.meta) !== JSON.stringify(tool.meta);
-        if (metaChanged) {
-          metaUpdatePromises.push(
+        if (changed) {
+          updatePromises.push(
             db
               .update(schema.toolsTable)
-              .set({ meta: tool.meta ?? null, updatedAt: new Date() })
+              .set({
+                rawName,
+                description: tool.description,
+                parameters: tool.parameters,
+                meta: tool.meta ?? null,
+                updatedAt: new Date(),
+              })
               .where(eq(schema.toolsTable.id, existingTool.id))
               .returning()
               .then(([updated]) => updated ?? existingTool),
@@ -783,6 +961,7 @@ class ToolModel {
       } else {
         toolsToInsert.push({
           name: tool.name,
+          rawName,
           description: tool.description,
           parameters: tool.parameters,
           meta: tool.meta,
@@ -792,8 +971,8 @@ class ToolModel {
       }
     }
 
-    if (metaUpdatePromises.length > 0) {
-      resultTools.push(...(await Promise.all(metaUpdatePromises)));
+    if (updatePromises.length > 0) {
+      resultTools.push(...(await Promise.all(updatePromises)));
     }
 
     // Bulk insert new tools if any
@@ -804,9 +983,11 @@ class ToolModel {
         .onConflictDoNothing()
         .returning();
 
-      // Create default policies for newly inserted tools
+      // Create default policies for newly inserted tools, honoring the org's
+      // configured "Default Guardrails for MCP Tools".
+      const defaultPolicies = await ToolModel.getDefaultToolPolicies();
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaultPolicies);
       }
 
       // Auto-configure policies via LLM if enabled (fire-and-forget)
@@ -885,6 +1066,7 @@ class ToolModel {
         sourceTools.map((t) => ({
           catalogId: targetCatalogId,
           name: clonedNameBySourceId.get(t.id) as string,
+          rawName: t.rawName ?? ToolModel.unslugifyName(t.name),
           parameters: t.parameters,
           description: t.description,
           meta: t.meta,
@@ -1205,12 +1387,14 @@ class ToolModel {
 
     // Remove stale tools that no longer exist in the Archestra tool definitions.
     // FK constraints use onDelete: "cascade" so related records are cleaned up
-    // automatically — which is also why a feature-flagged-off built-in must NOT
-    // be treated as stale: `archestraToolNames` only lists the tools enabled
-    // this boot, so deleting rows missing from it would wipe a disabled
-    // feature's tools (apps, sandbox) and cascade away every agent/conversation
-    // assignment. A built-in is stale only when its short name is gone from the
-    // full registry; flag-gating governs visibility, not catalog reconciliation.
+    // automatically — which is also why a built-in that is inactive this boot
+    // (e.g. the sandbox tools when no Dagger host is configured) must NOT be
+    // treated as stale: `archestraToolNames` only lists the tools active this
+    // boot, so deleting rows missing from it would wipe an inactive tool
+    // group's rows (e.g. the sandbox tools) and cascade away every
+    // agent/conversation assignment. A built-in is stale only when its short
+    // name is gone from the full registry; whether a tool is active this boot
+    // governs visibility, not catalog reconciliation.
     const knownBuiltInShortNames = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
     const allCatalogTools = await db
       .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
@@ -1368,18 +1552,15 @@ class ToolModel {
    *
    * New agents inherit the app toolset via {@link assignAppToolsToAgent}, but
    * agents that predate a tool's introduction (e.g. existing agents when
-   * read_app/edit_app are added) would otherwise never receive it. Apps are a
-   * global feature (`ARCHESTRA_APPS_ENABLED`), not a per-org opt-in, so this
-   * spans all orgs. Idempotent: only the newly-created short names are assigned,
-   * via `createManyIfNotExists`.
+   * read_app/edit_app are added) would otherwise never receive it. The app
+   * tools apply to every org, so this spans all orgs. Idempotent: only the
+   * newly-created short names are assigned, via `createManyIfNotExists`.
    *
    * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
    */
   static async backfillNewAppToolsToEnabledOrgs(
     newlyCreatedToolNames: string[],
   ): Promise<void> {
-    if (!config.apps.enabled) return;
-
     const createdShortNames = new Set(
       newlyCreatedToolNames
         .map(extractArchestraBuiltInShortName)
@@ -1413,6 +1594,62 @@ class ToolModel {
   }
 
   /**
+   * One-time backfill triggered on startup: when a sandbox built-in tool
+   * (runtime or persistent-files) is created for the first time on this seed
+   * run — i.e. the code runtime was just enabled — assign just those new
+   * tools to every existing agent in every org.
+   *
+   * New agents inherit the sandbox surface via
+   * {@link assignSandboxToolsToAgent}, but agents that predate the runtime
+   * enablement would otherwise never receive it: migration 0332 runs in the
+   * pre-upgrade hook, before the seed creates these flag-gated rows, so it
+   * cannot backfill them. Matching AgentModel.create, this spans every agent
+   * kind and both tool modes — an Auto-mode agent advertises only assigned
+   * built-ins in chat, so it needs the rows too — and skips built-in system
+   * agents, which bypass the create-time tool hooks by design. Idempotent:
+   * only the newly-created short names are assigned, via
+   * `createManyIfNotExists`.
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewSandboxToolsToAgents(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    const createdShortNames = new Set(
+      newlyCreatedToolNames
+        .map(extractArchestraBuiltInShortName)
+        .filter((name): name is string => name !== null),
+    );
+    const newSandboxShortNames = [
+      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+    ].filter((shortName) => createdShortNames.has(shortName));
+    if (newSandboxShortNames.length === 0) return;
+
+    const organizationIds = await OrganizationModel.findAllIds();
+    for (const organizationId of organizationIds) {
+      const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+        organizationId,
+        newSandboxShortNames,
+      );
+      if (toolIds.length === 0) continue;
+      const agentIds =
+        await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
+      for (const agentId of agentIds) {
+        await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+      }
+      logger.info(
+        {
+          organizationId,
+          agentCount: agentIds.length,
+          newSandboxShortNames,
+        },
+        "Backfilled new sandbox tools to org agents",
+      );
+    }
+  }
+
+  /**
    * Assign skill tools to a single agent if its org has opted in
    * (`organization.skillToolsEnabled`). No-op otherwise.
    *
@@ -1437,19 +1674,15 @@ class ToolModel {
   }
 
   /**
-   * Assign the MCP App management tools to a single agent when the apps
-   * feature is enabled. No-op otherwise.
+   * Assign the MCP App management tools to a single agent.
    *
    * Called from `AgentModel.create` so new agents can build and use apps by
-   * default. With the feature dark the app tools are not even seeded, so
-   * there is nothing to assign.
+   * default.
    */
   static async assignAppToolsToAgent(
     agentId: string,
     organizationId: string,
   ): Promise<void> {
-    if (!config.apps.enabled) return;
-
     const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
       organizationId,
       APP_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -1460,16 +1693,11 @@ class ToolModel {
   }
 
   /**
-   * Assign the code-execution sandbox tools to a single agent based on the
-   * deployment's runtime/Projects flags. No-op when the sandbox runtime is off.
-   *
-   * - Runtime tools (run_command/upload_file/download_file): assigned when the
-   *   skills-sandbox runtime is on (`config.skillsSandbox.enabled`).
-   * - Persistent-files (Projects) tools (search_files/read_file/save_file/
-   *   edit_file/delete_file): also require the Projects flag
-   *   (`config.projects.enabled`) — they need the runtime to run AND Projects to
-   *   be exposed (see `isSandboxToolEnabled`), so gating assignment on both
-   *   avoids assigned-but-hidden rows.
+   * Assign the code-execution sandbox tools to a single agent when the
+   * skills-sandbox runtime is on (`config.skillsSandbox.enabled`). No-op
+   * otherwise. Covers both the runtime tools
+   * (run_command/upload_file/download_file) and the persistent-files tools
+   * (search_files/read_file/save_file/edit_file/delete_file).
    *
    * Called from `AgentModel.create` so new agents inherit the sandbox surface.
    * With the runtime dark the sandbox tools are not even seeded, so there is
@@ -1483,10 +1711,8 @@ class ToolModel {
 
     const shortNames: ArchestraToolShortName[] = [
       ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
     ];
-    if (config.projects.enabled) {
-      shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
-    }
 
     const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
       organizationId,
@@ -1558,7 +1784,6 @@ class ToolModel {
    * Assign default Archestra tools to an agent.
    *
    * Default tools are those listed in {@link DEFAULT_ARCHESTRA_TOOL_NAMES}:
-   * - artifact_write: for artifact management
    * - todo_write: for task tracking
    * - query_knowledge_sources: for querying the knowledge base
    *
@@ -1573,9 +1798,9 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    // The sandbox runtime + Projects file tools are auto-assigned separately by
-    // `assignSandboxToolsToAgent` (flag-gated), not here. This default set is the
-    // always-on baseline only.
+    // Sandbox and persistent-files tools are assigned separately by
+    // `assignSandboxToolsToAgent` (only when the sandbox runtime is on); this
+    // method assigns just the tools every agent gets.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
     ];
@@ -1598,6 +1823,28 @@ class ToolModel {
 
     // Assign tools to agent in bulk
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  /**
+   * Ids of built-in Archestra catalog tool rows matching the given (full,
+   * possibly branded) names. Used by the startup seed to translate the
+   * newly-inserted names returned by {@link seedArchestraTools} into ids for
+   * the All-tools exclusion pre-fill backfill.
+   */
+  static async findBuiltInToolIdsByNames(names: string[]): Promise<string[]> {
+    if (names.length === 0) return [];
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          isNull(schema.toolsTable.agentId),
+          isNull(schema.toolsTable.delegateToAgentId),
+          inArray(schema.toolsTable.name, names),
+        ),
+      );
+    return rows.map((row) => row.id);
   }
 
   /**
@@ -1651,6 +1898,7 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
         mcpServerId: schema.agentToolsTable.mcpServerId,
         credentialResolutionMode:
           schema.agentToolsTable.credentialResolutionMode,
@@ -1688,6 +1936,59 @@ class ToolModel {
   }
 
   /**
+   * Resolve assigned tool names to their row ids using the SAME filter and
+   * ordering as {@link getMcpToolsAssignedToAgent} (the execution resolver), so
+   * a tool-invocation policy is evaluated against the exact row that will run.
+   * First-wins per name mirrors execution's `mcpTools[0]`. Keep the WHERE/ORDER
+   * in sync with getMcpToolsAssignedToAgent.
+   */
+  static async getAssignedToolIdsByName(
+    toolNames: string[],
+    agentId: string,
+  ): Promise<Map<string, string>> {
+    if (toolNames.length === 0) {
+      return new Map();
+    }
+
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
+
+    const rows = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.toolsTable.name, toolNames),
+          isNotNull(schema.toolsTable.catalogId),
+          toolInEnvironmentPredicate(agentEnvironmentId),
+        ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
+      );
+
+    const idsByName = new Map<string, string>();
+    for (const row of rows) {
+      if (!idsByName.has(row.name)) {
+        idsByName.set(row.name, row.id);
+      }
+    }
+    return idsByName;
+  }
+
+  /**
    * Find an agent-assigned MCP tool by its unprefixed name suffix.
    * Mirrors {@link getMcpToolsAssignedToAgent} but matches via RIGHT() suffix
    * instead of exact name, for when MCP App iframes call oncalltool with the
@@ -1708,6 +2009,7 @@ class ToolModel {
     const mcpTools = await db
       .select({
         toolName: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
         mcpServerId: schema.agentToolsTable.mcpServerId,
         credentialResolutionMode:
           schema.agentToolsTable.credentialResolutionMode,
@@ -1746,27 +2048,23 @@ class ToolModel {
   }
 
   /**
-   * Resolve upstream tool names to rows assignable to an MCP App, scoped to
-   * the caller's organization (a tool is reachable when its catalog entry
-   * belongs to the org or is a global, org-less entry). Archestra built-ins
-   * are excluded — apps reach the data store through `archestra.storage`, and
-   * the management tools are not app-dispatchable. The catalog join also
-   * guarantees a non-null catalogId, which app dispatch requires.
+   * Of `toolIds`, the subset assignable to an MCP App in `environmentId`:
+   * catalog-backed (non-null catalogId, which app dispatch requires), org-visible
+   * (the catalog belongs to the org or is a global org-less entry), not an
+   * Archestra built-in, not a clone pending discovery, and in the environment.
+   * This is the by-id, install-agnostic gate {@link resolveAppAssignableToolRows}
+   * applies to the agent's *assigned* tools — an assigned tool is reachable
+   * through its assignment without a separate discoverable install, but must
+   * still be org-visible and in-environment.
    */
-  static async findAppAssignableToolsByNames(
+  static async filterAppAssignableToolIds(
     organizationId: string,
-    names: readonly string[],
+    toolIds: string[],
     environmentId: string | null,
-  ): Promise<
-    Array<{ id: string; name: string; clonedPendingDiscovery: boolean }>
-  > {
-    if (names.length === 0) return [];
-    return await db
-      .select({
-        id: schema.toolsTable.id,
-        name: schema.toolsTable.name,
-        clonedPendingDiscovery: schema.toolsTable.clonedPendingDiscovery,
-      })
+  ): Promise<Set<string>> {
+    if (toolIds.length === 0) return new Set();
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
       .innerJoin(
         schema.internalMcpCatalogTable,
@@ -1774,10 +2072,9 @@ class ToolModel {
       )
       .where(
         and(
-          inArray(schema.toolsTable.name, [...names]),
+          inArray(schema.toolsTable.id, toolIds),
           ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-          // Environment isolation: an app may only be assigned tools in the
-          // requesting agent's environment.
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
           toolInEnvironmentPredicate(environmentId),
           or(
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
@@ -1785,6 +2082,7 @@ class ToolModel {
           ),
         ),
       );
+    return new Set(rows.map((row) => row.id));
   }
 
   /**
@@ -1833,10 +2131,13 @@ class ToolModel {
   }
 
   /**
-   * By-id counterpart of {@link findAppAssignableToolsByNames}: resolves a tool
-   * only within the caller's organization (catalog-backed, org-owned or global).
-   * A tool from another org — or a non-catalog/built-in tool — returns null, so
-   * the raw-id assignment endpoint cannot attach (or probe for) foreign tools.
+   * Resolve a single app-assignable tool by id within the caller's organization
+   * (catalog-backed, org-owned or global). A tool from another org — or a
+   * non-catalog/built-in tool — returns null, so the raw-id assignment endpoint
+   * cannot attach (or probe for) foreign tools. Name-based app assignment goes
+   * through {@link resolveAppAssignableToolRows} instead, which resolves a
+   * duplicate name to the same canonical row search_tools and the app runtime
+   * pick.
    */
   static async findAppAssignableToolById(
     organizationId: string,
@@ -1926,6 +2227,7 @@ class ToolModel {
       .select({
         id: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
         mcpServerId: schema.appToolsTable.mcpServerId,
         credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
@@ -1969,6 +2271,7 @@ class ToolModel {
       .select({
         id: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
         mcpServerId: schema.appToolsTable.mcpServerId,
         credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
         catalogId: schema.toolsTable.catalogId,
@@ -2013,6 +2316,7 @@ class ToolModel {
    */
   static async findByCatalogIdWithMeta(catalogId: string): Promise<
     Array<{
+      id: string;
       name: string;
       description: string | null;
       parameters: Record<string, unknown> | undefined;
@@ -2021,6 +2325,7 @@ class ToolModel {
   > {
     return db
       .select({
+        id: schema.toolsTable.id,
         name: schema.toolsTable.name,
         description: schema.toolsTable.description,
         parameters: schema.toolsTable.parameters,
@@ -2251,17 +2556,11 @@ class ToolModel {
     const newToolNames = new Set(tools.map((t) => t.name.toLowerCase()));
     const existingToolsByRawName = new Map<string, Tool>();
     for (const tool of existingTools) {
-      // Extract the raw tool name by taking the part after the LAST `__`
-      // This handles cases where server names contain `__` (e.g., huggingface__remote-mcp)
-      const lastSeparatorIndex = tool.name.lastIndexOf(
-        MCP_SERVER_TOOL_NAME_SEPARATOR,
-      );
-      const rawName =
-        lastSeparatorIndex !== -1
-          ? tool.name.slice(
-              lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
-            )
-          : tool.name;
+      // Prefer the stored raw name; fall back to the part after the LAST `__`
+      // for legacy rows whose raw_name is not yet backfilled. Using the LAST
+      // separator handles server names that contain `__` (e.g.
+      // huggingface__remote-mcp).
+      const rawName = tool.rawName ?? ToolModel.unslugifyName(tool.name);
       const rawNameLower = rawName.toLowerCase();
 
       // Check if we already have a tool with this raw name
@@ -2327,18 +2626,22 @@ class ToolModel {
         const metaChanged =
           JSON.stringify(existingTool.meta ?? null) !==
           JSON.stringify(tool.meta ?? null);
+        // Backfill/refresh the stored raw name (legacy rows have it null).
+        const rawNameChanged = existingTool.rawName !== rawName;
 
         if (
           nameChanged ||
           descriptionChanged ||
           parametersChanged ||
-          metaChanged
+          metaChanged ||
+          rawNameChanged
         ) {
           syncUpdatePromises.push(
             db
               .update(schema.toolsTable)
               .set({
                 name: tool.name,
+                rawName,
                 description: tool.description,
                 parameters: tool.parameters,
                 meta: tool.meta,
@@ -2355,6 +2658,7 @@ class ToolModel {
         // New tool - prepare for bulk insert
         toolsToInsert.push({
           name: tool.name,
+          rawName,
           description: tool.description,
           parameters: tool.parameters,
           meta: tool.meta,
@@ -2379,9 +2683,11 @@ class ToolModel {
         .onConflictDoNothing()
         .returning();
 
-      // Create default policies for newly inserted tools
+      // Create default policies for newly inserted tools, honoring the org's
+      // configured "Default Guardrails for MCP Tools".
+      const defaultPolicies = await ToolModel.getDefaultToolPolicies();
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaultPolicies);
       }
 
       // Auto-configure policies via LLM if enabled (fire-and-forget)
@@ -2402,15 +2708,9 @@ class ToolModel {
     // Build a map of synced tools by raw name for transferring assignments
     const syncedToolsByRawName = new Map<string, Tool>();
     for (const tool of [...created, ...updated, ...unchanged]) {
-      const lastSeparatorIndex = tool.name.lastIndexOf(
-        MCP_SERVER_TOOL_NAME_SEPARATOR,
-      );
-      const rawName =
-        lastSeparatorIndex !== -1
-          ? tool.name
-              .slice(lastSeparatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length)
-              .toLowerCase()
-          : tool.name.toLowerCase();
+      const rawName = (
+        tool.rawName ?? ToolModel.unslugifyName(tool.name)
+      ).toLowerCase();
       syncedToolsByRawName.set(rawName, tool);
     }
 

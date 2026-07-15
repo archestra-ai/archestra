@@ -3,13 +3,10 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-06-18
+lastUpdated: 2026-07-15
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ![MCP Registry](/docs/platform-mcp-registry-overview.webp)
 
@@ -29,7 +26,7 @@ An MCP server usually moves through this lifecycle:
 
 This separation lets admins curate a small approved catalog while still allowing each user or team to connect with their own credentials.
 
-Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/apps/:id`.
+Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/a/:id`.
 
 ## Server Configuration
 
@@ -89,3 +86,13 @@ See [Environments](/docs/platform-environments) for the full isolation model and
 The registry does not expose tools to clients by itself. After a server is installed, Archestra discovers the tools exposed by that installed connection. Those tools become usable after they are assigned to an Agent or MCP Gateway.
 
 For external MCP clients, create or edit an [MCP Gateway](/docs/platform-mcp-gateway), assign tools from installed registry entries (or use Automatic tool assignment mode to derive them from labels), then connect the client to the gateway endpoint. For built-in Archestra agents, assign the same tools from the agent's tool configuration.
+
+Each registry card shows which agents and gateways have tools assigned from the server. The uninstall dialog lists them too, so you can see who is affected before removing a connection. The count covers explicit assignments only — Automatic tool assignment mode is not included.
+
+## Refreshing Tools
+
+Archestra stores the tool list discovered at install time. When the upstream server adds or changes tools, refresh the stored list — no reinstall needed. Tool assignments and policies are preserved.
+
+- **Inspector**: open the server's Inspector tab and click **Refresh Tools**.
+- **API**: `POST /api/mcp_server/:id/reload-tools`.
+- **Automatic**: set `ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES` to re-sync every installed server on an interval. See [Deployment](/docs/platform-deployment).

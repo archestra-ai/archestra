@@ -55,6 +55,7 @@ import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
+import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
@@ -67,6 +68,7 @@ import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
+import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import {
@@ -75,6 +77,7 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -305,6 +308,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.deepseekProxyRoutes);
   fastify.register(routes.githubCopilotProxyRoutes);
   fastify.register(routes.groqProxyRoutes);
+  fastify.register(routes.microsoft365CopilotProxyRoutes);
   fastify.register(routes.minimaxProxyRoutes);
   fastify.register(routes.modelRouterProxyRoutes);
   fastify.register(routes.mistralProxyRoutes);
@@ -373,6 +377,14 @@ function captureServerException(
   error: unknown,
   extraProperties?: Record<string, unknown>,
 ): void {
+  // Same drop/keep-and-group policy the Sentry filter uses, so the two sinks
+  // agree: expected client/upstream errors are skipped, and availability
+  // incidents (transient DB, secrets-backend outage) get a stable fingerprint.
+  const decision = classifyErrorForTracking(error);
+  if (!decision.report) {
+    return;
+  }
+
   const { distinctId, sessionId } = getPostHogTraceContext(request);
   posthogErrorTrackingService.captureException({
     error,
@@ -383,7 +395,14 @@ function captureServerException(
       method: request.method,
       url: request.url,
       route: request.routeOptions?.url,
+      // The requested host (from the Host header) — identifies which
+      // deployment hit the error, used by the PostHog Slack alert template.
+      hostname: request.host,
       reqId: request.id,
+      ...(decision.fingerprint && {
+        $exception_fingerprint: decision.fingerprint.join("/"),
+      }),
+      ...decision.tags,
       ...extraProperties,
     },
   });
@@ -434,6 +453,21 @@ export const createFastifyInstance = () =>
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
+    // REST API responses are per-user and must never be cached by
+    // intermediaries. Reverse proxies/CDNs in front of a deployment default to
+    // caching responses that carry no Cache-Control header, which replays one
+    // user's stale GET body after their own writes (e.g. an /api/apps list
+    // that keeps showing pre-pin state until a hard refresh). Routes that
+    // intentionally cache set their own header, which wins.
+    .addHook("onSend", (request, reply, _payload, done) => {
+      if (
+        request.url.startsWith("/api/") &&
+        !reply.hasHeader("cache-control")
+      ) {
+        void reply.header("Cache-Control", "no-store");
+      }
+      done();
+    })
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
     .setErrorHandler<ApiError | Error>(function (error, request, reply) {
       const requestContext = buildRequestErrorContext(request);
@@ -527,6 +561,66 @@ export const createFastifyInstance = () =>
         });
       }
 
+      // Fastify's own typed errors (unsupported media type, malformed
+      // content-type, …) carry the intended 4xx status. Without this branch
+      // they fall through to the generic handler below, which miscodes a
+      // client mistake as a 500 and captures it as a server exception.
+      const errorStatusCode = (error as { statusCode?: unknown }).statusCode;
+      if (
+        !(error instanceof ApiError) &&
+        typeof errorStatusCode === "number" &&
+        errorStatusCode >= 400 &&
+        errorStatusCode < 500
+      ) {
+        const coerced = new ApiError(
+          errorStatusCode,
+          error.message || "Bad Request",
+        );
+        this.log.info(
+          {
+            ...requestContext,
+            error: coerced.message,
+            statusCode: coerced.statusCode,
+          },
+          "HTTP 40x request error occurred",
+        );
+        return reply.status(coerced.statusCode).send({
+          error: { message: coerced.message, type: coerced.type },
+        });
+      }
+
+      // Transient database connectivity failures (DNS lookup, connection
+      // refused during a database restart, pool connect timeouts) that
+      // survived the retry budget are availability incidents, not bugs in
+      // whichever route happened to be in flight. Respond with a retryable
+      // 503 instead of a 500, and group them in error tracking by root
+      // cause rather than by the query text the ORM wraps them in.
+      const transientDbErrorCode = getTransientDbErrorCode(error);
+      if (transientDbErrorCode) {
+        this.log.error(
+          {
+            ...requestContext,
+            error: error.message,
+            statusCode: 503,
+            dbErrorCode: transientDbErrorCode,
+          },
+          "HTTP 503 database temporarily unavailable",
+        );
+
+        captureServerException(request, error, {
+          error_type: "db_unavailable",
+          db_error_code: transientDbErrorCode,
+          status_code: 503,
+        });
+
+        return reply.status(503).send({
+          error: {
+            message: "Database temporarily unavailable, please retry",
+            type: "api_service_unavailable_error",
+          },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type, internalCode } = error;
@@ -539,6 +633,9 @@ export const createFastifyInstance = () =>
 
         if (statusCode >= 500) {
           this.log.error(logPayload, "HTTP 50x request error occurred");
+          // Capture is centrally filtered and grouped by
+          // classifyErrorForTracking: 502/504 upstream failures are dropped as
+          // noise, and a secrets-backend outage is grouped by root cause.
           captureServerException(request, error, {
             error_type: "api_error",
             status_code: statusCode,
@@ -1059,7 +1156,7 @@ const startWebServer = async () => {
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
 
-    instanceAnalyticsService.trackStartup().catch((error) => {
+    instanceAnalyticsService.start().catch((error) => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
@@ -1095,6 +1192,10 @@ const startWebServer = async () => {
     // Bring up the ngrok tunnel (if ARCHESTRA_NGROK_AUTH_TOKEN is set) so the
     // instance is reachable from the Internet for inbound chatops webhooks.
     await ngrokTunnelManager.initialize();
+
+    // Opt-in periodic re-discovery of installed MCP servers' tools
+    // (no-op unless ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES is set).
+    mcpToolsRefreshManager.start();
 
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
@@ -1320,6 +1421,10 @@ function registerWebServerShutdown(
         await taskQueueService.stopWorker();
       }
 
+      mcpToolsRefreshManager.stop();
+
+      instanceAnalyticsService.stop();
+
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"
       >();
@@ -1381,7 +1486,7 @@ const startWorker = async () => {
     await enterpriseTier.start();
 
     // Sync Archestra MCP branding so the worker recognises branded tool names
-    // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
+    // (e.g. "archestra_staging__todo_write") when executing scheduled tasks.
     // Without this, isToolName() only matches the default "archestra__" prefix
     // and builtin tools fall through to mcpClient.executeToolCallForOwner() which fails
     // because they have credentialResolutionMode "static" with no mcpServerId.
@@ -1497,9 +1602,22 @@ const startWorker = async () => {
 // This handler logs those leaks and keeps the server alive.
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "Unhandled promise rejection");
+  // Apply the shared tracking policy on this non-request capture path too, so a
+  // rejected transient-DB query groups by root cause and expected client/
+  // upstream errors are skipped, matching the request-error handler.
+  const decision = classifyErrorForTracking(reason);
+  if (!decision.report) {
+    return;
+  }
   posthogErrorTrackingService.captureException({
     error: reason,
-    properties: { error_type: "unhandled_rejection" },
+    properties: {
+      ...(decision.fingerprint && {
+        $exception_fingerprint: decision.fingerprint.join("/"),
+      }),
+      ...decision.tags,
+      error_type: "unhandled_rejection",
+    },
   });
 });
 

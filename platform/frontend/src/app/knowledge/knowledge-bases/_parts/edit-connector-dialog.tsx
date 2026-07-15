@@ -27,19 +27,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
+  AdminApiKeyDescription,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
   connectorNeedsEmail,
+  connectorSupportsAdminApiKey,
+  connectorSupportsAutoSync,
   getConnectorCredentialConfig,
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
@@ -53,6 +57,7 @@ type ConnectorItem = Pick<
   | "connectorType"
   | "config"
   | "schedule"
+  | "permissionSyncIntervalSeconds"
   | "enabled"
   | "environmentId"
 >;
@@ -64,7 +69,9 @@ type EditConnectorFormValues = {
   config: Record<string, unknown>;
   email: string;
   apiToken: string;
+  adminApiKey: string;
   schedule: string;
+  permissionSyncIntervalSeconds: number;
   environmentId: string | null;
 };
 
@@ -89,7 +96,9 @@ export function EditConnectorDialog({
       config: connector.config,
       email: "",
       apiToken: "",
+      adminApiKey: "",
       schedule: connector.schedule,
+      permissionSyncIntervalSeconds: connector.permissionSyncIntervalSeconds,
       environmentId: connector.environmentId ?? null,
     },
   });
@@ -105,7 +114,9 @@ export function EditConnectorDialog({
         config: connector.config,
         email: "",
         apiToken: "",
+        adminApiKey: "",
         schedule: connector.schedule,
+        permissionSyncIntervalSeconds: connector.permissionSyncIntervalSeconds,
         environmentId: connector.environmentId ?? null,
       });
     }
@@ -137,7 +148,14 @@ export function EditConnectorDialog({
   });
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
-    const hasCredentials = values.apiToken.length > 0;
+    // Any single credential field can be updated alone — the backend merges
+    // the submitted fields over the stored secret, so pasting only the admin
+    // API key (or correcting only the email) must not be dropped just because
+    // the token field is left empty to keep the existing token.
+    const hasCredentials =
+      values.email.length > 0 ||
+      values.apiToken.length > 0 ||
+      values.adminApiKey.length > 0;
     const result = await updateConnector.mutateAsync({
       id: connector.id,
       body: {
@@ -151,10 +169,14 @@ export function EditConnectorDialog({
         ) as archestraApiTypes.CreateConnectorData["body"]["config"],
         environmentId: values.environmentId,
         schedule: values.schedule,
+        ...(visibility === "auto-sync-permissions" && {
+          permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
+        }),
         ...(hasCredentials && {
           credentials: {
             ...(values.email && { email: values.email }),
-            apiToken: values.apiToken,
+            ...(values.apiToken && { apiToken: values.apiToken }),
+            ...(values.adminApiKey && { adminApiKey: values.adminApiKey }),
           },
         }),
       },
@@ -288,6 +310,8 @@ export function EditConnectorDialog({
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
             showTeamRequired
+            supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+            autoSyncPermissionAction="update"
           />
 
           <div className="border-t" />
@@ -330,21 +354,14 @@ export function EditConnectorDialog({
                   <FormLabel>{apiTokenLabel}</FormLabel>
                   <FormControl>
                     {apiTokenMultiline ? (
-                      <Textarea
+                      <SecretTextarea
                         placeholder={apiTokenPlaceholder}
                         rows={5}
-                        autoComplete="new-password"
-                        data-1p-ignore
-                        data-lpignore="true"
                         {...field}
                       />
                     ) : (
-                      <Input
-                        type="password"
+                      <SecretInput
                         placeholder={apiTokenPlaceholder}
-                        autoComplete="new-password"
-                        data-1p-ignore
-                        data-lpignore="true"
                         {...field}
                       />
                     )}
@@ -359,13 +376,48 @@ export function EditConnectorDialog({
             />
           )}
 
+          {visibility === "auto-sync-permissions" &&
+            connectorSupportsAdminApiKey(connectorType) && (
+              <FormField
+                control={form.control}
+                name="adminApiKey"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Organization admin API key (optional)</FormLabel>
+                    <FormControl>
+                      <SecretInput
+                        placeholder="Atlassian organization admin API key"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      <AdminApiKeyDescription type={connectorType} /> Leave
+                      empty to keep the existing key.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
           <Collapsible>
             <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
               <span className="text-sm font-medium">Advanced</span>
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-4 space-y-4">
-              <SchedulePicker form={form} name="schedule" />
+              <SchedulePicker
+                form={form}
+                name="schedule"
+                connectorTypeLabel={typeLabel}
+              />
+              {visibility === "auto-sync-permissions" && (
+                <PermissionSyncIntervalPicker
+                  form={form}
+                  name="permissionSyncIntervalSeconds"
+                  connectorTypeLabel={typeLabel}
+                />
+              )}
               <ConnectorAdvancedConfigFields
                 connectorType={connectorType}
                 form={form}

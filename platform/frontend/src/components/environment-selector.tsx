@@ -120,13 +120,18 @@ export function EnvironmentSelector({
       ) : null}
       {!hasCustomEnvironmentOptions ? (
         <p className="text-xs text-muted-foreground">
-          Only the default environment is available.{" "}
-          <Link
-            href="/settings/environments"
-            className="underline underline-offset-2"
-          >
-            Manage environments
-          </Link>
+          Only the default environment is available.
+          {hasEnvAdmin ? (
+            <>
+              {" "}
+              <Link
+                href="/settings/environments"
+                className="underline underline-offset-2"
+              >
+                Manage environments
+              </Link>
+            </>
+          ) : null}
         </p>
       ) : null}
     </div>

@@ -4,7 +4,6 @@ import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
-import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -167,42 +166,6 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode, response.body).toBe(200);
-    });
-  });
-
-  describe("PATCH /api/organization/agent-settings - skill slash commands", () => {
-    test("rejects enabling slash commands while skill tools are off", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: true },
-      });
-
-      expect(response.statusCode).toBe(400);
-    });
-
-    test("allows enabling slash commands once skill tools are on", async () => {
-      await OrganizationModel.patch(organizationId, {
-        skillToolsEnabled: true,
-      });
-
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: true },
-      });
-
-      expect(response.statusCode).toBe(200);
-    });
-
-    test("allows disabling slash commands regardless of skill tools", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/agent-settings",
-        payload: { skillSlashCommandsEnabled: false },
-      });
-
-      expect(response.statusCode).toBe(200);
     });
   });
 
@@ -486,12 +449,11 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/security-settings", () => {
-    test("updates global tool policy, chat file upload, and tool auto-assignment settings", async () => {
+    test("updates chat file upload and tool auto-assignment settings", async () => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/security-settings",
         payload: {
-          globalToolPolicy: "restrictive",
           allowChatFileUploads: false,
           allowToolAutoAssignment: false,
         },
@@ -499,7 +461,6 @@ describe("organization routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
-        globalToolPolicy: "restrictive",
         allowChatFileUploads: false,
         allowToolAutoAssignment: false,
       });
@@ -510,7 +471,6 @@ describe("organization routes", () => {
         method: "PATCH",
         url: "/api/organization/security-settings",
         payload: {
-          globalToolPolicy: "permissive",
           allowChatFileUploads: true,
           allowToolAutoAssignment: true,
         },
@@ -523,7 +483,6 @@ describe("organization routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
-        globalToolPolicy: "permissive",
         allowChatFileUploads: true,
         allowToolAutoAssignment: true,
       });

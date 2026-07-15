@@ -7,7 +7,7 @@ import type {
 import * as Sentry from "@sentry/node";
 import config from "@/config";
 import logger from "@/logging";
-import { ApiError } from "@/types";
+import { classifyErrorForTracking } from "./error-tracking-policy";
 import {
   isNoiseRoute,
   isNoisyMcpGatewayGetRoute,
@@ -28,6 +28,27 @@ const {
   },
 } = config;
 
+/**
+ * Build the Error object reported for a raw upstream-provider failure.
+ *
+ * The upstream HTTP status is attached to the Error so the {@link filterErrorEvent}
+ * 4xx filter drops expected provider CLIENT errors (rate limits, invalid
+ * credentials, provider-side content blocks) as noise, while genuine provider
+ * 5xx failures still report.
+ * @public — exported for testability
+ */
+export function buildRawProviderError(params: {
+  statusCode: number | undefined;
+  errorMessage: string;
+}): Error {
+  const error = new Error(params.errorMessage);
+  error.name = "RawProviderError";
+  if (params.statusCode !== undefined) {
+    (error as Error & { statusCode?: number }).statusCode = params.statusCode;
+  }
+  return error;
+}
+
 export function captureRawProviderErrorInSentry(params: {
   provider: string;
   statusCode: number | undefined;
@@ -37,8 +58,10 @@ export function captureRawProviderErrorInSentry(params: {
   errorType: string | undefined;
   rawErrorJson: string;
 }): void {
-  const error = new Error(params.errorMessage);
-  error.name = "RawProviderError";
+  const error = buildRawProviderError({
+    statusCode: params.statusCode,
+    errorMessage: params.errorMessage,
+  });
 
   Sentry.captureException(error, {
     level: "error",
@@ -63,6 +86,32 @@ export function captureRawProviderErrorInSentry(params: {
       rawErrorJson: params.rawErrorJson,
     },
   });
+}
+
+/**
+ * Sentry `beforeSend` filter. Delegates the drop/keep-and-group decision to the
+ * sink-agnostic {@link classifyErrorForTracking} policy (shared with the PostHog
+ * capture path), then applies the result in Sentry's shape: return null to drop,
+ * or set the event's fingerprint/tags to group an availability incident.
+ *
+ * https://docs.sentry.io/platforms/javascript/configuration/filtering/
+ * @public — exported for testability
+ */
+export function filterErrorEvent(
+  event: ErrorEvent,
+  hint: EventHint,
+): ErrorEvent | null {
+  const decision = classifyErrorForTracking(hint.originalException);
+  if (!decision.report) {
+    return null;
+  }
+  if (decision.fingerprint) {
+    event.fingerprint = decision.fingerprint;
+  }
+  if (decision.tags) {
+    event.tags = { ...event.tags, ...decision.tags };
+  }
+  return event;
 }
 
 /**
@@ -142,37 +191,7 @@ const initSentry = async (): Promise<void> => {
      */
     skipOpenTelemetrySetup: true,
 
-    /**
-     * Filter out expected client errors (4xx) from being sent to Sentry.
-     * These are expected application errors (not found, validation errors, etc.)
-     * that don't indicate bugs and would just create noise in Sentry.
-     *
-     * https://docs.sentry.io/platforms/javascript/configuration/filtering/
-     */
-    beforeSend(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
-      const error = hint.originalException;
-
-      // Filter out ApiError instances with 4xx status codes
-      if (error instanceof ApiError) {
-        if (error.statusCode >= 400 && error.statusCode < 500) {
-          return null;
-        }
-      }
-
-      // Also check for statusCode property on generic errors (e.g., from Fastify)
-      if (
-        error &&
-        typeof error === "object" &&
-        "statusCode" in error &&
-        typeof error.statusCode === "number" &&
-        error.statusCode >= 400 &&
-        error.statusCode < 500
-      ) {
-        return null;
-      }
-
-      return event;
-    },
+    beforeSend: filterErrorEvent,
 
     // https://docs.sentry.io/platforms/javascript/configuration/options/#tracesSampler
     tracesSampler: ({

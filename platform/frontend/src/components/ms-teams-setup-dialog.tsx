@@ -11,6 +11,7 @@ import { StepCard } from "@/components/step-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useUpdateChatOpsConfigInQuickstart } from "@/lib/chatops/chatops-config.query";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
@@ -354,6 +355,7 @@ function StepBotSettings({
             <span className="pt-0.5 flex-1">
               Copy the <strong>Microsoft App ID</strong>
               <Input
+                aria-label="Microsoft App ID"
                 value={appId}
                 onChange={(e) => onAppIdChange(e.target.value)}
                 placeholder="Paste your Microsoft App ID"
@@ -373,6 +375,7 @@ function StepBotSettings({
               <span className="text-muted-foreground">(optional)</span> — for
               single-tenant bots
               <Input
+                aria-label="Microsoft Tenant ID"
                 value={showTenantMask ? savedTenantIdMask : tenantId}
                 onChange={(e) => onTenantIdChange(e.target.value)}
                 onFocus={() => setTenantFocused(true)}
@@ -396,11 +399,11 @@ function StepBotSettings({
             <span className="pt-0.5 flex-1">
               Click <strong>Manage Password</strong> →{" "}
               <strong>New client secret</strong> → copy the secret value
-              <Input
-                // plain text on purpose: -webkit-text-security masking makes
-                // iCloud Passwords treat the field as a password input and
-                // pop its AutoFill prompt over the dialog
-                type="text"
+              <SecretInput
+                // masked={false}: the value swap below already renders the
+                // saved-secret mask, and a newly typed secret stays visible
+                // (this dialog's pre-SecretInput behavior)
+                masked={false}
                 value={showSecretMask ? savedAppSecretMask : appSecret}
                 onChange={(e) => onAppSecretChange(e.target.value)}
                 onFocus={() => setSecretFocused(true)}
@@ -411,10 +414,6 @@ function StepBotSettings({
                     : "Paste your client secret"
                 }
                 className="mt-1.5"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                data-bwignore
               />
             </span>
           </li>

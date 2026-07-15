@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -31,13 +32,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
-import {
-  MCP_CONFIG_AUTOCOMPLETE,
-  MCP_SECRET_AUTOCOMPLETE,
-} from "@/lib/mcp/mcp-form-autocomplete";
+import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
@@ -779,16 +776,14 @@ export function LocalServerInstallDialog({
                             />
                           </Suspense>
                         ) : (
-                          <Input
+                          <SecretInput
                             id={`env-${env.key}`}
-                            type="password"
                             value={environmentValues[env.key] || ""}
                             onChange={(e) =>
                               handleEnvVarChange(env.key, e.target.value)
                             }
                             placeholder={`Enter value for ${env.key}`}
                             className="font-mono"
-                            autoComplete={MCP_SECRET_AUTOCOMPLETE}
                             disabled={isInstalling}
                           />
                         )}
@@ -985,16 +980,14 @@ export function LocalServerInstallDialog({
                           disabled={isInstalling}
                         />
                       ) : fieldConfig.sensitive ? (
-                        <Input
+                        <SecretInput
                           id={`user-config-${fieldName}`}
-                          type="password"
                           value={userConfigValues[fieldName] || ""}
                           onChange={(e) =>
                             handleUserConfigChange(fieldName, e.target.value)
                           }
                           placeholder={`Enter value for ${fieldConfig.title || fieldName}`}
                           className="font-mono"
-                          autoComplete={MCP_SECRET_AUTOCOMPLETE}
                           disabled={isInstalling}
                         />
                       ) : (
@@ -1064,7 +1057,7 @@ function AutoResizeTextarea({
   }, [value, adjustHeight]);
 
   return (
-    <Textarea
+    <SecretTextarea
       ref={textareaRef}
       id={id}
       value={value}

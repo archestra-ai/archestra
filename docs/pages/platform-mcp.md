@@ -6,9 +6,7 @@ description: How MCP servers, gateways, authentication, and orchestration fit to
 lastUpdated: 2026-06-18
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 ![MCP overview](/docs/platform-mcp-registry-overview.webp)
 

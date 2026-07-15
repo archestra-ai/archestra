@@ -22,6 +22,25 @@ import {
  */
 export const ArchestraInternalErrorCode = {
   ContextLengthExceeded: "context_length_exceeded",
+  /**
+   * The provider rejected the request because the key's remaining usage balance
+   * is too low — out of credit or over a usage/spend limit (e.g. Anthropic 402
+   * `billing_error`, or a 400 usage-limit message). Retrying won't help until
+   * the balance is topped up or the limit resets.
+   */
+  ProviderInsufficientBalance: "provider_insufficient_balance",
+  /**
+   * The upstream provider finished a completion without producing any content
+   * or tool calls (e.g. OpenRouter occasionally streams an empty turn). A
+   * transient provider-side condition: the proxy returns it as a retryable 503
+   * and the chat mapper surfaces it as the retryable EmptyResponse card.
+   */
+  UpstreamEmptyResponse: "upstream_empty_response",
+  /**
+   * An upstream provider began a response but stopped making progress until
+   * Archestra's inactivity deadline elapsed. Transient and safe to retry.
+   */
+  UpstreamTimeout: "upstream_timeout",
 } as const;
 
 export type ArchestraInternalErrorCode =
@@ -66,6 +85,7 @@ export const AnthropicErrorTypes = {
   RATE_LIMIT: "rate_limit_error",
   API_ERROR: "api_error",
   OVERLOADED: "overloaded_error",
+  BILLING: "billing_error",
 } as const;
 
 /**
@@ -254,12 +274,25 @@ export const MinimaxErrorTypes = {
 export enum ChatErrorCode {
   /** Rate/quota exceeded - retryable after delay */
   RateLimit = "rate_limit",
+  /**
+   * An Archestra-configured cost/usage limit blocked the request. Distinct from
+   * RateLimit: this is Archestra enforcing a budget, not the provider throttling
+   * traffic, so it is NOT retryable — retrying re-hits the same cap. Pairs with
+   * the `usageLimitExceeded`/`usageLimitEntityType` fields below.
+   */
+  UsageLimitExceeded = "usage_limit_exceeded",
   /** Invalid or missing API key */
   Authentication = "authentication",
   /** API key lacks permissions for the requested resource */
   PermissionDenied = "permission_denied",
   /** Malformed or invalid request */
   InvalidRequest = "invalid_request",
+  /**
+   * The provider key's remaining usage balance is too low (out of credit or over
+   * a usage/spend limit). NOT retryable — retrying re-hits the same wall until
+   * the balance is topped up or the limit resets.
+   */
+  ProviderInsufficientBalance = "provider_insufficient_balance",
   /** Model or resource not found */
   NotFound = "not_found",
   /** Input exceeds the model's context window */
@@ -281,11 +314,24 @@ export enum ChatErrorCode {
    */
   IncompleteToolCall = "incomplete_tool_call",
   /**
+   * A tool call was truncated because the model hit its output-token limit while
+   * writing it (finishReason "length") — the tool input was too large to finish
+   * in one turn. Deterministic in the payload size, so NOT retryable: retrying
+   * re-truncates. Distinct from IncompleteToolCall (a transient mid-stream drop).
+   */
+  ToolCallOutputTruncated = "tool_call_output_truncated",
+  /**
    * The provider needs a per-user credential the acting user hasn't linked yet
    * (e.g. GitHub Copilot). Carries an `authAction` so the UI can prompt the user
    * to link their account rather than showing a generic key error.
    */
   ProviderAuthRequired = "provider_auth_required",
+  /**
+   * The request declared tools but the model can't take them (e.g. Microsoft
+   * 365 Copilot). NOT retryable — the same agent/model pairing re-hits the
+   * same rejection until the tools or the model change.
+   */
+  ToolsUnsupported = "tools_unsupported",
   /** Catch-all for unrecognized errors */
   Unknown = "unknown",
 }
@@ -296,12 +342,20 @@ export enum ChatErrorCode {
 export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.RateLimit]:
     "Too many requests. Please wait a moment and try again.",
+  [ChatErrorCode.UsageLimitExceeded]:
+    "Archestra blocked this request because a configured usage limit has been reached. Contact your administrator to raise the limit or wait for it to reset.",
   [ChatErrorCode.Authentication]:
     "Invalid API key. Please check your Chat Settings.",
   [ChatErrorCode.PermissionDenied]:
     "Your API key doesn't have permission for this model.",
   [ChatErrorCode.InvalidRequest]:
     "There was an issue with your request. Please try again.",
+  // Provider-neutral: this code is emitted for any provider whose key runs out
+  // of balance or trips a usage/spend limit. Provider-specific phrasing (e.g. the
+  // Anthropic connection-page copy) is surfaced by the adapter's
+  // `extractErrorMessage`, not baked into this cross-provider table.
+  [ChatErrorCode.ProviderInsufficientBalance]:
+    "Your API key's remaining usage balance is too low. Please contact your administrator or try again later.",
   [ChatErrorCode.NotFound]:
     "The selected model is not available. Please choose a different model.",
   [ChatErrorCode.ContextTooLong]:
@@ -317,8 +371,12 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "The model ended its turn without a reply. Rephrasing your message may help.",
   [ChatErrorCode.IncompleteToolCall]:
     "The model started a tool call but didn't finish it, so the turn ended without a reply. Retrying may help.",
+  [ChatErrorCode.ToolCallOutputTruncated]:
+    "The model ran out of output space while writing a tool call, so it couldn't finish — the tool input was too large for one turn. Break the change into smaller steps and try again.",
   [ChatErrorCode.ProviderAuthRequired]:
     "Connect your account to use this model.",
+  [ChatErrorCode.ToolsUnsupported]:
+    "This model doesn't support tools, but the request included some. Remove the agent's tools or switch to a model that supports tool calling.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
 

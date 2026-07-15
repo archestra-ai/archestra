@@ -47,6 +47,7 @@ export const TOOL_PERMISSIONS: Record<
   deploy_mcp_server: { resource: "mcpRegistry", action: "update" },
   list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
   get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
+  reload_mcp_server_tools: { resource: "mcpRegistry", action: "update" },
   create_mcp_server_installation_request: {
     resource: "mcpServerInstallationRequest",
     action: "create",
@@ -91,6 +92,7 @@ export const TOOL_PERMISSIONS: Record<
 
   // Tool Assignment
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },
+  bulk_remove_tools_from_agents: { resource: "agent", action: "update" },
   bulk_assign_tools_to_mcp_gateways: {
     resource: "mcpGateway",
     action: "update",
@@ -135,7 +137,6 @@ export const TOOL_PERMISSIONS: Record<
 
   // Chat — available to all (operate within user's own chat session)
   todo_write: null,
-  artifact_write: null,
   swap_agent: { resource: "agent", action: "read" },
   swap_to_default_agent: null,
   create_project_from_conversation: { resource: "project", action: "create" },
@@ -151,6 +152,7 @@ export const TOOL_PERMISSIONS: Record<
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
+  edit_skill: { resource: "skill", action: "update" },
   // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
   // assignment. The implicit per-conversation sandbox is created lazily; the
   // create step is not a tool. load_skill (skill:read) mounts a skill into
@@ -158,11 +160,14 @@ export const TOOL_PERMISSIONS: Record<
   run_command: { resource: "sandbox", action: "execute" },
   download_file: { resource: "sandbox", action: "execute" },
   upload_file: { resource: "sandbox", action: "execute" },
-  search_files: { resource: "sandbox", action: "execute" },
-  read_file: { resource: "sandbox", action: "execute" },
-  save_file: { resource: "sandbox", action: "execute" },
-  edit_file: { resource: "sandbox", action: "execute" },
-  delete_file: { resource: "sandbox", action: "execute" },
+  // Persistent file store — these operate on `skill_sandbox_files`, not the
+  // sandbox itself, so they gate on `file:manage`. Per-file authorization
+  // (authorship, project membership) stays in the handlers.
+  search_files: { resource: "file", action: "manage" },
+  read_file: { resource: "file", action: "manage" },
+  save_file: { resource: "file", action: "manage" },
+  edit_file: { resource: "file", action: "manage" },
+  delete_file: { resource: "file", action: "manage" },
 
   // MCP Apps. The data-store tools gate on app:read/update; the running app's
   // appId is route-bound (set by the app MCP proxy), so the permission check

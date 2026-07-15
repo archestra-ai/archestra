@@ -7,11 +7,7 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import logger from "@/logging";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
-import type {
-  AutonomyPolicyOperator,
-  GlobalToolPolicy,
-  TrustedData,
-} from "@/types";
+import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 
 /**
  * Check if a policy is a default policy (applies to all results)
@@ -338,7 +334,7 @@ class TrustedDataPolicyModel {
   /**
    * Evaluate trusted data policies for a chat
    *
-   * KEY SECURITY PRINCIPLE: Data is UNTRUSTED by default (when globalToolPolicy is "restrictive").
+   * KEY SECURITY PRINCIPLE: Data is UNTRUSTED by default.
    * - Only data that explicitly matches a trusted data policy is considered safe
    * - If no policy matches, the data is considered untrusted
    * - This implements an allowlist approach for maximum security
@@ -350,7 +346,6 @@ class TrustedDataPolicyModel {
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
-    globalToolPolicy: GlobalToolPolicy = "restrictive",
     context: PolicyEvaluationContext,
   ): Promise<{
     isTrusted: boolean;
@@ -362,7 +357,6 @@ class TrustedDataPolicyModel {
     const results = await TrustedDataPolicyModel.evaluateBulk(
       agentId,
       [{ toolName, toolOutput }],
-      globalToolPolicy,
       context,
     );
     return (
@@ -386,7 +380,6 @@ class TrustedDataPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
       toolOutput: any;
     }>,
-    globalToolPolicy: GlobalToolPolicy = "restrictive",
     context: PolicyEvaluationContext,
   ): Promise<
     Map<
@@ -408,19 +401,6 @@ class TrustedDataPolicyModel {
         reason: string;
       }
     >();
-
-    // YOLO mode: trust all data immediately, skip policy evaluation
-    if (globalToolPolicy === "permissive") {
-      for (let i = 0; i < toolCalls.length; i++) {
-        results.set(i.toString(), {
-          isTrusted: true,
-          isBlocked: false,
-          shouldSanitizeWithDualLlm: false,
-          reason: "Trusted by permissive global policy",
-        });
-      }
-      return results;
-    }
 
     // Handle built-in MCP server tools. Policy-evaluated built-ins like
     // `query_knowledge_sources` are intentionally excluded from auto-trust:
@@ -456,12 +436,20 @@ class TrustedDataPolicyModel {
       .select({
         toolId: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
+        // The backing catalog's server type is a platform fact (never
+        // tool-supplied), so an owned-app launch tool cannot be forged by an
+        // upstream server declaring itself one.
+        serverType: schema.internalMcpCatalogTable.serverType,
         policyId: schema.trustedDataPoliciesTable.id,
         policyDescription: schema.trustedDataPoliciesTable.description,
         conditions: schema.trustedDataPoliciesTable.conditions,
         action: schema.trustedDataPoliciesTable.action,
       })
       .from(schema.toolsTable)
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
       .leftJoin(
         schema.trustedDataPoliciesTable,
         eq(schema.toolsTable.id, schema.trustedDataPoliciesTable.toolId),
@@ -481,9 +469,21 @@ class TrustedDataPolicyModel {
 
     // Track tools that exist in the database
     const knownTools = new Set<string>();
+    // A name resolves to an owned-app launch tool only when EVERY tool sharing
+    // it is an app backing (serverType "app"). Names are unique only per catalog
+    // and evaluateBulk resolves by name, so a name a non-app catalog also uses is
+    // ambiguous and must not inherit app trust — otherwise a hostile server could
+    // register a colliding name to skip the guardrail.
+    const appNameTools = new Set<string>();
+    const nonAppNameTools = new Set<string>();
 
     for (const row of allPoliciesAndTools) {
       knownTools.add(row.toolName);
+      if (row.serverType === "app") {
+        appNameTools.add(row.toolName);
+      } else {
+        nonAppNameTools.add(row.toolName);
+      }
 
       if (!policiesByTool.has(row.toolName)) {
         policiesByTool.set(row.toolName, []);
@@ -497,6 +497,12 @@ class TrustedDataPolicyModel {
       });
     }
 
+    // Owned-app launch tools: platform-synthesized render pointers with no
+    // external data — trusted only when the name is unambiguously an app backing.
+    const ownedAppLaunchTools = new Set(
+      [...appNameTools].filter((name) => !nonAppNameTools.has(name)),
+    );
+
     // Process each tool call
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName, toolOutput } = toolCalls[i];
@@ -504,6 +510,19 @@ class TrustedDataPolicyModel {
       // Skip policy-bypassing Archestra tools (already handled above);
       // policy-evaluated built-ins like `query_knowledge_sources` fall through.
       if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
+        continue;
+      }
+
+      // An owned-app launch tool ("Open <app>") returns only a platform render
+      // pointer, so its result is trusted — opening an app must not flip the
+      // context to sensitive and block the next call.
+      if (ownedAppLaunchTools.has(toolName)) {
+        results.set(i.toString(), {
+          isTrusted: true,
+          isBlocked: false,
+          shouldSanitizeWithDualLlm: false,
+          reason: "Owned-app launch tool (platform-authored render pointer)",
+        });
         continue;
       }
 

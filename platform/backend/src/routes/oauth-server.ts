@@ -10,7 +10,6 @@ import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
 import { AgentModel } from "@/models";
 import { APP_CONNECTOR_PATH_PREFIX } from "@/services/apps/app-connector-resource";
-import { ApiError } from "@/types";
 import { getPublicRequestOrigin } from "./request-origin";
 
 /**
@@ -53,15 +52,6 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "/.well-known/oauth-protected-resource",
         "",
       );
-
-      // An MCP App connector's discovery is dark when the feature is off, so it
-      // does not reveal that an app exists.
-      if (
-        resourcePath.startsWith(APP_CONNECTOR_PATH_PREFIX) &&
-        !config.apps.enabled
-      ) {
-        throw new ApiError(404, "Not found");
-      }
 
       // Check if the profile has an external IdP configured
       const authorizationServers = [baseUrl];

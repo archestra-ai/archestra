@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -29,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -290,12 +290,7 @@ export function OidcConfigForm({
               <FormItem>
                 <FormLabel>Client Secret</FormLabel>
                 <FormControl>
-                  <Input
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="your-client-secret"
-                    {...field}
-                  />
+                  <SecretInput placeholder="your-client-secret" {...field} />
                 </FormControl>
                 <FormDescription>
                   The client secret provided by your OIDC provider.
@@ -432,6 +427,7 @@ export function OidcConfigForm({
             <FormLabel>Scopes</FormLabel>
             <div className="flex gap-2">
               <Input
+                aria-label="Add scope"
                 placeholder="Add scope (e.g., profile)"
                 value={newScope}
                 onChange={(e) => setNewScope(e.target.value)}
@@ -444,6 +440,7 @@ export function OidcConfigForm({
               />
               <Button
                 type="button"
+                aria-label="Add scope"
                 onClick={addScope}
                 size="icon"
                 variant="outline"
@@ -462,6 +459,7 @@ export function OidcConfigForm({
                     {scope}
                     <button
                       type="button"
+                      aria-label="Remove scope"
                       onClick={() => removeScope(scope)}
                       className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                     >
@@ -656,12 +654,7 @@ function EnterpriseManagedCredentialsForm(props: {
             <FormItem>
               <FormLabel>Exchange Client Secret</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Optional"
-                  {...field}
-                />
+                <SecretInput placeholder="Optional" {...field} />
               </FormControl>
               <FormDescription>
                 Only used when the exchange endpoint authenticates with a client
@@ -805,7 +798,7 @@ function EnterpriseManagedCredentialsForm(props: {
           <FormItem>
             <FormLabel>Private Key PEM</FormLabel>
             <FormControl>
-              <Textarea
+              <SecretTextarea
                 placeholder="-----BEGIN PRIVATE KEY-----"
                 className="min-h-32 font-mono text-xs"
                 {...field}

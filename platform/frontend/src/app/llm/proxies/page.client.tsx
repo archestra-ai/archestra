@@ -15,11 +15,13 @@ import {
   AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +42,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { LlmProxyActions } from "./llm-proxy-actions";
@@ -182,6 +185,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const router = useRouter();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [postCreateProxy, setPostCreateProxy] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const navigateToConnection = useCallback(
     (agentId: string) => {
       router.push(
@@ -190,8 +197,9 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     },
     [router],
   );
-  const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
+  const editDialog = useAgentDialogUrlParam("edit");
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
+  const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
   const restoreProxy = useRestoreProfile();
 
   const handleSortingChange = useCallback(
@@ -332,9 +340,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             agent={agent}
             canModify={canModify}
             onConnect={(a) => navigateToConnection(a.id)}
-            onEdit={(agentData) => {
-              setEditingProxy(agentData);
-            }}
+            onEdit={editDialog.open}
             onDelete={setDeletingProxyId}
             onRestore={(agentId) => {
               restoreProxy.mutate(agentId, {
@@ -344,6 +350,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 },
               });
             }}
+            onClone={setCloningProxy}
           />
         );
       },
@@ -465,16 +472,25 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               onOpenChange={setIsCreateDialogOpen}
               agentType="llm_proxy"
               defaultIconType="llm_proxy"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                setPostCreateProxy(created);
+              }}
+            />
+
+            <PostCreateConnectDialog
+              created={postCreateProxy}
+              agentType="llm_proxy"
+              onOpenChange={(open) => {
+                if (!open) setPostCreateProxy(null);
               }}
             />
 
             <AgentDialog
-              open={!!editingProxy}
-              onOpenChange={(open) => !open && setEditingProxy(null)}
-              agent={editingProxy}
-              agentType={editingProxy?.agentType || "llm_proxy"}
+              open={!!editDialog.agent}
+              onOpenChange={(open) => !open && editDialog.close()}
+              agent={editDialog.agent}
+              agentType={editDialog.agent?.agentType || "llm_proxy"}
               defaultIconType="llm_proxy"
             />
 
@@ -485,6 +501,17 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 onOpenChange={(open) => !open && setDeletingProxyId(null)}
               />
             )}
+
+            <CloneAgentDialog
+              agent={cloningProxy}
+              onOpenChange={(open) => {
+                if (!open) setCloningProxy(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the clone so user can rename immediately
+                editDialog.open(cloned as ProxyData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

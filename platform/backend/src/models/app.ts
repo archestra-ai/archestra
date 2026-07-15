@@ -14,6 +14,7 @@ import { softDelete } from "@/database/soft-delete";
 import { ApiError } from "@/types";
 import type { App, InsertApp } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AppAccessModel from "./app-access";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -50,17 +51,20 @@ function buildOrgFilters(params: {
   accessibleAppIds?: string[];
 }) {
   const normalizedSearch = params.search?.trim();
+  const searchPattern = normalizedSearch
+    ? `%${escapeLikePattern(normalizedSearch)}%`
+    : undefined;
   return [
     eq(schema.appsTable.organizationId, params.organizationId),
     notDeleted(schema.appsTable),
     ...(params.accessibleAppIds !== undefined
       ? [inArray(schema.appsTable.id, params.accessibleAppIds)]
       : []),
-    ...(normalizedSearch
+    ...(searchPattern
       ? [
           or(
-            ilike(schema.appsTable.name, `%${normalizedSearch}%`),
-            ilike(schema.appsTable.description, `%${normalizedSearch}%`),
+            ilike(schema.appsTable.name, searchPattern),
+            ilike(schema.appsTable.description, searchPattern),
           ),
         ]
       : []),
@@ -169,6 +173,35 @@ class AppModel {
       ),
     );
     return result ?? null;
+  }
+
+  /**
+   * The id of the active app matching an author's name, if any (else null).
+   * Mirrors the partial unique index `apps_org_author_name_uidx`
+   * (organizationId, authorId, name WHERE deleted_at IS NULL). Id-only select
+   * on purpose: the winning row may not be catalog-backed yet, so no JOINs.
+   */
+  static async findIdByOrgAuthorName({
+    organizationId,
+    authorId,
+    name,
+  }: {
+    organizationId: string;
+    authorId: string;
+    name: string;
+  }): Promise<string | null> {
+    const [result] = await db
+      .select({ id: schema.appsTable.id })
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, organizationId),
+          eq(schema.appsTable.authorId, authorId),
+          eq(schema.appsTable.name, name),
+          notDeleted(schema.appsTable),
+        ),
+      );
+    return result?.id ?? null;
   }
 
   /** A single active app, returned only if the caller may view it (else null). */

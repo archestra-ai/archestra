@@ -1,4 +1,4 @@
-import { MEMBER_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import TeamModel from "./team";
 
@@ -1389,6 +1389,36 @@ describe("TeamModel", () => {
       expect(result.data).toHaveLength(1);
       expect(result.data[0].name).toBe("User1 Team");
       expect(result.total).toBe(1);
+    });
+
+    test("reports the caller's own role per team via myRole", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const adminTeam = await makeTeam(org.id, user.id, { name: "Admin Team" });
+      const memberTeam = await makeTeam(org.id, user.id, {
+        name: "Member Team",
+      });
+      await makeTeamMember(adminTeam.id, user.id, { role: ADMIN_ROLE_NAME });
+      await makeTeamMember(memberTeam.id, user.id, { role: MEMBER_ROLE_NAME });
+
+      const result = await TeamModel.getUserTeamsPaginated({
+        userId: user.id,
+        limit: 10,
+        offset: 0,
+      });
+
+      const byName = Object.fromEntries(
+        result.data.map((t) => [t.name, t.myRole]),
+      );
+      expect(byName).toEqual({
+        "Admin Team": ADMIN_ROLE_NAME,
+        "Member Team": MEMBER_ROLE_NAME,
+      });
     });
 
     test("supports pagination", async ({

@@ -4,6 +4,12 @@
 // rejects with 400 INVALID_ARGUMENT. This sanitizer walks a tool parameter schema
 // and removes non-string enums while preserving the value type, folding the dropped
 // literal(s) into the field description so the model keeps the hint.
+//
+// Gemini/Vertex also rejects schema nodes that carry no `type` at all ("schema
+// didn't specify the schema type field"). MCP servers routinely emit such nodes —
+// zod `z.unknown()` serializes to a bare `{}` — so the sanitizer infers a type
+// from structural keywords and defaults a bare "any" node to `object`, matching
+// the fallback in Google's own SDKs.
 
 type SchemaObject = Record<string, unknown>;
 
@@ -51,7 +57,48 @@ export function sanitizeGeminiToolSchema(schema: unknown): unknown {
   const result: SchemaObject = { ...(schema as SchemaObject) };
   normalizeEnum(result);
   recurseSubschemas(result);
+  ensureNodeType(result);
   return result;
+}
+
+// Gemini requires every schema node to declare a `type` (composites expressed
+// via anyOf/oneOf/allOf are typed through their branches, and $ref nodes through
+// their target). Infer one from structural keywords; a completely bare node —
+// JSON Schema's "accept anything" — falls back to `object`, the same default
+// Google's own generative-ai SDKs apply.
+function ensureNodeType(node: SchemaObject): void {
+  if (node.type !== undefined || typeof node.$ref === "string") return;
+  if (
+    Array.isArray(node.anyOf) ||
+    Array.isArray(node.oneOf) ||
+    Array.isArray(node.allOf)
+  ) {
+    return;
+  }
+
+  if (
+    node.properties !== undefined ||
+    node.patternProperties !== undefined ||
+    node.required !== undefined ||
+    node.additionalProperties !== undefined
+  ) {
+    node.type = "object";
+    return;
+  }
+  if (
+    node.items !== undefined ||
+    node.prefixItems !== undefined ||
+    node.contains !== undefined
+  ) {
+    node.type = "array";
+    return;
+  }
+  if (Array.isArray(node.enum) && node.enum.length > 0) {
+    // normalizeEnum already ran: a surviving enum is all-string
+    node.type = "string";
+    return;
+  }
+  node.type = "object";
 }
 
 function normalizeEnum(node: SchemaObject): void {

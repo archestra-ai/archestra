@@ -156,6 +156,14 @@ pub enum Provenance {
 
 /// One immutable stored value. Fields are private: a value's body, label, and
 /// provenance are fixed at admission and never change.
+///
+/// The embedded label and provenance are the **admission-time materialized
+/// projection** of the value's admission fact in the event log — the log is
+/// the authoritative source (`crate::projection::{value_labels, provenance}`
+/// recompute them from it, and the parity suite asserts equality). They stay
+/// embedded because the borrowed accessors below hand out `&ValueLabel` /
+/// `&Provenance`, which a recomputed-per-call projection cannot serve; there
+/// is no invalidation to manage — values never change after admission.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StoredValue {
     body: OpaqueValue,

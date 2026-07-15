@@ -373,3 +373,113 @@ fn confirmation_spend_projects_the_legacy_truth() {
     tracked(&mut trajectory, 1, |t| t.release(token).unwrap().1);
     assert!(projection::confirmation_available(trajectory.events()).is_none());
 }
+
+/// Labels are causal projections, never trajectory-wide taints: an
+/// irrelevant admission — however suspicious — enters no other value's
+/// label, while transitive explicit and control dependencies do.
+#[test]
+fn label_projection_is_causal_not_trajectory_wide() {
+    let mut trajectory = Trajectory::new();
+    let doc = trajectory.ingress(
+        Speaker::user(user("alice")),
+        ValueLabel::identity(),
+        OpaqueValue::new("clean doc"),
+    );
+    // Irrelevant later frontier growth: a suspicious value nothing depends on.
+    trajectory.ingress(
+        Speaker::user(user("mallory")),
+        ValueLabel {
+            trust: Trust::SUSPICIOUS,
+            audience: Audience::UNKNOWN,
+        },
+        OpaqueValue::new("poison"),
+    );
+    let summary = trajectory
+        .admit_model_output(OpaqueValue::new("summary"), BTreeSet::from([doc]), BTreeSet::new())
+        .unwrap();
+    let labels = projection::value_labels(trajectory.events());
+    assert_eq!(labels.get(&summary), Some(&ValueLabel::identity()));
+
+    // Transitive control dependence, by contrast, is causal and taints.
+    let selector = trajectory.ingress(
+        Speaker::user(user("mallory")),
+        ValueLabel {
+            trust: Trust::SUSPICIOUS,
+            audience: Audience::PUBLIC,
+        },
+        OpaqueValue::new("selector"),
+    );
+    let chosen = trajectory
+        .admit_model_output(
+            OpaqueValue::new("chosen"),
+            BTreeSet::from([summary]),
+            BTreeSet::from([selector]),
+        )
+        .unwrap();
+    let derived = trajectory
+        .admit_model_output(OpaqueValue::new("derived"), BTreeSet::from([chosen]), BTreeSet::new())
+        .unwrap();
+    let labels = projection::value_labels(trajectory.events());
+    assert_eq!(labels.get(&derived).map(|l| l.trust), Some(Trust::SUSPICIOUS));
+    assert_parity(&trajectory);
+}
+
+/// Provenance replays exactly through diamonds and transformed derivations:
+/// the projection rebuilt from the log names the same edges the store
+/// materialized at admission.
+#[test]
+fn provenance_replays_diamonds_and_transforms() {
+    let mut trajectory = Trajectory::new();
+    let a = trajectory.ingress(
+        Speaker::user(user("alice")),
+        ValueLabel::identity(),
+        OpaqueValue::new("a"),
+    );
+    let b = trajectory
+        .admit_model_output(OpaqueValue::new("b"), BTreeSet::from([a]), BTreeSet::new())
+        .unwrap();
+    let c = trajectory
+        .admit_model_output(OpaqueValue::new("c"), BTreeSet::from([a]), BTreeSet::new())
+        .unwrap();
+    let d = trajectory
+        .admit_model_output(OpaqueValue::new("d"), BTreeSet::from([b, c]), BTreeSet::new())
+        .unwrap();
+    let laundered = trajectory.seed_transformed(
+        d,
+        ValueLabel {
+            trust: Trust::TRUSTED,
+            audience: Audience::PUBLIC,
+        },
+    );
+
+    let provenances = projection::provenance(trajectory.events());
+    match provenances.get(&d) {
+        Some(crate::value::Provenance::ModelOutput { reads, .. }) => {
+            assert_eq!(reads, &BTreeSet::from([b, c]), "diamond joins both branches");
+        }
+        other => panic!("expected model-output provenance for the diamond join, got {other:?}"),
+    }
+    match provenances.get(&laundered) {
+        Some(crate::value::Provenance::Transformed { source, .. }) => assert_eq!(*source, d),
+        other => panic!("expected transformed provenance, got {other:?}"),
+    }
+    // The ancestry chain walks back to the ingress seed through the replayed
+    // edges alone.
+    let mut frontier = vec![laundered];
+    let mut reached_seed = false;
+    while let Some(id) = frontier.pop() {
+        match provenances.get(&id).expect("every value has projected provenance") {
+            crate::value::Provenance::Ingress { .. } => reached_seed = true,
+            crate::value::Provenance::ModelOutput { reads, control } => {
+                frontier.extend(reads.iter().chain(control.iter()).copied());
+            }
+            crate::value::Provenance::Transformed { source, .. } => frontier.push(*source),
+            crate::value::Provenance::Endorsed { source, .. } => frontier.push(*source),
+            crate::value::Provenance::ToolOutput { arguments, control, .. } => {
+                frontier.extend(arguments.iter().chain(control.iter()).copied())
+            }
+        }
+    }
+    assert!(reached_seed, "the transitive walk reaches the ingress seed");
+    assert_parity(&trajectory);
+}

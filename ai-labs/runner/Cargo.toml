@@ -24,7 +24,7 @@ percent-encoding = "2"
 jsonschema = "0.29"
 rmcp = { version = "1.7", features = ["server", "macros", "transport-streamable-http-server"] }
 axum = "0.8"
-nix = { version = "0.30", features = ["process", "signal"] }
+nix = { version = "0.31", features = ["process", "signal"] }
 indicatif = "0.18"
 tempfile = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }

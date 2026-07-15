@@ -206,9 +206,15 @@ impl fmt::Display for AuditEvent {
     }
 }
 
-/// The monotone, append-only control-plane state of one trajectory:
-/// may-effects that were committed at dispatch time, and the audit log.
-/// Nothing here is ever removed or loosened.
+/// The monotone control-plane read model of one trajectory: may-effects that
+/// were committed at dispatch time, and the audit log. Nothing here is ever
+/// removed or loosened.
+///
+/// Demoted from authoritative state to a **materialized projection** of the
+/// append-only event log: its effect surface is updated exclusively by
+/// [`TrajectoryState::apply`] as facts are admitted, so it stays rebuildable
+/// from the log by construction (values never change after admission and the
+/// log only grows, so there is no invalidation to manage).
 #[derive(Debug, Serialize)]
 pub struct TrajectoryState {
     past_effects: Effects,
@@ -234,14 +240,23 @@ impl TrajectoryState {
     }
 
     /// Append one audit event. Append-only by construction.
-    pub fn record(&mut self, event: AuditEvent) {
+    pub(crate) fn record(&mut self, event: AuditEvent) {
         self.audit.push(event);
+    }
+
+    /// Materialize one admitted fact into the read model. The only writer of
+    /// the effect surface: committed effects accumulate exactly as their
+    /// facts are admitted to the log.
+    pub(crate) fn apply(&mut self, fact: &crate::event::Fact) {
+        if let crate::event::Fact::EffectsCommitted { effects, .. } = fact {
+            self.commit_effects(effects.clone());
+        }
     }
 
     /// Fold newly committed effects into the monotone past. Combine is a
     /// union, so effects can only accumulate; failure of a later dispatch
     /// never removes them.
-    pub fn commit_effects(&mut self, effects: Effects) {
+    fn commit_effects(&mut self, effects: Effects) {
         self.past_effects = self.past_effects.clone().combine(effects);
     }
 }
@@ -251,14 +266,21 @@ mod tests {
     use super::*;
     use crate::dimension::Effect;
 
+    fn commitment(effects: Effects) -> crate::event::Fact {
+        crate::event::Fact::EffectsCommitted {
+            action: crate::revision::ActionId::new(0),
+            effects,
+        }
+    }
+
     #[test]
     fn effects_only_accumulate() {
         let mut state = TrajectoryState::default();
-        state.commit_effects(Effects::declared([Effect::Egress]));
-        state.commit_effects(Effects::none());
+        state.apply(&commitment(Effects::declared([Effect::Egress])));
+        state.apply(&commitment(Effects::none()));
         assert_eq!(state.past_effects(), &Effects::declared([Effect::Egress]));
 
-        state.commit_effects(Effects::declared([Effect::Mutation]));
+        state.apply(&commitment(Effects::declared([Effect::Mutation])));
         assert_eq!(
             state.past_effects(),
             &Effects::declared([Effect::Egress, Effect::Mutation])
@@ -268,8 +290,8 @@ mod tests {
     #[test]
     fn unknown_effects_absorb_permanently() {
         let mut state = TrajectoryState::default();
-        state.commit_effects(Effects::UNKNOWN);
-        state.commit_effects(Effects::none());
+        state.apply(&commitment(Effects::UNKNOWN));
+        state.apply(&commitment(Effects::none()));
         assert_eq!(state.past_effects(), &Effects::UNKNOWN);
     }
 }

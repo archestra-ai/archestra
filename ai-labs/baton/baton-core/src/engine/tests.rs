@@ -4707,3 +4707,99 @@ fn rescue_endorse_targets_shrink_per_peel() {
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "published").unwrap();
 }
+
+/// The general no-widening law, trust instance: a contract may declare a
+/// trusted output, but admission folds the declaration with the suspicious
+/// argument, so the result cannot launder into a trusted sink. The block is
+/// real and its remedy is an explicit authorization (a durable raise routed
+/// to a competent authority) — never the declaration itself.
+#[test]
+fn declared_trusted_output_cannot_launder_a_suspicious_flow() {
+    let summarize = ToolContract {
+        name: ToolName::new("doc.summarize"),
+        requires: Requirements::default(),
+        output_label: ValueLabel {
+            audience: Audience::PUBLIC,
+            trust: Trust::TRUSTED,
+        },
+        effects: Effects::none(),
+        arguments: ArgumentSchema::opaque(),
+    };
+    let mut engine = engine_with([summarize, email_contract()]);
+    engine.register_authority(human()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let page = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "web page");
+    let request = ToolRequest::new(
+        ToolName::new("doc.summarize"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([(
+            ArgumentName::new("doc"),
+            ArgumentTree::Value(page),
+        )])),
+        BTreeSet::new(),
+    );
+    let token = match engine.evaluate(&mut trajectory, request) {
+        Ok(FlowOutcome::AllowedNow(token)) => token,
+        other => panic!("summarize has no requirements, expected a permit, got {other:?}"),
+    };
+    let summary = dispatch(&mut trajectory, token, "summary").unwrap();
+    // Declared trusted+public; the conservative fold absorbed it.
+    assert_eq!(trajectory.value(summary).unwrap().label().trust, Trust::SUSPICIOUS);
+
+    let email = email_request(&mut trajectory, summary, "alice");
+    let plans = remediable(&engine, &mut trajectory, email);
+    let steps = &plans.first().steps;
+    assert!(
+        raise_step(steps.first())
+            .is_some_and(|(source, raise)| source == summary && raise.trust == Some(KnownTrust::Trusted)),
+        "the widening is authorizable only as an explicit durable raise"
+    );
+}
+
+/// The general no-widening law, audience instance: a contract-declared
+/// public output cannot widen a bounded flow — the fold keeps the bounded
+/// audience, the sink blocks on the outside recipient, and only an explicit
+/// authorization admits them.
+#[test]
+fn declared_public_output_cannot_widen_a_bounded_audience() {
+    let summarize = ToolContract {
+        name: ToolName::new("doc.summarize"),
+        requires: Requirements::default(),
+        output_label: ValueLabel {
+            audience: Audience::PUBLIC,
+            trust: Trust::TRUSTED,
+        },
+        effects: Effects::none(),
+        arguments: ArgumentSchema::opaque(),
+    };
+    let mut engine = engine_with([summarize, email_contract()]);
+    engine.register_authority(human()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "internal doc");
+    let request = ToolRequest::new(
+        ToolName::new("doc.summarize"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([(
+            ArgumentName::new("doc"),
+            ArgumentTree::Value(doc),
+        )])),
+        BTreeSet::new(),
+    );
+    let token = match engine.evaluate(&mut trajectory, request) {
+        Ok(FlowOutcome::AllowedNow(token)) => token,
+        other => panic!("summarize has no requirements, expected a permit, got {other:?}"),
+    };
+    let summary = dispatch(&mut trajectory, token, "summary").unwrap();
+    // Declared public; the fold keeps the bounded audience.
+    assert_eq!(
+        trajectory.value(summary).unwrap().label().audience,
+        Audience::readers([user("alice")])
+    );
+
+    let email = email_request(&mut trajectory, summary, "bob");
+    let plans = remediable(&engine, &mut trajectory, email);
+    let steps = &plans.first().steps;
+    assert!(
+        raise_step(steps.first())
+            .is_some_and(|(source, raise)| source == summary && raise.audience == Some(BTreeSet::from([user("bob")]))),
+        "the widening is authorizable only as an explicit audience vouch"
+    );
+}

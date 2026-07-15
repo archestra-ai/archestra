@@ -11,6 +11,17 @@
 //! effects; between `Trusted` and `Suspicious` for trust). This is the taint
 //! fold — distinct from the sink-side adequacy relation, where `Unknown` is
 //! instead incomparable → [`Adequacy::Unprovable`](crate::preset).
+//!
+//! Each dimension also carries a **widening relation** (`widening_over`), the
+//! dual of adequacy: whether one element exposes strictly more than a
+//! baseline — more readers, a higher trust assertion, a grown effect surface
+//! — with the excess as the witness. The general no-widening law is that a
+//! derived state is never wider than its causal input fold unless an
+//! authority explicitly authorized the widening. Trust and audience enforce
+//! it at admission by construction (the conservative fold absorbs any wider
+//! declared output — see `value.rs`); effects are not a value dimension, so
+//! their instance binds at the flow check as the surface-growth criterion,
+//! cleared only by an `AcquireEffects` authorization.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -89,7 +100,7 @@ impl Audience {
         }
     }
 
-    /// Endorse lift (durable relabel — see [`crate::transition::EndorseDelta`]):
+    /// Endorse lift (durable relabel — see [`crate::remedy::LabelRaise`]):
     /// admit `vouched` into the readers. `Public` stays public; `Unknown`
     /// becomes exactly the vouched readers. Monotone in the adequacy order.
     pub(crate) fn admitting(&self, vouched: &BTreeSet<UserId>) -> Self {
@@ -97,6 +108,28 @@ impl Audience {
             MeetSet::All => Self(MeetSet::All),
             MeetSet::Only(s) => Self(MeetSet::Only(s.union(vouched).cloned().collect())),
             MeetSet::Unknown => Self(MeetSet::Only(vouched.clone())),
+        }
+    }
+
+    /// Widening relation (dual of adequacy): does `self` expose readers
+    /// beyond `baseline`? The witness is the excess exposure. Declaring
+    /// bounded readers over an `Unknown` baseline is a widening — it asserts
+    /// an audience the baseline cannot prove, exactly what the endorse raise
+    /// [`Self::admitting`] exists to authorize. An `Unknown` self widens
+    /// nothing: it asserts no exposure (it is unprovable, not public).
+    pub(crate) fn widening_over(&self, baseline: &Audience) -> Option<Audience> {
+        match (&self.0, &baseline.0) {
+            (MeetSet::All, MeetSet::All) | (MeetSet::Unknown, _) => None,
+            (MeetSet::All, MeetSet::Only(_) | MeetSet::Unknown) => Some(Self::PUBLIC),
+            (MeetSet::Only(_), MeetSet::All) => None,
+            (MeetSet::Only(readers), MeetSet::Only(bounded)) => {
+                let excess: BTreeSet<UserId> = readers.difference(bounded).cloned().collect();
+                match excess.is_empty() {
+                    true => None,
+                    false => Some(Self(MeetSet::Only(excess))),
+                }
+            }
+            (MeetSet::Only(readers), MeetSet::Unknown) => Some(Self(MeetSet::Only(readers.clone()))),
         }
     }
 
@@ -187,7 +220,23 @@ impl Trust {
         self.0.at_least(floor)
     }
 
-    /// Endorse lift (durable relabel — see [`crate::transition::EndorseDelta`]):
+    /// Widening relation (dual of adequacy): does `self` assert strictly more
+    /// trust than `baseline`? A higher known judgement widens; asserting any
+    /// judgement over an `Unknown` baseline widens (that assertion is exactly
+    /// the endorse raise). An `Unknown` self asserts nothing and widens
+    /// nothing.
+    pub(crate) fn widening_over(&self, baseline: &Trust) -> Option<Trust> {
+        match (self.0, baseline.0) {
+            (MinLevel::Unknown, _) => None,
+            (MinLevel::Known(asserted), MinLevel::Known(base)) => match asserted > base {
+                true => Some(*self),
+                false => None,
+            },
+            (MinLevel::Known(_), MinLevel::Unknown) => Some(*self),
+        }
+    }
+
+    /// Endorse lift (durable relabel — see [`crate::remedy::LabelRaise`]):
     /// raise trust to at least `attested`. A join (`max`), never a demotion —
     /// a `Trusted` flow is never lowered by a weaker attestation, and an
     /// `Unknown` one becomes the attested judgement.
@@ -277,13 +326,16 @@ impl Effects {
         }
     }
 
-    /// The effects `self` (a call's proposed effects) would *add* to the
-    /// already-committed `past` surface: `None` when the flow is downhill on
-    /// effects (`past.combine(self) == past`), else `Some(growth)` — the
-    /// minimal effects whose commit equals committing `self`. Growth to
-    /// `Unknown` (an unannotated tool over a knowable past) is a real,
-    /// representable growth, distinct from any declared set.
-    pub(crate) fn growth_over(&self, past: &Effects) -> Option<Effects> {
+    /// Widening relation (dual of adequacy) — the effects instance of the
+    /// general no-widening law, where it binds at the *flow check* (effects
+    /// are trajectory state, not a value dimension, so admission cannot
+    /// enforce it): the effects `self` (a call's proposed effects) would
+    /// *add* to the already-committed `past` surface. `None` when the flow is
+    /// downhill on effects (`past.combine(self) == past`), else
+    /// `Some(growth)` — the minimal effects whose commit equals committing
+    /// `self`. Growth to `Unknown` (an unannotated tool over a knowable past)
+    /// is a real, representable growth, distinct from any declared set.
+    pub(crate) fn widening_over(&self, past: &Effects) -> Option<Effects> {
         if past.clone().combine(self.clone()) == *past {
             return None;
         }
@@ -456,6 +508,39 @@ mod tests {
         );
         assert_eq!(Trust::UNKNOWN.at_least(KnownTrust::Suspicious), Adequacy::Unprovable);
         assert_eq!(Trust::UNKNOWN.at_least(KnownTrust::Trusted), Adequacy::Unprovable);
+    }
+
+    /// The widening relation is the dual of adequacy on every dimension:
+    /// strictly more exposure than the baseline, witnessed by the excess.
+    #[test]
+    fn widening_over_is_the_dual_of_adequacy_per_dimension() {
+        // Trust: a higher assertion widens; any assertion over Unknown widens
+        // (that assertion is the endorse raise); Unknown asserts nothing.
+        assert_eq!(Trust::TRUSTED.widening_over(&Trust::SUSPICIOUS), Some(Trust::TRUSTED));
+        assert_eq!(Trust::SUSPICIOUS.widening_over(&Trust::TRUSTED), None);
+        assert_eq!(Trust::TRUSTED.widening_over(&Trust::TRUSTED), None);
+        assert_eq!(Trust::TRUSTED.widening_over(&Trust::UNKNOWN), Some(Trust::TRUSTED));
+        assert_eq!(Trust::UNKNOWN.widening_over(&Trust::SUSPICIOUS), None);
+
+        // Audience: the excess readers are the witness; public over bounded
+        // widens to everyone; Unknown asserts no exposure.
+        let ab = Audience::readers([user("alice"), user("bob")]);
+        let a = Audience::readers([user("alice")]);
+        assert_eq!(ab.widening_over(&a), Some(Audience::readers([user("bob")])));
+        assert_eq!(a.widening_over(&ab), None);
+        assert_eq!(Audience::PUBLIC.widening_over(&a), Some(Audience::PUBLIC));
+        assert_eq!(a.widening_over(&Audience::PUBLIC), None);
+        assert_eq!(Audience::UNKNOWN.widening_over(&a), None);
+        assert_eq!(a.widening_over(&Audience::UNKNOWN), Some(a.clone()));
+
+        // Effects: the growth is the witness — the flow-check instance.
+        let egress = Effects::declared([Effect::Egress]);
+        assert_eq!(Effects::none().widening_over(&egress), None);
+        assert_eq!(
+            Effects::declared([Effect::Egress, Effect::Mutation]).widening_over(&egress),
+            Some(Effects::declared([Effect::Mutation]))
+        );
+        assert_eq!(Effects::UNKNOWN.widening_over(&egress), Some(Effects::UNKNOWN));
     }
 
     #[test]

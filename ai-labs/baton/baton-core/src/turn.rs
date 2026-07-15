@@ -334,7 +334,9 @@ impl Trajectory {
             });
         }
         batch.push(Fact::ActionReleased { action: parts.action });
-        self.state.commit_effects(parts.proposed_effects.clone());
+        // The commitment itself materializes from the batch's
+        // `EffectsCommitted` fact in `commit`; only the audit record is
+        // appended directly here (its projection cutover is a later slice).
         self.state.record(AuditEvent::EffectsCommitted {
             action: parts.action,
             effects: parts.proposed_effects.clone(),
@@ -903,13 +905,27 @@ impl Trajectory {
     /// subject is the confidentiality axis exercise an egress-bearing sink
     /// without criterion (1) (surface growth) firing on the first egress.
     ///
-    /// Deliberately bypasses the event log: it advances nothing today, so a
-    /// shadow batch would desynchronize the frontier from the revision. The
-    /// seeded trajectories are therefore outside the projection parity
-    /// domain; the projection cutover replaces this helper.
+    /// Recorded as an honest synthetic dispatch — proposal, commitment,
+    /// release, declared failure, one batch — so the log stays the single
+    /// source of the committed effect surface even for seeded fixtures (and
+    /// the seed advances the revision like the real dispatch it stands for).
     #[cfg(test)]
     pub(crate) fn seed_committed_effects(&mut self, effects: crate::dimension::Effects) {
-        self.state.commit_effects(effects);
+        let action = ActionId::new(self.next_action);
+        self.next_action += 1;
+        let flow = FlowId::new(self.next_flow);
+        self.next_flow += 1;
+        self.commit(vec![
+            Fact::ActionProposed {
+                action,
+                flow,
+                tool: ToolName::new("seed.dispatch"),
+                effects: effects.clone(),
+            },
+            Fact::EffectsCommitted { action, effects },
+            Fact::ActionReleased { action },
+            Fact::DispatchFailed { action },
+        ]);
     }
 
     /// Test setup: admit a derived value under `output`, attributed to `source`
@@ -959,11 +975,17 @@ impl Trajectory {
     /// The batch is built before any legacy write and mirrors validations
     /// that already passed, so an admission conflict here is a crate bug —
     /// it fails loudly rather than letting the log and the legacy state
-    /// diverge.
+    /// diverge. Admitted facts are then materialized into the
+    /// [`TrajectoryState`] read model — the log is the only writer of the
+    /// committed effect surface.
     fn commit(&mut self, facts: Vec<Fact>) {
+        let admitted_from = self.events.events().len();
         self.events
             .append_batch(facts)
             .expect("shadow facts mirror an already-validated mutation");
+        for event in &self.events.events()[admitted_from..] {
+            self.state.apply(&event.fact);
+        }
         self.advance();
     }
 }

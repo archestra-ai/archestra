@@ -1158,12 +1158,17 @@ impl SimFlow {
             Verdict::Allow => {}
             Verdict::Escalate(violations) => remaining.extend(violations),
         }
-        // Criterion (1): the growth check is over the *committed* surface, not
-        // the waiver-adjusted `past` — a waiver lifts a prior-effect sink check,
-        // not what the call would commit. An Accept marker (accepted_effects)
-        // suppresses growth it already acquired.
+        // Criterion (1) — the effects instance of the general no-widening law
+        // (`widening_over`, the dimension interface's dual of adequacy).
+        // Trust and audience enforce theirs at admission by construction (the
+        // conservative fold absorbs a wider declared output); effects are
+        // trajectory state, so their instance binds here. The check is over
+        // the *committed* surface, not the waiver-adjusted `past` — a waiver
+        // lifts a prior-effect sink check, not what the call would commit. An
+        // Accept marker (accepted_effects) suppresses growth it already
+        // acquired.
         let effective_past = self.past_effects.clone().combine(self.accepted_effects.clone());
-        if let Some(growth) = self.proposed_effects.growth_over(&effective_past) {
+        if let Some(growth) = self.proposed_effects.widening_over(&effective_past) {
             remaining.push(Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth }));
         }
         if waiver.is_some() {

@@ -274,7 +274,19 @@ impl ValueStore {
         control: BTreeSet<ValueId>,
         body: OpaqueValue,
     ) -> Result<ValueId, UnknownValue> {
-        let label = intrinsic.combine(self.fold_labels(arguments.iter().chain(control.iter()))?);
+        let fold = self.fold_labels(arguments.iter().chain(control.iter()))?;
+        let label = intrinsic.combine(fold.clone());
+        // The general no-widening law, trust/audience instances: unaided
+        // admission never exposes more than the causal dependency fold — a
+        // contract-declared wider output (trust laundering, audience
+        // widening) is absorbed by the combine above. Only a *validated*
+        // transformer derivation or an *authority-granted* endorsement may
+        // sit below the fold. The effects instance binds at the flow check
+        // (`Effects::widening_over`).
+        debug_assert!(
+            label.trust.widening_over(&fold.trust).is_none() && label.audience.widening_over(&fold.audience).is_none(),
+            "tool-output admission widened the dependency fold"
+        );
         Ok(self.push(
             body,
             label,
@@ -450,6 +462,43 @@ mod tests {
             )
             .unwrap();
         assert_eq!(store.get(out).unwrap().label().trust, Trust::SUSPICIOUS);
+    }
+
+    /// The general no-widening law holds at tool-output admission by
+    /// construction: a declared wider output (trusted over a suspicious
+    /// fold, public over a bounded fold) is absorbed by the conservative
+    /// combine — the admitted label never widens the dependency fold on any
+    /// value dimension. The effects instance binds at the flow check instead
+    /// (effects are trajectory state, not a value dimension).
+    #[test]
+    fn tool_output_admission_never_widens_the_dependency_fold() {
+        let mut store = ValueStore::default();
+        let bounded_suspicious = store.admit_ingress(
+            TurnId::new(0),
+            ValueLabel {
+                audience: Audience::readers([UserId::new("alice")]),
+                trust: Trust::SUSPICIOUS,
+            },
+            OpaqueValue::new("internal page"),
+        );
+        let fold = store.get(bounded_suspicious).unwrap().label().clone();
+        let laundering_intrinsic = ValueLabel {
+            audience: Audience::PUBLIC,
+            trust: Trust::TRUSTED,
+        };
+        let out = store
+            .admit_tool_output(
+                ActionId::new(0),
+                laundering_intrinsic,
+                BTreeSet::from([bounded_suspicious]),
+                BTreeSet::new(),
+                OpaqueValue::new("summary"),
+            )
+            .unwrap();
+        let admitted = store.get(out).unwrap().label();
+        assert_eq!(admitted, &fold);
+        assert!(admitted.trust.widening_over(&fold.trust).is_none());
+        assert!(admitted.audience.widening_over(&fold.audience).is_none());
     }
 
     #[test]

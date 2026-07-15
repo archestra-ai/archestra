@@ -11,7 +11,7 @@
 set -euo pipefail
 
 CRATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_DIR="$CRATE_DIR/../../target"
+TARGET_DIR="$CRATE_DIR/target"
 cd "$CRATE_DIR"
 
 GATEWAY_ADDR="127.0.0.1:8732"
@@ -49,7 +49,7 @@ fi
 
 # --- build ---------------------------------------------------------------------
 echo "building (--features demo)…"
-cargo build --features demo --quiet
+cargo build --quiet
 
 # --- start the gateway (narration stays on this terminal) -----------------------
 pids=()

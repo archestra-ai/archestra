@@ -1048,21 +1048,24 @@ async function getRepos(
 ): Promise<GithubRepo[]> {
   if (config.repos && config.repos.length > 0) {
     const repos: GithubRepo[] = [];
-    for (const name of config.repos) {
+    for (const entry of config.repos) {
+      // A repo entry may be a bare name (belongs to config.owner) or a fully
+      // qualified `owner/repo` slug — users routinely paste the latter, and it
+      // is the only way to span multiple owners with a single owner field.
+      // Pairing a slug with config.owner would build `/repos/{owner}/{owner/repo}`
+      // which 404s and gets silently skipped, ingesting nothing.
+      const { owner, name } = parseRepoEntry(entry, config.owner);
       let defaultBranch: string | null = null;
       try {
-        const response = await octokit.rest.repos.get({
-          owner: config.owner,
-          repo: name,
-        });
+        const response = await octokit.rest.repos.get({ owner, repo: name });
         defaultBranch = response.data.default_branch;
       } catch {
         // If we can't fetch repo metadata, fall back to null (main→master fallback)
       }
       repos.push({
-        owner: config.owner,
+        owner,
         name,
-        htmlUrl: `${config.githubUrl.replace(/\/api\/v3$/, "").replace(/\/+$/, "")}/${config.owner}/${name}`,
+        htmlUrl: `${config.githubUrl.replace(/\/api\/v3$/, "").replace(/\/+$/, "")}/${owner}/${name}`,
         defaultBranch,
       });
     }
@@ -1115,6 +1118,28 @@ async function getRepos(
   }
 
   return repos;
+}
+
+/**
+ * Split a configured repo entry into its owner and bare name. Accepts either a
+ * bare `repo` (owned by `defaultOwner`) or a fully qualified `owner/repo` slug.
+ * Only the first slash separates owner from name; GitHub repo names never
+ * contain slashes, so anything after the first is folded back into the name and
+ * left to fail loudly at the API rather than being silently mis-split.
+ */
+function parseRepoEntry(
+  entry: string,
+  defaultOwner: string,
+): { owner: string; name: string } {
+  const trimmed = entry.trim();
+  const slash = trimmed.indexOf("/");
+  if (slash === -1) {
+    return { owner: defaultOwner, name: trimmed };
+  }
+  return {
+    owner: trimmed.slice(0, slash),
+    name: trimmed.slice(slash + 1),
+  };
 }
 
 const FALLBACK_BRANCHES = ["main", "master", "dev", "develop"];

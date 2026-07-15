@@ -31,6 +31,7 @@ import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { Switch } from "@/components/ui/switch";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import {
+  AdminApiKeyDescription,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
   connectorNeedsEmail,
@@ -149,9 +150,12 @@ export function EditConnectorDialog({
   const handleSubmit = async (values: EditConnectorFormValues) => {
     // Any single credential field can be updated alone — the backend merges
     // the submitted fields over the stored secret, so pasting only the admin
-    // API key must not be dropped just because the token field is empty.
+    // API key (or correcting only the email) must not be dropped just because
+    // the token field is left empty to keep the existing token.
     const hasCredentials =
-      values.apiToken.length > 0 || values.adminApiKey.length > 0;
+      values.email.length > 0 ||
+      values.apiToken.length > 0 ||
+      values.adminApiKey.length > 0;
     const result = await updateConnector.mutateAsync({
       id: connector.id,
       body: {
@@ -387,10 +391,8 @@ export function EditConnectorDialog({
                       />
                     </FormControl>
                     <FormDescription>
-                      Lets permission sync resolve managed accounts&apos; hidden
-                      emails through the Atlassian admin APIs. Create a key{" "}
-                      <em>without scopes</em> in Atlassian administration under
-                      Settings → API keys. Leave empty to keep the existing key.
+                      <AdminApiKeyDescription type={connectorType} /> Leave
+                      empty to keep the existing key.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

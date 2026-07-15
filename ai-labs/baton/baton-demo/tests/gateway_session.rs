@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use baton_proxy::gateway::{GatewayConfig, Outcome, Session};
+use baton_demo::gateway::{GatewayConfig, Outcome, Session};
 
 const SCENARIO: &str = r#"
 [[authority]]

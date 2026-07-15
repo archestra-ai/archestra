@@ -135,6 +135,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "subagentsCount",
               "knowledgeSourcesCount",
               "team",
+              "lastUsedAt",
             ] as const),
           ),
         response: constructResponseSchema(

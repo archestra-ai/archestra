@@ -1148,6 +1148,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       // SPDX-SnippetEnd
 
+      // Drop the connector's queued work before the cascade removes its runs.
+      // The tasks table has no FK to connectors, so these would otherwise be
+      // orphaned — and orphaned batch_embedding tasks keep occupying content-lane
+      // worker slots, head-of-line-blocking the surviving connectors' syncs. An
+      // in-flight run stops cooperatively on its own once its (cascade-deleted)
+      // run row disappears and its fenced writes no-op.
+      await TaskModel.deleteQueuedForConnector(id);
+
       // Delete the secret
       if (connector.secretId) {
         try {

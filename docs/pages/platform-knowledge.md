@@ -90,6 +90,18 @@ Supported connectors: **GitHub**, **Confluence**, and **Jira**. Support for Goog
 
 **Manual user assignment.** When an account's email stays hidden, assign it to an Archestra user from the Users tab.
 
+#### Atlassian Organization Admin API Key
+
+An organization admin API key reads managed accounts' emails through the Atlassian admin APIs. Add it to a Jira or Confluence connector, and permission sync resolves members whose profile email visibility is not **"Anyone"**.
+
+Create the key in [Atlassian administration](https://admin.atlassian.com) under **Settings → API keys**:
+
+1. Select **Create API key** and name it.
+2. Leave the key **without scopes**. Permission sync calls the classic admin APIs, which scopes do not cover.
+3. Copy the key into the connector's **Organization admin API key** field.
+
+The API token stays required. Atlassian does not accept admin API keys on the Jira and Confluence APIs.
+
 ## Supported Connectors
 
 Archestra ships with these built-in connector types.
@@ -100,7 +112,7 @@ Sync issues and discussions from Atlassian Jira.
 
 **Indexed:** issue descriptions, comments, and metadata from Jira Cloud or Server.
 
-**Authentication:** an Atlassian account email and an [API token](https://id.atlassian.com/manage-profile/security/api-tokens). For auto-sync permissions on Cloud, also add an [organization admin API key](https://support.atlassian.com/organization-administration/docs/manage-an-organization-with-the-admin-apis/) in the **Organization admin API key** field — it lets permission sync read managed accounts' hidden emails. Create the key without scopes. The API token is still required: Atlassian does not accept admin API keys on the Jira or Confluence APIs.
+**Authentication:** an Atlassian account email and an [API token](https://id.atlassian.com/manage-profile/security/api-tokens). For auto-sync permissions on Cloud, also add an [organization admin API key](#atlassian-organization-admin-api-key).
 
 | Field                   | Description                                                        |
 | ----------------------- | ------------------------------------------------------------------ |
@@ -117,7 +129,7 @@ Sync wiki pages from Atlassian Confluence.
 
 **Indexed:** pages from Confluence Cloud or Server.
 
-**Authentication:** the same Atlassian email and API token used for Jira, with the same optional organization admin API key for auto-sync permissions.
+**Authentication:** the same Atlassian email and API token used for Jira, with the same optional [organization admin API key](#atlassian-organization-admin-api-key) for auto-sync permissions.
 
 | Field          | Description                                                                   |
 | -------------- | ----------------------------------------------------------------------------- |

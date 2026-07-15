@@ -56,6 +56,29 @@ export async function verifyToolCallResultViaApi({
     token = await getOrgTokenForProfile(request);
   }
 
+  // The assignment dialog's Save is not awaited by the UI helpers, and the
+  // gateway's enablement check reads agent_tools live — so a direct call can
+  // win the race against the assignment mutation and get the "not enabled"
+  // recovery text instead of the tool result. On the lite harness
+  // (frontend/backend/DB in one container, sub-ms latency) the call wins
+  // deterministically. Wait until the gateway itself lists the tool, which is
+  // the same assignment set the invocation policy checks. Skipped for "Error"
+  // expectations: there the tool may legitimately never appear for this token.
+  if (expectedResult !== "Error") {
+    await expect
+      .poll(
+        async () => {
+          const tools = await listMcpTools(request, {
+            profileId: effectiveProfileId,
+            token,
+          }).catch(() => [] as McpTool[]);
+          return tools.some((tool) => tool.name === toolName);
+        },
+        { timeout: 30_000, intervals: [250, 500, 1000, 2000, 4000] },
+      )
+      .toBe(true);
+  }
+
   let toolResult: Awaited<ReturnType<typeof callMcpTool>>;
 
   try {

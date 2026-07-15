@@ -12,6 +12,8 @@ import {
   RetryableErrorCodes,
   type SupportedProvider,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
   VllmErrorTypes,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
@@ -27,6 +29,8 @@ import {
   RetryError,
   UnsupportedFunctionalityError,
 } from "ai";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { unavailableToolDispatchModeMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
@@ -81,8 +85,36 @@ export class EmptyModelResponseError extends Error {
 // Unavailable tool errors — model called a tool that doesn't exist
 // =============================================================================
 
+// Applies only when the live tool list has no search/run dispatch pair (full
+// exposure): every callable tool really is in the list, so "copy an exact name"
+// is the correct steer. Dispatch-mode surfaces get
+// `unavailableToolDispatchModeMessage` instead — see unavailableToolMessage.
 const UNAVAILABLE_TOOL_ERROR_MESSAGE =
   "The requested tool is not available in this chat. Available tools are listed in the details below. Tool names carry their server as a prefix in the form `server__tool`; the bare short name without that prefix will not match. Copy an exact name from the list for the next tool call.";
+
+/**
+ * Pick the recovery steer for a nonexistent-tool call. When the request's tool
+ * list contains the search/run dispatch pair (search_and_run_only exposure),
+ * "copy a name from the list" is wrong — third-party tools are never in that
+ * list — so steer the model through search_tools → run_tool instead. The
+ * dispatch tools are located by short name so a custom-branded prefix (e.g.
+ * `acme__run_tool`) is recognized and echoed exactly as the model sees it.
+ */
+function unavailableToolMessage(availableToolNames: string[]): string {
+  const searchToolsName = availableToolNames.find(
+    (name) =>
+      archestraMcpBranding.getToolShortName(name) ===
+      TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  const runToolName = availableToolNames.find(
+    (name) =>
+      archestraMcpBranding.getToolShortName(name) === TOOL_RUN_TOOL_SHORT_NAME,
+  );
+  if (searchToolsName && runToolName) {
+    return unavailableToolDispatchModeMessage({ searchToolsName, runToolName });
+  }
+  return UNAVAILABLE_TOOL_ERROR_MESSAGE;
+}
 
 type UnavailableToolErrorDetails = {
   type: "unavailable_tool";
@@ -104,11 +136,12 @@ export function getUnavailableToolErrorDetails(
   error: unknown,
 ): UnavailableToolErrorDetails | null {
   if (NoSuchToolError.isInstance(error)) {
+    const availableToolNames = error.availableTools ?? [];
     return {
       type: "unavailable_tool",
-      message: UNAVAILABLE_TOOL_ERROR_MESSAGE,
+      message: unavailableToolMessage(availableToolNames),
       requestedToolName: error.toolName,
-      availableToolNames: error.availableTools ?? [],
+      availableToolNames,
       originalErrorMessage: error.message,
     };
   }
@@ -120,7 +153,7 @@ export function getUnavailableToolErrorDetails(
 
   return {
     type: "unavailable_tool",
-    message: UNAVAILABLE_TOOL_ERROR_MESSAGE,
+    message: unavailableToolMessage(parsed.availableToolNames),
     ...parsed,
   };
 }

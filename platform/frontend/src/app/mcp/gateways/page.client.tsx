@@ -45,6 +45,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -111,6 +112,7 @@ function McpGateways({
     | "toolsCount"
     | "subagentsCount"
     | "team"
+    | "lastUsedAt"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
     | "asc"
@@ -353,6 +355,33 @@ function McpGateways({
           (t) => t.delegateToAgentId,
         ).length;
         return <div>{subagentsCount}</div>;
+      },
+    },
+    {
+      id: "lastUsedAt",
+      accessorKey: "lastUsedAt",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Last used
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const lastUsedAt = row.original.lastUsedAt;
+        return (
+          <span
+            className="text-sm text-muted-foreground"
+            title={
+              lastUsedAt ? new Date(lastUsedAt).toLocaleString() : undefined
+            }
+          >
+            {formatRelativeTimeFromNow(lastUsedAt ?? null)}
+          </span>
+        );
       },
     },
     ...(isAdmin

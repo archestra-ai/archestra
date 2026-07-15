@@ -2,7 +2,7 @@
 //! `bin/gateway_agent.rs`): the terminal-prompting MCP elicitation handler and
 //! OpenRouter key resolution.
 //!
-//! Deliberately NOT part of the `baton_proxy` library — demo scaffolding must
+//! Deliberately NOT part of the `baton_demo` library — demo scaffolding must
 //! not sit in its API. Each demo bin includes this file directly with
 //! `#[path = "../demo_support.rs"] mod demo_support;`.
 

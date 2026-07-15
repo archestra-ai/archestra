@@ -32,7 +32,7 @@ describe("AppPinModel", () => {
     await AppPinModel.unpinOwned({ userId: user.id, appId: app.id });
   });
 
-  test("external pin round-trip keyed by (install, resource)", async ({
+  test("external pin round-trip keyed by (install, resource, tool)", async ({
     makeUser,
     makeMcpServer,
   }) => {
@@ -41,6 +41,7 @@ describe("AppPinModel", () => {
     const ref = {
       mcpServerId: server.id,
       resourceUri: "ui://pm/board.html",
+      toolName: "show_board",
     };
 
     await AppPinModel.pinExternal({ userId: user.id, ...ref });
@@ -54,8 +55,22 @@ describe("AppPinModel", () => {
     });
     expect(pins.get(key)).toBeInstanceOf(Date);
 
+    // a different tool sharing the same resource is a distinct pin — several
+    // tools of one server commonly share a widget template, and a pin must
+    // land on one tile, not the group
+    const sameResourceOtherTool = { ...ref, toolName: "edit_board" };
+    pins = await AppPinModel.getPinnedAtForExternalApps({
+      userId: user.id,
+      refs: [sameResourceOtherTool],
+    });
+    expect(pins.size).toBe(0);
+
     // a different resource of the same install is a distinct pin
-    const otherRef = { mcpServerId: server.id, resourceUri: "ui://pm/x.html" };
+    const otherRef = {
+      mcpServerId: server.id,
+      resourceUri: "ui://pm/x.html",
+      toolName: "show_board",
+    };
     pins = await AppPinModel.getPinnedAtForExternalApps({
       userId: user.id,
       refs: [otherRef],
@@ -119,7 +134,11 @@ describe("AppPinModel", () => {
   }) => {
     const user = await makeUser();
     const server = await makeMcpServer();
-    const ref = { mcpServerId: server.id, resourceUri: "ui://pm/board.html" };
+    const ref = {
+      mcpServerId: server.id,
+      resourceUri: "ui://pm/board.html",
+      toolName: "show_board",
+    };
     await AppPinModel.pinExternal({ userId: user.id, ...ref });
 
     await McpServerModel.delete(server.id);

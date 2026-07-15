@@ -34,6 +34,30 @@ export function unavailableThirdPartyToolMessage(toolName: string): string {
 }
 
 /**
+ * Recovery message for a direct model tool call that failed because the tool is
+ * not in the request's tool list, on an agent whose live tool list includes the
+ * search/run dispatch pair (search_and_run_only exposure). The generic "copy an
+ * exact name from the list" steer is wrong there — the list never contains
+ * third-party tools — so this one states the actual calling convention. The
+ * dispatch tool names are passed in as they appear in the live tool list, so a
+ * custom-branded prefix is preserved.
+ */
+export function unavailableToolDispatchModeMessage(params: {
+  searchToolsName: string;
+  runToolName: string;
+}): string {
+  const { searchToolsName, runToolName } = params;
+  return (
+    `The requested tool cannot be called directly in this chat. Only the tools ` +
+    `listed in the details below are directly callable; every other tool must be ` +
+    `invoked through ${runToolName}. Call ${searchToolsName} with a description ` +
+    `of the capability you need to find the exact tool name, then call ` +
+    `${runToolName} with tool_name set to that exact name and the target tool's ` +
+    `arguments in tool_args. Do not guess tool names.`
+  );
+}
+
+/**
  * Recovery message for a tool that exists and is assigned but has been disabled
  * for the current conversation via the per-conversation tool selection. Distinct
  * from `unavailableThirdPartyToolMessage` (which is about non-existent / not

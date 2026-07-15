@@ -248,6 +248,27 @@ describe("EditConnectorDialog - Jira admin API key", () => {
     // admin key must survive an empty token field instead of being dropped.
     expect(call[0].body.credentials).toEqual({ adminApiKey: "org-admin-key" });
   });
+
+  it("submits a corrected email alone, without re-entering the token", async () => {
+    mockMutateAsync.mockResolvedValue({ id: "conn-jira-1" });
+    const user = userEvent.setup();
+    renderDialog(makeJiraAutoSyncConnector());
+
+    // Correcting a typo'd credential email must not be silently dropped just
+    // because the token field is left empty to keep the existing token.
+    fireEvent.change(screen.getByLabelText(/Email/), {
+      target: { value: "correct@example.com" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    const [call] = mockMutateAsync.mock.calls;
+    expect(call[0].body.credentials).toEqual({ email: "correct@example.com" });
+  });
 });
 
 describe("EditConnectorDialog - permission sync interval (auto-sync)", () => {

@@ -23,6 +23,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  max,
   min,
   ne,
   notInArray,
@@ -62,6 +63,7 @@ import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
@@ -217,6 +219,21 @@ class AgentModel {
     const promptsMap = await AgentSuggestedPromptModel.getForAgents(agentIds);
     for (const agent of agents) {
       agent.suggestedPrompts = promptsMap.get(agent.id) ?? [];
+    }
+  }
+
+  /**
+   * Populate lastUsedAt on agents from the MCP tool-call log: the most recent
+   * request (any JSON-RPC method) routed through each agent's MCP gateway
+   * endpoint. Null when nothing was ever routed through the agent.
+   */
+  private static async populateLastUsedAt(agents: Agent[]): Promise<void> {
+    const agentIds = agents.map((a) => a.id);
+    if (agentIds.length === 0) return;
+
+    const lastCallMap = await McpToolCallModel.getLastCallAtForAgents(agentIds);
+    for (const agent of agents) {
+      agent.lastUsedAt = lastCallMap.get(agent.id) ?? null;
     }
   }
 
@@ -1147,6 +1164,28 @@ class AgentModel {
             sql`COALESCE(${knowledgeSourcesCountSubquery.knowledgeSourcesCount}, 0)`,
           ),
         );
+    } else if (sorting?.sortBy === "lastUsedAt") {
+      const lastUsedAtSubquery = db
+        .select({
+          agentId: schema.mcpToolCallsTable.agentId,
+          lastUsedAt: max(schema.mcpToolCallsTable.createdAt).as("lastUsedAt"),
+        })
+        .from(schema.mcpToolCallsTable)
+        .groupBy(schema.mcpToolCallsTable.agentId)
+        .as("lastUsedAts");
+
+      query = query
+        .leftJoin(
+          lastUsedAtSubquery,
+          eq(schema.agentsTable.id, lastUsedAtSubquery.agentId),
+        )
+        .orderBy(
+          ...personalAgentPriorityOrderClauses,
+          // Never-used agents sort as oldest (asc first / desc last).
+          direction(
+            sql`COALESCE(${lastUsedAtSubquery.lastUsedAt}, '-infinity'::timestamp)`,
+          ),
+        );
     } else if (sorting?.sortBy === "team") {
       const teamNameSubquery = db
         .select({
@@ -1262,6 +1301,7 @@ class AgentModel {
       AgentModel.populateConnectorIds(agents),
       AgentModel.populateSuggestedPrompts(agents),
       AgentModel.populateResolvedLlm(agents),
+      AgentModel.populateLastUsedAt(agents),
     ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
@@ -1283,8 +1323,9 @@ class AgentModel {
       case "subagentsCount":
       case "knowledgeSourcesCount":
       case "team":
-        // toolsCount, subagentsCount, knowledgeSourcesCount, and team sorting use a separate query path.
-        // This fallback should never be reached for these sort types.
+      case "lastUsedAt":
+        // These sort keys use a separate query path with a dedicated subquery join.
+        // This fallback should never be reached for them.
         return direction(schema.agentsTable.createdAt); // Fallback
       default:
         // Default: newest first

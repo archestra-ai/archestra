@@ -467,6 +467,13 @@ export function McpAppEntryContent({
           {isOwnedInPanel ? (
             <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
           ) : null}
+          {/* Apps can request fullscreen from the panel too (via the SDK); the
+              bar is the only chrome there, so it must carry the way back out.
+              Escape alone doesn't cut it — focus usually sits inside the
+              iframe, where the host never sees the keydown. */}
+          {displayMode === "fullscreen" ? (
+            <McpAppFullscreenExitButton onClick={toggleFullscreen} size="bar" />
+          ) : null}
         </>
       }
     />

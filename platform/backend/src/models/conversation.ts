@@ -80,6 +80,17 @@ class ConversationModel {
     const conditions = [
       eq(schema.conversationsTable.userId, userId),
       eq(schema.conversationsTable.organizationId, organizationId),
+      // App-opened chats are drafts until the user writes: opening an app
+      // seeds a conversation (services/apps/app-chat-conversation.ts), and
+      // clicking through apps must not pile unused chats into the sidebar. A
+      // user-role message is the "keep it" signal — until then the chat is
+      // reachable at /chat/<id> but never listed. Derived, not a flag flip,
+      // so it needs no hook in the message write path.
+      sql`(${schema.conversationsTable.origin} != 'app_open' OR EXISTS (
+        SELECT 1 FROM ${schema.messagesTable}
+        WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
+        AND ${schema.messagesTable.role} = 'user'
+      ))`,
     ];
 
     // Add search filter if provided

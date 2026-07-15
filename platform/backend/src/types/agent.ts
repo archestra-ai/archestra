@@ -260,6 +260,13 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * Populated on read paths (list/get); absent on mutation responses.
    */
   sandboxAvailable: z.boolean().optional(),
+  /**
+   * Timestamp of the most recent MCP request (any JSON-RPC method) routed
+   * through this agent, from the mcp_tool_calls log. Null when nothing was
+   * ever routed through it. Populated on paginated list reads; absent on
+   * other responses.
+   */
+  lastUsedAt: z.date().nullable().optional(),
 });
 
 // Base schema without refinement - can be used with .partial()

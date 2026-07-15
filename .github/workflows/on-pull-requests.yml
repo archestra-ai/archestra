@@ -230,8 +230,31 @@ jobs:
   # Fast feedback on every PR push: lint + typecheck + unit tests.
   # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
   # or on-demand via the "run-e2e" PR label.
+  #
+  # bot-pr-guard: the expensive jobs below skip on automated bot PRs.
+  # release-please (archestra-ci[bot]) force-rewrites its PR branch on every
+  # merge to main — re-running the full suite dozens of times a day — and the
+  # contributor-onboarding bot (archestra-contributor-pr-bot[bot]) opens
+  # one-line docs PRs that auto-merge in seconds. Neither can surface real
+  # failures, and the merge queue re-runs all required checks for real on
+  # merge_group anyway. A job that skips under its own name still satisfies
+  # its required status check (see the required-check note in
+  # platform-e2e-tests.yml), so no placeholder twins are needed — a
+  # same-named twin would mask real failures on merge_group. The guard only
+  # bites on pull_request events: on merge_group, github.event.pull_request
+  # is null and the first clause short-circuits, so queue validation runs
+  # unchanged.
+  #
+  # EXCEPTION: platform-lint-and-unit-tests must still run on release-please
+  # PRs — it auto-commits the regenerated docs/openapi.json version bump onto
+  # the release branch ("chore: update docs/openapi.json version for
+  # release"). Without that commit the merge_group codegen check fails and
+  # the release cannot merge, so that job only skips the contributor bot.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
+    # bot-pr-guard (see above): contributor bot only — release-please PRs
+    # need this job's codegen auto-commit.
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # Backstop: every check here finishes in well under 10m, but leaked
     # test-runner processes (vitest fork workers / esbuild) occasionally orphan
@@ -396,6 +419,8 @@ jobs:
   # operates on the committed lockfile.
   platform-rust-checks:
     name: Platform Rust Checks
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     permissions:
@@ -437,6 +462,8 @@ jobs:
 
   ai-labs-rust-checks:
     name: AI Labs Rust Checks
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     permissions:
@@ -475,6 +502,8 @@ jobs:
   # takes the suite off the workflow's critical path.
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup. 15 minutes means something is hung.
@@ -543,7 +572,12 @@ jobs:
   backend-unit-tests-gate:
     name: Backend Unit Tests
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    if: always()
+    # always() so the gate still runs (and turns red) when a shard fails,
+    # ANDed with the bot-pr-guard (see comment above
+    # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
+    # gate must skip too — with plain always() it would run and fail on the
+    # shards' "skipped" result.
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
     needs: [backend-unit-tests]
     permissions: {}
     steps:
@@ -559,6 +593,8 @@ jobs:
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW)
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read

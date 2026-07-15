@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   FormControl,
   FormDescription,
@@ -342,25 +343,55 @@ export function connectorSupportsAdminApiKey(type: ConnectorType): boolean {
 }
 
 /**
+ * Description of the admin API key field, shared by the create and edit
+ * dialogs (each appends its own trailing sentence). Says why the key exists —
+ * the email join permission sync needs — and links to the docs for the
+ * how-to (creating a scopeless key in Atlassian administration).
+ */
+export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
+  const label = getConnectorTypeLabel(type);
+  return (
+    <>
+      Permissions auto-sync needs {label} user emails to work. Add a {label}{" "}
+      organization admin API key or set every {label} user&apos;s profile
+      visibility to &quot;Anyone&quot; to let this connector read {label} user
+      emails.{" "}
+      <ExternalDocsLink
+        href={getFrontendDocsUrl(
+          DocsPage.PlatformKnowledge,
+          ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR,
+        )}
+        className="underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
+      .
+    </>
+  );
+}
+
+/**
  * What the credential must be able to see for auto-sync permissions to
  * resolve members to users (the email join). Shown under the credential field
  * when Auto-sync permissions is selected: each source hides emails behind a
  * specific, non-obvious visibility rule, and a credential without it produces
- * a snapshot full of unresolvable members.
+ * a snapshot full of unresolvable members. Atlassian says this on its admin
+ * API key field instead, since that field is where the fix lives.
  */
 export function getPermissionSyncCredentialNote(
   type: ConnectorType,
 ): string | null {
   switch (type) {
-    case "jira":
-    case "confluence":
-      return "Auto-sync permissions matches members by email, and Atlassian Cloud only returns another user's email when that user's profile email visibility is set to \"Anyone\" — admin roles on this API token do not unlock hidden emails. Add an organization admin API key below so permission sync can resolve managed accounts' emails through the Atlassian admin APIs.";
     case "github":
       return "Auto-sync permissions matches members by their public GitHub profile email. No token scope reveals a private email, so members without a public profile email are recorded but stay unresolvable.";
     default:
       return null;
   }
 }
+
+const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
+  "atlassian-organization-admin-api-key";
 // SPDX-SnippetEnd
 
 export function getConnectorUrlConfig(

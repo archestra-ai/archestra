@@ -2023,6 +2023,69 @@ describe("knowledge base routes", () => {
 
       expect(response.statusCode).toBe(404);
     });
+
+    test("purges the connector's queued tasks, leaving other connectors' tasks", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Queued Work Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+      const other = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Survivor Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://survivor.atlassian.net",
+          isCloud: true,
+          projectKey: "SURV",
+        },
+      });
+
+      // A content-sync run whose batch_embedding tasks reference it by run id
+      // (batch_embedding payloads carry connectorRunId, not connectorId).
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+      });
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: connector.id },
+      });
+      await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: { connectorRunId: run.id, documentIds: ["doc-1"] },
+      });
+      // The survivor's queued sync must be untouched.
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: other.id },
+      });
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}`,
+      });
+      expect(response.statusCode).toBe(200);
+
+      expect(
+        await TaskModel.hasPendingOrProcessing("connector_sync", connector.id),
+      ).toBe(false);
+      expect(
+        await TaskModel.hasPendingOrProcessingByType("batch_embedding"),
+      ).toBe(false);
+      // The survivor's task is still queued.
+      expect(
+        await TaskModel.hasPendingOrProcessing("connector_sync", other.id),
+      ).toBe(true);
+    });
   });
 
   // ===== Connector Knowledge Base Assignments =====

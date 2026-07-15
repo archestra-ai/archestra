@@ -67,7 +67,7 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     expect(item?.pinnedAt).toBeNull();
   });
 
-  test("external app: pin and unpin by (install, resource); pinnedAt surfaces in the listing", async ({
+  test("external app: pin and unpin by (install, resource, tool); pinnedAt surfaces in the listing", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTool,
@@ -89,7 +89,7 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     const pin = await app.inject({
       method: "PUT",
       url: `/api/apps/external/${server.id}/pin`,
-      payload: { resourceUri: "ui://pm/board.html" },
+      payload: { resourceUri: "ui://pm/board.html", toolName: "show_board" },
     });
     expect(pin.statusCode).toBe(200);
     let item = (await listItems()).find(
@@ -99,13 +99,104 @@ describe("PUT/DELETE /api/apps pin routes", () => {
 
     const unpin = await app.inject({
       method: "DELETE",
-      url: `/api/apps/external/${server.id}/pin?resourceUri=${encodeURIComponent("ui://pm/board.html")}`,
+      url: `/api/apps/external/${server.id}/pin?resourceUri=${encodeURIComponent("ui://pm/board.html")}&toolName=show_board`,
     });
     expect(unpin.statusCode).toBe(200);
     item = (await listItems()).find(
       (i) => i.source === "external" && i.mcpServerId === server.id,
     );
     expect(item?.pinnedAt).toBeNull();
+  });
+
+  test("pinning one tool pins only its tile when several tools share a ui resource", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // The Jira-style shape: one server, many interactive tools, all sharing a
+    // single widget template. Pinning one tile must not pin the whole group.
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Tracker",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const sharedUi = {
+      _meta: { ui: { resourceUri: "ui://tracker/app.html" } },
+    };
+    await makeTool({
+      catalogId: catalog.id,
+      name: "createissue",
+      meta: sharedUi,
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "editissue",
+      meta: sharedUi,
+    });
+    await makeTool({ catalogId: catalog.id, name: "getissue", meta: sharedUi });
+
+    const pin = await app.inject({
+      method: "PUT",
+      url: `/api/apps/external/${server.id}/pin`,
+      payload: {
+        resourceUri: "ui://tracker/app.html",
+        toolName: "createissue",
+      },
+    });
+    expect(pin.statusCode).toBe(200);
+
+    const tiles = (await listItems()).filter(
+      (i) => i.source === "external" && i.mcpServerId === server.id,
+    );
+    expect(tiles).toHaveLength(3);
+    const pinnedTools = tiles
+      .filter((i) => i.pinnedAt !== null)
+      .map((i) => i.toolName);
+    expect(pinnedTools).toEqual(["createissue"]);
+
+    // Unpinning that tile clears exactly that pin.
+    const unpin = await app.inject({
+      method: "DELETE",
+      url: `/api/apps/external/${server.id}/pin?resourceUri=${encodeURIComponent("ui://tracker/app.html")}&toolName=createissue`,
+    });
+    expect(unpin.statusCode).toBe(200);
+    const after = (await listItems()).filter(
+      (i) => i.source === "external" && i.mcpServerId === server.id,
+    );
+    expect(after.every((i) => i.pinnedAt === null)).toBe(true);
+  });
+
+  test("pinning an external app with a tool that does not expose the resource returns 404", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Tracker 404",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "createissue",
+      meta: { _meta: { ui: { resourceUri: "ui://tracker/app.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: `/api/apps/external/${server.id}/pin`,
+      payload: {
+        resourceUri: "ui://tracker/app.html",
+        toolName: "not-a-real-tool",
+      },
+    });
+    expect(res.statusCode).toBe(404);
   });
 
   // Every /api/ route must be registered in requiredEndpointPermissionsMap or
@@ -217,7 +308,7 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     const res = await app.inject({
       method: "PUT",
       url: `/api/apps/external/${server.id}/pin`,
-      payload: { resourceUri: "ui://pm/board.html" },
+      payload: { resourceUri: "ui://pm/board.html", toolName: "show_board" },
     });
     expect(res.statusCode).toBe(404);
   });

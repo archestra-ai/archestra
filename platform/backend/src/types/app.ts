@@ -98,6 +98,10 @@ export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   mcpServerId: z.string(),
   scope: AppScopeSchema,
   resourceUri: z.string(),
+  // The short tool name. Together with (mcpServerId, resourceUri) it is the
+  // item's pin identity: several tools of one server can share a ui://
+  // resource, so the resource alone does not identify a tile.
+  toolName: z.string(),
   // The catalog's icon, exactly as the MCP registry renders it: an emoji
   // character or a base64 image data URL. Null when the server has none (the
   // card falls back to its generic server glyph).

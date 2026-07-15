@@ -305,6 +305,39 @@ class TaskModel {
     `);
     return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
   }
+
+  /**
+   * Drop all queued (pending/processing) work belonging to a connector. The
+   * tasks table has no FK to connectors, so deleting a connector otherwise
+   * orphans its enqueued tasks — and since batch_embedding shares the content
+   * lane with connector_sync, those orphans keep occupying worker slots and
+   * head-of-line-block the surviving connectors' syncs. connector_sync and
+   * permission_sync carry connectorId in their payload; batch_embedding carries
+   * only connectorRunId, so it is matched through the connector's runs. MUST be
+   * called before the connector (and its cascade-deleted runs) are removed, or
+   * the batch_embedding subquery finds nothing. Returns the number deleted.
+   */
+  static async deleteQueuedForConnector(connectorId: string): Promise<number> {
+    const { rowCount } = await db.execute(sql`
+      DELETE FROM tasks t
+      WHERE t.status IN ('pending', 'processing')
+        AND (
+          (
+            t.task_type IN ('connector_sync', 'permission_sync')
+            AND t.payload->>'connectorId' = ${connectorId}
+          )
+          OR (
+            t.task_type = 'batch_embedding'
+            AND EXISTS (
+              SELECT 1 FROM connector_runs r
+              WHERE r.id = (t.payload->>'connectorRunId')::uuid
+                AND r.connector_id = ${connectorId}::uuid
+            )
+          )
+        )
+    `);
+    return rowCount ?? 0;
+  }
 }
 
 export default TaskModel;

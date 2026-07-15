@@ -413,6 +413,59 @@ describe("GithubConnector", () => {
       expect(batches[0].documents[1].id).toBe("my-repo#2");
     });
 
+    test("resolves fully-qualified owner/repo slugs against their own owner, not config.owner", async () => {
+      // Regression: repo entries pasted as `owner/repo` slugs (the only way to
+      // span multiple owners) were paired with config.owner, producing
+      // `/repos/{config.owner}/{owner/repo}` — a 404 the sync silently swallowed
+      // as "repo not found", ingesting zero documents.
+      mockListForRepo.mockResolvedValue({ data: [] });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          githubUrl: "https://api.github.com",
+          owner: "config-owner",
+          repos: ["other-org/their-repo"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      // Metadata lookup and issue/PR fetches all target the slug's own owner.
+      expect(mockReposGet).toHaveBeenCalledWith({
+        owner: "other-org",
+        repo: "their-repo",
+      });
+      expect(mockListForRepo).toHaveBeenCalledWith(
+        expect.objectContaining({ owner: "other-org", repo: "their-repo" }),
+      );
+      expect(mockListForRepo).not.toHaveBeenCalledWith(
+        expect.objectContaining({ owner: "config-owner" }),
+      );
+    });
+
+    test("treats a bare repo name as belonging to config.owner", async () => {
+      mockListForRepo.mockResolvedValue({ data: [] });
+
+      for await (const _batch of connector.sync({
+        config: {
+          githubUrl: "https://api.github.com",
+          owner: "config-owner",
+          repos: ["bare-repo"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        // drain
+      }
+
+      expect(mockListForRepo).toHaveBeenCalledWith(
+        expect.objectContaining({ owner: "config-owner", repo: "bare-repo" }),
+      );
+    });
+
     test("discovers repositories from GitHub App installation when repos are omitted", async () => {
       const originalFetch = globalThis.fetch;
       const mockFetch = vi.fn().mockResolvedValue({

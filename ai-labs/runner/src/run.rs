@@ -423,14 +423,32 @@ fn select_envs(
     Ok(selected)
 }
 
-/// A shared-backend env's per-lane agent + MCP, prepared up front so a lane worker can run that env's
+/// A shared-backend env's per-lane agents + MCP, prepared up front so a lane worker can run that env's
 /// tasks against the already-booted shared backend.
 struct SharedLaneSetup {
     client: EvalClient,
-    agent_id: String,
-    submit_tool: String,
+    agents: LaneAgents,
     mcp: BenchmarkMcp,
     resolved: ResolvedModel,
+}
+
+/// One lane's agents for an env: the shared lane agent every task defaults to, plus a dedicated
+/// agent per task that overrides the system prompt (`[agent]` in task.toml) — the override must not
+/// leak into the other tasks' agent.
+struct LaneAgents {
+    agent_id: String,
+    /// task id -> that task's dedicated agent.
+    task_agents: HashMap<String, String>,
+    submit_tool: String,
+}
+
+impl LaneAgents {
+    /// Every agent id, lane agent first — the registration set for the env's MCPs.
+    fn all_ids(&self) -> Vec<String> {
+        std::iter::once(self.agent_id.clone())
+            .chain(self.task_agents.values().cloned())
+            .collect()
+    }
 }
 
 /// One unit of work for a lane: that lane's tasks against a single env. A lane drains its stops serially.
@@ -533,8 +551,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
                                 tasks,
                                 lane.clone(),
                                 setup.mcp,
-                                setup.submit_tool,
-                                setup.agent_id,
+                                setup.agents,
                                 ctx.root_run_dir.clone(),
                                 setup.resolved,
                                 progress.clone(),
@@ -581,8 +598,8 @@ fn note(mp: &MultiProgress, msg: impl AsRef<str>) {
 
 /// Cancel the in-process server task of every prepared benchmark MCP — called on a setup-error path so a
 /// partially-prepared env doesn't leak listener tasks for the rest of the run.
-async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp)]) {
-    for (_, _, _, mcp) in setups {
+async fn stop_mcps(setups: &[(Lane, LaneAgents, BenchmarkMcp)]) {
+    for (_, _, mcp) in setups {
         mcp.stop().await;
     }
 }
@@ -669,7 +686,7 @@ async fn setup_shared_env(
         }
     };
 
-    let mut setups: Vec<(Lane, String, String, BenchmarkMcp)> = Vec::new();
+    let mut setups: Vec<(Lane, LaneAgents, BenchmarkMcp)> = Vec::new();
     for lane in &env_plan.lanes {
         let token = &uuid::Uuid::new_v4().simple().to_string()[..8];
         let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{token}")).await {
@@ -680,9 +697,9 @@ async fn setup_shared_env(
                 return Err(e.to_string());
             }
         };
-        match setup_lane_agent(&client, env, lane, &mcp, &team_id).await {
-            Ok((agent_id, submit_tool)) => {
-                setups.push((lane.clone(), agent_id, submit_tool, mcp));
+        match setup_lane_agent(&client, env, &env_plan.tasks, lane, &mcp, &team_id).await {
+            Ok(agents) => {
+                setups.push((lane.clone(), agents, mcp));
             }
             Err(e) => {
                 mcp.stop().await;
@@ -696,7 +713,7 @@ async fn setup_shared_env(
     let agent_ids: Vec<String> = if env.mcps.is_empty() && !env.fixture_mcp {
         Vec::new()
     } else {
-        setups.iter().map(|(_, id, _, _)| id.clone()).collect()
+        setups.iter().flat_map(|(_, agents, _)| agents.all_ids()).collect()
     };
     let fixture = match seed_env_mcps(&client, env, ctx, &agent_ids).await {
         Ok(fixture) => fixture,
@@ -713,14 +730,13 @@ async fn setup_shared_env(
 
     let lane_setups = setups
         .into_iter()
-        .map(|(lane, agent_id, submit_tool, mcp)| {
+        .map(|(lane, agents, mcp)| {
             let resolved = resolved[&lane.name].clone();
             (
                 lane.name.clone(),
                 SharedLaneSetup {
                     client: client.clone(),
-                    agent_id,
-                    submit_tool,
+                    agents,
                     mcp,
                     resolved,
                 },
@@ -776,7 +792,7 @@ async fn run_isolated_lane(
         }
     };
 
-    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp, &team_id).await {
+    let agents = match setup_lane_agent(&client, &env, &tasks, &lane, &mcp, &team_id).await {
         Ok(s) => s,
         Err(e) => {
             mcp.stop().await;
@@ -785,7 +801,7 @@ async fn run_isolated_lane(
         }
     };
 
-    let fixture_mcp = match seed_env_mcps(&client, &env, &ctx, std::slice::from_ref(&agent_id)).await {
+    let fixture_mcp = match seed_env_mcps(&client, &env, &ctx, &agents.all_ids()).await {
         Ok(fixture) => fixture,
         Err(e) => {
             mcp.stop().await;
@@ -800,8 +816,7 @@ async fn run_isolated_lane(
         tasks,
         lane,
         mcp,
-        submit_tool,
-        agent_id,
+        agents,
         ctx.root_run_dir.clone(),
         resolved,
         progress,
@@ -924,13 +939,17 @@ async fn resolve_lanes(
     Ok(resolved)
 }
 
+/// Create the lane's shared agent plus a dedicated agent for every selected task that overrides the
+/// system prompt, then give all of them the same tool surface. `tasks` is the run's selection for
+/// this env (post `--task` filter), so no agent is created for a task that won't run.
 async fn setup_lane_agent(
     client: &EvalClient,
     env: &EnvConfig,
+    tasks: &[Task],
     lane: &Lane,
     mcp: &BenchmarkMcp,
     team_id: &str,
-) -> Result<(String, String), RunError> {
+) -> Result<LaneAgents, RunError> {
     let agent_id = ensure_agent(
         client,
         &format!("{}-{}", env.agent_name, lane.slug()),
@@ -939,8 +958,27 @@ async fn setup_lane_agent(
         team_id,
     )
     .await?;
-    let submit_tool = setup_agent_tools(client, &agent_id, mcp.base_url(), &env.tools, mcp.name()).await?;
-    Ok((agent_id, submit_tool))
+    let mut task_agents = HashMap::new();
+    for task in tasks {
+        if let Some(prompt) = &task.agent_system_prompt {
+            let task_agent_id = ensure_agent(
+                client,
+                &format!("{}-{}-{}", env.agent_name, task.id, lane.slug()),
+                prompt,
+                env.platform.tool_exposure_mode,
+                team_id,
+            )
+            .await?;
+            task_agents.insert(task.id.clone(), task_agent_id);
+        }
+    }
+    let mut agents = LaneAgents {
+        agent_id,
+        task_agents,
+        submit_tool: String::new(),
+    };
+    agents.submit_tool = setup_agent_tools(client, &agents.all_ids(), mcp.base_url(), &env.tools, mcp.name()).await?;
+    Ok(agents)
 }
 
 /// Pull a required `id` string from a platform API object. A missing or non-string `id` is a
@@ -988,7 +1026,7 @@ async fn ensure_agent(
 
 async fn setup_agent_tools(
     client: &EvalClient,
-    agent_id: &str,
+    agent_ids: &[String],
     bench_url: &str,
     extra_tools: &[String],
     mcp_name: &str,
@@ -996,11 +1034,13 @@ async fn setup_agent_tools(
     let mut short_names: Vec<String> = REQUIRED_TOOL_SHORT_NAMES.iter().map(|s| s.to_string()).collect();
     short_names.extend(extra_tools.iter().cloned());
     let tool_ids = resolve_tool_ids(client, &short_names).await?;
-    let assignments: Vec<_> = tool_ids
-        .values()
-        .map(|tool_id| crate::client::ToolAssignment {
-            agent_id: agent_id.to_string(),
-            tool_id: tool_id.clone(),
+    let assignments: Vec<_> = agent_ids
+        .iter()
+        .flat_map(|agent_id| {
+            tool_ids.values().map(move |tool_id| crate::client::ToolAssignment {
+                agent_id: agent_id.clone(),
+                tool_id: tool_id.clone(),
+            })
         })
         .collect();
     let result = client.bulk_assign_tools(&assignments).await?;
@@ -1013,11 +1053,15 @@ async fn setup_agent_tools(
         )));
     }
 
-    let registered = register_remote_mcp(client, mcp_name, bench_url, "org", Some(&[agent_id.to_string()])).await?;
+    // One registration for all agents: `register_remote_mcp` creates a catalog item + install per
+    // call, so per-agent calls would install duplicate copies of the benchmark MCP.
+    let registered = register_remote_mcp(client, mcp_name, bench_url, "org", Some(agent_ids)).await?;
     let submit_tool = find_submit_tool(&registered.tools)?;
     let allowed: HashSet<String> = extra_tools.iter().map(|n| format!("archestra__{n}")).collect();
-    strip_mutating_skill_tools(client, agent_id, &allowed).await?;
-    assert_agent_tool_surface(client, agent_id, &submit_tool, &allowed).await?;
+    for agent_id in agent_ids {
+        strip_mutating_skill_tools(client, agent_id, &allowed).await?;
+        assert_agent_tool_surface(client, agent_id, &submit_tool, &allowed).await?;
+    }
     Ok(submit_tool)
 }
 
@@ -1148,8 +1192,7 @@ async fn run_lane(
     tasks: Vec<Task>,
     lane: Lane,
     mcp: BenchmarkMcp,
-    submit_tool: String,
-    agent_id: String,
+    agents: LaneAgents,
     root_run_dir: PathBuf,
     resolved: ResolvedModel,
     progress: ProgressBar,
@@ -1159,16 +1202,18 @@ async fn run_lane(
     for task in tasks {
         let rollout = rollout_label(&task, &lane);
         progress.set_message(format!("{} {}", rollout, task.id));
+        let agent_id = agents.task_agents.get(&task.id).unwrap_or(&agents.agent_id);
+        let system_prompt = task.agent_system_prompt.as_deref().unwrap_or(&env.agent_system_prompt);
         let result = run_one(
             client.clone(),
             mcp.clone(),
-            &submit_tool,
+            &agents.submit_tool,
             &root_run_dir,
             &env.id,
-            &env.agent_system_prompt,
+            system_prompt,
             env.platform.tool_exposure_mode,
             &lane,
-            &agent_id,
+            agent_id,
             &task,
             &resolved,
             &prices,
@@ -2957,6 +3002,7 @@ mod tests {
             artifact_key: None,
             max_format_attempts: 3,
             state_rest: vec![],
+            agent_system_prompt: None,
         }
     }
 

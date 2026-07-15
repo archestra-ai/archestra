@@ -3,19 +3,7 @@ name = "baton-proxy"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "baton enforcement demos: inference-layer proxy and tool-layer MCP gateway that gate policy-breaching tool calls on a human, over baton-core"
-
-[features]
-# The demo agent pulls a full agent framework (rig-core) and a real LLM; keep it
-# off the default build so the proxy/approver and their tests stay lean.
-default = []
-demo = [
-    "dep:rig-core",
-    "rig-core/rmcp",
-    "rmcp/client",
-    "rmcp/transport-streamable-http-client",
-    "rmcp/transport-streamable-http-client-reqwest",
-]
+description = "Inference-layer proxy that blocks tool calls failing their baton contract, over baton-core"
 
 [dependencies]
 baton-core = { path = "../baton-core" }
@@ -23,7 +11,6 @@ baton-contracts = { path = "../baton-contracts" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-std", "net"] }
 axum = "0.8"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json"] }
-rmcp = { version = "1.7", features = ["server", "macros", "elicitation", "transport-streamable-http-server"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
@@ -32,8 +19,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 thiserror = "2"
-tokio-util = "0.7"
-rig-core = { version = "0.39", optional = true }
 
 [lints]
 workspace = true
@@ -41,22 +26,3 @@ workspace = true
 [[bin]]
 name = "baton-proxy"
 path = "src/bin/proxy.rs"
-
-[[bin]]
-name = "baton-approver"
-path = "src/bin/approver.rs"
-required-features = ["demo"]
-
-[[bin]]
-name = "baton-demo-agent"
-path = "src/bin/demo_agent.rs"
-required-features = ["demo"]
-
-[[bin]]
-name = "baton-gateway"
-path = "src/bin/gateway.rs"
-
-[[bin]]
-name = "baton-gateway-agent"
-path = "src/bin/gateway_agent.rs"
-required-features = ["demo"]

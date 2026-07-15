@@ -10841,7 +10841,7 @@ export type GetAgentsData = {
         status?: 'active' | 'deleted';
         limit?: number;
         offset?: number;
-        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team';
+        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/agents';
@@ -11018,6 +11018,7 @@ export type GetAgentsResponses = {
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
+            lastUsedAt?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -11260,6 +11261,7 @@ export type CreateAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -11467,6 +11469,7 @@ export type GetAllAgentsResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     }>;
 };
 
@@ -11649,6 +11652,7 @@ export type GetDefaultMcpGatewayResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -11831,6 +11835,7 @@ export type GetDefaultLlmProxyResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -12092,6 +12097,7 @@ export type ImportAgentResponses = {
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
+            lastUsedAt?: string | null;
         };
         warnings: Array<{
             type: 'tool' | 'knowledgeBase' | 'connector' | 'delegation';
@@ -12367,6 +12373,7 @@ export type GetAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -12602,6 +12609,7 @@ export type UpdateAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -12786,6 +12794,7 @@ export type CloneAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -13312,6 +13321,7 @@ export type RestoreAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -15702,6 +15712,7 @@ export type GetAppsResponses = {
             mcpServerId: string;
             scope: 'personal' | 'team' | 'org';
             resourceUri: string;
+            toolName: string;
             icon: string | null;
             requiresInput: boolean;
         }>;
@@ -16399,6 +16410,7 @@ export type UnpinExternalAppData = {
     };
     query: {
         resourceUri: string;
+        toolName: string;
     };
     url: '/api/apps/external/{mcpServerId}/pin';
 };
@@ -16482,6 +16494,7 @@ export type UnpinExternalAppResponse = UnpinExternalAppResponses[keyof UnpinExte
 export type PinExternalAppData = {
     body: {
         resourceUri: string;
+        toolName: string;
     };
     path: {
         mcpServerId: string;
@@ -22644,7 +22657,7 @@ export type GetChatConversationsResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -22807,7 +22820,7 @@ export type CreateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -23051,7 +23064,7 @@ export type GetChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -23217,7 +23230,7 @@ export type UpdateChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -23816,7 +23829,7 @@ export type ForkChatConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -24164,7 +24177,7 @@ export type CompactChatConversationResponses = {
             } | Array<unknown> | null;
             artifact: string | null;
             projectId: string | null;
-            origin: 'user' | 'schedule_trigger';
+            origin: 'user' | 'schedule_trigger' | 'app_open';
             pinnedAt: string | null;
             lastMessageAt: string;
             createdAt: string;
@@ -24597,7 +24610,7 @@ export type GetSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -24759,7 +24772,7 @@ export type ForkSharedConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -24923,7 +24936,7 @@ export type GenerateChatConversationTitleResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -25086,7 +25099,7 @@ export type UpdateChatMessageResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -62103,7 +62116,7 @@ export type GetProjectConversationsResponses = {
         title: string | null;
         authorUserId: string;
         authorName: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         lastMessageAt: string;
         createdAt: string;
         readOnly: boolean;
@@ -63436,7 +63449,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         } | Array<unknown> | null;
         artifact: string | null;
         projectId: string | null;
-        origin: 'user' | 'schedule_trigger';
+        origin: 'user' | 'schedule_trigger' | 'app_open';
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;

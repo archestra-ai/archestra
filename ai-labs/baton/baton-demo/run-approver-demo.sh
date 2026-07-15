@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 # Run the whole baton-proxy demo: approver + proxy + demo agent.
 #
+# PARKED: this crate does not build against current baton-core, and it expects
+# the approval-rewriting `baton-proxy` behavior that no longer exists. Kept for
+# the External-authority port; see README.md. It will not run as-is.
+#
 # Works from any checkout or git worktree — all paths derive from this script's
 # location. Extra args are forwarded to the demo agent (e.g. --task "...",
 # --model ...). Ctrl-C or the demo finishing stops the background servers.
 set -euo pipefail
 
+# Parked: fail fast rather than emit confusing build/runtime errors. Remove this
+# guard once the approval flow is ported to External authorities (see APPROVER.md).
+echo "run-approver-demo.sh is PARKED: it does not build against current baton-core." >&2
+echo "See APPROVER.md. The working demo is ./run-gateway-demo.sh." >&2
+exit 1
+
 CRATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_DIR="$CRATE_DIR/../../target"
+TARGET_DIR="$CRATE_DIR/target"
 cd "$CRATE_DIR"
 
 PROXY_ADDR="127.0.0.1:8730"

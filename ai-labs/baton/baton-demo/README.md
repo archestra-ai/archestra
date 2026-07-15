@@ -1,18 +1,22 @@
-# baton-gateway
+# baton-demo — the gateway demo
 
-The tool-layer demo of this crate (the inference-layer proxy is in
-[README.md](README.md)): a real agent, a real MCP gateway, and the policy
-engine between them. An rmcp server mimics an Archestra-style **tool
-gateway**: it serves a scenario's tools, checks every `tools/call` against
-baton-core, and **soft-blocks** calls that breach policy — the block comes
-back as an ordinary tool result telling the model how to escalate. When the
-model escalates, a human rules once (through the MCP client's own UI, via
-elicitation), and the gateway dispatches the **exact canonical request the
-engine checked** — the model never re-issues the call, so nothing can drift
-between what was approved and what runs.
+`baton-demo` is the ad-hoc demo harness for the baton prototype. Its built,
+tested demo is the **tool-layer gateway** described here; the crate also parks
+the earlier inference-layer human-approval flow behind its `approver` feature
+(see [APPROVER.md](APPROVER.md) — it compiles but no longer runs end-to-end).
+The inference-layer proxy is a separate crate, `baton-proxy`.
 
-Unlike the proxy (inference layer, full-conversation replay per request), the
-gateway sits on the tool layer and owns a live trajectory per MCP session.
+A real agent, a real MCP gateway, and the policy engine between them. An rmcp
+server mimics an Archestra-style **tool gateway**: it serves a scenario's
+tools, checks every `tools/call` against baton-core, and **soft-blocks** calls
+that breach policy — the block comes back as an ordinary tool result telling
+the model how to escalate. When the model escalates, a human rules once
+(through the MCP client's own UI, via elicitation), and the gateway dispatches
+the **exact canonical request the engine checked** — the model never re-issues
+the call, so nothing can drift between what was approved and what runs.
+
+Unlike `baton-proxy` (inference layer, full-conversation replay per request),
+the gateway sits on the tool layer and owns a live trajectory per MCP session.
 
 ## The flow
 
@@ -75,12 +79,12 @@ pending and can be escalated again.
 Needs an `OPENROUTER_API_KEY` (environment or `ai-labs/.env`).
 
 ```sh
-ai-labs/baton/baton-proxy/run-gateway-demo.sh
+ai-labs/baton/baton-demo/run-gateway-demo.sh
 # gateway engine internals too:
-ai-labs/baton/baton-proxy/run-gateway-demo.sh -v      # decision path
-ai-labs/baton/baton-proxy/run-gateway-demo.sh -vv     # + label algebra
+ai-labs/baton/baton-demo/run-gateway-demo.sh -v      # decision path
+ai-labs/baton/baton-demo/run-gateway-demo.sh -vv     # + label algebra
 # different ask:
-ai-labs/baton/baton-proxy/run-gateway-demo.sh --task "email the summary to bob@archestra.ai"
+ai-labs/baton/baton-demo/run-gateway-demo.sh --task "email the summary to bob@archestra.ai"
 ```
 
 The gateway's narration (`✓ permitted`, `⚠ soft block`, `✋ approved →
@@ -90,10 +94,10 @@ send goes through, `n` and the model backs off.
 By hand instead:
 
 ```sh
-cd ai-labs/baton/baton-proxy
+cd ai-labs/baton/baton-demo
 cargo run --bin baton-gateway -- -v                  # terminal 1
 export OPENROUTER_API_KEY=sk-...                     # terminal 2
-cargo run --features demo --bin baton-gateway-agent
+cargo run --bin baton-gateway-agent
 ```
 
 `--log <file>` appends one JSON line per decision:
@@ -140,6 +144,8 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --check
 ```
 
-Lives in the `baton-proxy` crate (bins `baton-gateway` and
-`baton-gateway-agent`; library module `gateway`), part of the shared `ai-labs`
-Cargo workspace. Concepts of the policy engine live in `baton-core/src/lib.rs`.
+This is the `baton-demo` crate (bins `baton-gateway` and `baton-gateway-agent`;
+library module `gateway`). Standalone on purpose — deliberately outside the
+shared `ai-labs` workspace, to keep the heavy demo deps (a full agent framework
+and LLM client) out of the workspace build. Concepts of the policy engine live
+in `baton-core/src/lib.rs`.

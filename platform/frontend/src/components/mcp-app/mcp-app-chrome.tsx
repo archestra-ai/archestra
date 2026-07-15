@@ -116,14 +116,17 @@ export function McpAppSettingsButton({ onClick }: { onClick: () => void }) {
 
 export function McpAppFullscreenExitButton({
   onClick,
+  size = "sm",
 }: {
   onClick: () => void;
+  size?: McpAppButtonSize;
 }) {
   return (
     <McpAppIconButton
       icon={Minimize2}
       label="Exit fullscreen"
       onClick={onClick}
+      size={size}
     />
   );
 }

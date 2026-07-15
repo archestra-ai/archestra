@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { MemberModel, MessageModel } from "@/models";
+import { ConversationModel, MemberModel, MessageModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -112,6 +112,15 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(messages).toHaveLength(2);
     expect(expectSeededRender(messages[0])).toBe(appId);
     expectSeededGreeting(messages[1], "Notes");
+
+    // Seeded as an `app_open` draft: hidden from the conversations list until
+    // the user writes into it (ConversationModel.findAll).
+    const conversation = await ConversationModel.findById({
+      id: conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    expect(conversation?.origin).toBe("app_open");
   });
 
   test("seeds a render plus a greeting for a brand-new scaffold app", async () => {

@@ -10,6 +10,21 @@ import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials
 export const AppScopeSchema = ResourceVisibilityScopeSchema;
 export type AppScope = z.infer<typeof AppScopeSchema>;
 
+/**
+ * The caller's relationship to an owned app, derived from their real access
+ * path — the Apps analogue of Projects' `viewerRole`:
+ * - `owner`  — they authored it (full control, incl. modifying it via chat).
+ * - `shared` — reachable through its scope (an org app, or a team they belong
+ *              to). They may view/use it; whether they may change it still
+ *              depends on the scope rule (e.g. org apps need `app:admin`).
+ * - `admin`  — reachable ONLY because they hold `app:admin` oversight (a
+ *              personal app authored by someone else, or a team app for a team
+ *              they're not in). They may view it and manage its settings, but —
+ *              like a Projects admin — must NOT modify the app itself via chat.
+ */
+export const AppViewerRoleSchema = z.enum(["owner", "shared", "admin"]);
+export type AppViewerRole = z.infer<typeof AppViewerRoleSchema>;
+
 // The launch tool that hands a host the app's `ui://` resource so it renders the
 // app. ext-apps hosts discover a renderable UI from a tool's
 // `_meta.ui.resourceUri`, so an external client needs a tool to call. Shared by
@@ -77,6 +92,14 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   id: z.string(),
   scope: AppScopeSchema,
   authorId: z.string().nullable(),
+  // The author's display name, for the personal-scope badge — an app admin
+  // sees other users' personal apps and needs to tell whose an app is. Null
+  // when the author row is gone or has no name; the card falls back to a bare
+  // "Personal" label.
+  authorName: z.string().nullable(),
+  // The caller's relationship to this app (owner/shared/admin). Drives the
+  // "Owned by <name>" oversight badge and the admin's read-but-don't-chat gate.
+  viewerRole: AppViewerRoleSchema,
   latestVersion: z.number().int(),
   // Teams the app is shared with (via its backing catalog), for the card's
   // visibility pill. Empty unless the app is team-scoped.

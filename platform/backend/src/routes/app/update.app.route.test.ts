@@ -65,6 +65,58 @@ describe("PATCH /api/apps/:appId", () => {
     expect(response.json().latestVersion).toBe(created.latestVersion + 1);
   });
 
+  test("an admin may re-scope another user's personal app without becoming its owner", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    // `user` is an app admin. Changing a foreign personal app's visibility is a
+    // settings change (allowed via oversight), and it must never reassign
+    // authorship to the acting admin — the app stays the original author's.
+    const otherAuthor = await makeUser();
+    await makeMember(otherAuthor.id, organizationId);
+    const foreign = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: otherAuthor.id,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${foreign.id}`,
+      payload: { scope: "org" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      scope: "org",
+      authorId: otherAuthor.id,
+    });
+  });
+
+  test("an admin cannot rewrite another user's personal app's html (that is chat-authoring, not settings)", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    // Editing the html IS editing the app itself. An admin who only sees the app
+    // through oversight may change its settings but not its content — the same
+    // line the modify-via-chat tools draw.
+    const otherAuthor = await makeUser();
+    await makeMember(otherAuthor.id, organizationId);
+    const foreign = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: otherAuthor.id,
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${foreign.id}`,
+      payload: { html: "<h1>admin rewrite</h1>" },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
   test("renaming into an existing name returns 409", async () => {
     await app.inject({
       method: "POST",

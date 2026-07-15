@@ -13,6 +13,8 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   description: "An owned app",
   scope: "org",
   authorId: "user-1",
+  authorName: "Ada Lovelace",
+  viewerRole: "owner",
   latestVersion: 1,
   teams: [],
   executionModel: "viewer-scoped",

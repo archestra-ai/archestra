@@ -14,13 +14,31 @@ class AppAccessModel {
    * IDs of (non-deleted) apps a user can see, by the backing catalog's scope:
    * every `org` app, their own `personal` apps, and `team` apps whose backing
    * catalog is assigned to a team they belong to. `userId: undefined` → an
-   * org-context principal (org apps only).
+   * org-context principal (org apps only). `isAppAdmin: true` bypasses scope
+   * and returns every app in the org — mirroring `userHasAppAccess`, so an app
+   * admin's list matches what they can already view one-by-one.
    */
   static async getUserAccessibleAppIds(params: {
     organizationId: string;
     userId?: string;
+    isAppAdmin?: boolean;
   }): Promise<string[]> {
-    const { organizationId, userId } = params;
+    const { organizationId, userId, isAppAdmin } = params;
+    const scopeCondition = isAppAdmin
+      ? undefined
+      : userId === undefined
+        ? eq(schema.internalMcpCatalogTable.scope, "org")
+        : or(
+            eq(schema.internalMcpCatalogTable.scope, "org"),
+            and(
+              eq(schema.internalMcpCatalogTable.scope, "personal"),
+              eq(schema.appsTable.authorId, userId),
+            ),
+            and(
+              eq(schema.internalMcpCatalogTable.scope, "team"),
+              eq(schema.teamMembersTable.userId, userId),
+            ),
+          );
     const rows = await db
       .selectDistinct({ id: schema.appsTable.id })
       .from(schema.appsTable)
@@ -55,19 +73,7 @@ class AppAccessModel {
         and(
           eq(schema.appsTable.organizationId, organizationId),
           notDeleted(schema.appsTable),
-          userId === undefined
-            ? eq(schema.internalMcpCatalogTable.scope, "org")
-            : or(
-                eq(schema.internalMcpCatalogTable.scope, "org"),
-                and(
-                  eq(schema.internalMcpCatalogTable.scope, "personal"),
-                  eq(schema.appsTable.authorId, userId),
-                ),
-                and(
-                  eq(schema.internalMcpCatalogTable.scope, "team"),
-                  eq(schema.teamMembersTable.userId, userId),
-                ),
-              ),
+          scopeCondition,
         ),
       );
     return rows.map((row) => row.id);

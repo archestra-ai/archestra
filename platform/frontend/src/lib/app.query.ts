@@ -24,7 +24,10 @@ const {
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
-type AppsParams = Pick<AppsQuery, "limit" | "offset" | "search">;
+type AppsParams = Pick<
+  AppsQuery,
+  "limit" | "offset" | "search" | "scope" | "authorIds" | "excludeAuthorIds"
+>;
 type AppDetailQueryOptions = { toastOnError?: boolean };
 
 // ===== Query hooks =====

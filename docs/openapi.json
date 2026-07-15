@@ -54370,6 +54370,41 @@
             "in": "query",
             "name": "search",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "authorIds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "excludeAuthorIds",
+            "required": false
           }
         ],
         "responses": {
@@ -54434,6 +54469,18 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "authorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "viewerRole": {
+                                "type": "string",
+                                "enum": [
+                                  "owner",
+                                  "shared",
+                                  "admin"
+                                ]
+                              },
                               "latestVersion": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
@@ -54469,6 +54516,8 @@
                               "id",
                               "scope",
                               "authorId",
+                              "authorName",
+                              "viewerRole",
                               "latestVersion",
                               "teams"
                             ],
@@ -57836,6 +57885,18 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "viewerRole": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "shared",
+                        "admin"
+                      ]
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -57853,7 +57914,9 @@
                     "deletedAt",
                     "scope",
                     "environmentId",
-                    "teams"
+                    "teams",
+                    "viewerRole",
+                    "authorName"
                   ],
                   "additionalProperties": false
                 }

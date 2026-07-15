@@ -15621,6 +15621,9 @@ export type GetAppsData = {
         limit?: number;
         offset?: number;
         search?: string;
+        scope?: 'personal' | 'team' | 'org';
+        authorIds?: Array<string>;
+        excludeAuthorIds?: Array<string>;
     };
     url: '/api/apps';
 };
@@ -15705,6 +15708,8 @@ export type GetAppsResponses = {
             id: string;
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
+            authorName: string | null;
+            viewerRole: 'owner' | 'shared' | 'admin';
             latestVersion: number;
             teams: Array<{
                 id: string;
@@ -16791,6 +16796,8 @@ export type GetAppResponses = {
             id: string;
             name: string;
         }>;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        authorName: string | null;
     };
 };
 

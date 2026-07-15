@@ -33,6 +33,7 @@ import {
   resolveAppToolsByName,
 } from "@/services/agent-tool-assignment";
 import {
+  assertCallerMayAuthorApp,
   assertCallerMayModifyApp,
   callerIsAppAdmin,
   resolveOrgTeams,
@@ -659,6 +660,7 @@ const registry = defineArchestraTools([
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId: auth.organizationId,
         userId: auth.userId,
+        isAppAdmin: await callerIsAppAdmin(auth.userId, auth.organizationId),
       });
       const apps = await AppModel.findByOrganization({
         organizationId: auth.organizationId,
@@ -1092,15 +1094,15 @@ const registry = defineArchestraTools([
             ? await resolveOrgTeams(args.teams, organizationId)
             : [];
         // Authorize BOTH the app's current scope and the destination, exactly as
-        // the REST re-scope path does. The source check is what stops a team
-        // admin from demoting or hijacking an org-scoped app they can merely see
-        // into a team they administer; the destination check stops redirecting an
-        // app to teams they don't administer.
-        await assertCallerMayModifyApp({
+        // the REST re-scope path does. The source check is the chat-authoring
+        // gate: it stops a team admin from demoting or hijacking an org-scoped
+        // app they can merely see, AND stops an app-admin from re-scoping a
+        // personal app they only see through oversight. The destination check
+        // stops redirecting an app to teams they don't administer.
+        await assertCallerMayAuthorApp({
           userId,
           organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
+          app: { id: app.id, scope: app.scope, authorId: app.authorId },
           resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         await assertCallerMayModifyApp({
@@ -1448,11 +1450,13 @@ async function loadApp(params: {
   }
   if (params.modify) {
     try {
-      await assertCallerMayModifyApp({
+      // The chat authoring path: an app-admin who only sees this app through
+      // oversight (someone else's personal app, or a team app they're not in)
+      // is refused here — they may still change its settings over REST.
+      await assertCallerMayAuthorApp({
         userId: params.userId,
         organizationId: params.organizationId,
-        scope: app.scope,
-        authorId: app.authorId,
+        app: { id: app.id, scope: app.scope, authorId: app.authorId },
         resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
     } catch (error) {

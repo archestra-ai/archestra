@@ -18,6 +18,7 @@ import { useState } from "react";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
@@ -55,9 +56,10 @@ export function AppCard({ app }: { app: AppListItem }) {
   );
 }
 
-// Shared card chrome: a full-card click target (rendered by the caller) sits
-// behind the content, and the overflow menu floats above it (z-10) so its own
-// clicks don't fall through to the card action.
+// Shared card chrome: the scope pill / owner badge / overflow menu cluster that
+// sits at the right of the card's header row (mirroring the project card). It's
+// raised above the full-card click target (z-10) so its own clicks don't fall
+// through to the card action.
 function CardOverflowMenu({
   leading,
   children,
@@ -66,7 +68,7 @@ function CardOverflowMenu({
   children: React.ReactNode;
 }) {
   return (
-    <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+    <div className="relative z-10 flex shrink-0 items-center gap-1.5">
       {leading}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -168,6 +170,14 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
   const router = useRouter();
   const openApp = useOpenAppInChat();
   const { data: canDelete } = useHasPermissions({ app: ["delete"] });
+  // A personal app the caller only reaches through app:admin oversight
+  // (viewerRole "admin") — i.e. someone else's personal app — gets a visible
+  // "Owned by <name>" badge (mirroring the Projects page) so an admin can tell
+  // it apart from their own personal apps at a glance, without hovering the
+  // icon-only scope pill. The server computes viewerRole from the real access
+  // path, so a still-loading session can never mislabel the viewer's own app.
+  const isForeignPersonalApp =
+    app.scope === "personal" && app.viewerRole === "admin";
   // Stays true from click through the redirect: the mutation resolving flips
   // isPending off before navigation paints, so spin on this instead. On success
   // the card unmounts mid-navigation, so it never resets; only a failure does.
@@ -198,52 +208,65 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
 
         {isOpening ? <CardOpeningOverlay /> : null}
 
-        <CardOverflowMenu
-          leading={
-            <ScopeBadge
-              scope={app.scope}
-              teamNames={app.teams?.map((team) => team.name)}
-              hidePersonal
+        {/* Header row mirrors the project card: icon + title on one line at the
+            left, the scope pill / owner badge / overflow menu at the right. */}
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <AppTypeIcon owned />
+            <CardTitle className="min-w-0 truncate leading-snug">
+              {app.name}
+            </CardTitle>
+          </div>
+          <CardOverflowMenu
+            leading={
+              <>
+                <ScopeBadge
+                  scope={app.scope}
+                  teamNames={app.teams?.map((team) => team.name)}
+                />
+                {/* Between the scope pill and the overflow menu, exactly as the
+                    project card places its owner badge. */}
+                {isForeignPersonalApp ? (
+                  <Badge variant="secondary">
+                    {app.authorName
+                      ? `Owned by ${app.authorName}`
+                      : "Other user"}
+                  </Badge>
+                ) : null}
+              </>
+            }
+          >
+            <PinMenuItem
+              pinned={!!app.pinnedAt}
+              target={{ source: "owned", appId: app.id }}
             />
-          }
-        >
-          <PinMenuItem
-            pinned={!!app.pinnedAt}
-            target={{ source: "owned", appId: app.id }}
-          />
-          <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
-            <Settings className="h-4 w-4" />
-            Settings
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href={`/a/${app.id}`} target="_blank" rel="noreferrer">
-              <SquareArrowOutUpRight className="h-4 w-4" />
-              Open in new tab
-            </Link>
-          </DropdownMenuItem>
-          {canDelete ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </>
-          ) : null}
-        </CardOverflowMenu>
-
-        <div className="mb-3 flex items-center gap-1.5 pr-16">
-          <AppTypeIcon owned />
+            <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+              <Settings className="h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`/a/${app.id}`} target="_blank" rel="noreferrer">
+                <SquareArrowOutUpRight className="h-4 w-4" />
+                Open in new tab
+              </Link>
+            </DropdownMenuItem>
+            {canDelete ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </CardOverflowMenu>
         </div>
 
-        <CardTitle className="line-clamp-2 leading-snug break-words">
-          {app.name}
-        </CardTitle>
         {app.description ? (
-          <CardDescription className="mt-1 line-clamp-3 break-words">
+          <CardDescription className="line-clamp-3 break-words">
             {app.description}
           </CardDescription>
         ) : null}
@@ -317,43 +340,46 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
 
       {isOpening ? <CardOpeningOverlay /> : null}
 
-      <CardOverflowMenu leading={<ScopeBadge scope={app.scope} hidePersonal />}>
-        <PinMenuItem
-          pinned={!!app.pinnedAt}
-          target={{
-            source: "external",
-            mcpServerId: app.mcpServerId,
-            resourceUri: app.resourceUri,
-            toolName: app.toolName,
-          }}
-        />
-        {/* A tool with required inputs only opens via the chat prompt flow —
-            its standalone page can't render anything useful, so don't offer it. */}
-        {app.requiresInput ? null : (
+      {/* Header row mirrors the project card: icon + title on one line at the
+          left, the scope pill / overflow menu at the right. */}
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <AppTypeIcon owned={false} icon={app.icon} />
+          <CardTitle className="min-w-0 truncate leading-snug">
+            {app.name}
+          </CardTitle>
+        </div>
+        <CardOverflowMenu leading={<ScopeBadge scope={app.scope} />}>
+          <PinMenuItem
+            pinned={!!app.pinnedAt}
+            target={{
+              source: "external",
+              mcpServerId: app.mcpServerId,
+              resourceUri: app.resourceUri,
+              toolName: app.toolName,
+            }}
+          />
+          {/* A tool with required inputs only opens via the chat prompt flow —
+              its standalone page can't render anything useful, so don't offer it. */}
+          {app.requiresInput ? null : (
+            <DropdownMenuItem asChild>
+              <Link href={runHref} target="_blank" rel="noreferrer">
+                <SquareArrowOutUpRight className="h-4 w-4" />
+                Open in new tab
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem asChild>
-            <Link href={runHref} target="_blank" rel="noreferrer">
-              <SquareArrowOutUpRight className="h-4 w-4" />
-              Open in new tab
+            <Link href={serverHref}>
+              <Server className="h-4 w-4" />
+              Manage MCP server
             </Link>
           </DropdownMenuItem>
-        )}
-        <DropdownMenuItem asChild>
-          <Link href={serverHref}>
-            <Server className="h-4 w-4" />
-            Manage MCP server
-          </Link>
-        </DropdownMenuItem>
-      </CardOverflowMenu>
-
-      <div className="mb-3 flex items-center gap-1.5 pr-16">
-        <AppTypeIcon owned={false} icon={app.icon} />
+        </CardOverflowMenu>
       </div>
 
-      <CardTitle className="line-clamp-2 leading-snug break-words">
-        {app.name}
-      </CardTitle>
       {app.description ? (
-        <CardDescription className="mt-1 line-clamp-3 break-words">
+        <CardDescription className="line-clamp-3 break-words">
           {app.description}
         </CardDescription>
       ) : null}

@@ -1,6 +1,6 @@
 import { requireScopedModifyPermission } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
-import { TeamModel } from "@/models";
+import { AppAccessModel, TeamModel } from "@/models";
 import { ApiError } from "@/types";
 import type { AppScope } from "@/types/app";
 
@@ -105,5 +105,55 @@ export async function assertCallerMayModifyApp(params: {
     userTeamIds,
     userId: params.userId,
     resourceLabel: "app",
+  });
+}
+
+/**
+ * Throw `ApiError(403)` unless the caller may modify an app *via chat* — the
+ * authoring path exercised by the `edit_app`/`refine_app`/`set_app_tools`/
+ * `publish_app`/`delete_app`/`preview_app_tool` MCP tools (and a PATCH that
+ * carries new html).
+ *
+ * Stricter than {@link assertCallerMayModifyApp}: an `app:admin` who reaches an
+ * app ONLY through oversight — a personal app authored by someone else, or a
+ * team app for a team they're not in — may view it and manage its settings
+ * (name/visibility/teams/env/tools) over REST, but must NOT drive its build
+ * chat. This mirrors the Projects rule where `viewerRole === "admin"` is
+ * read + manage-settings yet cannot start chats. Once past the oversight gate
+ * the ordinary scope rule still applies (org apps need admin, team apps need a
+ * team-admin member), so this never *widens* who can author.
+ */
+export async function assertCallerMayAuthorApp(params: {
+  userId: string;
+  organizationId: string;
+  app: { id: string; scope: AppScope; authorId: string | null };
+  resourceTeamIds: string[];
+}): Promise<void> {
+  // "Reachable without the admin bypass" is exactly "not oversight-only": the
+  // author of a personal app, a member of a team app, and everyone for an org
+  // app all pass; an app-admin seeing someone else's personal app does not.
+  const reachableWithoutAdmin = await AppAccessModel.userHasAppAccess({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    app: {
+      id: params.app.id,
+      organizationId: params.organizationId,
+      scope: params.app.scope,
+      authorId: params.app.authorId,
+    },
+    isAppAdmin: false,
+  });
+  if (!reachableWithoutAdmin) {
+    throw new ApiError(
+      403,
+      "You can view this app and change its settings, but only its owner can modify the app itself via chat.",
+    );
+  }
+  await assertCallerMayModifyApp({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    scope: params.app.scope,
+    authorId: params.app.authorId,
+    resourceTeamIds: params.resourceTeamIds,
   });
 }

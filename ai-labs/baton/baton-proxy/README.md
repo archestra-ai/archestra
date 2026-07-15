@@ -76,9 +76,10 @@ escalates as an unprovable fact and fails closed unless an authority clears
 it. Write `requires = {}` to say "considered, nothing required". A policy may
 declare that authority itself: `[[contracts.authority]]` with `rule = "allow"`
 and `acknowledge_unknown = true` approves exactly the unprovable facts routed
-to it (unknown requirements, unknown effects, missing contracts) and records
-each grant in the decision log — proven breaches are outside its competence
-and stay blocked.
+to it (unknown requirements, unknown effects) and records each grant in the
+decision log — proven breaches are outside its competence and stay blocked.
+Tools with no contract at all never reach it — they pass through unevaluated,
+per the line below.
 
 Tools without a contract pass through untouched — annotate the risky few, leave
 the rest.

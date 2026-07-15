@@ -104,7 +104,7 @@ fn apply_first_step(engine: &PolicyEngine, trajectory: &mut Trajectory, plan: Pl
 }
 
 fn approve_all(
-    _: &crate::transition::ProposedGrant,
+    _: &crate::remedy::Authorization,
     _: &[Violation],
     _: &crate::approval::TrajectoryView,
 ) -> Option<crate::approval::Ruling> {
@@ -114,7 +114,7 @@ fn approve_all(
 }
 
 fn abstain_all(
-    _: &crate::transition::ProposedGrant,
+    _: &crate::remedy::Authorization,
     _: &[Violation],
     _: &crate::approval::TrajectoryView,
 ) -> Option<crate::approval::Ruling> {
@@ -1281,24 +1281,28 @@ fn an_endorse_routes_only_within_the_mandate_bounds() {
     let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "doc");
     let view = TrajectoryView::new(trajectory.store());
 
-    let beyond = crate::transition::ProposedGrant::Endorse {
-        source: doc,
-        delta: crate::transition::EndorseDelta {
-            trust: None,
-            audience: Some(BTreeSet::from([user("dave")])),
-        },
+    let beyond = crate::remedy::Authorization {
+        delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
+            crate::remedy::LabelRaise {
+                trust: None,
+                audience: Some(BTreeSet::from([user("dave")])),
+            },
+        )),
+        scope: crate::remedy::AuthorizationScope::DerivedValue { source: doc },
     };
     assert!(matches!(
         engine.route_grant(&beyond, &[], &view),
         RoutedRuling::NoRuling
     ));
 
-    let within = crate::transition::ProposedGrant::Endorse {
-        source: doc,
-        delta: crate::transition::EndorseDelta {
-            trust: None,
-            audience: Some(BTreeSet::from([user("charlie")])),
-        },
+    let within = crate::remedy::Authorization {
+        delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
+            crate::remedy::LabelRaise {
+                trust: None,
+                audience: Some(BTreeSet::from([user("charlie")])),
+            },
+        )),
+        scope: crate::remedy::AuthorizationScope::DerivedValue { source: doc },
     };
     assert!(matches!(
         engine.route_grant(&within, &[], &view),
@@ -1358,11 +1362,11 @@ fn a_denied_endorse_is_terminal_and_mints_no_value() {
 #[test]
 fn endorse_authority_refuses_a_suspicious_transitive_ancestry() {
     fn refuse_suspicious_ancestry(
-        grant: &crate::transition::ProposedGrant,
+        grant: &crate::remedy::Authorization,
         _: &[Violation],
         view: &crate::approval::TrajectoryView,
     ) -> Option<crate::approval::Ruling> {
-        let crate::transition::ProposedGrant::Endorse { source, .. } = grant else {
+        let crate::remedy::AuthorizationScope::DerivedValue { source } = &grant.scope else {
             return None;
         };
         let tainted = view
@@ -2105,10 +2109,10 @@ fn external_accept_roundtrip() {
     let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
         panic!("the external acquirer should defer to an out-of-process ruling");
     };
-    assert!(matches!(
-        pending.grant(),
-        crate::transition::ProposedGrant::Accept { effects } if *effects == Effects::declared([Effect::Egress])
-    ));
+    assert!(pending.grant().delta.coordinates().any(|coordinate| matches!(
+        coordinate,
+        crate::remedy::DeltaCoordinate::AcquireEffects(effects) if *effects == Effects::declared([Effect::Egress])
+    )));
     let Decision::Permitted(token) = engine
         .apply_approval(
             &mut trajectory,
@@ -2752,7 +2756,7 @@ fn inline_authority_inspects_the_view_and_violations() {
     // Auto-vouch an audience expansion only when the trajectory's first
     // ingress (the document under review) is itself trusted.
     fn vouch_trusted_source(
-        grant: &crate::transition::ProposedGrant,
+        grant: &crate::remedy::Authorization,
         violations: &[Violation],
         view: &crate::approval::TrajectoryView,
     ) -> Option<crate::approval::Ruling> {
@@ -2762,7 +2766,10 @@ fn inline_authority_inspects_the_view_and_violations() {
         let source_trusted = view
             .label(crate::revision::ValueId::new(0))
             .is_some_and(|label| label.trust == Trust::TRUSTED);
-        if audience_breach && source_trusted && matches!(grant, crate::transition::ProposedGrant::Endorse { .. }) {
+        if audience_breach
+            && source_trusted
+            && matches!(grant.scope, crate::remedy::AuthorizationScope::DerivedValue { .. })
+        {
             Some(crate::approval::Ruling::Approve {
                 reason: "source document is trusted".to_owned(),
             })
@@ -3426,7 +3433,7 @@ fn unprovable_re_entry_writes_no_audit() {
 // ---- Denial audit attribution per grant kind ----
 
 fn deny_all(
-    _: &crate::transition::ProposedGrant,
+    _: &crate::remedy::Authorization,
     _: &[Violation],
     _: &crate::approval::TrajectoryView,
 ) -> Option<crate::approval::Ruling> {
@@ -3846,7 +3853,7 @@ fn rescue_without_a_release_authority_stays_terminal() {
 #[test]
 fn rescue_endorse_authority_sees_the_projected_target() {
     fn approve_iff_projected(
-        _: &crate::transition::ProposedGrant,
+        _: &crate::remedy::Authorization,
         resolved: &[Violation],
         _: &crate::approval::TrajectoryView,
     ) -> Option<crate::approval::Ruling> {

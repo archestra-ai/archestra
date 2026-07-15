@@ -294,6 +294,14 @@ pub struct EndorseDelta {
 }
 
 impl EndorseDelta {
+    /// This raise as the typed delta coordinate payload.
+    pub(crate) fn as_raise(&self) -> crate::remedy::LabelRaise {
+        crate::remedy::LabelRaise {
+            trust: self.trust,
+            audience: self.audience.clone(),
+        }
+    }
+
     /// Does `mandate` bound at least this raise? Trust by [`KnownTrust`] order,
     /// audience by set inclusion.
     #[must_use]

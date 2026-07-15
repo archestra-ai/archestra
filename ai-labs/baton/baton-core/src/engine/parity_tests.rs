@@ -57,7 +57,7 @@ fn redact_transformer() -> crate::transition::RegisteredTransformer {
 
 fn approving_human() -> crate::approval::Authority {
     fn approve(
-        _: &crate::transition::ProposedGrant,
+        _: &crate::remedy::Authorization,
         _: &[crate::contract::Violation],
         _: &crate::approval::TrajectoryView,
     ) -> Option<crate::approval::Ruling> {

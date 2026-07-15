@@ -6,7 +6,7 @@
 //! legitimate, authorized flow through.
 
 use baton_core::{
-    ArgumentSchema, AudienceRule, Authority, AuthorityMandate, Effect, Effects, ProposedGrant, Requirements, Ruling,
+    ArgumentSchema, AudienceRule, Authority, AuthorityMandate, Authorization, Effect, Effects, Requirements, Ruling,
     ToolContract, ToolName, TrajectoryView, UserId, ValueLabel, Violation,
 };
 use serde::Serialize;
@@ -46,7 +46,7 @@ pub struct Invoices {
 /// the engine only routes a grant to this authority when its mandate covers it —
 /// so an unconditional approval vouches in exactly the external auditor (and
 /// accepts the send's first egress), and nothing else.
-fn approve_auditor(_: &ProposedGrant, _: &[Violation], _: &TrajectoryView<'_>) -> Option<Ruling> {
+fn approve_auditor(_: &Authorization, _: &[Violation], _: &TrajectoryView<'_>) -> Option<Ruling> {
     Some(Ruling::Approve {
         reason: "approved sending financials to the external auditor".to_owned(),
     })

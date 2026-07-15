@@ -23,7 +23,9 @@ use serde::Serialize;
 
 use crate::ToolName;
 use crate::audit::{AuditEvent, AuthorityName};
+use crate::contract::Violation;
 use crate::dimension::Effects;
+use crate::remedy::{Authorization, AuthorizationScope};
 use crate::revision::{ActionId, FlowId, TransitionId, TurnId, ValueId};
 use crate::transition::EndorseDelta;
 use crate::turn::Actor;
@@ -209,6 +211,21 @@ pub enum Fact {
     ResponseEmitted {
         value: ValueId,
     },
+    /// An authority granted and the engine applied a typed authorization:
+    /// an exact delta at an exact scope. `derived` names the authorized
+    /// derived value a durable grant minted.
+    AuthorizationApplied {
+        authorization: Authorization,
+        authority: AuthorityName,
+        resolved: Vec<Violation>,
+        derived: Option<ValueId>,
+    },
+    /// An authority denied a typed authorization.
+    AuthorizationDenied {
+        authorization: Authorization,
+        authority: AuthorityName,
+        reason: String,
+    },
     /// Control-plane history with no structural projection yet (failed
     /// transitions, approval round-trips, waivers, denials) — carried
     /// verbatim in the shadow phase; the remedy-vocabulary slice replaces
@@ -233,6 +250,13 @@ impl Fact {
             | Self::DispatchFailed { action }
             | Self::ActionAbandoned { action } => Subject::Action(*action),
             Self::CheckPerformed { flow, .. } => Subject::Check(*flow),
+            Self::AuthorizationApplied { authorization, .. } | Self::AuthorizationDenied { authorization, .. } => {
+                match &authorization.scope {
+                    AuthorizationScope::DerivedValue { source } => Subject::Value(*source),
+                    AuthorizationScope::PendingAction { action } => Subject::Action(*action),
+                    AuthorizationScope::PolicyCheck { flow } => Subject::Check(*flow),
+                }
+            }
             Self::ControlPlane { .. } => Subject::Trajectory,
         }
     }
@@ -249,6 +273,13 @@ impl Fact {
             | Self::DispatchFailed { .. }
             | Self::ActionAbandoned { .. }
             | Self::CheckPerformed { .. } => Scope::Action,
+            Self::AuthorizationApplied { authorization, .. } | Self::AuthorizationDenied { authorization, .. } => {
+                match &authorization.scope {
+                    AuthorizationScope::DerivedValue { .. } => Scope::Value,
+                    AuthorizationScope::PendingAction { .. } => Scope::Action,
+                    AuthorizationScope::PolicyCheck { .. } => Scope::Action,
+                }
+            }
             Self::TurnAppended { .. }
             | Self::EffectsCommitted { .. }
             | Self::ConfirmationSpent { .. }
@@ -267,7 +298,9 @@ impl Fact {
                 origin: ValueOrigin::Endorsed { authority, .. },
                 ..
             } => Issuer::Authority(authority.clone()),
-            Self::GrowthAccepted { authority, .. } => Issuer::Authority(authority.clone()),
+            Self::GrowthAccepted { authority, .. }
+            | Self::AuthorizationApplied { authority, .. }
+            | Self::AuthorizationDenied { authority, .. } => Issuer::Authority(authority.clone()),
             _ => Issuer::Engine,
         }
     }
@@ -478,7 +511,10 @@ impl ProbeState {
                 true => Err(EventConflict::ConfirmationAlreadySpent { turn: *turn }),
                 false => Ok(()),
             },
-            Fact::ResponseEmitted { .. } | Fact::ControlPlane { .. } => Ok(()),
+            Fact::ResponseEmitted { .. }
+            | Fact::AuthorizationApplied { .. }
+            | Fact::AuthorizationDenied { .. }
+            | Fact::ControlPlane { .. } => Ok(()),
         }
     }
 
@@ -515,6 +551,8 @@ impl ProbeState {
             | Fact::EffectsCommitted { .. }
             | Fact::CheckPerformed { .. }
             | Fact::ResponseEmitted { .. }
+            | Fact::AuthorizationApplied { .. }
+            | Fact::AuthorizationDenied { .. }
             | Fact::ControlPlane { .. } => {}
         }
     }

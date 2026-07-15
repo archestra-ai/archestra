@@ -278,7 +278,7 @@ impl BatonGateBuilder {
 #[cfg(test)]
 mod tests {
     use baton_core::{
-        Audience, AudienceRule, Authority, AuthorityMandate, Effect, Effects, ProposedGrant, Requirements, Ruling,
+        Audience, AudienceRule, Authority, AuthorityMandate, Authorization, Effect, Effects, Requirements, Ruling,
         ToolContract, ToolName, TrajectoryView, Trust, UserId, ValueLabel, Violation,
     };
     use serde_json::json;
@@ -321,7 +321,7 @@ mod tests {
         }
     }
 
-    fn approve(_: &ProposedGrant, _: &[Violation], _: &TrajectoryView<'_>) -> Option<Ruling> {
+    fn approve(_: &Authorization, _: &[Violation], _: &TrajectoryView<'_>) -> Option<Ruling> {
         Some(Ruling::Approve {
             reason: "vouched".to_owned(),
         })

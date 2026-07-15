@@ -10,8 +10,8 @@ use std::collections::BTreeSet;
 
 use baton_core::contract::Breach;
 use baton_core::{
-    ArgumentSchema, ArgumentTree, Audience, Authority, AuthorityMandate, BlockReason, Blocked, Decision, Effect,
-    Effects, KnownTrust, OpaqueValue, PolicyEngine, ProposedGrant, Pursuit, Requirements, Ruling, Speaker,
+    ArgumentSchema, ArgumentTree, Audience, Authority, AuthorityMandate, Authorization, BlockReason, Blocked, Decision,
+    DeltaCoordinate, Effect, Effects, KnownTrust, OpaqueValue, PolicyEngine, Pursuit, Requirements, Ruling, Speaker,
     ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, Trust, UserId, ValueId, ValueLabel, Violation,
 };
 use serde::{Deserialize, Serialize};
@@ -150,22 +150,29 @@ impl From<&BlockReason> for BlockKind {
     }
 }
 
+fn acquires_effects(grant: &Authorization) -> bool {
+    grant
+        .delta
+        .coordinates()
+        .any(|coordinate| matches!(coordinate, DeltaCoordinate::AcquireEffects(_)))
+}
+
 fn approve_effect_growth(
-    grant: &ProposedGrant,
+    grant: &Authorization,
     _violations: &[Violation],
     _trajectory: &TrajectoryView<'_>,
 ) -> Option<Ruling> {
-    matches!(grant, ProposedGrant::Accept { .. }).then(|| Ruling::Approve {
+    acquires_effects(grant).then(|| Ruling::Approve {
         reason: "legacy baton-check treats declared effects as ordinary trajectory state".to_owned(),
     })
 }
 
 fn approve_unknown(
-    grant: &ProposedGrant,
+    grant: &Authorization,
     violations: &[Violation],
     _trajectory: &TrajectoryView<'_>,
 ) -> Option<Ruling> {
-    (!matches!(grant, ProposedGrant::Accept { .. })
+    (!acquires_effects(grant)
         && !violations.is_empty()
         && violations.iter().all(|violation| {
             matches!(
@@ -178,7 +185,7 @@ fn approve_unknown(
     })
 }
 
-fn deny_all(_grant: &ProposedGrant, _violations: &[Violation], _trajectory: &TrajectoryView<'_>) -> Option<Ruling> {
+fn deny_all(_grant: &Authorization, _violations: &[Violation], _trajectory: &TrajectoryView<'_>) -> Option<Ruling> {
     Some(Ruling::Deny {
         reason: "deny-all harness authority never declassifies".to_owned(),
     })

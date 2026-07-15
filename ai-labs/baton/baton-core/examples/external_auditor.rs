@@ -12,7 +12,7 @@
 //! Run with `cargo run --example external_auditor`.
 
 use baton_core::{
-    ArgumentTree, Authority, AuthorityMandate, Decision, OpaqueValue, PolicyEngine, ProposedGrant, Pursuit, Ruling,
+    ArgumentTree, Authority, AuthorityMandate, Authorization, Decision, OpaqueValue, PolicyEngine, Pursuit, Ruling,
     Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, UserId, ValueId, ValueLabel, Violation,
 };
 
@@ -29,7 +29,7 @@ fn u(id: &str) -> UserId {
 /// Approves any grant routed here. Competence is gated by the mandate, so an
 /// unconditional approval vouches in exactly `AUDITOR` and accepts the send's
 /// first egress — and is not competent to wave data to anyone else.
-fn approve_auditor(_: &ProposedGrant, _: &[Violation], _: &TrajectoryView<'_>) -> Option<Ruling> {
+fn approve_auditor(_: &Authorization, _: &[Violation], _: &TrajectoryView<'_>) -> Option<Ruling> {
     Some(Ruling::Approve {
         reason: "approved sending financials to the external auditor".to_owned(),
     })

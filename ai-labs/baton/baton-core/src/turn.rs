@@ -563,6 +563,49 @@ impl Trajectory {
         self.commit(batch);
     }
 
+    /// Audit an applied check-transient authorization: the legacy audit
+    /// event plus the typed authorization fact, one batch, one advance.
+    pub(crate) fn record_applied_authorization(
+        &mut self,
+        event: AuditEvent,
+        authorization: crate::remedy::Authorization,
+        authority: crate::audit::AuthorityName,
+        resolved: Vec<crate::contract::Violation>,
+    ) {
+        let batch = vec![
+            Fact::ControlPlane { event: event.clone() },
+            Fact::AuthorizationApplied {
+                authorization,
+                authority,
+                resolved,
+                derived: None,
+            },
+        ];
+        self.state.record(event);
+        self.commit(batch);
+    }
+
+    /// Audit a denied authorization: the legacy audit event plus the typed
+    /// denial fact, one batch, one advance.
+    pub(crate) fn record_denied_authorization(
+        &mut self,
+        event: AuditEvent,
+        authorization: crate::remedy::Authorization,
+        authority: crate::audit::AuthorityName,
+        reason: String,
+    ) {
+        let batch = vec![
+            Fact::ControlPlane { event: event.clone() },
+            Fact::AuthorizationDenied {
+                authorization,
+                authority,
+                reason,
+            },
+        ];
+        self.state.record(event);
+        self.commit(batch);
+    }
+
     /// Apply a validated content-justified `Derive` step as one transaction: admit the
     /// derived value under the declared output label, substitute it into the
     /// pending action's current argument tree, and audit the transition. The
@@ -687,11 +730,24 @@ impl Trajectory {
         let transition = self.mint_transition();
         let pending = self.pending.as_mut().expect("pending action validated by the engine");
         let action = pending.id();
-        let batch = vec![Fact::GrowthAccepted {
-            action,
-            effects: effects.clone(),
-            authority: authority.clone(),
-        }];
+        let batch = vec![
+            Fact::GrowthAccepted {
+                action,
+                effects: effects.clone(),
+                authority: authority.clone(),
+            },
+            Fact::AuthorizationApplied {
+                authorization: crate::remedy::Authorization {
+                    delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::AcquireEffects(
+                        effects.clone(),
+                    )),
+                    scope: crate::remedy::AuthorizationScope::PendingAction { action },
+                },
+                authority: authority.clone(),
+                resolved: resolved.clone(),
+                derived: None,
+            },
+        ];
         pending.accept_growth(effects.clone());
         self.state.record(AuditEvent::AcceptApplied {
             transition,
@@ -739,6 +795,17 @@ impl Trajectory {
                 action,
                 from: source,
                 to: derived,
+            },
+            Fact::AuthorizationApplied {
+                authorization: crate::remedy::Authorization {
+                    delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
+                        delta.as_raise(),
+                    )),
+                    scope: crate::remedy::AuthorizationScope::DerivedValue { source },
+                },
+                authority: authority.clone(),
+                resolved: Vec::new(),
+                derived: Some(derived),
             },
         ];
         let admitted = self

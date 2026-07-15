@@ -27,8 +27,9 @@ use serde::Serialize;
 use crate::audit::AuthorityName;
 use crate::contract::Violation;
 use crate::engine::EngineId;
+use crate::remedy::Authorization;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
-use crate::transition::{AuthorityMandate, ProposedGrant};
+use crate::transition::AuthorityMandate;
 use crate::turn::TrajectoryId;
 use crate::value::{Provenance, ValueLabel, ValueStore};
 
@@ -39,12 +40,12 @@ pub enum Ruling {
     Deny { reason: String },
 }
 
-/// A deterministic inline decision function: registered policy over the grant
-/// it is asked to authorize, the violations that grant targets, and a
+/// A deterministic inline decision function: registered policy over the authorization
+/// it is asked to grant, the violations that grant targets, and a
 /// read-only view of the trajectory (labels and provenance of the values in
 /// scope). `None` abstains — routing falls through to the next competent
 /// authority, so abstention keeps the contract total.
-pub type AuthorityFn = fn(&ProposedGrant, &[Violation], &TrajectoryView<'_>) -> Option<Ruling>;
+pub type AuthorityFn = fn(&Authorization, &[Violation], &TrajectoryView<'_>) -> Option<Ruling>;
 
 /// A read-only projection of the trajectory handed to an inline authority: the
 /// label and provenance of any value it needs to judge a grant. Borrowed and
@@ -190,7 +191,7 @@ pub enum AuthorityMode {
 pub struct PendingApproval {
     plan: PlanId,
     action: ActionId,
-    grant: ProposedGrant,
+    grant: Authorization,
     authority: AuthorityName,
     /// The violations this grant targets, as predicted at issuance.
     resolved: Vec<Violation>,
@@ -207,7 +208,7 @@ pub struct PendingApproval {
 /// and the pending action.
 pub(crate) struct ApprovalParts {
     pub(crate) action: ActionId,
-    pub(crate) grant: ProposedGrant,
+    pub(crate) grant: Authorization,
     pub(crate) authority: AuthorityName,
     pub(crate) resolved: Vec<Violation>,
     pub(crate) trajectory: TrajectoryId,
@@ -223,7 +224,7 @@ impl PendingApproval {
     pub(crate) fn new(
         plan: PlanId,
         action: ActionId,
-        grant: ProposedGrant,
+        grant: Authorization,
         authority: AuthorityName,
         resolved: Vec<Violation>,
         ancestry: AncestrySnapshot,
@@ -254,9 +255,8 @@ impl PendingApproval {
         &self.ancestry
     }
 
-    /// The grant the ruling would authorize (a waiver, an acknowledgment, or an
-    /// effect acquisition).
-    pub fn grant(&self) -> &ProposedGrant {
+    /// The authorization the ruling would grant: its exact delta and scope.
+    pub fn grant(&self) -> &Authorization {
         &self.grant
     }
 

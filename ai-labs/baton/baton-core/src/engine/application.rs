@@ -7,15 +7,16 @@ use crate::audit::{AuditEvent, AuthorityName};
 use crate::contract::{Fixability, Violation};
 use crate::dimension::Effects;
 use crate::plan::{Justification, TransitionKind};
+use crate::remedy::{Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise};
 use crate::request::ToolRequest;
 use crate::revision::{ActionId, PlanId, ValueId};
-use crate::transition::{ActionTransition, ProposedGrant, TransientWaiver};
+use crate::transition::{ActionTransition, TransientWaiver};
 use crate::turn::Trajectory;
 use crate::value::ValueLabel;
 
 use super::PolicyEngine;
 use super::capability::{BlockReason, Decision, StepCapability, StepOutcome, StepRefused, ToolContract};
-use super::planning::{SimFlow, grant_for};
+use super::planning::{SimFlow, authorization_for, raise_authorization};
 
 /// The result of routing a grant through the competent authorities: the first
 /// resolving inline ruling, a deferral to an external authority, or no ruling
@@ -56,16 +57,55 @@ fn pending_action_is(trajectory: &Trajectory, action: ActionId) -> Result<&crate
     }
 }
 
-/// The per-grant-kind denial attribution, shared by inline routing and the
+/// The per-delta-kind denial attribution, shared by inline routing and the
 /// external approval path.
-fn denial_event(grant: &ProposedGrant, authority: AuthorityName, reason: String) -> AuditEvent {
-    match grant {
-        ProposedGrant::Accept { .. } => AuditEvent::AcceptDenied { authority, reason },
-        ProposedGrant::Endorse { .. } => AuditEvent::EndorseDenied { authority, reason },
-        ProposedGrant::Waive { .. } | ProposedGrant::Acknowledge { .. } => {
-            AuditEvent::WaiverDenied { authority, reason }
+fn denial_event(ask: &Authorization, authority: AuthorityName, reason: String) -> AuditEvent {
+    let mut coordinates = ask.delta.coordinates();
+    if coordinates.any(|c| matches!(c, DeltaCoordinate::RaiseLabel(_))) {
+        return AuditEvent::EndorseDenied { authority, reason };
+    }
+    if ask
+        .delta
+        .coordinates()
+        .any(|c| matches!(c, DeltaCoordinate::AcquireEffects(_)))
+    {
+        return AuditEvent::AcceptDenied { authority, reason };
+    }
+    AuditEvent::WaiverDenied { authority, reason }
+}
+
+/// The check-transient lift an authorization applies, reconstructed from its
+/// atomic coordinates (the acknowledge coordinate contributes no lift — its
+/// facts are cleared by the recheck's presence-of-a-lift rule).
+fn lift_of(ask: &Authorization) -> TransientWaiver {
+    let mut lift = TransientWaiver::empty();
+    for coordinate in ask.delta.coordinates() {
+        match coordinate {
+            DeltaCoordinate::ExceptPriorEffects(effects) => lift.prior_effects = Some(effects.clone()),
+            DeltaCoordinate::StandInConfirmation => lift.confirms = true,
+            DeltaCoordinate::ReleaseControl(deps) => lift.control_release = deps.clone(),
+            DeltaCoordinate::RaiseLabel(_)
+            | DeltaCoordinate::AcquireEffects(_)
+            | DeltaCoordinate::AcknowledgeUnknown(_) => {}
         }
     }
+    lift
+}
+
+/// The durable raise an authorization mints, if it carries one.
+fn raise_of(ask: &Authorization) -> Option<LabelRaise> {
+    ask.delta.coordinates().find_map(|coordinate| match coordinate {
+        DeltaCoordinate::RaiseLabel(raise) => Some(raise.clone()),
+        _ => None,
+    })
+}
+
+/// The surface growth an authorization acquires, if it carries one.
+fn acquisition_of(ask: &Authorization) -> Option<Effects> {
+    ask.delta.coordinates().find_map(|coordinate| match coordinate {
+        DeltaCoordinate::AcquireEffects(effects) => Some(effects.clone()),
+        _ => None,
+    })
 }
 
 impl PolicyEngine {
@@ -256,13 +296,21 @@ impl PolicyEngine {
                 Ok(StepOutcome::Advanced(self.evaluate(trajectory, original)))
             }
             TransitionKind::ApplyWaiver { delta } => {
-                let grant = grant_for(&delta, &spec.precondition.remaining);
+                let flow = pending_action_is(trajectory, capability.action)?.flow();
+                let grant = authorization_for(&delta, &spec.precondition.remaining, flow);
                 Ok(
-                    match self.route_step_grant(trajectory, &capability, &checked, grant, spec.precondition.remaining) {
+                    match self.route_step_grant(
+                        trajectory,
+                        &capability,
+                        &checked,
+                        grant.clone(),
+                        spec.precondition.remaining,
+                    ) {
                         RoutedStep::Approved { authority, resolved } => StepOutcome::Advanced(self.waiver_permit(
                             trajectory,
                             capability.action,
                             delta,
+                            grant,
                             authority,
                             resolved,
                         )),
@@ -272,8 +320,11 @@ impl PolicyEngine {
                 )
             }
             TransitionKind::AcceptGrowth { effects } => {
-                let grant = ProposedGrant::Accept {
-                    effects: effects.clone(),
+                let grant = Authorization {
+                    delta: AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(effects.clone())),
+                    scope: AuthorizationScope::PendingAction {
+                        action: capability.action,
+                    },
                 };
                 Ok(
                     match self.route_step_grant(trajectory, &capability, &checked, grant, spec.precondition.remaining) {
@@ -289,10 +340,7 @@ impl PolicyEngine {
                 source,
                 justification: Justification::Fiat { delta, targets },
             } => {
-                let grant = ProposedGrant::Endorse {
-                    source,
-                    delta: delta.clone(),
-                };
+                let grant = raise_authorization(source, &delta);
                 // The authority rules on the step's declared targets, not the
                 // actual posture: for an ordinary step they coincide, but a
                 // terminal-rescue endorse targets the projected post-release
@@ -323,7 +371,7 @@ impl PolicyEngine {
         trajectory: &mut Trajectory,
         capability: &StepCapability,
         checked: &ToolRequest,
-        grant: ProposedGrant,
+        grant: Authorization,
         resolved: Vec<Violation>,
     ) -> RoutedStep {
         let routed = {
@@ -333,7 +381,12 @@ impl PolicyEngine {
         match routed {
             RoutedRuling::Approved(authority) => RoutedStep::Approved { authority, resolved },
             RoutedRuling::Denied { authority, reason } => {
-                trajectory.record_event(denial_event(&grant, authority.clone(), reason.clone()));
+                trajectory.record_denied_authorization(
+                    denial_event(&grant, authority.clone(), reason.clone()),
+                    grant.clone(),
+                    authority.clone(),
+                    reason.clone(),
+                );
                 RoutedStep::Terminal(self.terminal(
                     trajectory,
                     resolved,
@@ -378,7 +431,7 @@ impl PolicyEngine {
     /// one abstained.
     pub(super) fn route_grant(
         &self,
-        grant: &ProposedGrant,
+        grant: &Authorization,
         resolved: &[Violation],
         view: &TrajectoryView,
     ) -> RoutedRuling {
@@ -431,28 +484,28 @@ impl PolicyEngine {
         }
         pending_action_is(trajectory, parts.action)?;
         match ruling {
-            // Dispatch on the grant: a waiver (or acknowledgment) rechecks and
-            // permits; an accept records the growth marker and re-evaluates.
-            Ruling::Approve { .. } => match parts.grant {
-                ProposedGrant::Endorse { source, delta } => {
+            // Dispatch on the authorization's scope: a durable raise mints the
+            // endorsed value; an action-scoped acquisition records the growth
+            // marker and re-evaluates; a check-scoped lift (or acknowledgment)
+            // rechecks and permits.
+            Ruling::Approve { .. } => match &parts.grant.scope {
+                AuthorizationScope::DerivedValue { source } => {
+                    let raise = raise_of(&parts.grant).expect("a derived-value grant carries a raise");
+                    // The endorse machinery still speaks EndorseDelta until the
+                    // taxonomy removal retires it.
+                    let delta = crate::transition::EndorseDelta {
+                        trust: raise.trust,
+                        audience: raise.audience,
+                    };
                     let original = trajectory
                         .pending_action()
                         .expect("validated pending above")
                         .original()
                         .clone();
-                    Ok(self.endorse_permit(trajectory, source, delta, parts.authority, original))
+                    Ok(self.endorse_permit(trajectory, *source, delta, parts.authority, original))
                 }
-                ProposedGrant::Waive { waiver, .. } => {
-                    Ok(self.waiver_permit(trajectory, parts.action, waiver, parts.authority, parts.resolved))
-                }
-                ProposedGrant::Acknowledge { .. } => Ok(self.waiver_permit(
-                    trajectory,
-                    parts.action,
-                    TransientWaiver::empty(),
-                    parts.authority,
-                    parts.resolved,
-                )),
-                ProposedGrant::Accept { effects } => {
+                AuthorizationScope::PendingAction { .. } => {
+                    let effects = acquisition_of(&parts.grant).expect("an action-scoped grant carries an acquisition");
                     let original = trajectory
                         .pending_action()
                         .expect("validated pending above")
@@ -460,9 +513,25 @@ impl PolicyEngine {
                         .clone();
                     Ok(self.accept_permit(trajectory, effects, parts.authority, parts.resolved, original))
                 }
+                AuthorizationScope::PolicyCheck { .. } => {
+                    let lift = lift_of(&parts.grant);
+                    Ok(self.waiver_permit(
+                        trajectory,
+                        parts.action,
+                        lift,
+                        parts.grant,
+                        parts.authority,
+                        parts.resolved,
+                    ))
+                }
             },
             Ruling::Deny { reason } => {
-                trajectory.record_event(denial_event(&parts.grant, parts.authority.clone(), reason.clone()));
+                trajectory.record_denied_authorization(
+                    denial_event(&parts.grant, parts.authority.clone(), reason.clone()),
+                    parts.grant.clone(),
+                    parts.authority.clone(),
+                    reason.clone(),
+                );
                 Ok(self.terminal(
                     trajectory,
                     parts.resolved,
@@ -482,6 +551,7 @@ impl PolicyEngine {
         trajectory: &mut Trajectory,
         action: ActionId,
         delta: TransientWaiver,
+        authorization: Authorization,
         authority: AuthorityName,
         resolved: Vec<Violation>,
     ) -> Decision {
@@ -511,12 +581,17 @@ impl PolicyEngine {
             changes.insert(crate::audit::WaiverKind::Acknowledgment);
         }
         let transition = trajectory.mint_transition();
-        trajectory.record_event(AuditEvent::WaiverApplied {
-            transition,
-            changes,
+        trajectory.record_applied_authorization(
+            AuditEvent::WaiverApplied {
+                transition,
+                changes,
+                authority: authority.clone(),
+                resolved: resolved.clone(),
+            },
+            authorization,
             authority,
             resolved,
-        });
+        );
         let intrinsic = match contract {
             Some(c) => c.output_label.clone(),
             None => ValueLabel::unknown(),

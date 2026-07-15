@@ -5,9 +5,10 @@ use crate::approval::{Authority, AuthorityMode};
 use crate::contract::{AudienceRule, Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::{Effects, KnownTrust};
 use crate::plan::{ExitKind, Justification, NonEmptyVec, Posture, TransitionKind, TransitionSpec};
+use crate::remedy::{Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate};
 use crate::request::ToolRequest;
-use crate::revision::ValueId;
-use crate::transition::{ActionTransition, EndorseDelta, ProposedGrant, RegisteredTransformer, TransientWaiver};
+use crate::revision::{ActionId, FlowId, ValueId};
+use crate::transition::{ActionTransition, EndorseDelta, RegisteredTransformer, TransientWaiver};
 use crate::turn::Trajectory;
 use crate::value::{UnknownValue, ValueLabel};
 
@@ -172,12 +173,9 @@ impl PolicyEngine {
                 // the control-release waiver below. All contributing leaves must
                 // be endorsable, else this branch cannot clear the breach.
                 let endorse = endorse_steps(&sim, &remaining);
-                let endorsable = endorse.iter().all(|(leaf, delta)| {
-                    self.can_authorize(&ProposedGrant::Endorse {
-                        source: *leaf,
-                        delta: delta.clone(),
-                    })
-                });
+                let endorsable = endorse
+                    .iter()
+                    .all(|(leaf, delta)| self.can_authorize(&raise_authorization(*leaf, delta)));
                 if endorsable {
                     for (leaf, delta) in endorse {
                         let precondition = Posture {
@@ -205,8 +203,9 @@ impl PolicyEngine {
                 // composes additively with a waiver — they are separate steps to
                 // separate competences (acquire_effects vs the lift dims).
                 if let Some(growth) = surface_growth_of(&remaining) {
-                    let grant = ProposedGrant::Accept {
-                        effects: growth.clone(),
+                    let grant = Authorization {
+                        delta: AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(growth.clone())),
+                        scope: AuthorizationScope::PendingAction { action: pending.id() },
                     };
                     if !self.can_authorize(&grant) {
                         // No authority can acquire this effect: this branch
@@ -243,7 +242,7 @@ impl PolicyEngine {
                     if !sim.violations(Some(&delta)).is_empty() {
                         continue;
                     }
-                    let grant = grant_for(&delta, &remaining);
+                    let grant = authorization_for(&delta, &remaining, pending.flow());
                     if !self.can_authorize(&grant) {
                         continue;
                     }
@@ -292,8 +291,12 @@ impl PolicyEngine {
         if base.control_labels.is_empty() {
             return Vec::new();
         }
+        let pending = trajectory
+            .pending_action()
+            .expect("rescue runs only for the stored pending action");
+        let (action, flow) = (pending.id(), pending.flow());
         let ids: Vec<ValueId> = base.control_labels.keys().copied().collect();
-        let Some(rescue) = self.minimal_joint_release(&base, &ids) else {
+        let Some(rescue) = self.minimal_joint_release(&base, &ids, action, flow) else {
             return Vec::new();
         };
 
@@ -368,7 +371,13 @@ impl PolicyEngine {
     /// probed for the same reason: an unreleased endorse-plus-waiver solve is
     /// ordinary enumeration's domain, and the rescue only runs when that came
     /// up empty.
-    fn minimal_joint_release(&self, base: &SimFlow, ids: &[ValueId]) -> Option<JointRescue> {
+    fn minimal_joint_release(
+        &self,
+        base: &SimFlow,
+        ids: &[ValueId],
+        action: ActionId,
+        flow: FlowId,
+    ) -> Option<JointRescue> {
         let n = ids.len();
         if n > RESCUE_EXHAUSTIVE_MAX {
             return None;
@@ -382,7 +391,7 @@ impl PolicyEngine {
                 .filter(|(i, _)| mask & (1 << i) != 0)
                 .map(|(_, id)| *id)
                 .collect();
-            if let Some(rescue) = self.joint_rescue(base, &release) {
+            if let Some(rescue) = self.joint_rescue(base, &release, action, flow) {
                 return Some(rescue);
             }
         }
@@ -393,7 +402,13 @@ impl PolicyEngine {
     /// required grant has no competent authority or the composed remedies do
     /// not clear the projection. An empty endorse set is a valid solve: a
     /// non-monotone subset release can be clean on its own.
-    fn joint_rescue(&self, base: &SimFlow, release: &BTreeSet<ValueId>) -> Option<JointRescue> {
+    fn joint_rescue(
+        &self,
+        base: &SimFlow,
+        release: &BTreeSet<ValueId>,
+        action: ActionId,
+        flow: FlowId,
+    ) -> Option<JointRescue> {
         let mut projected = base.clone();
         projected.control_labels.retain(|id, _| !release.contains(id));
         // `violations(None)`, not `violations(Some(_))`: the projection must
@@ -410,10 +425,7 @@ impl PolicyEngine {
         let mut endorse = Vec::new();
         let mut residual = projected.violations(None);
         while let Some((leaf, delta)) = endorse_steps(&projected, &residual).into_iter().next() {
-            if !self.can_authorize(&ProposedGrant::Endorse {
-                source: leaf,
-                delta: delta.clone(),
-            }) {
+            if !self.can_authorize(&raise_authorization(leaf, &delta)) {
                 return None;
             }
             let raised = delta.raise(&projected.leaf_labels[&leaf]);
@@ -422,8 +434,9 @@ impl PolicyEngine {
             residual = projected.violations(None);
         }
         if let Some(growth) = surface_growth_of(&residual) {
-            if !self.can_authorize(&ProposedGrant::Accept {
-                effects: growth.clone(),
+            if !self.can_authorize(&Authorization {
+                delta: AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(growth.clone())),
+                scope: AuthorizationScope::PendingAction { action },
             }) {
                 return None;
             }
@@ -432,7 +445,7 @@ impl PolicyEngine {
         }
         let mut delta = needed_delta(&residual);
         delta.control_release = release.clone();
-        if !self.can_authorize(&grant_for(&delta, &residual)) {
+        if !self.can_authorize(&authorization_for(&delta, &residual, flow)) {
             return None;
         }
         if !projected.violations(Some(&delta)).is_empty() {
@@ -522,15 +535,15 @@ impl PolicyEngine {
     /// external (a deterministic answer beats a round-trip to a human), each in
     /// registration order. An inline authority may still abstain at ruling
     /// time, which falls through to the next authority in this order.
-    pub(super) fn competent_authorities<'a>(&'a self, grant: &'a ProposedGrant) -> impl Iterator<Item = &'a Authority> {
+    pub(super) fn competent_authorities<'a>(&'a self, ask: &'a Authorization) -> impl Iterator<Item = &'a Authority> {
         let inline = self
             .authorities
             .iter()
-            .filter(move |a| matches!(a.mode, AuthorityMode::Inline(_)) && a.mandate.covers(grant));
+            .filter(move |a| matches!(a.mode, AuthorityMode::Inline(_)) && a.mandate.authorizes(ask));
         let external = self
             .authorities
             .iter()
-            .filter(move |a| matches!(a.mode, AuthorityMode::External) && a.mandate.covers(grant));
+            .filter(move |a| matches!(a.mode, AuthorityMode::External) && a.mandate.authorizes(ask));
         inline.chain(external)
     }
 
@@ -538,8 +551,8 @@ impl PolicyEngine {
     /// acknowledgment) is enumerated only when one exists; the actual ruling —
     /// which an inline authority may abstain from, falling through to the next —
     /// happens at application.
-    fn can_authorize(&self, grant: &ProposedGrant) -> bool {
-        self.competent_authorities(grant).next().is_some()
+    fn can_authorize(&self, ask: &Authorization) -> bool {
+        self.competent_authorities(ask).next().is_some()
     }
 }
 
@@ -734,15 +747,16 @@ impl SimFlow {
     }
 }
 
-/// The typed grant a residual asks an authority to authorize. A non-empty
-/// lift is a [`ProposedGrant::Waive`]; an empty lift over an acknowledge-only
-/// residual is a [`ProposedGrant::Acknowledge`], which routes on the explicit
-/// `acknowledge_unknown` capability rather than being covered by every mandate.
-pub(super) fn grant_for(delta: &TransientWaiver, resolved: &[Violation]) -> ProposedGrant {
-    // Acknowledge-only facts (unknown effects, a missing contract) are cleared
-    // by the presence of *any* waiver on the recheck, so a non-empty lift that
-    // rides alongside them must still carry them — otherwise a lift-only
-    // mandate would launder an unknown it has no competence to acknowledge.
+/// The typed authorization a check-transient residual asks for: the lift's
+/// atomic coordinates plus any acknowledge-only facts it clears, scoped to
+/// one policy check of `flow`. Acknowledge-only facts (unknown effects, a
+/// missing contract) are cleared by the presence of *any* lift on the
+/// recheck, so a non-empty lift that rides alongside them must still carry
+/// the acknowledge coordinate — otherwise a lift-only mandate would launder
+/// an unknown it has no competence to acknowledge. An empty lift is a pure
+/// acknowledgment, which routes on the explicit `acknowledge_unknown`
+/// capability rather than being covered by every mandate.
+pub(super) fn authorization_for(delta: &TransientWaiver, resolved: &[Violation], flow: FlowId) -> Authorization {
     let acknowledged: Vec<Unprovable> = resolved
         .iter()
         .filter(|violation| violation.fixability() == Fixability::AcknowledgeOnly)
@@ -751,13 +765,30 @@ pub(super) fn grant_for(delta: &TransientWaiver, resolved: &[Violation]) -> Prop
             Violation::Breach(_) => None,
         })
         .collect();
-    if delta == &TransientWaiver::empty() {
-        ProposedGrant::Acknowledge { facts: acknowledged }
-    } else {
-        ProposedGrant::Waive {
-            waiver: delta.clone(),
-            acknowledged,
-        }
+    let mut coordinates = Vec::new();
+    if let Some(effects) = &delta.prior_effects {
+        coordinates.push(DeltaCoordinate::ExceptPriorEffects(effects.clone()));
+    }
+    if delta.confirms {
+        coordinates.push(DeltaCoordinate::StandInConfirmation);
+    }
+    if !delta.control_release.is_empty() {
+        coordinates.push(DeltaCoordinate::ReleaseControl(delta.control_release.clone()));
+    }
+    if !acknowledged.is_empty() || coordinates.is_empty() {
+        coordinates.push(DeltaCoordinate::AcknowledgeUnknown(acknowledged));
+    }
+    Authorization {
+        delta: AuthorizationDelta::product(coordinates).expect("at least one coordinate by construction"),
+        scope: AuthorizationScope::PolicyCheck { flow },
+    }
+}
+
+/// The durable raise authorization an endorse of `source` asks for.
+pub(super) fn raise_authorization(source: ValueId, delta: &EndorseDelta) -> Authorization {
+    Authorization {
+        delta: AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(delta.as_raise())),
+        scope: AuthorizationScope::DerivedValue { source },
     }
 }
 

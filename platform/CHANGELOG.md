@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.3.10](https://github.com/archestra-ai/archestra/compare/platform-v1.3.9...platform-v1.3.10) (2026-07-15)
+
+
+### Features
+
+* **agents/tokens:** clearer connect-dialog token flow, A2A examples, team dialog & /agents cleanups ([#6602](https://github.com/archestra-ai/archestra/issues/6602)) ([b443909](https://github.com/archestra-ai/archestra/commit/b4439094173accc79fbc2c3937d34c939e13348b))
+* **agents:** choose the clone's visibility when cloning an agent / MCP gateway / LLM proxy ([#6607](https://github.com/archestra-ai/archestra/issues/6607)) ([b5f9890](https://github.com/archestra-ai/archestra/commit/b5f989042d42819cb5255477dff320052384cdb7))
+* **apps:** seed new MCP Apps with the organization's white-label logo ([#6588](https://github.com/archestra-ai/archestra/issues/6588)) ([bde62a9](https://github.com/archestra-ai/archestra/commit/bde62a99999480b719f40573f689eab51449b9eb))
+* **apps:** single-tool app titles, draft app chats, split apps sections ([#6594](https://github.com/archestra-ai/archestra/issues/6594)) ([edd1d39](https://github.com/archestra-ai/archestra/commit/edd1d39885a88475903e937e1200c31c4011f842))
+* **kb:** auto sync permissions ([#6420](https://github.com/archestra-ai/archestra/issues/6420)) ([26aefd0](https://github.com/archestra-ai/archestra/commit/26aefd06f899f8d1a48afdb50ecc42baf752161a))
+* **knowledge:** merge Knowledge and Connectors into one tabbed page ([#6587](https://github.com/archestra-ai/archestra/issues/6587)) ([5f4871c](https://github.com/archestra-ai/archestra/commit/5f4871c4a404bdbcb122dd2483af1e3ee8e381af))
+* **mcp-gateway:** show last used time in the gateways table ([#6431](https://github.com/archestra-ai/archestra/issues/6431)) ([c14c448](https://github.com/archestra-ai/archestra/commit/c14c448cdaea7b1c3af0461796cfda7468f75ff8))
+* **mcp-registry:** surface which agents use an MCP server ([#6609](https://github.com/archestra-ai/archestra/issues/6609)) ([c974a53](https://github.com/archestra-ai/archestra/commit/c974a539c2d876b38030d78cddfd34e104438e54))
+
+
+### Bug Fixes
+
+* **apps:** pin MCP-server apps per tool; keep pin state consistent without a refresh ([#6598](https://github.com/archestra-ai/archestra/issues/6598)) ([6b612c2](https://github.com/archestra-ai/archestra/commit/6b612c2f06f8c3edb72612987b9291cbd7f6a169))
+* **apps:** show an exit-fullscreen button for panel-hosted apps ([#6601](https://github.com/archestra-ai/archestra/issues/6601)) ([9ad930c](https://github.com/archestra-ai/archestra/commit/9ad930c71465c4e46bcf85b6c1458db1fd90c433))
+* **archestra-mcp:** attribute created agents/gateways/proxies to the calling user ([#6606](https://github.com/archestra-ai/archestra/issues/6606)) ([df28dd5](https://github.com/archestra-ai/archestra/commit/df28dd5ebf388f6197892353a15dd118c9e1db8f))
+* **backend:** stop the dev-watch server from orphaning itself across rebuilds ([#6605](https://github.com/archestra-ai/archestra/issues/6605)) ([3c88525](https://github.com/archestra-ai/archestra/commit/3c885251c61457f48e50597bb408c15e5b06c058))
+* **chat:** declutter queued messages UI ([#6585](https://github.com/archestra-ai/archestra/issues/6585)) ([1e94abd](https://github.com/archestra-ai/archestra/commit/1e94abd230e533bffd3aae021f385f7ad33bcc40))
+* **chat:** steer unavailable-tool errors through search_tools/run_tool in dispatch mode ([#6550](https://github.com/archestra-ai/archestra/issues/6550)) ([79bf69d](https://github.com/archestra-ai/archestra/commit/79bf69ddd1877d4c2ce68bb340f5ad0dad4cdfb8))
+* **connection:** accept the browser origin as a setup-script endpoint ([#6567](https://github.com/archestra-ai/archestra/issues/6567)) ([573ab90](https://github.com/archestra-ai/archestra/commit/573ab90031f3ff0c34beb96b3578c31d7ea02597))
+* **frontend:** stop DataTable columns from hiding behind horizontal scroll ([#6566](https://github.com/archestra-ai/archestra/issues/6566)) ([d894fdd](https://github.com/archestra-ai/archestra/commit/d894fdd11c8dccfc4112441a330734548a39049b))
+* **knowledge-base:** connectors not syncing ([#6600](https://github.com/archestra-ai/archestra/issues/6600)) ([a9faeae](https://github.com/archestra-ai/archestra/commit/a9faeae17c32eb04cee1c984c7eb32524052a21c))
+
+
+### Miscellaneous Chores
+
+* **knowledge-base:** Cleanup auto-sync permissions connector creden… ([#6596](https://github.com/archestra-ai/archestra/issues/6596)) ([0b5205a](https://github.com/archestra-ai/archestra/commit/0b5205ac0f300494140aa112cdced2c185d8e375))
+
 ## [1.3.9](https://github.com/archestra-ai/archestra/compare/platform-v1.3.8...platform-v1.3.9) (2026-07-14)
 
 

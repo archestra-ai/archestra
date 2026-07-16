@@ -171,17 +171,22 @@ export function recordUnavailableToolCallStep(
   tracker: ToolCallRepeatTracker,
   step: { toolCalls?: readonly ObservedToolCall[] },
 ): void {
-  // A step naming two different missing tools counts as the first: the streak
-  // tracks one wall being hit repeatedly, and there is no meaningful streak
-  // across a model that reaches for a different absent tool each time.
-  const unavailable = step.toolCalls?.find(isUnavailableToolCall);
-  if (!unavailable) return;
-  // Args are deliberately left out of the fingerprint. The call failed because
-  // the tool does not exist, which is a function of the name alone — it would
+  const names = (step.toolCalls ?? [])
+    .filter(isUnavailableToolCall)
+    .map((call) => call.toolName);
+  if (names.length === 0) return;
+  // The whole set the step reached for, deduplicated and ordered, so a step is
+  // the same attempt as another that named the same missing tools in a
+  // different order. Recording just one of them would let a model alternate
+  // [a, b] with [b, a] and reset the streak every step, which is the same
+  // escape as fingerprinting the arguments.
+  const attempt = [...new Set(names)].sort().join(",");
+  // Args are deliberately left out of the fingerprint. The calls failed because
+  // the tools do not exist, which is a function of the names alone — they would
   // fail identically with any arguments. Fingerprinting them would make every
   // retry a fresh streak and the ceiling would never fire, which is the blind
   // spot this closes.
-  tracker.record(unavailable.toolName, undefined);
+  tracker.record(attempt, undefined);
 }
 
 /**

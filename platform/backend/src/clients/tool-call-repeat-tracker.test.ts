@@ -286,6 +286,25 @@ describe("recordUnavailableToolCallStep", () => {
     expect(tracker.record("anything", undefined).count).toBe(1);
   });
 
+  it("reaches the ceiling when a step names the same missing tools in a different order", () => {
+    const { step, stopped } = boundTracker();
+
+    // Same two walls every step, hit in whatever order the model emitted them.
+    // Keying on only one of the names would read this as a fresh attempt each
+    // time and never terminate — the same escape as fingerprinting arguments.
+    for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
+      const batch = [
+        unavailableCall("ghost_a", { i }),
+        unavailableCall("ghost_b", { i }),
+      ];
+      step(i % 2 === 0 ? batch.reverse() : batch);
+      expect(stopped()).toBe(false);
+    }
+
+    step([unavailableCall("ghost_b", {}), unavailableCall("ghost_a", {})]);
+    expect(stopped()).toBe(true);
+  });
+
   it("resets the streak when a different unavailable tool interleaves", () => {
     const { step, stopped } = boundTracker();
 

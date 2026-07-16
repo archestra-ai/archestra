@@ -1476,7 +1476,11 @@ async function resolveHtmlSource(params: {
     throw error;
   }
   if (!resolved) return notFound();
+  // Both are attacker-controlled: any project member can save a file under a
+  // chosen name and MIME, and these errors are read by another member's model
+  // as trusted tool output. Escape whatever is echoed back, not just the name.
   const displayName = escapeAppNameForModelText(resolved.filename);
+  const displayMime = escapeAppNameForModelText(resolved.mimeType);
 
   // buildValidatedVersionPayload enforces this cap again on the assembled
   // document, which is what actually guards the write; checking here only buys
@@ -1493,7 +1497,7 @@ async function resolveHtmlSource(params: {
   if (html === null) {
     return {
       error: errorResult(
-        `"${displayName}" (${resolved.mimeType}) is not UTF-8 text, so it cannot be an app document. Nothing was saved.`,
+        `"${displayName}" (${displayMime}) is not UTF-8 text, so it cannot be an app document. Nothing was saved.`,
       ),
     };
   }

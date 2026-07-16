@@ -252,6 +252,28 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
     expect(putResponse.statusCode).toBe(409);
   });
 
+  test("the 409 gate rejects slug-equivalent names (whitespace vs underscores)", async () => {
+    await createCatalog({ name: "My Server", serverType: "remote" });
+    const beta = await createCatalog({ name: "beta", serverType: "remote" });
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${beta.id}`,
+      payload: { name: "my_server" },
+    });
+
+    expect(putResponse.statusCode).toBe(409);
+    expect(putResponse.json().error.internal_code).toBe(
+      "catalog_name_conflict",
+    );
+
+    const [catalogRow] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, beta.id));
+    expect(catalogRow.name).toBe("beta");
+  });
+
   test("a case-only self-rename is allowed (self excluded from the 409 gate)", async () => {
     const beta = await createCatalog({ name: "beta", serverType: "remote" });
 

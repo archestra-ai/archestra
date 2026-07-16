@@ -2259,20 +2259,27 @@ describe("McpServerRuntimeManager.adoptDeploymentNames", () => {
       name: string;
       selectorId: string;
       creationTimestamp?: Date;
+      namespace?: string;
     }>,
   ) {
     const { McpServerRuntimeManager } = await import("./manager");
     const manager = new McpServerRuntimeManager();
     (manager as unknown as { k8sAppsApi: unknown }).k8sAppsApi = {
-      listNamespacedDeployment: vi.fn().mockResolvedValue({
-        items: deployments.map((d) => ({
-          metadata: {
-            name: d.name,
-            labels: { app: "mcp-server", "mcp-server-id": d.selectorId },
-            creationTimestamp: d.creationTimestamp,
-          },
-        })),
-      }),
+      listNamespacedDeployment: vi
+        .fn()
+        .mockImplementation(({ namespace }: { namespace: string }) =>
+          Promise.resolve({
+            items: deployments
+              .filter((d) => (d.namespace ?? "test-namespace") === namespace)
+              .map((d) => ({
+                metadata: {
+                  name: d.name,
+                  labels: { app: "mcp-server", "mcp-server-id": d.selectorId },
+                  creationTimestamp: d.creationTimestamp,
+                },
+              })),
+          }),
+        ),
     };
     return manager;
   }
@@ -2303,6 +2310,46 @@ describe("McpServerRuntimeManager.adoptDeploymentNames", () => {
     });
     // In-memory mutation — the same row object feeds startServer + sweep.
     expect(server.deploymentName).toBe("mcp-old-diverged-name");
+  });
+
+  test("adopts the live deployment from an environment namespace (not only the platform namespace)", async () => {
+    const catalog = {
+      id: "cat-env",
+      environmentId: "env-staging",
+      multitenant: false,
+      deploymentName: null as string | null,
+      serverType: "local" as const,
+    };
+    const server = makeLocalServerRow({
+      id: "srv-env",
+      name: "current-name",
+      catalogId: "cat-env",
+    });
+    const manager = await createManagerForAdopt([
+      {
+        name: "mcp-old-diverged-name",
+        selectorId: "srv-env",
+        namespace: "env-staging-ns",
+      },
+    ]);
+    (
+      manager as unknown as {
+        resolveNamespaceForCatalog: (
+          catalogItem: typeof catalog,
+        ) => Promise<string>;
+      }
+    ).resolveNamespaceForCatalog = vi.fn().mockResolvedValue("env-staging-ns");
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [catalog],
+    });
+
+    expect(server.deploymentName).toBe("mcp-old-diverged-name");
+    expect(McpServerModel.setDeploymentName).toHaveBeenCalledExactlyOnceWith({
+      id: "srv-env",
+      deploymentName: "mcp-old-diverged-name",
+    });
   });
 
   test("freezes the legacy recompute for a row with no live deployment", async () => {

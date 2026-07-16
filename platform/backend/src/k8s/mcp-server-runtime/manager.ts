@@ -1453,10 +1453,6 @@ export class McpServerRuntimeManager {
   }
 
   /**
-   * Sweep deployments whose names no longer match the current name produced by
-   * K8sDeployment.constructDeploymentName for their owning server.
-   */
-  /**
    * One-shot startup pass that freezes each local install's K8s deployment
    * name into the DB. The live cluster is the source of truth: a row whose
    * DB name diverged from its running deployment (renamed via API before the
@@ -1480,20 +1476,12 @@ export class McpServerRuntimeManager {
       throw new Error("Kubernetes API client not initialized");
     }
 
-    // One list call; group live deployments by their selector identity label
-    // (server id single-tenant, catalog id multitenant).
-    const deployments = await this.k8sAppsApi.listNamespacedDeployment({
-      namespace: this.namespace,
-      labelSelector: "app=mcp-server",
-    });
-    const deploymentsBySelectorId = new Map<string, k8s.V1Deployment[]>();
-    for (const deployment of deployments.items) {
-      const selectorId = deployment.metadata?.labels?.["mcp-server-id"];
-      if (!selectorId || !deployment.metadata?.name) continue;
-      const group = deploymentsBySelectorId.get(selectorId) ?? [];
-      group.push(deployment);
-      deploymentsBySelectorId.set(selectorId, group);
-    }
+    // List every namespace local catalogs deploy into (platform + per-environment),
+    // then group live deployments by their selector identity label (server id
+    // single-tenant, catalog id multitenant).
+    const namespaces = await this.namespacesForLocalCatalogs(localCatalogItems);
+    const deploymentsBySelectorId =
+      await this.listMcpDeploymentsGroupedBySelectorId(namespaces);
 
     // Duplicate deployments for one id are the historical orphan bug itself.
     // Prefer the one matching the legacy recompute (the row's current name
@@ -1611,63 +1599,70 @@ export class McpServerRuntimeManager {
     };
 
     try {
-      const deployments = await this.k8sAppsApi.listNamespacedDeployment({
-        namespace: this.namespace,
-        labelSelector: "app=mcp-server",
-      });
+      const namespaces = await this.namespacesForInstalledLocalServers(
+        installedServers,
+        getCatalog,
+      );
 
-      for (const deployment of deployments.items) {
-        const labels = deployment.metadata?.labels;
-        const deploymentName = deployment.metadata?.name;
-        if (!labels || !deploymentName) continue;
+      for (const deploymentNamespace of namespaces) {
+        const deployments = await this.k8sAppsApi.listNamespacedDeployment({
+          namespace: deploymentNamespace,
+          labelSelector: "app=mcp-server",
+        });
 
-        const serverId = labels["mcp-server-id"];
-        if (!serverId) continue;
+        for (const deployment of deployments.items) {
+          const labels = deployment.metadata?.labels;
+          const deploymentName = deployment.metadata?.name;
+          if (!labels || !deploymentName) continue;
 
-        const server = serverById.get(serverId);
-        if (!server) continue;
+          const serverId = labels["mcp-server-id"];
+          if (!serverId) continue;
 
-        // Only ever compare against a FROZEN name. The adopt pass runs
-        // before this sweep and freezes every local single-tenant row, so
-        // NULL here means the expected name can't be proven — never delete
-        // on a recomputed guess.
-        if (!server.deploymentName) continue;
+          const server = serverById.get(serverId);
+          if (!server) continue;
 
-        const catalog = await getCatalog(server.catalogId);
-        const expectedName = K8sDeployment.constructDeploymentName(
-          server,
-          catalog,
-        );
+          // Only ever compare against a FROZEN name. The adopt pass runs
+          // before this sweep and freezes every local single-tenant row, so
+          // NULL here means the expected name can't be proven — never delete
+          // on a recomputed guess.
+          if (!server.deploymentName) continue;
 
-        if (deploymentName === expectedName) continue;
-
-        logger.info(
-          { deploymentName, expectedName, serverId },
-          "Deleting orphaned MCP deployment with stale name",
-        );
-
-        try {
-          await this.k8sAppsApi.deleteNamespacedDeployment({
-            name: deploymentName,
-            namespace: this.namespace,
-          });
-        } catch (err) {
-          logger.warn(
-            { err, deploymentName },
-            "Failed to delete orphaned MCP deployment",
+          const catalog = await getCatalog(server.catalogId);
+          const expectedName = K8sDeployment.constructDeploymentName(
+            server,
+            catalog,
           );
-        }
 
-        try {
-          await this.k8sApi.deleteNamespacedService({
-            name: `${deploymentName}-service`,
-            namespace: this.namespace,
-          });
-        } catch (err) {
-          logger.debug(
-            { err, deploymentName },
-            "No orphaned service to delete (or already gone)",
+          if (deploymentName === expectedName) continue;
+
+          logger.info(
+            { deploymentName, expectedName, serverId, deploymentNamespace },
+            "Deleting orphaned MCP deployment with stale name",
           );
+
+          try {
+            await this.k8sAppsApi.deleteNamespacedDeployment({
+              name: deploymentName,
+              namespace: deploymentNamespace,
+            });
+          } catch (err) {
+            logger.warn(
+              { err, deploymentName, deploymentNamespace },
+              "Failed to delete orphaned MCP deployment",
+            );
+          }
+
+          try {
+            await this.k8sApi.deleteNamespacedService({
+              name: `${deploymentName}-service`,
+              namespace: deploymentNamespace,
+            });
+          } catch (err) {
+            logger.debug(
+              { err, deploymentName, deploymentNamespace },
+              "No orphaned service to delete (or already gone)",
+            );
+          }
         }
       }
     } catch (error) {
@@ -1697,6 +1692,56 @@ export class McpServerRuntimeManager {
 
     responseStream.write(message);
     responseStream.end();
+  }
+
+  private async namespacesForLocalCatalogs(
+    localCatalogItems: CatalogItem[],
+  ): Promise<string[]> {
+    const namespaces = new Set<string>([this.namespace]);
+    for (const catalog of localCatalogItems) {
+      if (!catalog) continue;
+      namespaces.add(await this.resolveNamespaceForCatalog(catalog));
+    }
+    return [...namespaces];
+  }
+
+  private async namespacesForInstalledLocalServers(
+    installedServers: McpServer[],
+    getCatalog: (
+      catalogId: string | null | undefined,
+    ) => Promise<CatalogItem | null>,
+  ): Promise<string[]> {
+    const namespaces = new Set<string>([this.namespace]);
+    for (const server of installedServers) {
+      const catalog = await getCatalog(server.catalogId);
+      if (catalog?.serverType !== "local") continue;
+      namespaces.add(await this.resolveNamespaceForCatalog(catalog));
+    }
+    return [...namespaces];
+  }
+
+  private async listMcpDeploymentsGroupedBySelectorId(
+    namespaces: string[],
+  ): Promise<Map<string, k8s.V1Deployment[]>> {
+    if (!this.k8sAppsApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
+    const deploymentsBySelectorId = new Map<string, k8s.V1Deployment[]>();
+    for (const namespace of namespaces) {
+      const deployments = await this.k8sAppsApi.listNamespacedDeployment({
+        namespace,
+        labelSelector: "app=mcp-server",
+      });
+      for (const deployment of deployments.items) {
+        const selectorId = deployment.metadata?.labels?.["mcp-server-id"];
+        if (!selectorId || !deployment.metadata?.name) continue;
+        const group = deploymentsBySelectorId.get(selectorId) ?? [];
+        group.push(deployment);
+        deploymentsBySelectorId.set(selectorId, group);
+      }
+    }
+    return deploymentsBySelectorId;
   }
 }
 

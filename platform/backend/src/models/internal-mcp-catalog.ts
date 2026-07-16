@@ -499,19 +499,24 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * Case-insensitive root-catalog name lookup within an organization — the
-   * rename 409 gate. Tool names embed the lowercased catalog slug and
-   * tool-call routing resolves purely by name string, so a same-name (or
-   * same-slug) sibling catalog would silently receive the other server's
-   * calls — including calls from stale clients that would otherwise get a
-   * clean "unknown tool" error.
+   * Root-catalog lookup within an organization by sanitized tool-slug prefix —
+   * the rename 409 gate. Tool names embed `sanitizeServerNameForSlug(name)` and
+   * tool-call routing resolves purely by name string, so a sibling catalog whose
+   * display name slugifies to the same prefix (e.g. `"My Server"` vs
+   * `"my_server"`) would silently receive the other server's calls — including
+   * calls from stale clients that would otherwise get a clean "unknown tool"
+   * error. The route excludes self by id before acting on a match.
    */
   static async findRootByNameInOrg(params: {
     name: string;
     organizationId: string;
   }): Promise<{ id: string } | null> {
-    const [row] = await db
-      .select({ id: schema.internalMcpCatalogTable.id })
+    const targetSlug = ToolModel.sanitizeServerNameForSlug(params.name);
+    const rows = await db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+      })
       .from(schema.internalMcpCatalogTable)
       .where(
         and(
@@ -520,11 +525,15 @@ class InternalMcpCatalogModel {
             schema.internalMcpCatalogTable.organizationId,
             params.organizationId,
           ),
-          sql`lower(${schema.internalMcpCatalogTable.name}) = lower(${params.name})`,
         ),
-      )
-      .limit(1);
-    return row ?? null;
+      );
+
+    for (const row of rows) {
+      if (ToolModel.sanitizeServerNameForSlug(row.name) === targetSlug) {
+        return { id: row.id };
+      }
+    }
+    return null;
   }
 
   /**

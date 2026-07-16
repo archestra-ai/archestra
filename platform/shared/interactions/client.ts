@@ -64,6 +64,57 @@ export function isCodexOriginator(
   return CODEX_FIRST_PARTY_ORIGINATORS.has(value) || value.startsWith("codex ");
 }
 
+/**
+ * Whether a User-Agent denotes a first-party Codex client. Codex builds its UA
+ * with the originator as the leading product token, e.g.
+ * `codex_cli_rs/0.20.0 (Linux 6.6; x86_64) …` — checked as a fallback for when
+ * a middlebox drops the `originator` header itself.
+ */
+export function isCodexUserAgent(
+  userAgent: string | null | undefined,
+): boolean {
+  return !!userAgent && isCodexOriginator(userAgent.split("/", 1)[0]);
+}
+
+/**
+ * Extracts the Codex session id from a Responses-request `client_metadata`
+ * object. Codex sends `client_metadata: { session_id, thread_id, turn_id, … }`
+ * on every request (session_id is a UUID; per-run, unlike the durable
+ * thread_id). Returns the session id when the value matches that shape, null
+ * otherwise — a strict shape-match, since `client_metadata` is not a standard
+ * OpenAI field but could still be sent by other clients.
+ */
+export function codexClientMetadataSessionId(
+  clientMetadata: unknown,
+): string | null {
+  if (!clientMetadata || typeof clientMetadata !== "object") {
+    return null;
+  }
+  const sessionId = (clientMetadata as { session_id?: unknown }).session_id;
+  if (typeof sessionId === "string" && isCodexSessionId(sessionId.trim())) {
+    return sessionId.trim();
+  }
+  return null;
+}
+
+/** Whether a request body value shape-matches Codex `client_metadata`. */
+export function isCodexClientMetadata(clientMetadata: unknown): boolean {
+  return codexClientMetadataSessionId(clientMetadata) !== null;
+}
+
+/**
+ * Whether a value has the shape of a Codex session id. Codex session/thread
+ * ids are UUIDs (codex-rs generates them via `Uuid`).
+ */
+export function isCodexSessionId(
+  value: string | null | undefined,
+): value is string {
+  return !!value && UUID_PATTERN.test(value);
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const CLAUDE_CLIENT_AGENT_IDS = [
   CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,

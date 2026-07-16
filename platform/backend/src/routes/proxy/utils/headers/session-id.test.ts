@@ -257,9 +257,32 @@ describe("extractSessionInfo", () => {
     expect(result).toEqual({ sessionId: null, sessionSource: null });
   });
 
-  test("extracts session ID from the Codex `session-id` header", () => {
+  test("Codex request (originator): client_metadata.session_id wins over the session-id header", () => {
     const result = extractSessionInfo(
-      { "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+      {
+        originator: "codex_cli_rs",
+        "session-id": "019f66bc-ffff-72d1-b927-4d96fad7dc3a",
+      },
+      {
+        client_metadata: {
+          session_id: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+          thread_id: "019f66bc-aaaa-72d1-b927-4d96fad7dc3a",
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      sessionSource: "codex_session",
+    });
+  });
+
+  test("Codex request (originator): falls back to the session-id header when client_metadata is absent", () => {
+    const result = extractSessionInfo(
+      {
+        originator: "codex_cli_rs",
+        "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      },
       undefined,
     );
 
@@ -269,10 +292,13 @@ describe("extractSessionInfo", () => {
     });
   });
 
-  test("falls back to Codex prompt_cache_key when no session-id header", () => {
+  test("Codex request via the explicit X-Archestra-Agent-Id header", () => {
     const result = extractSessionInfo(
-      {},
-      { prompt_cache_key: "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+      {
+        "x-archestra-agent-id": "openai_codex",
+        "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      },
+      undefined,
     );
 
     expect(result).toEqual({
@@ -281,27 +307,90 @@ describe("extractSessionInfo", () => {
     });
   });
 
-  test("prefers the Codex session-id header over prompt_cache_key", () => {
+  test("Codex request via the User-Agent when the originator header was dropped", () => {
     const result = extractSessionInfo(
-      { "session-id": "header-session" },
-      { prompt_cache_key: "body-cache-key" },
+      {
+        "user-agent": "codex_cli_rs/0.20.0 (Linux 6.6; x86_64) reqwest",
+        "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      },
+      undefined,
     );
 
     expect(result).toEqual({
-      sessionId: "header-session",
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
       sessionSource: "codex_session",
     });
   });
 
-  test("prompt_cache_key is a last resort, below the OpenAI user field", () => {
+  test("the client_metadata shape alone both identifies Codex and supplies the session id", () => {
     const result = extractSessionInfo(
       {},
-      { user: "openai-user", prompt_cache_key: "cache-key" },
+      {
+        client_metadata: {
+          session_id: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      sessionSource: "codex_session",
+    });
+  });
+
+  test("a session-id header on a non-Codex request is never read as a Codex session", () => {
+    // The header name is generic; without any Codex identification signal the
+    // value must not be captured with codex_session provenance.
+    const result = extractSessionInfo(
+      { "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+      undefined,
+    );
+
+    expect(result).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("a non-Codex request with a session-id header falls through to lower-priority signals", () => {
+    const result = extractSessionInfo(
+      { "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+      { user: "openai-user" },
     );
 
     expect(result).toEqual({
       sessionId: "openai-user",
       sessionSource: "openai_user",
+    });
+  });
+
+  test("Codex request with a non-UUID session-id header and no client_metadata yields no session", () => {
+    const result = extractSessionInfo(
+      { originator: "codex_cli_rs", "session-id": "not-a-uuid" },
+      undefined,
+    );
+
+    expect(result).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("prompt_cache_key is never used as a session signal", () => {
+    const result = extractSessionInfo({ originator: "codex_cli_rs" }, {
+      prompt_cache_key: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+    } as Parameters<typeof extractSessionInfo>[1]);
+
+    expect(result).toEqual({ sessionId: null, sessionSource: null });
+  });
+
+  test("the explicit X-Archestra-Session-Id header still outranks Codex signals", () => {
+    const result = extractSessionInfo(
+      {
+        "x-archestra-session-id": "archestra-session",
+        originator: "codex_cli_rs",
+        "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      },
+      undefined,
+    );
+
+    expect(result).toEqual({
+      sessionId: "archestra-session",
+      sessionSource: "header",
     });
   });
 });

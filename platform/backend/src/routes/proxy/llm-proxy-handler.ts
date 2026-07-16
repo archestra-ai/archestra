@@ -181,15 +181,16 @@ function getProviderMessagesCount(messages: unknown): number | null {
 /**
  * The subset of a proxied request body we read for session-id and client-app
  * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
- * → `system`/`metadata`; `extractSessionInfo` → `metadata`/`user`), so one
- * shared view keeps the cast in a single place.
+ * → `system`/`metadata`; `detectCodexClientId` → `client_metadata`;
+ * `extractSessionInfo` → `metadata`/`user`/`client_metadata`), so one shared
+ * view keeps the cast in a single place.
  */
 type RequestBodyForExtraction =
   | {
       system?: unknown;
       metadata?: { user_id?: string | null };
       user?: string | null;
-      prompt_cache_key?: string | null;
+      client_metadata?: unknown;
     }
   | undefined;
 
@@ -221,12 +222,16 @@ export async function handleLLMProxy<
   // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
   // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
   // app from the request and record it (Claude clients → "anthropic_claude"
-  // from the request body; Codex clients → "openai_codex" from the originator
-  // header the Codex CLI stamps on every request).
+  // from the request body; Codex clients → "openai_codex" from the
+  // client_metadata body shape or the originator/User-Agent headers the Codex
+  // CLI stamps on every request).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
-    utils.headers.clientApp.detectCodexClientId(headersForExtraction);
+    utils.headers.clientApp.detectCodexClientId(
+      headersForExtraction,
+      bodyForExtraction,
+    );
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (

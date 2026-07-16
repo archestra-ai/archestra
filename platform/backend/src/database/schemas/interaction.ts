@@ -89,7 +89,8 @@ const interactionsTable = pgTable(
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)
-     * - Codex `session-id` request header / `prompt_cache_key` body field
+     * - Codex `client_metadata.session_id` body field / `session-id` request
+     *   header (only on requests identified as Codex)
      * - Claude/Anthropic metadata.user_id field
      * - OpenAI's user field
      */

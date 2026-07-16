@@ -177,7 +177,7 @@ class LlmProviderApiKeyModel {
 
     // Query with team, user, and secrets table joins.
     // NOTE: secretsTable.secret is encrypted at rest — decrypt via
-    // parseVaultReferenceFromSecret() before reading the value.
+    // decryptApiKeyValue() before reading the value.
     const apiKeys = await db
       .select({
         id: schema.llmProviderApiKeysTable.id,
@@ -217,9 +217,11 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    // Parse vault references from secrets and compute storage type
+    // Decrypt each secret once, then derive metadata (vault ref, codex marker)
+    // from the value; the value itself never leaves this mapper.
     return apiKeys.map((key) => {
-      const vaultRef = parseVaultReferenceFromSecret(key.secret);
+      const apiKeyValue = decryptApiKeyValue(key.secret);
+      const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
       const secretStorageType = computeSecretStorageType(
         key.secretId,
         key.secretIsVault,
@@ -236,7 +238,9 @@ class LlmProviderApiKeyModel {
         vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
         vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
         secretStorageType,
-        isChatgptSubscription: isChatgptSubscriptionSecret(key.secret),
+        isChatgptSubscription:
+          key.provider === "openai" &&
+          isOpenAiCodexCredential(apiKeyValue ?? undefined),
       };
     });
   }
@@ -305,7 +309,7 @@ class LlmProviderApiKeyModel {
 
     // Query with team, user, and secrets table joins.
     // NOTE: secretsTable.secret is encrypted at rest — decrypt via
-    // parseVaultReferenceFromSecret() before reading the value.
+    // decryptApiKeyValue() before reading the value.
     const apiKeys = await db
       .select({
         id: schema.llmProviderApiKeysTable.id,
@@ -345,9 +349,11 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    // Parse vault references from secrets and compute storage type
+    // Decrypt each secret once, then derive metadata (vault ref, codex marker)
+    // from the value; the value itself never leaves this mapper.
     return apiKeys.map((key) => {
-      const vaultRef = parseVaultReferenceFromSecret(key.secret);
+      const apiKeyValue = decryptApiKeyValue(key.secret);
+      const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
       const secretStorageType = computeSecretStorageType(
         key.secretId,
         key.secretIsVault,
@@ -364,7 +370,9 @@ class LlmProviderApiKeyModel {
         vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
         vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
         secretStorageType,
-        isChatgptSubscription: isChatgptSubscriptionSecret(key.secret),
+        isChatgptSubscription:
+          key.provider === "openai" &&
+          isOpenAiCodexCredential(apiKeyValue ?? undefined),
       };
     });
   }
@@ -838,18 +846,28 @@ class LlmProviderApiKeyModel {
 }
 
 /**
- * Helper to parse vault reference from a secret value.
- * For LLM provider API keys, the secret contains { apiKey: "path#key" } format.
+ * Decrypts a stored secret and returns its `apiKey` string (LLM provider key
+ * secrets are `{ apiKey: "..." }`), or null when absent/non-string. List
+ * mappers call this once per key and derive metadata from the returned value —
+ * the value itself is never included in a response.
  */
-function parseVaultReferenceFromSecret(
-  secret: SecretValue | null,
-): { vaultSecretPath: string; vaultSecretKey: string } | null {
+function decryptApiKeyValue(secret: SecretValue | null): string | null {
   if (!secret || typeof secret !== "object") return null;
   const decrypted = isEncryptedSecret(secret)
     ? decryptSecretValue(secret)
     : secret;
   const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
-  if (typeof apiKeyValue === "string" && isVaultReference(apiKeyValue)) {
+  return typeof apiKeyValue === "string" ? apiKeyValue : null;
+}
+
+/**
+ * Helper to parse a vault reference from a decrypted apiKey value
+ * ("path#key" format).
+ */
+function parseVaultReferenceFromApiKey(
+  apiKeyValue: string | null,
+): { vaultSecretPath: string; vaultSecretKey: string } | null {
+  if (apiKeyValue && isVaultReference(apiKeyValue)) {
     const parsed = parseVaultReference(apiKeyValue);
     return {
       vaultSecretPath: parsed.path,
@@ -857,22 +875,6 @@ function parseVaultReferenceFromSecret(
     };
   }
   return null;
-}
-
-/**
- * True when the stored secret is an OpenAI "ChatGPT Subscription" (Codex)
- * credential (marker-encoded), so the edit form can open on the right auth-mode
- * tab. Reads only the marker prefix — the credential itself is never returned.
- */
-function isChatgptSubscriptionSecret(secret: SecretValue | null): boolean {
-  if (!secret || typeof secret !== "object") return false;
-  const decrypted = isEncryptedSecret(secret)
-    ? decryptSecretValue(secret)
-    : secret;
-  const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
-  return (
-    typeof apiKeyValue === "string" && isOpenAiCodexCredential(apiKeyValue)
-  );
 }
 
 /**

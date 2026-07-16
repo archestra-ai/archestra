@@ -1,7 +1,9 @@
 import {
   CLAUDE_CLIENT_ID,
   CODEX_CLIENT_ID,
+  isCodexClientMetadata,
   isCodexOriginator,
+  isCodexUserAgent,
 } from "@archestra/shared";
 import { getHeaderValue } from "./meta-header";
 import { isClaudeMetadataUserId } from "./session-id";
@@ -48,25 +50,27 @@ export function detectClaudeClientId(
 
 /**
  * Codex client auto-discovery — the Codex counterpart to
- * {@link detectClaudeClientId}. Codex has no request-body fingerprint we rely
- * on; instead it stamps its identity on the `originator` request header
- * (`codex_cli_rs` by default) and repeats it as the User-Agent's leading token
- * on every request, exactly the way the Anthropic billing header identifies
- * Claude. When the caller sets no explicit `X-Archestra-Agent-Id`, a
- * first-party Codex originator (see {@link isCodexOriginator}) — or a matching
- * User-Agent, in case a middlebox drops the originator header — attributes the
- * request to {@link CODEX_CLIENT_ID}.
+ * {@link detectClaudeClientId}. When the caller sets no explicit
+ * `X-Archestra-Agent-Id`, three Codex signals attribute the request to
+ * {@link CODEX_CLIENT_ID}, in order:
+ * 1. The Codex `client_metadata` body shape (a Responses-request object
+ *    carrying the UUID session/thread ids).
+ * 2. A first-party Codex `originator` header (`codex_cli_rs` by default; see
+ *    {@link isCodexOriginator}) — the Codex analog of the Anthropic billing
+ *    header.
+ * 3. A Codex User-Agent (Codex repeats the originator as the UA's leading
+ *    token, e.g. `codex_cli_rs/0.20.0 (Linux 6.6; x86_64) …`), in case a
+ *    middlebox drops the originator header.
  */
 export function detectCodexClientId(
   headers: Record<string, string | string[] | undefined>,
+  body: { client_metadata?: unknown } | undefined,
 ): typeof CODEX_CLIENT_ID | undefined {
-  if (isCodexOriginator(getHeaderValue(headers, "originator"))) {
-    return CODEX_CLIENT_ID;
-  }
-  // The User-Agent leads with the same originator value, e.g.
-  // `codex_cli_rs/0.20.0 (Linux 6.6; x86_64) …` — the token before the slash.
-  const userAgent = getHeaderValue(headers, "user-agent");
-  if (userAgent && isCodexOriginator(userAgent.split("/", 1)[0])) {
+  if (
+    isCodexClientMetadata(body?.client_metadata) ||
+    isCodexOriginator(getHeaderValue(headers, "originator")) ||
+    isCodexUserAgent(getHeaderValue(headers, "user-agent"))
+  ) {
     return CODEX_CLIENT_ID;
   }
   return undefined;

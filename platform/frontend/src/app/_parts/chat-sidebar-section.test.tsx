@@ -4,7 +4,7 @@ import {
 } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import { format, subDays } from "date-fns";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock ResizeObserver used by Radix UI components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -253,6 +253,10 @@ import { useFeature } from "@/lib/config/config.query";
 import { ChatSidebarSection } from "./chat-sidebar-section";
 
 beforeEach(() => {
+  // Pin the clock (midday, local time) so date-bucket labels are deterministic
+  // — no flakes when a run crosses midnight or a DST transition.
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 6 /* July */, 16, 12));
   vi.mocked(useRouter).mockReturnValue({
     push: mockRouterPush,
   } as unknown as ReturnType<typeof useRouter>);
@@ -264,6 +268,10 @@ beforeEach(() => {
     data: true,
   } as ReturnType<typeof useHasPermissions>);
   vi.mocked(useFeature).mockReturnValue(true);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function makeConv(
@@ -283,9 +291,9 @@ function makeConv(
   };
 }
 
-/** ISO timestamp n days before now (0 = today, 1 = always the previous calendar day). */
+/** ISO timestamp n calendar days before now (0 = today, 1 = yesterday). */
 function daysAgo(n: number) {
-  return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+  return subDays(new Date(), n).toISOString();
 }
 
 describe("ChatSidebarSection", () => {

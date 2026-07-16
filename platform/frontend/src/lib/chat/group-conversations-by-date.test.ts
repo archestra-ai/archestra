@@ -34,6 +34,10 @@ describe("getDateBucketLabel", () => {
     expect(getDateBucketLabel(new Date(2026, 0, 1))).toBe("Older");
   });
 
+  it("labels future dates (clock skew) as Today, not Older", () => {
+    expect(getDateBucketLabel(at(17, 0))).toBe("Today");
+  });
+
   it("falls back to Older for invalid dates instead of throwing", () => {
     expect(getDateBucketLabel("not-a-date")).toBe("Older");
   });

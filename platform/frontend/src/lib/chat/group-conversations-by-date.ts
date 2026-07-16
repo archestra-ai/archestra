@@ -17,9 +17,14 @@ export function getDateBucketLabel(value: string | Date): string {
   if (isYesterday(date)) {
     return "Yesterday";
   }
-  // NaN (invalid date) and future dates fail this check and fall to "Older",
-  // which also keeps `format` away from Invalid Date (it throws).
   const days = differenceInCalendarDays(new Date(), date);
+  // A future calendar day only happens on client/server clock skew across
+  // local midnight — the chat is effectively brand new, so call it "Today".
+  if (days < 0) {
+    return "Today";
+  }
+  // NaN (invalid date) fails both checks and falls to "Older", which also
+  // keeps `format` away from Invalid Date (it throws).
   if (days >= 2 && days <= 6) {
     return format(date, "MMM d");
   }

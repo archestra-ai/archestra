@@ -415,9 +415,9 @@ export function ConversationSearchPalette({
 
   const renderConversationItem = (
     conv: (typeof conversations)[number],
-    showPinIcon = false,
-    dateLabel?: string,
+    opts?: { showPinIcon?: boolean; dateLabel?: string },
   ) => {
+    const { showPinIcon = false, dateLabel } = opts ?? {};
     const isSearchActive = debouncedSearch.trim().length > 0;
     const displayTitle = getConversationDisplayTitle(conv.title, conv.messages);
     const preview = isSearchActive
@@ -574,22 +574,19 @@ export function ConversationSearchPalette({
                 {browseConversations.pinned.length > 0 && (
                   <CommandGroup heading="Pinned">
                     {browseConversations.pinned.map((conv) =>
-                      renderConversationItem(
-                        conv,
-                        true,
-                        getDateBucketLabel(conv.lastMessageAt),
-                      ),
+                      renderConversationItem(conv, {
+                        showPinIcon: true,
+                        dateLabel: getDateBucketLabel(conv.lastMessageAt),
+                      }),
                     )}
                   </CommandGroup>
                 )}
                 {browseConversations.unpinned.length > 0 && (
                   <CommandGroup>
                     {browseConversations.unpinned.map((conv) =>
-                      renderConversationItem(
-                        conv,
-                        false,
-                        getDateBucketLabel(conv.lastMessageAt),
-                      ),
+                      renderConversationItem(conv, {
+                        dateLabel: getDateBucketLabel(conv.lastMessageAt),
+                      }),
                     )}
                   </CommandGroup>
                 )}

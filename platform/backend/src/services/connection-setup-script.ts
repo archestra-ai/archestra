@@ -201,11 +201,26 @@ function sanitizeAppName(appName: string): string {
  * section headers, `ok` a success, `warn`/`err` advisory and failure lines
  * (err goes to stderr so `curl -f | bash` surfaces it).
  *
- * `cli` runs an external client CLI with a usable stdin — see the comment it
- * carries into the script. Every `claude`/`codex`/`copilot` invocation must go
- * through it, except ones already fed by a pipe (they own their stdin).
+ * `cli` runs an external client CLI with its stdout/stderr detached from the
+ * terminal — see the comment it carries into the script. Every
+ * `claude`/`codex`/`copilot` invocation must go through it, except ones already
+ * fed by a pipe (they own their stdin).
+ *
+ * The leading block normalizes the terminal's line discipline: a child that put
+ * the terminal in raw mode on an earlier run can leave it wedged (output no
+ * longer returns to column 0 and every line marches right), so we reset it up
+ * front and restore it on exit — the script both survives a wedged terminal and
+ * never hands one back.
  */
-const SCRIPT_HELPERS = `if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ]; then
+const SCRIPT_HELPERS = `# If stdout is a terminal, make sure its line discipline is sane: a CLI that
+# grabbed it (raw mode) on a previous run can leave newline handling off, which
+# staircases every following line to the right. Reset on entry so this run reads
+# cleanly, and on exit so the shell gets a usable terminal back.
+if [ -t 1 ] && command -v stty >/dev/null 2>&1 && { : </dev/tty; } 2>/dev/null; then
+  stty sane </dev/tty 2>/dev/null || true
+  trap 'stty sane </dev/tty 2>/dev/null || true' EXIT
+fi
+if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ]; then
   ARCH_C_RESET=$'\\033[0m'; ARCH_C_HEAD=$'\\033[1;36m'; ARCH_C_OK=$'\\033[1;32m'
   ARCH_C_WARN=$'\\033[1;33m'; ARCH_C_ERR=$'\\033[1;31m'
 else
@@ -216,16 +231,17 @@ ok()   { printf '%s==>%s %s\\n' "$ARCH_C_OK" "$ARCH_C_RESET" "$1"; }
 warn() { printf '%swarning:%s %s\\n' "$ARCH_C_WARN" "$ARCH_C_RESET" "$1"; }
 err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }
 
-# This script is piped into bash, so its stdin is the download pipe rather than
-# the terminal, and every command it starts inherits that. A CLI that probes the
-# terminal for its theme or capabilities writes the query to stdout but needs a
-# tty on stdin to switch the echo off and read the answer back; handed a pipe it
-# can do neither, so the terminal's answers echo into this output as stray text
-# like "rgb:1e1e/1e1e/1e1e" and "^[[?1;2c". Run those CLIs against the real
-# terminal when there is one — /dev/null is not enough, the probe is keyed on
-# stdout and would still echo — and never let them read this script as input.
-if (exec </dev/tty) 2>/dev/null; then ARCH_STDIN=/dev/tty; else ARCH_STDIN=/dev/null; fi
-cli() { "$@" <"$ARCH_STDIN"; }`;
+# Run a client CLI (claude/codex/copilot) so it prints plain text instead of
+# driving the terminal. Those CLIs render a full-screen TUI whenever stdout is a
+# tty: they probe the terminal for its theme/capabilities and position output
+# with absolute cursor moves, both of which assume they own the screen. Under
+# "curl | bash" they don't — this script is already writing to it — so the probe
+# replies echo in as stray text ("rgb:1e1e/1e1e/1e1e", "^[[?1;2c") and the
+# cursor moves land at the wrong column, cascading every following line to the
+# right. Piping stdout+stderr through cat makes stdout a pipe, not a tty, so each
+# CLI falls back to linear plain-text output; </dev/null keeps them off this
+# script's own stdin (the download pipe). pipefail preserves their exit status.
+cli() { "$@" </dev/null 2>&1 | cat; }`;
 
 function header(ctx: SetupScriptContext): string {
   const label = CLIENT_LABELS[ctx.clientId];

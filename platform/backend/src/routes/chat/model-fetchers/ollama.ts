@@ -155,7 +155,7 @@ function toFetchedCapabilities(
   // display, compaction, and overflow checks operate on the real window.
   const numCtx = defaultParameters?.num_ctx;
   const configuredContextLength =
-    typeof numCtx === "number" && Number.isFinite(numCtx) && numCtx > 0
+    typeof numCtx === "number" && Number.isInteger(numCtx) && numCtx > 0
       ? numCtx
       : undefined;
   const contextLength =

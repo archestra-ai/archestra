@@ -179,6 +179,19 @@ describe("fetchOllamaModels", () => {
     expect(model.capabilities?.contextLength).toBe(8192);
   });
 
+  test("ignores a non-integer num_ctx (would break the integer DB column)", async () => {
+    listBody = { data: [{ id: "weird" }] };
+    showByModel.weird = {
+      body: {
+        capabilities: ["completion"],
+        model_info: { "llama.context_length": 262144 },
+        parameters: "num_ctx 8192.5",
+      },
+    };
+    const [model] = await fetchOllamaModels("k");
+    expect(model.capabilities?.contextLength).toBe(262144);
+  });
+
   test("uses num_ctx as contextLength when model_info reports none", async () => {
     listBody = { data: [{ id: "bare" }] };
     showByModel.bare = {

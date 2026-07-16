@@ -17313,6 +17313,119 @@ export type GetAppToolsResponses = {
 
 export type GetAppToolsResponse = GetAppToolsResponses[keyof GetAppToolsResponses];
 
+export type GetAppConversationFilesData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query: {
+        conversationId: string;
+        query?: string;
+    };
+    url: '/api/apps/{appId}/files';
+};
+
+export type GetAppConversationFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppConversationFilesError = GetAppConversationFilesErrors[keyof GetAppConversationFilesErrors];
+
+export type GetAppConversationFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string | null;
+        ref: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        createdAt: string;
+    }>;
+};
+
+export type GetAppConversationFilesResponse = GetAppConversationFilesResponses[keyof GetAppConversationFilesResponses];
+
+export type GetAppConversationFileRawData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query: {
+        conversationId: string;
+        id?: string;
+        filename?: string;
+    };
+    url: '/api/apps/{appId}/files/raw';
+};
+
+export type GetAppConversationFileRawResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type PostAppRenderDiagnosticsData = {
     body: {
         version: number;

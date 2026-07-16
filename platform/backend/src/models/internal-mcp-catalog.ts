@@ -684,9 +684,16 @@ class InternalMcpCatalogModel {
       }
     }
 
+    // Drop keys whose value is undefined ("not provided"): drizzle ignores
+    // them in .set() anyway, but they'd defeat the empty-set fallback below
+    // and make an effectively-empty update throw "No values to set" (e.g. a
+    // rename-only PUT, whose name is applied by renameCascade and stripped
+    // before reaching this generic update).
     const setValues: Partial<
       typeof schema.internalMcpCatalogTable.$inferInsert
-    > = { ...dbValues };
+    > = Object.fromEntries(
+      Object.entries(dbValues).filter(([, value]) => value !== undefined),
+    );
 
     // Reset a stale image-approval decision when the custom image changes: the
     // new image must be re-vetted by the install-time gate, otherwise a one-time

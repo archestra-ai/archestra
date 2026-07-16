@@ -967,76 +967,10 @@ impl Trajectory {
             .expect("facts mirror an already-validated mutation");
         for event in &self.events.events()[admitted_from..] {
             self.state.apply(&event.fact);
-            Self::apply_flow_fact(&mut self.pending, &mut self.pending_emission, &event.fact);
+            crate::projection::apply_flow_fact(&mut self.pending, &mut self.pending_emission, &event.fact);
             if let Fact::ConfirmationSpent { turn } = &event.fact {
                 self.spent_confirmations.insert(*turn);
             }
-        }
-    }
-
-    /// Materialize one admitted fact into the pending-slot read models — the
-    /// only writer of both slots, so the log is authoritative for the action
-    /// and emission lifecycles by construction (admission already refused
-    /// any fact contradicting them).
-    fn apply_flow_fact(
-        pending: &mut Option<PendingAction>,
-        pending_emission: &mut Option<PendingEmission>,
-        fact: &Fact,
-    ) {
-        match fact {
-            Fact::ActionProposed {
-                action,
-                flow,
-                request,
-                effects,
-            } => {
-                *pending = Some(PendingAction::proposed(
-                    *action,
-                    *flow,
-                    request.clone(),
-                    effects.clone(),
-                ));
-            }
-            Fact::ActionConstrained { to_tool, effects, .. } => {
-                pending
-                    .as_mut()
-                    .expect("admission guarantees a live action")
-                    .constrain(to_tool.clone(), effects.clone());
-            }
-            Fact::ArgumentSubstituted { from, to, .. } => {
-                pending
-                    .as_mut()
-                    .expect("admission guarantees a live action")
-                    .substitute_argument(*from, *to);
-            }
-            Fact::GrowthAccepted { effects, .. } => {
-                pending
-                    .as_mut()
-                    .expect("admission guarantees a live action")
-                    .accept_growth(effects.clone());
-            }
-            Fact::ActionReleased { .. } => {
-                pending
-                    .as_mut()
-                    .expect("admission guarantees a live action")
-                    .mark_released();
-            }
-            Fact::ActionCompleted { .. } | Fact::DispatchFailed { .. } | Fact::ActionAbandoned { .. } => {
-                *pending = None;
-            }
-            Fact::EmissionProposed { flow, request } => {
-                *pending_emission = Some(PendingEmission::proposed(*flow, request.clone()));
-            }
-            Fact::EmissionBodySubstituted { from, to, .. } => {
-                pending_emission
-                    .as_mut()
-                    .expect("admission guarantees a live emission")
-                    .substitute_body(*from, *to);
-            }
-            Fact::EmissionAbandoned { .. } | Fact::ResponseEmitted { .. } => {
-                *pending_emission = None;
-            }
-            _ => {}
         }
     }
 }

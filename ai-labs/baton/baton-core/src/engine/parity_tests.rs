@@ -1,8 +1,12 @@
-//! Rebuild equivalence: the pure projections over the event set must agree
-//! with the materialized read models on every representative flow — the log
-//! is authoritative, the materializations are rebuildable from it. (These
-//! started as shadow-phase parity tests; after the cutover they pin the
-//! materialization discipline itself.)
+//! Rebuild equivalence: [`projection::TrajectoryView`] must agree with the
+//! hand-maintained read models on every representative flow — the log is
+//! authoritative, the read models are rebuildable from it.
+//!
+//! This suite is **transitional evidence**: it exists to prove the view is a
+//! faithful, complete build path before the read models are deleted in favour
+//! of it. Once `Trajectory` holds only the view, the two sides of every assert
+//! here become the same value and the suite goes with them; what survives is
+//! the behaviour each scenario drives.
 
 use std::collections::BTreeSet;
 
@@ -98,61 +102,62 @@ fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) ->
     )
 }
 
-/// Projected truth == legacy truth, across every domain the shadow
-/// projections cover.
+/// The projected view == the hand-maintained read models, across every
+/// domain the projections cover. This is the cutover evidence: it must hold
+/// before the read models can be deleted in favour of the view.
+///
+/// Two different strengths of claim live here, and conflating them is how the
+/// previous version of this assert became vacuous (it rebuilt
+/// `TrajectoryState` with the same `apply` that maintained it, asserting
+/// `apply(e) == apply(e)`):
+///
+/// - Labels, provenance, effects and audit are **independently recomputed**
+///   by the projections from the admission facts, while the read models build
+///   them at admission time. Agreement is a real check of the algebra.
+/// - The pending slots share one fold ([`projection::apply_flow_fact`]) by
+///   design — a second implementation would be the duplication we are
+///   removing. Agreement there is the weaker but load-bearing claim that
+///   *bulk replay reproduces incremental maintenance*.
 fn assert_parity(trajectory: &Trajectory) {
     let events = trajectory.events();
+    let view = projection::TrajectoryView::project(events);
 
-    // The whole control-plane read model rebuilds from the facts alone.
-    let mut rebuilt = crate::audit::TrajectoryState::default();
-    for event in events.events() {
-        rebuilt.apply(&event.fact);
-    }
-    assert_eq!(
-        rebuilt.past_effects(),
-        trajectory.state().past_effects(),
-        "state rebuild equivalence: effects"
-    );
-    assert_eq!(
-        rebuilt.audit(),
-        trajectory.state().audit(),
-        "state rebuild equivalence: audit"
-    );
-
-    let labels = projection::value_labels(events);
-    let provenances = projection::provenance(events);
-    for (id, label) in &labels {
+    for (id, label) in view.value_labels() {
         let stored = trajectory.value(*id).expect("projected value exists in the store");
         assert_eq!(stored.label(), label, "label parity for {id}");
         assert_eq!(
             stored.provenance(),
-            provenances.get(id).expect("provenance projected"),
+            view.provenance_of(*id).expect("provenance projected"),
             "provenance parity for {id}"
         );
     }
     // The projection is complete: the store holds exactly the projected ids.
-    assert!(trajectory.value(ValueId::new(labels.len() as u64)).is_err());
+    assert!(
+        trajectory
+            .value(ValueId::new(view.value_labels().len() as u64))
+            .is_err()
+    );
 
     assert_eq!(
-        &projection::committed_effects(events),
+        view.committed_effects(),
         trajectory.state().past_effects(),
         "committed-effects parity"
     );
-
-    match (projection::pending_action(events), trajectory.pending_action()) {
-        (None, None) => {}
-        (Some(view), Some(pending)) => {
-            assert_eq!(view.action, pending.id());
-            assert_eq!(&view.tool, &pending.current().tool);
-            assert_eq!(&view.proposed_effects, pending.proposed_effects());
-            assert_eq!(&view.accepted_effects, pending.accepted_effects());
-            assert_eq!(view.state, pending.state());
-        }
-        (projected, _) => panic!("pending-action parity broken: projected {projected:?}"),
-    }
+    assert_eq!(view.audit(), trajectory.state().audit(), "audit parity");
 
     assert_eq!(
-        projection::confirmation_available(events).map(|(_, tool)| tool),
+        view.pending_action(),
+        trajectory.pending_action(),
+        "pending-action parity (bulk replay == incremental maintenance)"
+    );
+    assert_eq!(
+        view.pending_emission(),
+        trajectory.pending_emission(),
+        "pending-emission parity (bulk replay == incremental maintenance)"
+    );
+
+    assert_eq!(
+        view.confirmation_available().map(|(_, tool)| tool.clone()),
         trajectory.pending_confirmation().cloned(),
         "confirmation parity"
     );
@@ -279,11 +284,20 @@ fn transform_remedy_walk_projects_the_legacy_truth() {
         StepOutcome::Advanced(FlowOutcome::AllowedNow(FlowPermit::Execute(token))) => token,
         other => panic!("expected the transform to permit, got {other:?}"),
     };
-    let substitutions = projection::pending_action(trajectory.events())
-        .expect("action pending until release")
-        .substitutions;
-    assert_eq!(substitutions.len(), 1);
-    assert_eq!(substitutions[0].0, body);
+    // The projected `current` tree is the substituted one: the tainted body
+    // is gone and the derived value took its slot, while the original
+    // proposal (the re-entry identity basis) still names the source.
+    let projected = projection::pending_action(trajectory.events()).expect("action pending until release");
+    assert!(!projected.current().arguments.leaves().contains(&body));
+    assert!(projected.original().arguments.leaves().contains(&body));
+    assert_eq!(
+        projected.current().arguments,
+        trajectory
+            .pending_action()
+            .expect("action pending until release")
+            .current()
+            .arguments
+    );
 
     let receipt = tracked(&mut trajectory, 1, |t| t.release(token).unwrap().1);
     tracked(&mut trajectory, 1, |t| {

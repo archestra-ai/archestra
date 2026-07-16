@@ -250,7 +250,7 @@ pub struct EmissionRequest {
 /// immutable original (the identity basis for idempotent re-entry) and the
 /// current form (what actually gets checked and emitted — a `DeriveValue`
 /// remedy substitutes into it). Independent of the pending tool-action slot.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PendingEmission {
     /// The checked flow this emission is the target of: plans, check-scoped
     /// grants, and check facts bind to it.
@@ -301,7 +301,7 @@ pub enum ActionState {
 /// possibly constrained form (what actually gets checked and dispatched) —
 /// `ActionId` alone cannot distinguish re-entry of the original from an
 /// independent proposal that merely equals the constrained form.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PendingAction {
     id: ActionId,
     /// The checked flow this action is the target of: plans, check-scoped

@@ -69,8 +69,8 @@ mod tests {
             r#"
             upstream_base_url = "http://upstream.invalid"
 
-            [contracts.user]
-            id = "operator"
+            [contracts.trajectory]
+            audience = ["operator"]
 
             [[contracts.tool]]
             name = "get_logs"
@@ -79,7 +79,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(p.upstream_base_url, "http://upstream.invalid");
-        assert_eq!(p.contracts.user_id.as_str(), "operator");
+        assert_eq!(
+            p.contracts.trajectory_label.audience,
+            baton_core::Audience::readers([baton_core::UserId::new("operator")])
+        );
         assert_eq!(p.contracts.contracts.len(), 1);
     }
 

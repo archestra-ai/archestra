@@ -30,7 +30,7 @@ The policy (`policy.toml`) annotates only the tools this scenario touches:
 - `k8s_delete_resource`, `k8s_apply_manifest`, `k8s_patch_resource` require a
   **trusted** flow — a mutation may not run once suspicious content is in play.
 - Everything in the conversation is **team-private**: the user's turns and the
-  cluster reads carry `audience = ["operator", "sre-team"]` (on `[contracts.user]`
+  cluster reads carry `audience = ["operator", "sre-team"]` (on `[contracts.trajectory]`
   and in the reads' `output`). Audience holds people only — never URLs or
   channels — and folds by intersection.
 - `notify` (served by `notify-mcp/`) posts to one fixed destination, the

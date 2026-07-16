@@ -51,12 +51,14 @@ pub enum ContractsError {
     DuplicateAuthority(String),
 }
 
-/// The parsed policy document: who the requesting user is, and the contracts
-/// to register. Built once at startup and shared read-only across requests.
+/// The parsed policy document: the Trajectory's default labels and the
+/// contracts to register. Built once at startup and shared read-only across
+/// requests.
 #[derive(Debug, Clone)]
 pub struct Contracts {
-    pub user_id: UserId,
-    pub user_label: ValueLabel,
+    /// The labels the Trajectory starts with — the label every user turn
+    /// carries. Tool results can only narrow them, never widen.
+    pub trajectory_label: ValueLabel,
     pub contracts: Vec<ToolContract>,
     /// Per-tool wire argument that carries recipients (e.g. `to`, `url`).
     pub recipients_args: HashMap<ToolName, String>,
@@ -77,15 +79,11 @@ impl Contracts {
     }
 }
 
-fn default_user_id() -> String {
-    "user".to_string()
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawConfig {
     #[serde(default)]
-    user: UserSpec,
+    trajectory: TrajectorySpec,
     #[serde(default)]
     tool: Vec<ToolSpec>,
     #[serde(default)]
@@ -94,9 +92,9 @@ struct RawConfig {
 
 impl RawConfig {
     fn build(self) -> Result<Contracts, ContractsError> {
-        let user_label = ValueLabel {
-            audience: self.user.audience.to_audience()?,
-            trust: self.user.trust.to_trust(),
+        let trajectory_label = ValueLabel {
+            audience: self.trajectory.audience.to_audience()?,
+            trust: self.trajectory.trust.to_trust(),
         };
 
         let mut contracts = Vec::new();
@@ -148,8 +146,7 @@ impl RawConfig {
         }
 
         Ok(Contracts {
-            user_id: UserId::new(&self.user.id),
-            user_label,
+            trajectory_label,
             contracts,
             recipients_args,
             authorities,
@@ -157,25 +154,17 @@ impl RawConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+/// The Trajectory's default labels: `trust` defaults to trusted (the user is
+/// the trust boundary), `audience` to public. These label user turns only —
+/// a tool result without a declared `output` stays unknown, it does not
+/// inherit these defaults.
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct UserSpec {
-    #[serde(default = "default_user_id")]
-    id: String,
+struct TrajectorySpec {
     #[serde(default)]
     audience: AudienceSpec,
     #[serde(default)]
     trust: TrustSpec,
-}
-
-impl Default for UserSpec {
-    fn default() -> Self {
-        Self {
-            id: default_user_id(),
-            audience: AudienceSpec::default(),
-            trust: TrustSpec::default(),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -477,8 +466,8 @@ mod tests {
     use super::*;
 
     const DEMO: &str = r#"
-        [user]
-        id = "operator"
+        [trajectory]
+        audience = ["operator", "sre-team"]
 
         [[tool]]
         name = "k8s_get_pod_logs"
@@ -509,7 +498,11 @@ mod tests {
     #[test]
     fn parses_demo_contracts() {
         let c = Contracts::from_toml(DEMO).unwrap();
-        assert_eq!(c.user_id.as_str(), "operator");
+        assert_eq!(c.trajectory_label.trust, Trust::TRUSTED);
+        assert_eq!(
+            c.trajectory_label.audience,
+            Audience::readers([UserId::new("operator"), UserId::new("sre-team")])
+        );
         assert_eq!(c.contracts.len(), 6);
 
         let logs = c
@@ -577,12 +570,21 @@ mod tests {
     }
 
     #[test]
-    fn user_defaults_stay_trusted_and_public() {
+    fn trajectory_defaults_stay_trusted_and_public() {
         let c = Contracts::from_toml("").unwrap();
-        assert_eq!(c.user_id.as_str(), "user");
-        assert_eq!(c.user_label.trust, Trust::TRUSTED);
-        assert_eq!(c.user_label.audience, Audience::PUBLIC);
+        assert_eq!(c.trajectory_label.trust, Trust::TRUSTED);
+        assert_eq!(c.trajectory_label.audience, Audience::PUBLIC);
         assert!(c.contracts.is_empty());
+    }
+
+    #[test]
+    fn removed_user_section_is_rejected() {
+        // The pre-trajectory dialect must fail loudly, not silently apply
+        // defaults.
+        assert!(matches!(
+            Contracts::from_toml("[user]\nid = \"operator\""),
+            Err(ContractsError::Parse(_))
+        ));
     }
 
     #[test]

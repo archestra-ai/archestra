@@ -4,8 +4,8 @@
 //! dialect). Both are parsed strictly (`deny_unknown_fields`): a typo in a
 //! config file must fail loudly, never silently weaken it.
 //!
-//! The policy's `[user]` section (`Contracts.user_id`/`user_label`) is
-//! ignored: the gateway session has no user model — every admitted value is
+//! The policy's `[trajectory]` section (`Contracts::trajectory_label`) is
+//! ignored: the gateway session has no user turns — every admitted value is
 //! model output over the session context.
 //!
 //! The canonical dialect can also declare inline `rule = "allow"` authorities

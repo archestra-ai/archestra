@@ -5,8 +5,7 @@ Baton reads its policy from one TOML file. The file names the upstream provider 
 ```toml
 upstream_base_url = "https://openrouter.ai/api/v1"
 
-[contracts.user]
-id = "operator"
+[contracts.trajectory]
 trust = "trusted"
 audience = ["operator", "sre-team"]
 
@@ -16,9 +15,9 @@ output   = { trust = "trusted", audience = ["operator", "sre-team"] }
 requires = { audience = "public" }
 ```
 
-## User Turns
+## The Trajectory
 
-`[contracts.user]` labels everything the user writes. `trust` defaults to `"trusted"` — the user is the trust boundary. `audience` defaults to `"public"`. Set a reader list to make the conversation private — `["operator", "sre-team"]`, for example.
+`[contracts.trajectory]` declares the labels the Trajectory starts with — the labels everything the user writes carries. `trust` defaults to `"trusted"` — the user is the trust boundary. `audience` defaults to `"public"`. Set a reader list to make the conversation private — `["operator", "sre-team"]`, for example. Tool results can only narrow these labels, never widen them, and a tool without a declared `output` contributes unknown — it does not inherit these defaults.
 
 ## Tool Contracts
 

@@ -17,14 +17,14 @@
 
 upstream_base_url = "https://openrouter.ai/api/v1"
 
-# The user's turns are trusted, so a clean investigation reaches the guarded
-# sinks; the injection blocks them by tainting the flow suspicious.
+# The labels the trajectory starts with — the labels every user turn carries.
+# User turns are trusted, so a clean investigation reaches the guarded sinks;
+# the injection blocks them by tainting the flow suspicious.
 #
 # Audience holds PEOPLE only — never destinations. This conversation is
 # team-private: readable by the operator and the SRE team. Audience folds by
 # intersection, so the flow can never widen past this set.
-[contracts.user]
-id = "operator"
+[contracts.trajectory]
 trust = "trusted"
 audience = ["operator", "sre-team"]
 

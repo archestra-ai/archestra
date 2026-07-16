@@ -27,8 +27,9 @@ parsed by [`baton-contracts`](../baton-contracts) into `ToolContract`s.
 ```toml
 upstream_base_url = "https://openrouter.ai/api/v1"
 
-[contracts.user]
-id = "operator"
+[contracts.trajectory]
+trust = "trusted"       # the default: the labels the trajectory starts with,
+audience = "public"     # carried by every user turn
 
 [[contracts.tool]]
 name = "read_notes"

@@ -17,7 +17,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use baton_core::{
     ArgumentTree, OpaqueValue, PolicyEngine, Pursuit, RejectedToken, Speaker, ToolName, ToolRequest, Trajectory,
-    UnknownValue, ValueId, Violation,
+    UnknownValue, UserId, ValueId, Violation,
 };
 use serde_json::{Map, Value};
 
@@ -98,9 +98,12 @@ impl<'a> Session<'a> {
         for msg in messages {
             match msg.role.as_str() {
                 "user" => {
+                    // The speaker id is record attribution only — no engine
+                    // check reads it, and the proxy has no wire signal for
+                    // who is speaking.
                     let id = session.trajectory.ingress(
-                        Speaker::user(policy.contracts.user_id.clone()),
-                        policy.contracts.user_label.clone(),
+                        Speaker::user(UserId::new("user")),
+                        policy.contracts.trajectory_label.clone(),
                         OpaqueValue::new(content_text(msg.content.as_ref())),
                     );
                     session.context.insert(id);
@@ -363,9 +366,6 @@ pub(crate) fn tests_policy() -> Policy {
         r#"
         upstream_base_url = "http://upstream.invalid"
 
-        [contracts.user]
-        id = "operator"
-
         [[contracts.tool]]
         name = "get_logs"
         output = { trust = "suspicious" }
@@ -394,9 +394,6 @@ pub(crate) fn tests_policy_no_authority() -> Policy {
     Policy::from_toml(
         r#"
         upstream_base_url = "http://upstream.invalid"
-
-        [contracts.user]
-        id = "operator"
 
         [[contracts.tool]]
         name = "mystery_tool"

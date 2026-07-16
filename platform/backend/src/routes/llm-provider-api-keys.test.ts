@@ -712,6 +712,196 @@ describe("LLM Provider API Keys CRUD", () => {
     );
   });
 
+  test("uses the provider display name in keyless connection errors", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "vLLM Local",
+        provider: "vllm",
+        scope: "personal",
+        baseUrl: "http://192.168.1.50:8000/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "Failed to connect to vLLM: fetch failed",
+    );
+  });
+
+  test("reports a network problem (not an invalid key) when the provider is unreachable", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Unreachable Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-unreachable-test",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    // The configured default URL is env-dependent, so assert its presence in
+    // the label without pinning the value.
+    expect(message).toMatch(
+      /^Could not reach Anthropic \(\S+\) to validate the API key: fetch failed/,
+    );
+    expect(message).not.toContain("Invalid API key");
+  });
+
+  test("reports an invalid key (not a connection failure) when the provider rejects it", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch Anthropic models: 401"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Rejected Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-rejected-test",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toBe(
+      "Invalid API key: Failed to fetch Anthropic models: 401",
+    );
+    expect(message).not.toContain("Could not reach");
+  });
+
+  test("keeps the Docker localhost hint on keyed-provider connection failures", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(new Error("fetch failed"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Local OpenAI-compatible",
+        provider: "openai",
+        apiKey: "sk-local-test",
+        scope: "personal",
+        baseUrl: "http://localhost:8080/v1",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toContain(
+      "Could not reach OpenAI (http://localhost:8080/v1)",
+    );
+    expect(message).toContain("http://host.docker.internal:8080/v1");
+  });
+
+  test("falls back to the invalid-key error when the validation message has no HTTP status", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Models list is empty"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Empty Models Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-empty-models-test",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe(
+      "Invalid API key: Models list is empty",
+    );
+  });
+
+  test("points at the base URL (not the key or a temporary issue) on a 404 validation response", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch Anthropic models: 404"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Wrong Path Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-wrong-path-test",
+        scope: "personal",
+        baseUrl: "https://anthropic.example.com/extra",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toContain(
+      "Anthropic (https://anthropic.example.com/extra) returned an error while validating the API key: Failed to fetch Anthropic models: 404",
+    );
+    expect(message).toContain("verify it");
+    expect(message).not.toContain("temporary provider issue");
+    expect(message).not.toContain("Invalid API key");
+  });
+
+  test("treats a non-JSON response body as a wrong endpoint, not an invalid key", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Unexpected token '<', \"<html>\" is not valid JSON"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "HTML Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-html-test",
+        scope: "personal",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toContain("returned an error while validating the API key");
+    expect(message).toContain("does not look like the provider's API");
+    expect(message).not.toContain("Invalid API key");
+  });
+
+  test("reports a provider-side error (not an invalid key) on a 429/5xx validation response", async () => {
+    mockTestProviderApiKey.mockRejectedValueOnce(
+      new Error("Failed to fetch Anthropic models: 429"),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Throttled Anthropic",
+        provider: "anthropic",
+        apiKey: "sk-ant-throttled-test",
+        scope: "personal",
+        baseUrl: "https://anthropic.example.com",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const message = response.json().error.message;
+    expect(message).toContain(
+      "Anthropic (https://anthropic.example.com) returned an error while validating the API key: Failed to fetch Anthropic models: 429",
+    );
+    expect(message).toContain("temporary provider issue");
+    expect(message).not.toContain("Invalid API key");
+    expect(message).not.toContain("Could not reach");
+  });
+
   test("treats an empty Ollama model list as a reachable server (keyless create succeeds)", async () => {
     mockTestProviderApiKey.mockRejectedValueOnce(
       new Error("Models list is empty"),

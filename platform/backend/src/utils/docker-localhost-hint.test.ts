@@ -1,5 +1,24 @@
 import { describe, expect, test } from "vitest";
-import { dockerLocalhostConnectionHint } from "./docker-localhost-hint";
+import {
+  dockerLocalhostConnectionHint,
+  isConnectionFailureMessage,
+} from "./docker-localhost-hint";
+
+describe("isConnectionFailureMessage", () => {
+  test.each([
+    "fetch failed",
+    "connect ECONNREFUSED 127.0.0.1:443",
+  ])("is true for the TCP-level failure %j", (message) => {
+    expect(isConnectionFailureMessage(message)).toBe(true);
+  });
+
+  test.each([
+    "Failed to fetch Anthropic models: 401",
+    "Models list is empty",
+  ])("is false for the provider response %j", (message) => {
+    expect(isConnectionFailureMessage(message)).toBe(false);
+  });
+});
 
 describe("dockerLocalhostConnectionHint", () => {
   test("suggests host.docker.internal for a localhost URL on a connection failure", () => {

@@ -218,6 +218,10 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
+    // Frozen K8s deployment identity (multitenant) — computed by
+    // InternalMcpCatalogModel.create / the startup adopt pass, never
+    // accepted from input.
+    deploymentName: true,
     ...PRESET_COLUMNS_OMIT,
     ...CATALOG_ITEM_APPROVAL_COLUMNS_OMIT,
   });
@@ -255,6 +259,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     authorId: true,
     // Tenancy is locked after creation
     multitenant: true,
+    // Frozen at creation/adopt time — renames must never touch it
+    deploymentName: true,
     // Clone lineage is locked after creation
     clonedFrom: true,
     ...PRESET_COLUMNS_OMIT,

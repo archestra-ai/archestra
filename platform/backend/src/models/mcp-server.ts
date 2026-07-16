@@ -954,8 +954,11 @@ class McpServerModel {
     return row?.server ?? null;
   }
 
-  static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
-    return await db
+  static async findByCatalogId(
+    catalogId: string,
+    tx?: Transaction,
+  ): Promise<McpServer[]> {
+    return await (tx ?? db)
       .select()
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.catalogId, catalogId));
@@ -980,6 +983,7 @@ class McpServerModel {
   static async update(
     id: string,
     server: Partial<UpdateMcpServer>,
+    tx?: Transaction,
   ): Promise<McpServer | null> {
     const serverData = server;
 
@@ -987,7 +991,7 @@ class McpServerModel {
 
     // Only update server table if there are fields to update
     if (Object.keys(serverData).length > 0) {
-      [updatedServer] = await db
+      [updatedServer] = await (tx ?? db)
         .update(schema.mcpServersTable)
         .set(serverData)
         .where(eq(schema.mcpServersTable.id, id))
@@ -998,7 +1002,7 @@ class McpServerModel {
       }
     } else {
       // No fields to update, fetch the existing server
-      const [existingServer] = await db
+      const [existingServer] = await (tx ?? db)
         .select()
         .from(schema.mcpServersTable)
         .where(eq(schema.mcpServersTable.id, id));

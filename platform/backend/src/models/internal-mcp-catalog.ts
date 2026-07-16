@@ -10,8 +10,11 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema, type Transaction } from "@/database";
-import { constructLegacyMultitenantMcpDeploymentName } from "@/k8s/shared";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import {
+  constructLegacyMcpDeploymentName,
+  constructLegacyMultitenantMcpDeploymentName,
+} from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -23,6 +26,7 @@ import {
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
+import LimitModel from "./limit";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
@@ -494,17 +498,176 @@ class InternalMcpCatalogModel {
     return InternalMcpCatalogModel.findByIdForAudit(item.id, organizationId);
   }
 
+  /**
+   * Case-insensitive root-catalog name lookup within an organization — the
+   * rename 409 gate. Tool names embed the lowercased catalog slug and
+   * tool-call routing resolves purely by name string, so a same-name (or
+   * same-slug) sibling catalog would silently receive the other server's
+   * calls — including calls from stale clients that would otherwise get a
+   * clean "unknown tool" error.
+   */
+  static async findRootByNameInOrg(params: {
+    name: string;
+    organizationId: string;
+  }): Promise<{ id: string } | null> {
+    const [row] = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+          eq(
+            schema.internalMcpCatalogTable.organizationId,
+            params.organizationId,
+          ),
+          sql`lower(${schema.internalMcpCatalogTable.name}) = lower(${params.name})`,
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Renames a root catalog and cascades the new name everywhere it is
+   * derived — one transaction, zero K8s interaction:
+   *   1. optional freeze-fallback (below)
+   *   2. the catalog's `name`
+   *   3. every install's derived `mcp_server.name` (constructServerName)
+   *   4. tool slugs in place (`<newname>__<tool>`; ids, policies, and agent
+   *      assignments untouched)
+   *   5. name-string-keyed `limits` rows (server + tool names)
+   *
+   * Deployment identity is frozen (`deployment_name`), so no pod restarts
+   * and no reinstall happens. `flagReinstallRequired` (catalog
+   * `deploymentSpecYaml` references the server-name placeholder — the one
+   * way the display name can reach a pod spec) additionally marks each
+   * install `reinstallRequired`.
+   *
+   * `freezeDeploymentNames` (pass when the K8s runtime is configured):
+   * freezes any still-NULL `deployment_name` from the OLD name before
+   * renaming. Only safe after the startup adopt pass completed — the route
+   * awaits `deploymentNamesAdopted` first — because post-adopt a still-NULL
+   * row provably has no live deployment, so the frozen value cannot orphan
+   * anything.
+   */
+  static async renameCascade(params: {
+    id: string;
+    newName: string;
+    flagReinstallRequired: boolean;
+    freezeDeploymentNames: boolean;
+  }): Promise<void> {
+    const { id, newName, flagReinstallRequired, freezeDeploymentNames } =
+      params;
+
+    await withDbTransaction(async (tx) => {
+      const [catalog] = await tx
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+      if (!catalog) {
+        throw new Error("Catalog item not found");
+      }
+      const oldName = catalog.name;
+      const installs = await McpServerModel.findByCatalogId(id, tx);
+
+      // (1) Freeze-fallback from the OLD names. Freezing from the new name
+      // would hand a pre-rename deployment (e.g. one an in-flight legacy
+      // install just created) to the orphan sweep.
+      if (freezeDeploymentNames) {
+        if (catalog.multitenant && !catalog.deploymentName) {
+          await InternalMcpCatalogModel.setDeploymentName(
+            {
+              id,
+              deploymentName: constructLegacyMultitenantMcpDeploymentName(
+                id,
+                oldName,
+              ),
+            },
+            tx,
+          );
+        }
+        if (!catalog.multitenant) {
+          for (const install of installs) {
+            if (install.serverType === "local" && !install.deploymentName) {
+              await McpServerModel.setDeploymentName(
+                {
+                  id: install.id,
+                  deploymentName: constructLegacyMcpDeploymentName(
+                    install.name,
+                  ),
+                },
+                tx,
+              );
+            }
+          }
+        }
+      }
+
+      // (2) Catalog name — written directly: the generic update() enforces
+      // name immutability precisely so renames flow only through this
+      // cascade.
+      await tx
+        .update(schema.internalMcpCatalogTable)
+        .set({ name: newName })
+        .where(eq(schema.internalMcpCatalogTable.id, id));
+
+      // (3) Install names. Pairs map each install's ACTUAL old name (which
+      // may predate the rename-consistency era) to its new derived name.
+      // The catalog-level pair covers limits keyed to the base name.
+      const serverNamePairs: Array<{ oldName: string; newName: string }> = [
+        { oldName, newName },
+      ];
+      for (const install of installs) {
+        const newServerName = McpServerModel.constructServerName({
+          baseName: newName,
+          serverType: install.serverType,
+          scope: install.scope,
+          ownerId: install.ownerId,
+          teamId: install.teamId,
+        });
+        const nameChanged = newServerName !== install.name;
+        if (nameChanged || flagReinstallRequired) {
+          await McpServerModel.update(
+            install.id,
+            {
+              ...(nameChanged ? { name: newServerName } : {}),
+              ...(flagReinstallRequired ? { reinstallRequired: true } : {}),
+            },
+            tx,
+          );
+        }
+        if (nameChanged) {
+          serverNamePairs.push({
+            oldName: install.name,
+            newName: newServerName,
+          });
+        }
+      }
+
+      // (4) Tool slugs in place.
+      const toolNamePairs = await ToolModel.renameToolPrefixesForCatalog(
+        { catalogId: id, newName },
+        tx,
+      );
+
+      // (5) Name-string-keyed limits.
+      await LimitModel.renameNameKeys({ serverNamePairs, toolNamePairs }, tx);
+    });
+  }
+
   static async update(
     id: string,
     catalogItem: Partial<UpdateInternalMcpCatalog>,
   ): Promise<InternalMcpCatalog | null> {
     const { labels, teams, ...dbValues } = catalogItem;
 
-    // Name immutability: matches the existing UI-enforced posture and avoids
-    // cascading rename to k8s deployment names and pre-slugified tool rows.
-    // App backing catalogs are exempt — they have no k8s deployment, and their
-    // launch tool's name is id-suffixed (stable across renames), so renaming an
-    // app's catalog is safe.
+    // Name immutability at the generic-update layer: renames flow
+    // EXCLUSIVELY through `renameCascade`, which also renames install rows,
+    // tool slugs, and name-keyed limits atomically — a bare column update
+    // here would silently skip that cascade, so this guard is an invariant,
+    // not an obstacle. App backing catalogs are exempt — they have no k8s
+    // deployment, and their launch tool's name is id-suffixed (stable across
+    // renames), so renaming an app's catalog is safe.
     if (dbValues.name !== undefined) {
       const [existing] = await db
         .select({

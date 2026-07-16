@@ -239,6 +239,18 @@ export function constructFrozenMcpDeploymentName(
 }
 
 /**
+ * Legacy single-tenant deployment name (`mcp-<slug>`), historically
+ * recomputed from the mutable server name on every deploy. Kept only for
+ * rows created before `deployment_name` existed: the startup adopt pass and
+ * the rename cascade's freeze-fallback use it to freeze a byte-identical
+ * value, and the runtime falls back to it while a row is still unfrozen.
+ * New installs use {@link constructFrozenMcpDeploymentName} instead.
+ */
+export function constructLegacyMcpDeploymentName(name: string): string {
+  return `mcp-${ensureStringIsRfc1123Compliant(name)}`.substring(0, 253);
+}
+
+/**
  * Shared-deployment name for a multitenant catalog:
  * `mcp-mt-<catalogId8>-<slug>`. New multitenant catalogs freeze exactly this
  * shape at creation — byte-identical to what the runtime historically

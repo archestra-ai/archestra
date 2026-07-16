@@ -13,6 +13,7 @@ import type z from "zod";
 import config from "@/config";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import {
+  constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
   ensureStringIsRfc1123Compliant,
   isK8sConflictError,
@@ -387,8 +388,7 @@ export default class K8sDeployment {
     if (mcpServer.deploymentName) {
       return mcpServer.deploymentName;
     }
-    const slugified = ensureStringIsRfc1123Compliant(mcpServer.name);
-    return `mcp-${slugified}`.substring(0, 253);
+    return constructLegacyMcpDeploymentName(mcpServer.name);
   }
 
   /**

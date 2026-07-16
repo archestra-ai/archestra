@@ -1206,7 +1206,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (e.g. Anthropic's ~4096) truncated large tool-call payloads
                 // and final submission turns.
                 streamTextConfig.maxOutputTokens = resolveAgentMaxOutputTokens({
+                  provider,
                   outputLength: modelRow?.outputLength ?? null,
+                  contextLength: modelRow?.contextLength ?? null,
                   ceiling: config.chat.maxOutputTokensCeiling,
                 });
 

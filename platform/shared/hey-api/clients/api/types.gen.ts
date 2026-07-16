@@ -47337,9 +47337,11 @@ export type GetLlmModelsResponses = {
         createdAt?: string;
         capabilities?: {
             contextLength: number | null;
+            outputLength: number | null;
             inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
+            effectiveMaxOutputTokens: number;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
             isCustomPrice: boolean;
@@ -47561,6 +47563,7 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionCacheWrite: string | null;
         cachePriceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
         isFree: boolean;
+        effectiveMaxOutputTokens: number;
     }>;
 };
 

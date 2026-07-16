@@ -1147,7 +1147,7 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
 
 - **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
   - Default: `32768`
-  - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
+  - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`. Models without a known output ceiling fall back to `8192` — except Ollama models, which fall back to their context window (Ollama itself does not cap output). The effective value per model is shown in the Max output column on the Models page.
   - Lower it to constrain spend; raise it for models whose useful outputs exceed 32768 tokens.
 
 ### MCP Apps Sandbox

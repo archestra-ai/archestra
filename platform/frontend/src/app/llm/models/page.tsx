@@ -321,6 +321,44 @@ export default function ModelsPage() {
         },
       },
       {
+        id: "maxOutput",
+        size: 110,
+        header: "Max output",
+        cell: ({ row }) => {
+          // The Context column already shows the unknown-capabilities badge.
+          if (hasUnknownCapabilities(row.original)) return null;
+          const { outputLength, effectiveMaxOutputTokens, provider } =
+            row.original;
+          if (outputLength !== null) {
+            return (
+              <span className="text-sm">
+                {formatContextLength(outputLength)}
+              </span>
+            );
+          }
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm text-muted-foreground">
+                    ~{formatContextLength(effectiveMaxOutputTokens)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>
+                    This model does not publish an output-token limit. Shown is
+                    the effective per-turn budget requested for it
+                    {provider === "ollama"
+                      ? ", capped by the model's context window and the server output-token ceiling."
+                      : ", the unknown-model default capped by the server output-token ceiling."}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
+      },
+      {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => (
@@ -672,6 +710,24 @@ function EditModelDialog({
             <p className="text-sm font-mono text-muted-foreground">
               {model.modelId}
             </p>
+          </div>
+
+          {/* Read-only: Token limits */}
+          <div className="space-y-1">
+            <span className="text-sm font-medium">Token limits</span>
+            <p className="text-sm text-muted-foreground">
+              Context window: {formatContextLength(model.contextLength ?? null)}
+              {" · "}Max output:{" "}
+              {model.outputLength !== null
+                ? formatContextLength(model.outputLength)
+                : `~${formatContextLength(model.effectiveMaxOutputTokens)} (estimated)`}
+            </p>
+            {model.outputLength === null && (
+              <p className="text-xs text-muted-foreground">
+                The model doesn't publish an output limit; this is the effective
+                per-turn budget that will be requested.
+              </p>
+            )}
           </div>
 
           {/* Pricing */}

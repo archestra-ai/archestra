@@ -359,6 +359,86 @@ describe("chat model routes", () => {
     ]);
   });
 
+  test("GET /api/llm-models reports the effective max output tokens per model", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Ollama models without a published output limit budget up to the context
+    // window; other providers keep the unknown-model default; a published
+    // limit is used as-is (all clamped by the operator ceiling, default 32768).
+    const ollamaModel = await ModelModel.create({
+      externalId: "ollama/qwen3-coder:30b",
+      provider: "ollama",
+      modelId: "qwen3-coder:30b",
+      description: "Local Ollama model",
+      contextLength: 131072,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const knownLimitModel = await ModelModel.create({
+      externalId: "anthropic/claude-test",
+      provider: "anthropic",
+      modelId: "claude-test",
+      description: "Model with a published output limit",
+      contextLength: 200000,
+      outputLength: 16000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const unknownModel = await ModelModel.create({
+      externalId: "openai/mystery-model",
+      provider: "openai",
+      modelId: "mystery-model",
+      description: "Model with no known limits",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+    // Models only appear in the response when linked to a visible API key.
+    for (const model of [ollamaModel, knownLimitModel, unknownModel]) {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: model.provider,
+        scope: "personal",
+        userId: user.id,
+      });
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: model.id, modelId: model.modelId }],
+        model.provider,
+      );
+    }
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rows: { id: string; effectiveMaxOutputTokens: number }[] =
+      response.json();
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(ollamaModel.id)?.effectiveMaxOutputTokens).toBe(32768);
+    expect(byId.get(knownLimitModel.id)?.effectiveMaxOutputTokens).toBe(16000);
+    expect(byId.get(unknownModel.id)?.effectiveMaxOutputTokens).toBe(8192);
+  });
+
   test("syncModelsForVisibleApiKeys syncs visible keys and preserves baseUrl", async ({
     makeSecret,
   }) => {

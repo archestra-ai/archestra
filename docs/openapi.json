@@ -182048,6 +182048,12 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
+                          "outputLength": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "inputModalities": {
                             "nullable": true,
                             "type": "array",
@@ -182077,6 +182083,9 @@
                           "supportsToolCalling": {
                             "nullable": true,
                             "type": "boolean"
+                          },
+                          "effectiveMaxOutputTokens": {
+                            "type": "number"
                           },
                           "pricePerMillionInput": {
                             "nullable": true,
@@ -182119,9 +182128,11 @@
                         },
                         "required": [
                           "contextLength",
+                          "outputLength",
                           "inputModalities",
                           "outputModalities",
                           "supportsToolCalling",
+                          "effectiveMaxOutputTokens",
                           "pricePerMillionInput",
                           "pricePerMillionOutput",
                           "isCustomPrice",
@@ -182919,6 +182930,9 @@
                       },
                       "isFree": {
                         "type": "boolean"
+                      },
+                      "effectiveMaxOutputTokens": {
+                        "type": "number"
                       }
                     },
                     "required": [
@@ -182956,7 +182970,8 @@
                       "pricePerMillionCacheRead",
                       "pricePerMillionCacheWrite",
                       "cachePriceSource",
-                      "isFree"
+                      "isFree",
+                      "effectiveMaxOutputTokens"
                     ],
                     "additionalProperties": false
                   }

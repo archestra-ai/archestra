@@ -12,6 +12,8 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
+import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
@@ -815,9 +817,16 @@ class ModelModel {
     if (!model) {
       return {
         contextLength: null,
+        outputLength: null,
         inputModalities: null,
         outputModalities: null,
         supportsToolCalling: null,
+        effectiveMaxOutputTokens: resolveAgentMaxOutputTokens({
+          provider: null,
+          outputLength: null,
+          contextLength: null,
+          ceiling: config.chat.maxOutputTokensCeiling,
+        }),
         pricePerMillionInput: null,
         pricePerMillionOutput: null,
         isCustomPrice: false,
@@ -832,9 +841,16 @@ class ModelModel {
 
     return {
       contextLength: model.contextLength,
+      outputLength: model.outputLength,
       inputModalities: model.inputModalities,
       outputModalities: model.outputModalities,
       supportsToolCalling: model.supportsToolCalling,
+      effectiveMaxOutputTokens: resolveAgentMaxOutputTokens({
+        provider: model.provider,
+        outputLength: model.outputLength,
+        contextLength: model.contextLength,
+        ceiling: config.chat.maxOutputTokensCeiling,
+      }),
       pricePerMillionInput: pricing.pricePerMillionInput,
       pricePerMillionOutput: pricing.pricePerMillionOutput,
       isCustomPrice: pricing.source === "custom",

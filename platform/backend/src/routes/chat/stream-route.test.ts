@@ -713,6 +713,51 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText.mock.calls[0]?.[0].maxOutputTokens).toBe(8192);
   });
 
+  test("falls back to the context window for an ollama model without a published output limit", async ({
+    makeConversation,
+  }) => {
+    // Catalog-unknown Ollama models sync with outputLength=null but a real
+    // contextLength; Ollama itself never caps output, so the turn must budget
+    // up to the context window (clamped by the ceiling), not the 8192 default.
+    const ollamaModel = await ModelModel.create({
+      externalId: "ollama/qwen3-coder:30b",
+      provider: "ollama",
+      modelId: "qwen3-coder:30b",
+      description: "Local Ollama model",
+      contextLength: 131072,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const ollamaConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: ollamaModel.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: ollamaConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].maxOutputTokens).toBe(32768);
+  });
+
   test("omits temperature from streamText when none is provided", async () => {
     mockStreamText.mockClear();
 

@@ -101,10 +101,13 @@ export type PriceSource = z.infer<typeof PriceSourceSchema>;
  */
 export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   contextLength: true,
+  outputLength: true,
   inputModalities: true,
   outputModalities: true,
   supportsToolCalling: true,
 }).extend({
+  /** Effective per-turn output-token budget the platform requests: min of the operator ceiling and the model's cap (or its fallback when the cap is unknown) */
+  effectiveMaxOutputTokens: z.number(),
   /** Price per million tokens for input (computed from per-token price) */
   pricePerMillionInput: z.string().nullable(),
   /** Price per million tokens for output (computed from per-token price) */
@@ -262,5 +265,7 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   cachePriceSource: PriceSourceSchema.nullable(),
   /** True when the provider charges nothing for this model (both raw prices are zero). */
   isFree: z.boolean(),
+  /** Effective per-turn output-token budget the platform requests: min of the operator ceiling and the model's cap (or its fallback when the cap is unknown) */
+  effectiveMaxOutputTokens: z.number(),
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;

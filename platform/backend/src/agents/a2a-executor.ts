@@ -425,7 +425,9 @@ export async function executeA2AMessage(
       // inject a small default max (e.g. Anthropic's ~4096) truncated large
       // tool-call payloads.
       maxOutputTokens: resolveAgentMaxOutputTokens({
+        provider,
         outputLength: modelRow?.outputLength ?? null,
+        contextLength: modelRow?.contextLength ?? null,
         ceiling: config.chat.maxOutputTokensCeiling,
       }),
       // Per-step context guard: cap oversized tool results and keep the

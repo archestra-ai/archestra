@@ -487,6 +487,55 @@ class LlmProviderApiKeyModel {
   }
 
   /**
+   * The acting user's own personal ChatGPT-subscription (Codex) key together
+   * with its decrypted credential (prefer isPrimary, then oldest). Codex
+   * credentials are per-user, so when resolution lands on someone else's
+   * subscription key (e.g. attached to a shared agent) the acting user's own
+   * subscription is substituted — this is that lookup. The marker lives inside
+   * the encrypted secret, so the user's personal `openai` keys are decrypted
+   * here (the value is only handed to the credential-resolution caller).
+   */
+  static async findPersonalCodexKey({
+    organizationId,
+    userId,
+  }: {
+    organizationId: string;
+    userId: string;
+  }): Promise<{ apiKey: LlmProviderApiKey; apiKeyValue: string } | null> {
+    const candidates = await db
+      .select({
+        apiKey: schema.llmProviderApiKeysTable,
+        secret: schema.secretsTable.secret,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .innerJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, "openai"),
+          eq(schema.llmProviderApiKeysTable.scope, "personal"),
+          eq(schema.llmProviderApiKeysTable.userId, userId),
+        ),
+      )
+      .orderBy(
+        sql`${schema.llmProviderApiKeysTable.isPrimary} DESC`,
+        schema.llmProviderApiKeysTable.createdAt,
+      );
+
+    for (const candidate of candidates) {
+      const apiKeyValue = decryptApiKeyValue(candidate.secret);
+      if (apiKeyValue !== null && isOpenAiCodexCredential(apiKeyValue)) {
+        return { apiKey: candidate.apiKey, apiKeyValue };
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * The acting user's own personal key for a provider (prefer isPrimary, then
    * oldest). Self-contained so the per-user-credential guard can call it before
    * the rest of getCurrentApiKey runs.

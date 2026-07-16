@@ -265,6 +265,15 @@ export async function resolveConfiguredAgentLlm(agent: {
         apiKeyRecord.secretId,
       );
       apiKey = (secret as string) ?? undefined;
+      // A ChatGPT-subscription (Codex) credential is likewise one person's
+      // token — per-user at the KEY level on `openai`, only detectable on the
+      // decrypted secret. This helper doesn't know the acting user, so never
+      // hand the credential out from here; the fall-through resolution
+      // enforces ownership (owner gets this same key back, anyone else gets
+      // their own subscription or the connect prompt).
+      if (apiKey !== undefined && isOpenAiCodexCredential(apiKey)) {
+        apiKey = undefined;
+      }
     }
 
     const model = agent.modelId

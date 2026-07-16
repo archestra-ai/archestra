@@ -71,6 +71,16 @@ export class ToolCallRepeatTracker {
    * fast nudge — only a consecutive identical repeat of the exact failing call.
    */
   private lastErroredFingerprint: string | null = null;
+  /**
+   * Streak of steps that called a tool outside the tool list, kept apart from
+   * the executed-call streak above. The two are recorded from different points
+   * in the loop — a tool's execute wrapper, and a step hook — so sharing one
+   * slot would let each reset the other: a step that calls one real tool and
+   * one missing tool would build neither streak, and a run that used to
+   * terminate on the real tool's repeats would instead run to MAX_AGENT_STEPS.
+   */
+  private lastUnavailableFingerprint: string | null = null;
+  private unavailableConsecutiveCount = 0;
 
   /**
    * Records one tool call. Increments the consecutive count when the call
@@ -123,13 +133,34 @@ export class ToolCallRepeatTracker {
   }
 
   /**
-   * Whether the current consecutive streak has reached the termination ceiling.
-   * Read by {@link repeatCeilingStopCondition} at each step boundary; the SDK
-   * evaluates stop conditions after the step's tool call has been recorded, so
-   * the streak this reads already includes the call that hit the ceiling.
+   * Records one step that asked for tools which are not in the tool list, keyed
+   * on the whole set it asked for. Kept separate from {@link record} — see
+   * {@link recordUnavailableToolCallStep} for why these calls are invisible to
+   * the tool wrappers in the first place.
+   */
+  recordUnavailableStep(toolNames: readonly string[]): void {
+    // JSON rather than a joined string so the key is injective: ["a,b"] and
+    // ["a","b"] are different attempts and must not share a streak.
+    const fingerprint = JSON.stringify([...new Set(toolNames)].sort());
+    if (fingerprint === this.lastUnavailableFingerprint) {
+      this.unavailableConsecutiveCount += 1;
+    } else {
+      this.lastUnavailableFingerprint = fingerprint;
+      this.unavailableConsecutiveCount = 1;
+    }
+  }
+
+  /**
+   * Whether either streak has reached the termination ceiling. Read by
+   * {@link repeatCeilingStopCondition} at each step boundary; the SDK evaluates
+   * stop conditions after the step's tool calls have been recorded, so the
+   * streaks this reads already include the call that hit the ceiling.
    */
   hasReachedTerminationCeiling(): boolean {
-    return this.consecutiveCount >= REPEAT_CALL_TERMINATION_CEILING;
+    return (
+      this.consecutiveCount >= REPEAT_CALL_TERMINATION_CEILING ||
+      this.unavailableConsecutiveCount >= REPEAT_CALL_TERMINATION_CEILING
+    );
   }
 }
 
@@ -175,18 +206,14 @@ export function recordUnavailableToolCallStep(
     .filter(isUnavailableToolCall)
     .map((call) => call.toolName);
   if (names.length === 0) return;
-  // The whole set the step reached for, deduplicated and ordered, so a step is
-  // the same attempt as another that named the same missing tools in a
-  // different order. Recording just one of them would let a model alternate
-  // [a, b] with [b, a] and reset the streak every step, which is the same
-  // escape as fingerprinting the arguments.
-  const attempt = [...new Set(names)].sort().join(",");
-  // Args are deliberately left out of the fingerprint. The calls failed because
-  // the tools do not exist, which is a function of the names alone — they would
-  // fail identically with any arguments. Fingerprinting them would make every
-  // retry a fresh streak and the ceiling would never fire, which is the blind
-  // spot this closes.
-  tracker.record(attempt, undefined);
+  // Keyed on the whole set the step reached for, so naming the same missing
+  // tools in a different order is the same attempt — recording only one of them
+  // would let a model alternate [a, b] with [b, a] and reset the streak every
+  // step. Arguments are left out for the same reason: these calls failed
+  // because the tools do not exist, which is a function of the names alone, so
+  // fingerprinting the arguments would make every retry look like a fresh
+  // attempt and the ceiling would never fire.
+  tracker.recordUnavailableStep(names);
 }
 
 /**
@@ -211,11 +238,13 @@ type _SdkToolCallIsObservable =
   TypedToolCall<ToolSet> extends ObservedToolCall ? true : never;
 const _assertSdkToolCallIsObservable: _SdkToolCallIsObservable = true;
 
-// Tuples on both sides: bare, `A | B extends C` binds `extends` to the last
-// member only, which silently evaluates to `A | B | true` and asserts nothing.
-type _SdkToolCallKeepsObservedKeys = [
-  "toolName" | "invalid" | "error",
-] extends [keyof DynamicToolCall]
+// Reads the keys off ObservedToolCall rather than repeating them, so a field
+// added there is covered without anyone remembering to update a literal. The
+// tuples keep the comparison a plain subset check, out of reach of union
+// distribution and of however a formatter chooses to break the line.
+type _SdkToolCallKeepsObservedKeys = [keyof ObservedToolCall] extends [
+  keyof DynamicToolCall,
+]
   ? true
   : never;
 const _assertSdkToolCallKeepsObservedKeys: _SdkToolCallKeepsObservedKeys = true;

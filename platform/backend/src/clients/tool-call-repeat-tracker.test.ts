@@ -286,6 +286,24 @@ describe("recordUnavailableToolCallStep", () => {
     expect(tracker.record("anything", undefined).count).toBe(1);
   });
 
+  it("still stops a real tool's own streak when a missing tool rides along in every step", () => {
+    const { tracker, step, stopped } = boundTracker();
+
+    // The two streaks are recorded from different places in the loop — the
+    // execute wrapper for the real call, this hook for the missing one. Sharing
+    // one slot would let each reset the other, so neither would ever build, and
+    // a run that terminated on the real tool's repeats before would now go all
+    // the way to MAX_AGENT_STEPS.
+    for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
+      tracker.record("real_tool", { same: true });
+      step([unavailableCall("ghost_tool", { i })]);
+      expect(stopped()).toBe(false);
+    }
+
+    tracker.record("real_tool", { same: true });
+    expect(stopped()).toBe(true);
+  });
+
   it("reaches the ceiling when a step names the same missing tools in a different order", () => {
     const { step, stopped } = boundTracker();
 

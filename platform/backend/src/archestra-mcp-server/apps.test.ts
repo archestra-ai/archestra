@@ -3294,12 +3294,13 @@ describe("edit_app replacementHtmlSource", () => {
     expect(head?.html).not.toBe(DOCUMENT);
   });
 
-  test("does not let a file's own name or type steer the model", async () => {
+  test("keeps a file's own name and type inside the sentence that quotes them", async () => {
     const appId = await scaffoldApp("Hostile Metadata");
     // Both fields are chosen by whoever saved the file, and the rejection is
-    // read by another member's model as trusted tool output. A collaborator
-    // could otherwise smuggle instructions into that context by uploading
-    // binary bytes under a crafted name and MIME.
+    // read by another member's model as trusted tool output. Escaping stops
+    // them breaking out of their quoting — it does not make the text itself
+    // harmless, which no escaper can; that is the platform's untrusted-content
+    // problem, not this message's.
     const file = await fileStore.put({
       organizationId,
       userId,

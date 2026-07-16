@@ -143,9 +143,26 @@ async function fetchOllamaShow(params: {
 function toFetchedCapabilities(
   show: OllamaShowResponse,
 ): FetchedModelCapabilities {
-  const contextLength =
-    readModelInfoNumber(show.model_info, ".context_length") ?? null;
+  const architecturalContextLength = readModelInfoNumber(
+    show.model_info,
+    ".context_length",
+  );
   const defaultParameters = parseOllamaParameters(show.parameters);
+
+  // The architectural context length is the model's theoretical maximum; the
+  // effective input window is the configured `num_ctx` (from a Modelfile),
+  // beyond which Ollama silently truncates the prompt. Cap with it so context
+  // display, compaction, and overflow checks operate on the real window.
+  const numCtx = defaultParameters?.num_ctx;
+  const configuredContextLength =
+    typeof numCtx === "number" && Number.isFinite(numCtx) && numCtx > 0
+      ? numCtx
+      : undefined;
+  const contextLength =
+    architecturalContextLength !== undefined &&
+    configuredContextLength !== undefined
+      ? Math.min(architecturalContextLength, configuredContextLength)
+      : (architecturalContextLength ?? configuredContextLength ?? null);
 
   // `capabilities` distinguishes embedding models from generative ones. Tri-state:
   // - embedding model with a reported dimension -> the number (authoritative).

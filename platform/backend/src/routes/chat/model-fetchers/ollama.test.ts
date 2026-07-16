@@ -153,6 +153,41 @@ describe("fetchOllamaModels", () => {
     expect(model.id).toBe("llama3");
   });
 
+  test("caps contextLength with a configured num_ctx below the architectural value", async () => {
+    listBody = { data: [{ id: "qwen3-8k" }] };
+    showByModel["qwen3-8k"] = {
+      body: {
+        capabilities: ["completion"],
+        model_info: { "qwen3.context_length": 262144 },
+        parameters: "num_ctx 8192",
+      },
+    };
+    const [model] = await fetchOllamaModels("k");
+    expect(model.capabilities?.contextLength).toBe(8192);
+  });
+
+  test("keeps the architectural contextLength when num_ctx is larger", async () => {
+    listBody = { data: [{ id: "small" }] };
+    showByModel.small = {
+      body: {
+        capabilities: ["completion"],
+        model_info: { "llama.context_length": 8192 },
+        parameters: "num_ctx 16384",
+      },
+    };
+    const [model] = await fetchOllamaModels("k");
+    expect(model.capabilities?.contextLength).toBe(8192);
+  });
+
+  test("uses num_ctx as contextLength when model_info reports none", async () => {
+    listBody = { data: [{ id: "bare" }] };
+    showByModel.bare = {
+      body: { capabilities: ["completion"], parameters: "num_ctx 4096" },
+    };
+    const [model] = await fetchOllamaModels("k");
+    expect(model.capabilities?.contextLength).toBe(4096);
+  });
+
   test("parses default parameters, coalescing repeated keys and keeping quoted values as strings", async () => {
     listBody = { data: [{ id: "llama3" }] };
     showByModel.llama3 = {

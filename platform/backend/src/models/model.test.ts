@@ -324,13 +324,13 @@ describe("ModelModel", () => {
 
       expect(updated.id).toBe(initial.id);
       expect(updated.description).toBe("Updated description");
-      // contextLength, inputModalities, supportsToolCalling are NOT updated on
-      // conflict to preserve user-edited values
-      expect(updated.contextLength).toBe(128000);
+      // inputModalities, supportsToolCalling are NOT updated on conflict to
+      // preserve user-edited values
       expect(updated.inputModalities).toEqual(["text"]);
       expect(updated.supportsToolCalling).toBe(false);
-      // outputLength is not user-editable and tracks the provider cap, so a
-      // fresh synced value overwrites the previous one.
+      // contextLength and outputLength are not user-editable and track the
+      // provider limits, so a fresh synced value overwrites the previous one.
+      expect(updated.contextLength).toBe(256000);
       expect(updated.outputLength).toBe(32000);
     });
   });
@@ -455,19 +455,24 @@ describe("ModelModel", () => {
         "update-model-50",
       );
       expect(updated?.description).toBe("Updated Description 50");
-      // contextLength and supportsToolCalling are NOT updated on conflict
-      // to preserve user-edited values
-      expect(updated?.contextLength).toBe(100000);
+      // contextLength tracks the provider limit, so a fresh synced value wins
+      expect(updated?.contextLength).toBe(200000);
+      // supportsToolCalling is NOT updated on conflict to preserve
+      // user-edited values
       expect(updated?.supportsToolCalling).toBe(false);
     });
 
-    test("updates outputLength to the freshly synced cap, keeping it only when the sync omits it", async () => {
-      const base = (modelId: string, outputLength: number | null) => ({
+    test("updates contextLength/outputLength to the freshly synced limits, keeping them only when the sync omits them", async () => {
+      const base = (
+        modelId: string,
+        outputLength: number | null,
+        contextLength: number | null,
+      ) => ({
         externalId: `openai/${modelId}`,
         provider: "openai" as const,
         modelId,
         description: modelId,
-        contextLength: 128000,
+        contextLength,
         outputLength,
         inputModalities: ["text" as const],
         outputModalities: ["text" as const],
@@ -478,14 +483,14 @@ describe("ModelModel", () => {
       });
 
       await ModelModel.bulkUpsert([
-        base("cap-lowered", 64000),
-        base("cap-null", null),
-        base("cap-cleared", 16384),
+        base("cap-lowered", 64000, 128000),
+        base("cap-null", null, null),
+        base("cap-cleared", 16384, 32000),
       ]);
       await ModelModel.bulkUpsert([
-        base("cap-lowered", 4096), // provider corrected the cap downward
-        base("cap-null", 8192), // backfills the previously-null cap
-        base("cap-cleared", null), // sync omits it → last known value kept
+        base("cap-lowered", 4096, 8192), // provider corrected the limits downward
+        base("cap-null", 8192, 40960), // backfills the previously-null limits
+        base("cap-cleared", null, null), // sync omits them → last known values kept
       ]);
 
       const lowered = await ModelModel.findByProviderAndModelId(
@@ -501,8 +506,11 @@ describe("ModelModel", () => {
         "cap-cleared",
       );
       expect(lowered?.outputLength).toBe(4096);
+      expect(lowered?.contextLength).toBe(8192);
       expect(filled?.outputLength).toBe(8192);
+      expect(filled?.contextLength).toBe(40960);
       expect(cleared?.outputLength).toBe(16384);
+      expect(cleared?.contextLength).toBe(32000);
     });
 
     test("preserves manual embedding dimension overrides on non-full sync", async () => {

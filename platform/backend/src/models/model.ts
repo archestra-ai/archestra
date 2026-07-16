@@ -304,11 +304,12 @@ class ModelModel {
         set: {
           externalId: data.externalId,
           description: data.description,
-          contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
-          // Unlike the other capability fields, outputLength has no admin editor
-          // and is used as an output-token safety cap, so prefer the freshly
-          // synced value (keeping the last known value only when the sync omits it)
-          // — a lowered provider cap must propagate, not be pinned forever.
+          // Unlike the other capability fields, contextLength and outputLength
+          // have no admin editor and drive context/output safety limits, so
+          // prefer the freshly synced value (keeping the last known value only
+          // when the sync omits it) — a lowered provider limit must propagate,
+          // not be pinned forever.
+          contextLength: sql`COALESCE(excluded.context_length, ${schema.modelsTable.contextLength})`,
           outputLength: sql`COALESCE(excluded.output_length, ${schema.modelsTable.outputLength})`,
           inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
           outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,
@@ -377,9 +378,10 @@ class ModelModel {
             set: {
               externalId: sql`excluded.external_id`,
               description: sql`excluded.description`,
-              contextLength: sql`COALESCE(${schema.modelsTable.contextLength}, excluded.context_length)`,
-              // See upsert(): outputLength prefers the fresh synced value so a
-              // lowered provider cap propagates instead of being pinned forever.
+              // See upsert(): contextLength/outputLength prefer the fresh synced
+              // value so a lowered provider limit propagates instead of being
+              // pinned forever.
+              contextLength: sql`COALESCE(excluded.context_length, ${schema.modelsTable.contextLength})`,
               outputLength: sql`COALESCE(excluded.output_length, ${schema.modelsTable.outputLength})`,
               inputModalities: sql`COALESCE(${schema.modelsTable.inputModalities}, excluded.input_modalities)`,
               outputModalities: sql`COALESCE(${schema.modelsTable.outputModalities}, excluded.output_modalities)`,

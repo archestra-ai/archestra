@@ -7,8 +7,10 @@
 //! its contract: the offending message is replaced with a stop explanation, so
 //! the blocked call never reaches the harness and is never executed.
 //!
-//! No authorities are registered — a flow the contracts cannot prove is
-//! blocked, fail closed. The prototype's human-approval flow (the
+//! Only inline `allow` authorities declared in the policy TOML are registered;
+//! `escalate` (external) authorities are rejected at load — the proxy has no
+//! human channel. A flow no declared authority covers is blocked, fail
+//! closed. The prototype's human-approval flow (the
 //! `baton-approver` / `baton-demo-agent` binaries) predates current baton-core's
 //! authority model; it is parked in the `baton-demo` crate (behind its
 //! `approver` feature) and returns as a port to External authorities

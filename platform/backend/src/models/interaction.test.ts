@@ -3,6 +3,8 @@ import {
   CLAUDE_CLIENT_FILTER,
   CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
+  CODEX_CLIENT_FILTER,
+  CODEX_CLIENT_ID,
 } from "@archestra/shared";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction } from "@/types";
@@ -1497,9 +1499,10 @@ describe("InteractionModel", () => {
         });
 
       // Two Claude clients (auto-discovered generic id and header-set Code id),
-      // a customer agent, and a plain session with no client.
+      // a Codex client, a customer agent, and a plain session with no client.
       await make("auto-claude-session", CLAUDE_CLIENT_ID);
       await make("claude-code-session", CLAUDE_CODE_CLIENT_ID);
+      await make("codex-session", CODEX_CLIENT_ID);
       await make("customer-session", "my-custom-agent");
       await make("plain-session", null);
 
@@ -1515,13 +1518,25 @@ describe("InteractionModel", () => {
         [CLAUDE_CLIENT_ID, CLAUDE_CODE_CLIENT_ID].sort(),
       );
 
-      // No filter returns all four
+      // Filter to Codex — only the Codex client id.
+      const codex = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { client: CODEX_CLIENT_FILTER },
+      );
+      expect(codex.data).toHaveLength(1);
+      expect(codex.data.flatMap((s) => s.externalAgentIds)).toEqual([
+        CODEX_CLIENT_ID,
+      ]);
+
+      // No filter returns all five
       const all = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
         true,
       );
-      expect(all.data).toHaveLength(4);
+      expect(all.data).toHaveLength(5);
     });
 
     test("marks mixed-source chat sessions without promoting compaction to the session source", async ({
@@ -1697,6 +1712,54 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].lastInteractionType).toBe(
         "openai:chatCompletions",
       );
+    });
+
+    test("recognizes a Responses-format request (Codex `input`) as the last interaction", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      // Codex sends the OpenAI Responses shape: turns live in `input`, not
+      // `messages`. The session summary must still surface it so the logs UI can
+      // render the real last user message instead of an empty title.
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "codex-responses-session",
+        externalAgentId: CODEX_CLIENT_ID,
+        request: {
+          model: "gpt-5.6-sol",
+          input: [
+            {
+              type: "message",
+              role: "user",
+              content: [{ type: "input_text", text: "Hi from codex cli" }],
+            },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r1",
+          object: "response",
+          created: Date.now(),
+          model: "gpt-5.6-sol",
+        } as unknown as InsertInteraction["response"],
+        type: "openai:responses",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "codex-responses-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastInteractionType).toBe("openai:responses");
     });
 
     test("skips prompt suggestion generator requests when finding lastInteractionRequest", async ({

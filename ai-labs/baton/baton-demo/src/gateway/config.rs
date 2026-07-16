@@ -1,29 +1,52 @@
-//! Gateway TOML → a policy engine plus the simulated tools it mediates.
-//! Parsed strictly (`deny_unknown_fields`): a typo in a policy file must fail
-//! loudly, never silently weaken it.
+//! Gateway config → a policy engine plus the simulated tools it mediates.
+//! Two files: the tool catalog (this crate's own sims dialect) and the policy
+//! (contracts + authorities, parsed by `baton-contracts` — the one canonical
+//! dialect). Both are parsed strictly (`deny_unknown_fields`): a typo in a
+//! config file must fail loudly, never silently weaken it.
+//!
+//! The policy's `[user]` section (`Contracts.user_id`/`user_label`) is
+//! ignored: the gateway session has no user model — every admitted value is
+//! model output over the session context.
+//!
+//! The canonical dialect can also declare inline `rule = "allow"` authorities
+//! (the old gateway dialect could not). They work, with one wrinkle: the
+//! session soft-blocks first and resolves inline rulings only during the
+//! escalation's remedy walk — so a call an allow authority fully covers still
+//! round-trips through `baton__escalate`, which then executes without
+//! prompting the human. The checked-in scenario uses only the escalate
+//! authority.
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-use baton_core::{
-    ArgumentName, ArgumentSchema, Audience, AudienceRule, Authority, AuthorityMandate, ContractRefused, Effect,
-    Effects, KnownTrust, PolicyEngine, RegistrationRefused, RegistryFrozen, Requirements, ToolContract, ToolName,
-    Trust, UserId, ValueLabel,
-};
+use baton_contracts::{Contracts, ContractsError};
+use baton_core::{AudienceRule, ContractRefused, PolicyEngine, RegistrationRefused, RegistryFrozen, ToolName, UserId};
 use serde::Deserialize;
 
 /// The escalation tool the gateway itself serves; a scenario tool cannot
-/// shadow it.
+/// shadow it, and the policy cannot contract it.
 pub const ESCALATE_TOOL: &str = "baton__escalate";
 /// The reserved MCP tool the agent's final answer must flow through: the
 /// gateway checks it at the engine's emission sink and returns only the
-/// permitted rendering.
+/// permitted rendering. Reserved on the same terms as `ESCALATE_TOOL`.
 pub const RESPOND_TOOL: &str = "baton__respond";
+
+/// Which of the two config files an error came from — startup messages name
+/// the offending file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigFile {
+    /// The tool-catalog file (`--config`).
+    Tools,
+    /// The policy file (`--policy`).
+    Policy,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("parse error: {0}")]
     Parse(#[from] toml::de::Error),
+    #[error(transparent)]
+    Contracts(#[from] ContractsError),
     #[error(transparent)]
     ContractRefused(#[from] ContractRefused),
     #[error(transparent)]
@@ -32,16 +55,37 @@ pub enum ConfigError {
     RegistryFrozen(#[from] RegistryFrozen),
     #[error("duplicate tool `{0}`")]
     DuplicateTool(String),
-    #[error("tool name `{ESCALATE_TOOL}` is reserved for the gateway's escalation tool")]
+    #[error("tool name `{ESCALATE_TOOL}` and `{RESPOND_TOOL}` are reserved for the gateway's own tools")]
     ReservedToolName,
-    #[error(
-        "tool `{0}` requires recipients within context but declares no recipients_arg, so every call would be blocked"
-    )]
-    MissingRecipientsArg(String),
-    #[error("tool `{tool}` recipients_arg `{arg}` is not a declared argument")]
+    #[error("the policy contracts `{ESCALATE_TOOL}`, which is reserved for the gateway's escalation tool")]
+    ReservedContractName,
+    #[error("the policy contracts `{0}`, which no simulated tool serves")]
+    ContractWithoutTool(String),
+    #[error("tool `{tool}`: the contract's `$.args.{arg}` audience names an argument the tool does not declare")]
     UnknownRecipientsArg { tool: String, arg: String },
     #[error("tool `{tool}`: {problem}")]
     BadResultTemplate { tool: String, problem: String },
+}
+
+impl ConfigError {
+    /// Attribute the error to the config file it came from.
+    pub fn source_file(&self) -> ConfigFile {
+        match self {
+            // `RegistryFrozen` reaches here only from the response policy,
+            // which the tool-catalog file declares.
+            Self::Parse(_)
+            | Self::DuplicateTool(_)
+            | Self::ReservedToolName
+            | Self::RegistryFrozen(_)
+            | Self::BadResultTemplate { .. } => ConfigFile::Tools,
+            Self::Contracts(_)
+            | Self::ContractRefused(_)
+            | Self::RegistrationRefused(_)
+            | Self::ReservedContractName
+            | Self::ContractWithoutTool(_)
+            | Self::UnknownRecipientsArg { .. } => ConfigFile::Policy,
+        }
+    }
 }
 
 /// One simulated tool: what the MCP client sees, and the canned result the
@@ -55,7 +99,7 @@ pub struct ToolSim {
     /// request at dispatch time.
     pub result: String,
     /// Which wire argument carries recipients (mirrors the contract's
-    /// argument schema) — used for narration and approval prompts.
+    /// `$.args.<arg>` audience) — used for narration and approval prompts.
     pub recipients_arg: Option<String>,
 }
 
@@ -69,7 +113,7 @@ pub struct ArgSpec {
     pub required: bool,
 }
 
-/// The parsed gateway policy: the engine (contracts + authorities, fixed
+/// The parsed gateway config: the engine (contracts + authorities, fixed
 /// before the first evaluation) and the simulated tools, keyed by name.
 pub struct GatewayConfig {
     pub engine: PolicyEngine,
@@ -77,22 +121,31 @@ pub struct GatewayConfig {
 }
 
 impl GatewayConfig {
-    pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
-        RawConfig::deserialize(toml::Deserializer::new(text))?.build()
+    /// Build from the two config files: `tools` is the simulated-tool catalog,
+    /// `policy` the contracts + authorities in the `baton-contracts` dialect.
+    /// The two join by tool name: a tool without a contract is served but
+    /// unregistered (calling it is unprovable and routes through the authority
+    /// chain like any unknown); a contract without a tool is a config error.
+    pub fn from_toml(tools: &str, policy: &str) -> Result<Self, ConfigError> {
+        let raw = RawConfig::deserialize(toml::Deserializer::new(tools))?;
+        let policy = Contracts::from_toml(policy)?;
+        raw.build(policy)
     }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawConfig {
-    #[serde(default, rename = "authority")]
-    authorities: Vec<AuthorityConfig>,
     #[serde(default, rename = "tool")]
     tools: Vec<ToolConfig>,
     /// Who reads the conversation. When present the engine registers the
     /// response-sink policy, and the agent's final answer is checked as an
     /// emission flow through `baton__respond`. Absent, the emission check
     /// fails closed (no registered response policy).
+    ///
+    /// This lives with the tool catalog rather than the policy file because
+    /// the canonical `baton-contracts` dialect models tool contracts and
+    /// authorities; the response sink is neither.
     #[serde(default)]
     response: Option<ResponseConfig>,
 }
@@ -105,168 +158,16 @@ struct ResponseConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct AuthorityConfig {
-    name: String,
-    #[serde(default)]
-    trust: Option<KnownTrustConfig>,
-    #[serde(default)]
-    audience: Option<Vec<String>>,
-    #[serde(default)]
-    waive_prior_effects: bool,
-    #[serde(default)]
-    confirms: bool,
-    #[serde(default)]
-    acknowledge_unknown: bool,
-    #[serde(default)]
-    may_release_control: bool,
-    #[serde(default)]
-    acquire_effects: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct ToolConfig {
     name: String,
     description: String,
     result: String,
     #[serde(default, rename = "arg")]
     args: Vec<ArgSpec>,
-    /// A tool without a contract is served but unregistered: calling it is
-    /// unprovable and routes through the authority chain like any unknown.
-    #[serde(default)]
-    contract: Option<ContractConfig>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ContractConfig {
-    #[serde(default)]
-    requires: RequiresConfig,
-    #[serde(default)]
-    recipients_arg: Option<String>,
-    #[serde(default)]
-    effects: Vec<EffectConfig>,
-    #[serde(default)]
-    output: OutputConfig,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RequiresConfig {
-    #[serde(default)]
-    trust: Option<KnownTrustConfig>,
-    #[serde(default)]
-    audience: Option<AudienceRuleConfig>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct OutputConfig {
-    #[serde(default)]
-    audience: AudienceConfig,
-    #[serde(default)]
-    trust: TrustConfig,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum AudienceRuleConfig {
-    Unrestricted,
-    RecipientsWithinContext,
-}
-
-impl AudienceRuleConfig {
-    fn to_domain(self) -> AudienceRule {
-        match self {
-            Self::Unrestricted => AudienceRule::Unrestricted,
-            Self::RecipientsWithinContext => AudienceRule::FromRecipients,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum AudienceConfig {
-    Readers(Vec<String>),
-    Named(AudienceName),
-}
-
-impl Default for AudienceConfig {
-    fn default() -> Self {
-        Self::Named(AudienceName::Public)
-    }
-}
-
-impl AudienceConfig {
-    fn to_domain(&self) -> Audience {
-        match self {
-            Self::Readers(readers) => Audience::readers(readers.iter().map(UserId::new)),
-            Self::Named(AudienceName::Public) => Audience::PUBLIC,
-            Self::Named(AudienceName::Unknown) => Audience::UNKNOWN,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum AudienceName {
-    Public,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum TrustConfig {
-    Suspicious,
-    #[default]
-    Trusted,
-    Unknown,
-}
-
-impl TrustConfig {
-    fn to_domain(self) -> Trust {
-        match self {
-            Self::Suspicious => Trust::SUSPICIOUS,
-            Self::Trusted => Trust::TRUSTED,
-            Self::Unknown => Trust::UNKNOWN,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum KnownTrustConfig {
-    Suspicious,
-    Trusted,
-}
-
-impl KnownTrustConfig {
-    fn to_domain(self) -> KnownTrust {
-        match self {
-            Self::Suspicious => KnownTrust::Suspicious,
-            Self::Trusted => KnownTrust::Trusted,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum EffectConfig {
-    Mutation,
-    Egress,
-}
-
-impl EffectConfig {
-    fn to_domain(self) -> Effect {
-        match self {
-            Self::Mutation => Effect::Mutation,
-            Self::Egress => Effect::Egress,
-        }
-    }
 }
 
 impl RawConfig {
-    fn build(self) -> Result<GatewayConfig, ConfigError> {
+    fn build(self, policy: Contracts) -> Result<GatewayConfig, ConfigError> {
         let mut engine = PolicyEngine::new();
         let mut tools = BTreeMap::new();
 
@@ -275,13 +176,10 @@ impl RawConfig {
                 return Err(ConfigError::ReservedToolName);
             }
             let name = ToolName::new(&tool.name);
-            if let Some(contract) = &tool.contract {
-                engine.register(contract.to_contract(&tool)?)?;
-            }
             let sim = ToolSim {
                 name: name.clone(),
                 description: tool.description,
-                recipients_arg: tool.contract.as_ref().and_then(|c| c.recipients_arg.clone()),
+                recipients_arg: policy.recipients_args.get(&name).cloned(),
                 args: tool.args,
                 result: tool.result,
             };
@@ -295,24 +193,40 @@ impl RawConfig {
             }
         }
 
-        for authority in &self.authorities {
-            engine.register_authority(Authority::external(
-                &authority.name,
-                AuthorityMandate {
-                    trust: authority.trust.map(KnownTrustConfig::to_domain),
-                    audience: authority
-                        .audience
-                        .as_ref()
-                        .map(|readers| readers.iter().map(UserId::new).collect()),
-                    waive_prior_effects: authority.waive_prior_effects,
-                    confirms: authority.confirms,
-                    acknowledge_unknown: authority.acknowledge_unknown,
-                    may_release_control: authority.may_release_control,
-                    acquire_effects: authority.acquire_effects,
-                },
-            ))?;
+        // Join the policy to the catalog. The reserved-name check runs first
+        // so a contracted `baton__escalate` reports as reserved, not as a
+        // contract without a tool.
+        for contract in &policy.contracts {
+            if contract.name.as_str() == ESCALATE_TOOL || contract.name.as_str() == RESPOND_TOOL {
+                return Err(ConfigError::ReservedContractName);
+            }
+            let Some(sim) = tools.get(&contract.name) else {
+                return Err(ConfigError::ContractWithoutTool(contract.name.as_str().to_owned()));
+            };
+            // baton-contracts validates only the `$.args.<arg>` path syntax;
+            // whether the argument exists is catalog knowledge. Without this
+            // check a typo would load fine and then fail every call at the
+            // engine as undeclared recipients — a load-time config bug
+            // surfacing as a runtime block.
+            if let Some(arg) = policy.recipients_args.get(&contract.name)
+                && !sim.declared_args().contains(arg.as_str())
+            {
+                return Err(ConfigError::UnknownRecipientsArg {
+                    tool: contract.name.as_str().to_owned(),
+                    arg: arg.clone(),
+                });
+            }
         }
 
+        for contract in policy.contracts {
+            engine.register(contract)?;
+        }
+        for authority in policy.authorities {
+            engine.register_authority(authority)?;
+        }
+
+        // The response sink: the agent's final answer is checked against this
+        // audience, and only the permitted rendering is delivered.
         if let Some(response) = &self.response {
             engine = engine.with_response_policy(baton_core::ResponsePolicy {
                 requires: baton_core::Requirements {
@@ -322,46 +236,8 @@ impl RawConfig {
                 readers: response.readers.iter().map(UserId::new).collect(),
             })?;
         }
-        Ok(GatewayConfig { engine, tools })
-    }
-}
 
-impl ContractConfig {
-    fn to_contract(&self, tool: &ToolConfig) -> Result<ToolContract, ConfigError> {
-        let audience = self
-            .requires
-            .audience
-            .map(AudienceRuleConfig::to_domain)
-            .unwrap_or_default();
-        let arguments = match &self.recipients_arg {
-            Some(arg) => {
-                if !tool.args.iter().any(|spec| &spec.name == arg) {
-                    return Err(ConfigError::UnknownRecipientsArg {
-                        tool: tool.name.clone(),
-                        arg: arg.clone(),
-                    });
-                }
-                ArgumentSchema::with_recipients(ArgumentName::new(arg))
-            }
-            None if audience == AudienceRule::FromRecipients => {
-                return Err(ConfigError::MissingRecipientsArg(tool.name.clone()));
-            }
-            None => ArgumentSchema::opaque(),
-        };
-        Ok(ToolContract {
-            name: ToolName::new(&tool.name),
-            requires: Requirements {
-                trust: self.requires.trust.map(KnownTrustConfig::to_domain),
-                audience,
-                ..Requirements::default()
-            },
-            output_label: ValueLabel {
-                audience: self.output.audience.to_domain(),
-                trust: self.output.trust.to_domain(),
-            },
-            effects: Effects::declared(self.effects.iter().copied().map(EffectConfig::to_domain)),
-            arguments,
-        })
+        Ok(GatewayConfig { engine, tools })
     }
 }
 

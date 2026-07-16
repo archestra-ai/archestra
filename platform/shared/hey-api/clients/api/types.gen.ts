@@ -15621,6 +15621,9 @@ export type GetAppsData = {
         limit?: number;
         offset?: number;
         search?: string;
+        scope?: 'personal' | 'team' | 'org';
+        authorIds?: Array<string>;
+        excludeAuthorIds?: Array<string>;
     };
     url: '/api/apps';
 };
@@ -15705,6 +15708,8 @@ export type GetAppsResponses = {
             id: string;
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
+            authorName: string | null;
+            viewerRole: 'owner' | 'shared' | 'admin';
             latestVersion: number;
             teams: Array<{
                 id: string;
@@ -16791,6 +16796,8 @@ export type GetAppResponses = {
             id: string;
             name: string;
         }>;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        authorName: string | null;
     };
 };
 
@@ -17305,6 +17312,120 @@ export type GetAppToolsResponses = {
 };
 
 export type GetAppToolsResponse = GetAppToolsResponses[keyof GetAppToolsResponses];
+
+export type GetAppAssignableBuiltinToolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/apps/assignable-builtin-tools';
+};
+
+export type GetAppAssignableBuiltinToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppAssignableBuiltinToolsError = GetAppAssignableBuiltinToolsErrors[keyof GetAppAssignableBuiltinToolsErrors];
+
+export type GetAppAssignableBuiltinToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string | null;
+        catalogId: string | null;
+        delegateToAgentId: string | null;
+        name: string;
+        rawName: string | null;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
+        policiesAutoConfiguredAt: string | null;
+        policiesAutoConfiguringStartedAt: string | null;
+        policiesAutoConfiguredReasoning: string | null;
+        policiesAutoConfiguredModel: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAppAssignableBuiltinToolsResponse = GetAppAssignableBuiltinToolsResponses[keyof GetAppAssignableBuiltinToolsResponses];
 
 export type PostAppRenderDiagnosticsData = {
     body: {
@@ -36180,7 +36301,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude';
+        client?: 'claude' | 'codex';
         /**
          * Filter by session ID
          */
@@ -48315,6 +48436,7 @@ export type GetLlmProviderApiKeysResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        isChatgptSubscription?: boolean;
     }>;
 };
 
@@ -48540,6 +48662,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        isChatgptSubscription?: boolean;
     }>;
 };
 
@@ -48733,6 +48856,7 @@ export type GetLlmProviderApiKeyResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        isChatgptSubscription?: boolean;
     };
 };
 
@@ -48862,7 +48986,9 @@ export type McpAppProxyPostData = {
     path: {
         appId: string;
     };
-    query?: never;
+    query?: {
+        conversationId?: string;
+    };
     url: '/api/mcp/app/{appId}';
 };
 
@@ -57185,6 +57311,184 @@ export type OpenAiListModelsWithAgentResponses = {
 };
 
 export type OpenAiListModelsWithAgentResponse = OpenAiListModelsWithAgentResponses[keyof OpenAiListModelsWithAgentResponses];
+
+export type OpenaiCodexDeviceAuthStartData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openai-codex-auth/device/start';
+};
+
+export type OpenaiCodexDeviceAuthStartErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenaiCodexDeviceAuthStartError = OpenaiCodexDeviceAuthStartErrors[keyof OpenaiCodexDeviceAuthStartErrors];
+
+export type OpenaiCodexDeviceAuthStartResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deviceAuthId: string;
+        userCode: string;
+        verificationUri: string;
+        interval: number;
+        expiresIn: number;
+    };
+};
+
+export type OpenaiCodexDeviceAuthStartResponse = OpenaiCodexDeviceAuthStartResponses[keyof OpenaiCodexDeviceAuthStartResponses];
+
+export type OpenaiCodexDeviceAuthPollData = {
+    body: {
+        deviceAuthId: string;
+        userCode: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openai-codex-auth/device/poll';
+};
+
+export type OpenaiCodexDeviceAuthPollErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenaiCodexDeviceAuthPollError = OpenaiCodexDeviceAuthPollErrors[keyof OpenaiCodexDeviceAuthPollErrors];
+
+export type OpenaiCodexDeviceAuthPollResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'pending';
+    } | {
+        status: 'slow_down';
+    } | {
+        status: 'complete';
+        credential: string;
+    };
+};
+
+export type OpenaiCodexDeviceAuthPollResponse = OpenaiCodexDeviceAuthPollResponses[keyof OpenaiCodexDeviceAuthPollResponses];
 
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
     body: OpenrouterChatCompletionRequestInput;

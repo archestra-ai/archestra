@@ -7,6 +7,8 @@ import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationShareModel from "./conversation-share";
 import MessageModel from "./message";
 import ModelModel from "./model";
+import ProjectModel from "./project";
+import ProjectShareModel from "./project-share";
 
 describe("ConversationModel", () => {
   test("can create a conversation", async ({
@@ -700,6 +702,166 @@ describe("ConversationModel", () => {
     });
 
     expect(found).toBeNull();
+  });
+
+  test("isAccessibleBy is true for the owner, false for an unrelated same-org user", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const unrelated = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Access Agent", teams: [] });
+    await makeMember(owner.id, org.id);
+    await makeMember(unrelated.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Access Conversation",
+    });
+
+    expect(
+      await ConversationModel.isAccessibleBy({
+        id: conversation.id,
+        userId: owner.id,
+        organizationId: org.id,
+      }),
+    ).toBe(true);
+    expect(
+      await ConversationModel.isAccessibleBy({
+        id: conversation.id,
+        userId: unrelated.id,
+        organizationId: org.id,
+      }),
+    ).toBe(false);
+  });
+
+  test("isAccessibleBy is false for a cross-org caller and a nonexistent id", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const owner = await makeUser();
+    const org = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const agent = await makeAgent({ name: "Cross-Org Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Cross-Org Conversation",
+    });
+
+    // Same id and user, wrong organization → never accessible.
+    expect(
+      await ConversationModel.isAccessibleBy({
+        id: conversation.id,
+        userId: owner.id,
+        organizationId: otherOrg.id,
+      }),
+    ).toBe(false);
+    expect(
+      await ConversationModel.isAccessibleBy({
+        id: crypto.randomUUID(),
+        userId: owner.id,
+        organizationId: org.id,
+      }),
+    ).toBe(false);
+  });
+
+  test("isAccessibleBy is true for a user with share access", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Shared Access Agent", teams: [] });
+    await makeMember(owner.id, org.id);
+    await makeMember(viewer.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Org-Shared Conversation",
+    });
+
+    await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    expect(
+      await ConversationModel.isAccessibleBy({
+        id: conversation.id,
+        userId: viewer.id,
+        organizationId: org.id,
+      }),
+    ).toBe(true);
+  });
+
+  test("isAccessibleBy is true for a member of the chat's project", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Project Access Agent", teams: [] });
+    await makeMember(owner.id, org.id);
+    await makeMember(viewer.id, org.id);
+
+    const project = await ProjectModel.create({
+      organizationId: org.id,
+      userId: owner.id,
+      name: "access-project",
+    });
+    const conversation = await ConversationModel.create({
+      userId: owner.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      projectId: project.id,
+      title: "Project Conversation",
+    });
+
+    // Unshared project: the chat stays owner-only.
+    expect(
+      await ConversationModel.isAccessibleBy({
+        id: conversation.id,
+        userId: viewer.id,
+        organizationId: org.id,
+      }),
+    ).toBe(false);
+
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId: org.id,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+
+    expect(
+      await ConversationModel.isAccessibleBy({
+        id: conversation.id,
+        userId: viewer.id,
+        organizationId: org.id,
+      }),
+    ).toBe(true);
   });
 
   test("returns null when updating non-existent conversation", async ({

@@ -33,11 +33,11 @@ fn user(id: &str) -> UserId {
 fn email_contract(effects: Effects) -> ToolContract {
     ToolContract {
         name: ToolName::new("email.send"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects,
         arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),

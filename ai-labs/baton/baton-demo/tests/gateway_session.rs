@@ -4,27 +4,16 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use baton_demo::gateway::{GatewayConfig, Outcome, Session};
+use baton_demo::gateway::{ConfigError, GatewayConfig, Outcome, Session};
 
-const SCENARIO: &str = r#"
+const SCENARIO_TOOLS: &str = r#"
 [response]
 readers = ["alice@archestra.ai", "bob@archestra.ai"]
-
-[[authority]]
-name = "human-in-the-loop"
-audience = ["alice@archestra.ai", "bob@archestra.ai", "alex@finance-audit.com"]
-may_release_control = true
-acquire_effects = true
-confirms = true
-acknowledge_unknown = true
 
 [[tool]]
 name = "invoices_list"
 description = "List invoices."
 result = "47 invoices totaling $1,248,000."
-
-[tool.contract]
-output = { audience = ["alice@archestra.ai", "bob@archestra.ai"], trust = "trusted" }
 
 [[tool]]
 name = "send_email"
@@ -40,15 +29,31 @@ name = "subject"
 
 [[tool.arg]]
 name = "body"
+"#;
 
-[tool.contract]
-requires = { audience = "recipients_within_context" }
-recipients_arg = "to"
-effects = ["egress"]
+const SCENARIO_POLICY: &str = r#"
+[[authority]]
+name = "human-in-the-loop"
+rule = "escalate"
+audience = ["alice@archestra.ai", "bob@archestra.ai", "alex@finance-audit.com"]
+may_release_control = true
+acquire_effects = true
+confirms = true
+acknowledge_unknown = true
+
+[[tool]]
+name = "invoices_list"
+requires = {}
+output = { audience = ["alice@archestra.ai", "bob@archestra.ai"], trust = "trusted" }
+
+[[tool]]
+name = "send_email"
+requires = { audience = "$.args.to" }
+output = { audience = "public", trust = "trusted", effects = ["egress"] }
 "#;
 
 fn session() -> Session {
-    let config = GatewayConfig::from_toml(SCENARIO).expect("scenario parses");
+    let config = GatewayConfig::from_toml(SCENARIO_TOOLS, SCENARIO_POLICY).expect("scenario parses");
     Session::new(Arc::new(config))
 }
 
@@ -208,23 +213,11 @@ async fn a_reissued_call_after_completion_is_a_new_action() {
 /// separately — one ruling never impersonates another authority.
 #[tokio::test]
 async fn split_mandates_ask_each_authority_once() {
-    const SPLIT: &str = r#"
-[[authority]]
-name = "audience-endorser"
-audience = ["alice@archestra.ai", "bob@archestra.ai", "alex@finance-audit.com"]
-
-[[authority]]
-name = "effects-officer"
-may_release_control = true
-acquire_effects = true
-
+    const SPLIT_TOOLS: &str = r#"
 [[tool]]
 name = "invoices_list"
 description = "List invoices."
 result = "47 invoices totaling $1,248,000."
-
-[tool.contract]
-output = { audience = ["alice@archestra.ai", "bob@archestra.ai"], trust = "trusted" }
 
 [[tool]]
 name = "send_email"
@@ -234,13 +227,30 @@ result = "Email sent to {to}."
 [[tool.arg]]
 name = "to"
 required = true
-
-[tool.contract]
-requires = { audience = "recipients_within_context" }
-recipients_arg = "to"
-effects = ["egress"]
 "#;
-    let config = GatewayConfig::from_toml(SPLIT).expect("scenario parses");
+    const SPLIT_POLICY: &str = r#"
+[[authority]]
+name = "audience-endorser"
+rule = "escalate"
+audience = ["alice@archestra.ai", "bob@archestra.ai", "alex@finance-audit.com"]
+
+[[authority]]
+name = "effects-officer"
+rule = "escalate"
+may_release_control = true
+acquire_effects = true
+
+[[tool]]
+name = "invoices_list"
+requires = {}
+output = { audience = ["alice@archestra.ai", "bob@archestra.ai"], trust = "trusted" }
+
+[[tool]]
+name = "send_email"
+requires = { audience = "$.args.to" }
+output = { audience = "public", trust = "trusted", effects = ["egress"] }
+"#;
+    let config = GatewayConfig::from_toml(SPLIT_TOOLS, SPLIT_POLICY).expect("scenario parses");
     let mut session = Session::new(Arc::new(config));
     read_invoices(&mut session);
     let Outcome::SoftBlocked { .. } = session.call_tool("send_email", &args(&[("to", "alex@finance-audit.com")]))
@@ -290,7 +300,7 @@ async fn no_ruling_fails_closed_and_keeps_the_action_pending() {
 /// session keeps working.
 #[test]
 fn executor_failure_closes_the_receipt() {
-    const OPTIONAL: &str = r#"
+    const OPTIONAL_TOOLS: &str = r#"
 [[tool]]
 name = "greet"
 description = "Greet someone."
@@ -298,10 +308,16 @@ result = "Hello {name}."
 
 [[tool.arg]]
 name = "name"
-
-[tool.contract]
 "#;
-    let config = GatewayConfig::from_toml(OPTIONAL).expect("scenario parses");
+    // The old empty `[tool.contract]` meant "considered, nothing required" with
+    // a public/trusted output; canonically both must be spelled.
+    const OPTIONAL_POLICY: &str = r#"
+[[tool]]
+name = "greet"
+requires = {}
+output = { audience = "public", trust = "trusted" }
+"#;
+    let config = GatewayConfig::from_toml(OPTIONAL_TOOLS, OPTIONAL_POLICY).expect("scenario parses");
     let mut session = Session::new(Arc::new(config));
     match session.call_tool("greet", &args(&[])) {
         Outcome::ExecutorFailed { .. } => {}
@@ -338,35 +354,75 @@ fn wire_validation_fails_closed() {
 
 #[test]
 fn config_rejects_bad_policies() {
-    assert!(GatewayConfig::from_toml("[[tool]]\nname = \"x\"\ndescription = \"d\"\nresult = \"r\"\ntypo = 1").is_err());
-    // recipients_within_context without a recipients_arg would block every call.
-    let no_recipients = r#"
+    const SEND_TOOL: &str = r#"
 [[tool]]
 name = "send"
 description = "d"
 result = "r"
-[tool.contract]
-requires = { audience = "recipients_within_context" }
+
+[[tool.arg]]
+name = "to"
 "#;
-    assert!(GatewayConfig::from_toml(no_recipients).is_err());
-    // recipients_arg must be a declared argument.
-    let unknown_arg = r#"
+    // Unknown field in the tool catalog.
+    assert!(matches!(
+        GatewayConfig::from_toml(
+            "[[tool]]\nname = \"x\"\ndescription = \"d\"\nresult = \"r\"\ntypo = 1",
+            ""
+        ),
+        Err(ConfigError::Parse(_))
+    ));
+    // Unknown field in the policy (surfaces through baton-contracts).
+    assert!(matches!(
+        GatewayConfig::from_toml(SEND_TOOL, "[[tool]]\nname = \"send\"\ntypo = 1"),
+        Err(ConfigError::Contracts(_))
+    ));
+    // The contract's `$.args.<arg>` audience must name a declared argument.
+    let bad_recipients_policy = r#"
 [[tool]]
 name = "send"
-description = "d"
-result = "r"
-[tool.contract]
-recipients_arg = "to"
+requires = { audience = "$.args.too" }
 "#;
-    assert!(GatewayConfig::from_toml(unknown_arg).is_err());
-    // The escalation tool name is reserved.
+    assert!(matches!(
+        GatewayConfig::from_toml(SEND_TOOL, bad_recipients_policy),
+        Err(ConfigError::UnknownRecipientsArg { tool, arg }) if tool == "send" && arg == "too"
+    ));
+    // A contract must govern a served tool.
+    assert!(matches!(
+        GatewayConfig::from_toml(SEND_TOOL, "[[tool]]\nname = \"ghost\"\nrequires = {}"),
+        Err(ConfigError::ContractWithoutTool(tool)) if tool == "ghost"
+    ));
+    // The escalation tool name is reserved in the catalog…
     let reserved = r#"
 [[tool]]
 name = "baton__escalate"
 description = "d"
 result = "r"
 "#;
-    assert!(GatewayConfig::from_toml(reserved).is_err());
+    assert!(matches!(
+        GatewayConfig::from_toml(reserved, ""),
+        Err(ConfigError::ReservedToolName)
+    ));
+    // …and in the policy, where it wins over the contract-without-tool check.
+    assert!(matches!(
+        GatewayConfig::from_toml("", "[[tool]]\nname = \"baton__escalate\"\nrequires = {}"),
+        Err(ConfigError::ReservedContractName)
+    ));
+    // Duplicate simulated tools collide.
+    let duplicated = r#"
+[[tool]]
+name = "x"
+description = "d"
+result = "r"
+
+[[tool]]
+name = "x"
+description = "d"
+result = "r"
+"#;
+    assert!(matches!(
+        GatewayConfig::from_toml(duplicated, ""),
+        Err(ConfigError::DuplicateTool(tool)) if tool == "x"
+    ));
     // Result templates are validated at load: undeclared placeholder…
     let unknown_placeholder = r#"
 [[tool]]
@@ -374,7 +430,10 @@ name = "greet"
 description = "d"
 result = "Hello {nope}."
 "#;
-    assert!(GatewayConfig::from_toml(unknown_placeholder).is_err());
+    assert!(matches!(
+        GatewayConfig::from_toml(unknown_placeholder, ""),
+        Err(ConfigError::BadResultTemplate { .. })
+    ));
     // …and an unclosed one.
     let unclosed = r#"
 [[tool]]
@@ -385,13 +444,69 @@ result = "Hello {name."
 [[tool.arg]]
 name = "name"
 "#;
-    assert!(GatewayConfig::from_toml(unclosed).is_err());
+    assert!(matches!(
+        GatewayConfig::from_toml(unclosed, ""),
+        Err(ConfigError::BadResultTemplate { .. })
+    ));
+}
+
+/// The checked-in config files drive the demo end-to-end: the clean read, the
+/// out-of-audience soft block, the human approval, and — the audience-label
+/// guarantee — a follow-up in-audience send that only stays clean because the
+/// approved send's output audience is public. Were the policy to drop
+/// send_email's output label to unknown, the approved send would put an
+/// unknown-audience value into the context and block the in-audience
+/// follow-up. The trust half of the migrated label is not observable through
+/// this scenario (no tool requires trust), so it is pinned directly on the
+/// parsed policy below.
+#[tokio::test]
+async fn checked_in_config_preserves_the_demo_scenario() {
+    // The old dialect defaulted a contract's output to public/trusted; the
+    // canonical dialect fails closed on omissions, so the checked-in policy
+    // must keep spelling both out.
+    let policy = baton_contracts::Contracts::from_toml(include_str!("../gateway-policy.toml"))
+        .expect("checked-in policy parses");
+    let send = policy
+        .contracts
+        .iter()
+        .find(|c| c.name.as_str() == "send_email")
+        .expect("send_email is contracted");
+    assert_eq!(send.output_label.trust, baton_core::Trust::TRUSTED);
+    assert_eq!(send.output_label.audience, baton_core::Audience::PUBLIC);
+    assert_eq!(
+        send.effects,
+        baton_core::Effects::declared([baton_core::Effect::Egress]),
+        "send_email's egress moved from contract level into output.effects in the migration"
+    );
+
+    let config = GatewayConfig::from_toml(include_str!("../gateway.toml"), include_str!("../gateway-policy.toml"))
+        .expect("checked-in config parses");
+    let mut session = Session::new(Arc::new(config));
+
+    match session.call_tool("invoices_list", &args(&[])) {
+        Outcome::Executed { .. } => {}
+        other => panic!("expected the read to execute, got {other:?}"),
+    }
+    let Outcome::SoftBlocked { .. } = session.call_tool("send_email", &email_args()) else {
+        panic!("expected the out-of-audience send to soft-block");
+    };
+    match session
+        .escalate("auditor needs the summary", |_| async { Some(true) })
+        .await
+    {
+        Outcome::Granted { result, .. } => assert_eq!(result, "Email sent to alex@finance-audit.com."),
+        other => panic!("expected the escalation to be granted, got {other:?}"),
+    }
+
+    match session.call_tool("send_email", &args(&[("to", "bob@archestra.ai"), ("subject", "fyi")])) {
+        Outcome::Executed { result, .. } => assert_eq!(result, "Email sent to bob@archestra.ai."),
+        other => panic!("expected the in-audience follow-up send to execute, got {other:?}"),
+    }
 }
 
 /// The final answer flows through the emission sink: a clean response is
-/// emitted as exactly the checked bytes, and a session with the tainted
-/// context blocked from the readers is refused — the raw text is never
-/// delivered.
+/// emitted as exactly the checked bytes, and a session whose readers cannot
+/// see the tainted context is refused — the raw text is never delivered.
 #[test]
 fn respond_emits_exactly_the_permitted_bytes() {
     let mut session = session();
@@ -410,11 +525,11 @@ fn respond_emits_exactly_the_permitted_bytes() {
 
 #[test]
 fn respond_blocks_a_leak_and_delivers_nothing() {
-    let scenario_with_narrow_readers = SCENARIO.replace(
+    let narrow_readers = SCENARIO_TOOLS.replace(
         r#"readers = ["alice@archestra.ai", "bob@archestra.ai"]"#,
         r#"readers = ["mallory@example.com"]"#,
     );
-    let config = GatewayConfig::from_toml(&scenario_with_narrow_readers).expect("scenario parses");
+    let config = GatewayConfig::from_toml(&narrow_readers, SCENARIO_POLICY).expect("scenario parses");
     let mut session = Session::new(Arc::new(config));
     let Outcome::Executed { .. } = session.call_tool("invoices_list", &args(&[])) else {
         panic!("the read should execute");

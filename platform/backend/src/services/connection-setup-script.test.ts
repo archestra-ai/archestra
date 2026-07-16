@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   CLAUDE_CODE_CLIENT_ID,
+  CODEX_CLIENT_ID,
   EXTERNAL_AGENT_ID_HEADER,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -19,6 +20,9 @@ const execFileAsync = promisify(execFile);
 
 /** The client-attribution header line the Claude Code setup script emits. */
 const AGENT_ID_HEADER_LINE = `${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`;
+
+/** The client-attribution header line the Codex setup script writes to config.toml. */
+const CODEX_AGENT_ID_TOML_LINE = `"${EXTERNAL_AGENT_ID_HEADER}" = "${CODEX_CLIENT_ID}"`;
 
 const MCP = {
   serverName: "prod_gateway",
@@ -45,6 +49,22 @@ const ANTHROPIC_PASSTHROUGH_PROXY = {
   provider: "anthropic" as const,
   providerLabel: "Anthropic",
   url: "https://archestra.example.com/v1/anthropic/profile-123",
+  proxyName: "default_proxy",
+  virtualKey: null,
+  virtualKeyName: null,
+  passthroughVirtualKey: "arch_passthroughcafe",
+};
+
+/**
+ * Codex ChatGPT-subscription passthrough: no virtual key credential is injected
+ * (Codex keeps its own login), so only the attribution headers are emitted —
+ * including the passthrough key that attributes the request to the user.
+ */
+const OPENAI_PASSTHROUGH_PROXY = {
+  authMode: "provider-key" as const,
+  provider: "openai" as const,
+  providerLabel: "OpenAI",
+  url: "https://archestra.example.com/v1/openai/profile-123",
   proxyName: "default_proxy",
   virtualKey: null,
   virtualKeyName: null,
@@ -334,12 +354,40 @@ describe("renderSetupScript", () => {
     expect(script).toContain("[model_providers.default_proxy]");
     expect(script).toContain('wire_api = "responses"');
     expect(script).toContain("requires_openai_auth = true");
+    // Attribution parity with Claude Code: every proxied Codex request carries
+    // the client-id header via config.toml's http_headers table.
+    expect(script).toContain("[model_providers.default_proxy.http_headers]");
+    expect(script).toContain(CODEX_AGENT_ID_TOML_LINE);
+    // Virtual-key mode: the injected key carries user attribution, so no
+    // separate passthrough-key header is written.
+    expect(script).not.toContain('"X-Archestra-Virtual-Key"');
     expect(script).toContain(
       `printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`,
     );
     // The virtual key is assigned to a variable, never an argv of codex.
     expect(script).not.toContain(
       `codex login --with-api-key ${PROXY.virtualKey}`,
+    );
+  });
+
+  test("codex passthrough: attributes user + client via config.toml http_headers", () => {
+    const script = renderSetupScript({
+      ...fullContext("codex"),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    expect(script).toContain("[model_providers.default_proxy.http_headers]");
+    expect(script).toContain(CODEX_AGENT_ID_TOML_LINE);
+    // Passthrough mode: the user is attributed via the passthrough virtual key,
+    // exactly like the Claude Code Anthropic-subscription passthrough.
+    expect(script).toContain(
+      '"X-Archestra-Virtual-Key" = "arch_passthroughcafe"',
+    );
+    // No credential is injected into config.toml — Codex keeps its own login.
+    expect(script).toContain(
+      "Codex keeps using your own OpenAI API key login.",
+    );
+    expect(script).not.toContain(
+      `printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`,
     );
   });
 
@@ -552,6 +600,9 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("# >>> archestra:default_proxy >>>");
     expect(script).toContain("[model_providers.default_proxy]");
     expect(script).toContain('wire_api = "responses"');
+    // Attribution parity: the client-id header is written to config.toml.
+    expect(script).toContain("[model_providers.default_proxy.http_headers]");
+    expect(script).toContain(CODEX_AGENT_ID_TOML_LINE);
     // virtual key passed via variable + stdin, never argv.
     expect(script).toContain("$ArchVirtualKey | codex login --with-api-key");
     expect(script).not.toContain(

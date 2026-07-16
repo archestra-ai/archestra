@@ -62,6 +62,14 @@ Model Router translation forwards inline non-text content where the provider's n
 - **Use Responses API for new clients**: OpenAI recommends `/responses` for new integrations. Chat Completions remains supported for existing clients.
 - **Streaming**: OpenAI streaming responses require your cloud provider's load balancer to support long-lived connections. See [Cloud Provider Configuration](/docs/platform-deployment#cloud-provider-configuration-streaming-timeout-settings) for more details.
 
+### ChatGPT Subscription (Codex)
+
+Reuse a ChatGPT/Codex subscription for chat instead of a metered API key. Add an OpenAI provider key, pick the **ChatGPT Subscription** tab, and use **Sign in with ChatGPT** to connect the account that holds your subscription.
+
+First turn on device code authorization for the account, in ChatGPT → Settings → Security → **Enable device code authorization for Codex**. It is off by default, and ChatGPT blocks the approval step until you enable it.
+
+These keys are per-user and personal-only: each person connects their own ChatGPT account. Requests are billed to the subscription.
+
 ## Anthropic
 
 ### Supported Anthropic APIs

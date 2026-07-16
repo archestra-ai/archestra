@@ -81,6 +81,7 @@ import {
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { trackEvent } from "@/lib/analytics";
+import { useApp } from "@/lib/app.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   clearOAuthPendingChatResume,
@@ -1034,6 +1035,22 @@ export function ChatPageContent({
     earlyToolUiStarts: chatSession?.earlyToolUiStarts ?? {},
     filterDeleted: true,
   });
+  // When an admin opens another user's app, the seeded conversation (origin
+  // "app_open") renders that app, but its server-computed viewerRole is "admin":
+  // they may use it and change its settings, not modify it via chat. Mirror the
+  // Projects admin view by replacing the composer with a "Viewing as
+  // administrator" banner. Gate on origin so useApp never fires for ordinary
+  // chats, and read the same authoritative viewerRole the card/settings use.
+  const oversightAppId =
+    conversation?.origin === "app_open"
+      ? (mcpApps.find((entry) => entry.appId)?.appId ?? null)
+      : null;
+  const oversightApp = useApp(oversightAppId);
+  const isAppOversight = oversightApp.data?.viewerRole === "admin";
+  // Hold the composer while an app-open conversation's app is still resolving so
+  // an oversight view never briefly flashes an editable composer before we know.
+  const isResolvingOversightApp =
+    oversightAppId !== null && oversightApp.isPending;
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const status = chatSession?.status ?? "ready";
@@ -2485,6 +2502,8 @@ export function ChatPageContent({
           isTitleAnimating={
             !!conversation && headerAnimatingTitles.has(conversation.id)
           }
+          isAppOversight={isAppOversight}
+          oversightOwnerName={oversightApp.data?.authorName ?? null}
           canManageShare={canManageShare}
           isShared={isShared}
           canCreateProject={canCreateProjectFromThisChat}
@@ -2699,7 +2718,7 @@ export function ChatPageContent({
                         </div>
                       </div>
                     </div>
-                  ) : (
+                  ) : isAppOversight || isResolvingOversightApp ? null : (
                     activeAgentId && (
                       <div className="sticky bottom-0 bg-background border-t p-4">
                         {/* Shared-element pair with the centered New Chat

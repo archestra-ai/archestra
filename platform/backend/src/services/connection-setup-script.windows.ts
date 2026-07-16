@@ -7,6 +7,7 @@ import {
 import type { ConnectionSetupClientId } from "@/types";
 import {
   claudeCodeOAuthNextStep,
+  codexAttributionHeaderLines,
   type SetupScriptContext,
   type SetupScriptProxySection,
 } from "./connection-setup-script";
@@ -481,6 +482,9 @@ name = "${ctx.proxy.proxyName}"
 base_url = "${ctx.proxy.url}"
 wire_api = "responses"
 requires_openai_auth = true
+
+[model_providers.${ctx.proxy.proxyName}.http_headers]
+${codexAttributionHeaderLines(ctx.proxy)}
 # <<< ${marker} <<<`;
 
     sections.push(`Say ${psq(`Adding the "${ctx.proxy.proxyName}" provider to ~/.codex/config.toml`)}

@@ -45,7 +45,12 @@ import {
   type AppSdkTool,
   injectAppSdk,
 } from "@/services/apps/app-sdk-injection";
-import { APP_RUNTIME_BUILTIN_SHORT_NAMES } from "@/services/apps/app-tool-runtime-gate";
+import {
+  APP_RUNTIME_BUILTIN_SHORT_NAMES,
+  getAssignedAppBuiltin,
+  isAppAssignableArchestraTool,
+  redactAppBuiltinAuditResult,
+} from "@/services/apps/app-tool-runtime-gate";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
@@ -67,10 +72,19 @@ type McpListTool = ListToolsResult["tools"][number];
  * app owner — which fail-closes to the per-app allowlist and records the call
  * against the app on the audit row).
  */
-export async function createAppServer(
-  appId: string,
-  tokenAuth: TokenAuthContext,
-): Promise<{ server: McpServer; app: App }> {
+export async function createAppServer(params: {
+  appId: string;
+  tokenAuth: TokenAuthContext;
+  /**
+   * The chat conversation the app is rendered in, already validated as
+   * accessible to the viewer by the proxy route (session-auth requests only).
+   * Threaded into the in-process built-in dispatch so the assigned file tools
+   * resolve the embedding chat's file scope; absent for standalone/external
+   * renders, where those tools see no files (their existing headless behavior).
+   */
+  conversationId?: string;
+}): Promise<{ server: McpServer; app: App }> {
+  const { appId, tokenAuth, conversationId } = params;
   const mcpServer = new McpServer(
     {
       name: `archestra-app-${appId}`,
@@ -149,13 +163,21 @@ export async function createAppServer(
         };
       }
 
-      // Reserved app-runtime built-ins (App Data Store + the LLM completion)
-      // run in-process with the route-bound appId so they can only ever act for
-      // this app. Other Archestra tools (the management/chat surface) are NOT
-      // dispatchable from an app runtime.
+      // Archestra built-ins run in-process with the route-bound appId so they
+      // can only ever act for this app: the reserved app-runtime tools (App
+      // Data Store + the LLM completion) unconditionally, the app-assignable
+      // file tools only with a live `app_tools` grant (re-checked here,
+      // fail-closed, so a revocation between the route gate and dispatch is
+      // refused). Other Archestra tools (the management/chat surface) are NOT
+      // dispatchable from an app runtime. The context carries no `agentId` —
+      // assignment was authorized against the app, not a chat agent — and the
+      // validated embedding conversation (if any), which is what scopes the
+      // file tools to the chat the app is rendered in.
       if (archestraMcpBranding.isToolName(name)) {
         const shortName = archestraMcpBranding.getToolShortName(name);
-        if (!shortName || !APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)) {
+        const reserved =
+          !!shortName && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName);
+        if (!reserved && !(await getAssignedAppBuiltin(name, appId))) {
           throw {
             code: -32601,
             message: `Tool "${name}" is not available to apps.`,
@@ -164,6 +186,7 @@ export async function createAppServer(
         const response = await executeArchestraTool(name, args, {
           agent: { id: appId, name: app.name },
           appId,
+          conversationId,
           userId: tokenAuth.userId,
           organizationId: tokenAuth.organizationId,
           tokenAuth,
@@ -176,7 +199,7 @@ export async function createAppServer(
             mcpServerName: archestraMcpBranding.serverName,
             method: "tools/call",
             toolCall: { id: `app-${Date.now()}`, name, arguments: args || {} },
-            toolResult: response,
+            toolResult: redactAppBuiltinAuditResult(name, response),
             userId: tokenAuth.userId ?? null,
             authMethod: deriveAuthMethod(tokenAuth) ?? null,
           });
@@ -389,9 +412,11 @@ async function buildPermittedAppToolList(
 /**
  * The assigned-tool descriptors embedded into the SDK bootstrap for
  * `archestra.tools.list()`: only tools the app's HTML can actually call —
- * RBAC-permitted upstream tools that don't exclude the "app" surface via
- * `_meta.ui.visibility`. The App Data Store built-ins are deliberately absent
- * (apps reach them through `archestra.storage`, not `tools.call`).
+ * RBAC-permitted upstream tools, plus the assigned app-assignable file
+ * built-ins (called through plain `tools.call`), that don't exclude the "app"
+ * surface via `_meta.ui.visibility`. The reserved App Data Store/LLM built-ins
+ * are deliberately absent (apps reach them through `archestra.storage` and
+ * `archestra.llm`, not `tools.call`).
  */
 async function buildAppSdkTools(
   appId: string,
@@ -399,7 +424,12 @@ async function buildAppSdkTools(
 ): Promise<AppSdkTool[]> {
   const permitted = await buildPermittedAppToolList(appId, tokenAuth);
   return permitted
-    .filter((tool) => !archestraMcpBranding.isToolName(tool.name))
+    .filter((tool) => {
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
+      if (shortName === null) return true; // upstream tool
+      // Present in the permitted list only when assigned (buildAppToolList).
+      return isAppAssignableArchestraTool(shortName);
+    })
     .filter((tool) => {
       const visibility = (
         tool._meta as { ui?: { visibility?: string[] } } | undefined
@@ -424,7 +454,21 @@ function buildAppLaunchTool(appId: string, app: App): McpListTool {
 }
 
 async function buildAppToolList(appId: string): Promise<McpListTool[]> {
-  const upstream = await AppToolModel.getToolsForApp(appId);
+  const assigned = await AppToolModel.getToolsForApp(appId);
+  // Assigned Archestra built-ins (the app-assignable file tools) are listed
+  // from the live registry below — the registered descriptor, not the seeded
+  // row — and only while the canonical availability predicate holds, so a dark
+  // flag hides a stale grant.
+  const assignedBuiltinShortNames = new Set<string>();
+  for (const tool of assigned) {
+    const shortName = archestraMcpBranding.getToolShortName(tool.name);
+    if (shortName && isAppAssignableArchestraTool(shortName)) {
+      assignedBuiltinShortNames.add(shortName);
+    }
+  }
+  const upstream = assigned.filter(
+    (tool) => !archestraMcpBranding.isToolName(tool.name),
+  );
   // Trim the runtime list to the app's bound environment so it never offers a
   // tool the call-time gate would refuse. UX hygiene only — the hard fence is
   // gateAppToolCall.
@@ -454,7 +498,9 @@ async function buildAppToolList(appId: string): Promise<McpListTool[]> {
     .filter((tool) => {
       const shortName = archestraMcpBranding.getToolShortName(tool.name);
       return (
-        shortName !== null && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)
+        shortName !== null &&
+        (APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName) ||
+          assignedBuiltinShortNames.has(shortName))
       );
     })
     .map((tool): McpListTool => {

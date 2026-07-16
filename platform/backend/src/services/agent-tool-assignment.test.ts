@@ -1,14 +1,22 @@
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  TOOL_SAVE_FILE_FULL_NAME,
+  TOOL_SEARCH_FILES_FULL_NAME,
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import MemberModel from "@/models/member";
 import TeamModel from "@/models/team";
+import ToolModel from "@/models/tool";
 import { describe, expect, test } from "@/test";
 import {
   assignToolToAgent,
   assignToolToApp,
   filterMcpServersAssignableToTarget,
   isMcpServerAssignableToTarget,
+  resolveAppToolsByName,
   validateAssignment,
 } from "./agent-tool-assignment";
 
@@ -667,6 +675,106 @@ describe("assignToolToApp", () => {
       mcpServerId: foreignServer.id,
     });
     expect(result).toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("resolveAppToolsByName", () => {
+  // The file tools are registered (and so seedable) only with the sandbox flag
+  // on; config is restored pristine before every test, so it is set per test.
+  const enableFileToolFlags = () => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+  };
+
+  test("resolves the app-assignable file tools when the flag is on", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    enableFileToolFlags();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const result = await resolveAppToolsByName({
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: agent.organizationId,
+      toolNames: [TOOL_SEARCH_FILES_FULL_NAME],
+      environmentId: null,
+    });
+
+    expect(result).toMatchObject({
+      tools: [{ name: TOOL_SEARCH_FILES_FULL_NAME }],
+    });
+  });
+
+  test("accepts the file tools by their short names, resolving to the prefixed row", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    enableFileToolFlags();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const result = await resolveAppToolsByName({
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: agent.organizationId,
+      toolNames: ["search_files"],
+      environmentId: null,
+    });
+
+    expect(result).toMatchObject({
+      tools: [{ name: TOOL_SEARCH_FILES_FULL_NAME }],
+    });
+  });
+
+  test("rejects other built-ins as unassignable to apps", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    enableFileToolFlags();
+
+    const result = await resolveAppToolsByName({
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: agent.organizationId,
+      toolNames: [TOOL_SAVE_FILE_FULL_NAME],
+      environmentId: null,
+    });
+
+    expect(result).toMatchObject({ code: "validation_error" });
+    if ("error" in result) {
+      expect(result.error.message).toContain(
+        "Built-in tools cannot be assigned",
+      );
+    }
+  });
+
+  test("rejects the file tools when the sandbox flag is off", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+
+    const result = await resolveAppToolsByName({
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: agent.organizationId,
+      toolNames: [TOOL_SEARCH_FILES_FULL_NAME],
+      environmentId: null,
+    });
+
+    expect(result).toMatchObject({ code: "validation_error" });
+    if ("error" in result) {
+      expect(result.error.message).toContain(
+        "Built-in tools cannot be assigned",
+      );
+    }
   });
 });
 

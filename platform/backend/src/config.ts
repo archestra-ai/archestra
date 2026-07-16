@@ -1237,6 +1237,35 @@ const config = {
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
+      /**
+       * "ChatGPT subscription" (Codex) auth mode on the OpenAI provider: reuse a
+       * user's ChatGPT/Codex subscription for chat instead of a static API key.
+       * The defaults are the first-party Codex CLI values (the same OAuth client
+       * and endpoints the `codex` CLI uses), overridable for testing.
+       */
+      codex: {
+        /** Codex backend serving the subscription Responses API (`/responses`). */
+        apiBaseUrl:
+          process.env.ARCHESTRA_OPENAI_CODEX_API_BASE_URL ||
+          "https://chatgpt.com/backend-api/codex",
+        /** OAuth issuer hosting the authorize/token/device endpoints. */
+        issuer:
+          process.env.ARCHESTRA_OPENAI_CODEX_ISSUER ||
+          "https://auth.openai.com",
+        /** Public OAuth client id used for the ChatGPT/Codex login flow. */
+        clientId:
+          process.env.ARCHESTRA_OPENAI_CODEX_CLIENT_ID ||
+          "app_EMoamEEZ73f0CkXaXp7hrann",
+        /**
+         * `originator` header value the Codex backend attributes traffic by.
+         * Defaults to Archestra's own identity — matching OpenCode, which sends
+         * its own `opencode` originator rather than impersonating the CLI (proof
+         * the backend accepts non-CLI originators). Overridable to `codex_cli_rs`
+         * if OpenAI ever restricts unknown originators.
+         */
+        originator:
+          process.env.ARCHESTRA_OPENAI_CODEX_ORIGINATOR || "archestra",
+      },
     },
     openrouter: {
       baseUrl:

@@ -31,7 +31,11 @@ pub(crate) const RESPONSE_SINK: &str = "assistant.response";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ToolContract {
     pub name: ToolName,
-    pub requires: Requirements,
+    /// What the trajectory must satisfy before this tool runs. `None` means
+    /// the requirements were never stated — every call escalates as
+    /// [`crate::contract::Unprovable::RequirementsUnknown`], fail closed;
+    /// `Some(Requirements::default())` means considered, nothing required.
+    pub requires: Option<Requirements>,
     pub output_label: ValueLabel,
     /// Effects one dispatch of this tool proposes; committed to the monotone
     /// past when dispatch begins.
@@ -46,7 +50,7 @@ impl ToolContract {
     pub fn source(name: impl Into<String>, output_label: ValueLabel) -> Self {
         Self {
             name: ToolName::new(name),
-            requires: Requirements::default(),
+            requires: Some(Requirements::default()),
             output_label,
             effects: Effects::none(),
             arguments: ArgumentSchema::opaque(),
@@ -59,10 +63,10 @@ impl ToolContract {
     pub fn egress_sink(name: impl Into<String>, recipients_arg: impl Into<String>) -> Self {
         Self {
             name: ToolName::new(name),
-            requires: Requirements {
+            requires: Some(Requirements {
                 audience: AudienceRule::FromRecipients,
                 ..Requirements::default()
-            },
+            }),
             output_label: ValueLabel::identity(),
             effects: Effects::declared([Effect::Egress]),
             arguments: ArgumentSchema::with_recipients(ArgumentName::new(recipients_arg)),

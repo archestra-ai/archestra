@@ -10,11 +10,13 @@ import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema, type Transaction } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfo,
   ResourceVisibilityScope,
+  SecretStorageType,
   SecretValue,
   UpdateLlmProviderApiKey,
 } from "@/types";
@@ -176,7 +178,7 @@ class LlmProviderApiKeyModel {
 
     // Query with team, user, and secrets table joins.
     // NOTE: secretsTable.secret is encrypted at rest — decrypt via
-    // parseVaultReferenceFromSecret() before reading the value.
+    // decryptApiKeyValue() before reading the value.
     const apiKeys = await db
       .select({
         id: schema.llmProviderApiKeysTable.id,
@@ -216,27 +218,7 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    // Parse vault references from secrets and compute storage type
-    return apiKeys.map((key) => {
-      const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      const secretStorageType = computeSecretStorageType(
-        key.secretId,
-        key.secretIsVault,
-        key.secretIsByosVault,
-      );
-      const {
-        secret: _secret,
-        secretIsVault: _isVault,
-        secretIsByosVault: _isByosVault,
-        ...rest
-      } = key;
-      return {
-        ...rest,
-        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-        secretStorageType,
-      };
-    });
+    return apiKeys.map(toApiKeyWithScopeInfo);
   }
 
   /**
@@ -303,7 +285,7 @@ class LlmProviderApiKeyModel {
 
     // Query with team, user, and secrets table joins.
     // NOTE: secretsTable.secret is encrypted at rest — decrypt via
-    // parseVaultReferenceFromSecret() before reading the value.
+    // decryptApiKeyValue() before reading the value.
     const apiKeys = await db
       .select({
         id: schema.llmProviderApiKeysTable.id,
@@ -343,27 +325,7 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    // Parse vault references from secrets and compute storage type
-    return apiKeys.map((key) => {
-      const vaultRef = parseVaultReferenceFromSecret(key.secret);
-      const secretStorageType = computeSecretStorageType(
-        key.secretId,
-        key.secretIsVault,
-        key.secretIsByosVault,
-      );
-      const {
-        secret: _secret,
-        secretIsVault: _isVault,
-        secretIsByosVault: _isByosVault,
-        ...rest
-      } = key;
-      return {
-        ...rest,
-        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-        secretStorageType,
-      };
-    });
+    return apiKeys.map(toApiKeyWithScopeInfo);
   }
 
   /**
@@ -835,18 +797,77 @@ class LlmProviderApiKeyModel {
 }
 
 /**
- * Helper to parse vault reference from a secret value.
- * For LLM provider API keys, the secret contains { apiKey: "path#key" } format.
+ * Maps a list-query row (key + joined secret columns) to the response shape,
+ * deriving the secret-value metadata (vault reference, ChatGPT-subscription
+ * marker) and dropping the secret columns.
+ *
+ * The secret is decrypted only when its value is actually inspected: BYOS-vault
+ * secrets carry the "path#key" reference to surface (the BYOS manager is the
+ * only writer of vault references, and it always sets `isByosVault`), and
+ * OpenAI secrets may carry the ChatGPT-subscription marker. Every other key
+ * skips the decrypt; the decrypted value never leaves this mapper either way.
  */
-function parseVaultReferenceFromSecret(
-  secret: SecretValue | null,
-): { vaultSecretPath: string; vaultSecretKey: string } | null {
+function toApiKeyWithScopeInfo<
+  T extends {
+    provider: string;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    secretIsByosVault: boolean | null;
+  },
+>(
+  key: T,
+): Omit<T, "secret" | "secretIsVault" | "secretIsByosVault"> & {
+  vaultSecretPath: string | null;
+  vaultSecretKey: string | null;
+  secretStorageType: SecretStorageType;
+  isChatgptSubscription: boolean;
+} {
+  const apiKeyValue =
+    key.provider === "openai" || key.secretIsByosVault
+      ? decryptApiKeyValue(key.secret)
+      : null;
+  const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
+  const { secret: _secret, secretIsVault, secretIsByosVault, ...rest } = key;
+  return {
+    ...rest,
+    vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
+    vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+    secretStorageType: computeSecretStorageType(
+      key.secretId,
+      secretIsVault,
+      secretIsByosVault,
+    ),
+    isChatgptSubscription:
+      key.provider === "openai" &&
+      isOpenAiCodexCredential(apiKeyValue ?? undefined),
+  };
+}
+
+/**
+ * Decrypts a stored secret and returns its `apiKey` string (LLM provider key
+ * secrets are `{ apiKey: "..." }`), or null when absent/non-string.
+ * {@link toApiKeyWithScopeInfo} calls this at most once per key and derives
+ * metadata from the returned value — the value itself is never included in a
+ * response.
+ */
+function decryptApiKeyValue(secret: SecretValue | null): string | null {
   if (!secret || typeof secret !== "object") return null;
   const decrypted = isEncryptedSecret(secret)
     ? decryptSecretValue(secret)
     : secret;
   const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
-  if (typeof apiKeyValue === "string" && isVaultReference(apiKeyValue)) {
+  return typeof apiKeyValue === "string" ? apiKeyValue : null;
+}
+
+/**
+ * Helper to parse a vault reference from a decrypted apiKey value
+ * ("path#key" format).
+ */
+function parseVaultReferenceFromApiKey(
+  apiKeyValue: string | null,
+): { vaultSecretPath: string; vaultSecretKey: string } | null {
+  if (apiKeyValue && isVaultReference(apiKeyValue)) {
     const parsed = parseVaultReference(apiKeyValue);
     return {
       vaultSecretPath: parsed.path,

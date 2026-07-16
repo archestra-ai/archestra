@@ -494,11 +494,17 @@ describe("GET /api/apps", () => {
     ).toBe(false);
   });
 
-  test("does not surface another author's personal-scope app to an admin caller", async ({
+  test("hides another author's personal app from the default (All) listing; own apps stay, tagged viewerRole owner", async ({
     makeUser,
+    makeMember,
     makeApp,
   }) => {
-    const otherAuthor = await makeUser();
+    // Mirroring the Projects list: the default "All apps" view shows only what
+    // the admin genuinely accesses (their own apps, plus org/team apps) — NOT
+    // every member's personal app. Oversight-only apps surface under Personal →
+    // Other users, so they can't read as apps that appear then vanish.
+    const otherAuthor = await makeUser({ name: "Grace Hopper" });
+    await makeMember(otherAuthor.id, organizationId);
     const foreignPersonal = await makeApp({
       organizationId,
       scope: "personal",
@@ -517,11 +523,83 @@ describe("GET /api/apps", () => {
       url: "/api/apps?limit=100&offset=0",
     });
     expect(res.statusCode).toBe(200);
-    const ids = (res.json().data as Array<{ id: string }>).map((a) => a.id);
-    // The caller is an org admin, yet the listing union is role-independent:
-    // a personal app appears only in its own author's listing.
+    const items = res.json().data as Array<Record<string, unknown>>;
+    const ids = items.map((a) => a.id as string);
     expect(ids).toContain(ownPersonal.id);
     expect(ids).not.toContain(foreignPersonal.id);
+    expect(items.find((i) => i.id === ownPersonal.id)?.viewerRole).toBe(
+      "owner",
+    );
+  });
+
+  test("Personal → Other users surfaces another author's personal app tagged as oversight (viewerRole admin + authorName)", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    // `user` is an app admin. The "Other users" toolbar option lists every
+    // personal app except the caller's own (excludeAuthorIds = self), so an
+    // admin can find and oversee other members' personal apps like projects.
+    const otherAuthor = await makeUser({ name: "Grace Hopper" });
+    await makeMember(otherAuthor.id, organizationId);
+    const foreignPersonal = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: otherAuthor.id,
+      name: "Someone Else's Personal App",
+    });
+    const ownPersonal = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+      name: "My Personal App",
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps?limit=100&offset=0&scope=personal&excludeAuthorIds=${user.id}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const items = res.json().data as Array<Record<string, unknown>>;
+    const ids = items.map((a) => a.id as string);
+    expect(ids).toContain(foreignPersonal.id);
+    expect(ids).not.toContain(ownPersonal.id);
+
+    const foreignItem = items.find((i) => i.id === foreignPersonal.id);
+    expect(foreignItem?.viewerRole).toBe("admin");
+    expect(foreignItem?.authorName).toBe("Grace Hopper");
+  });
+
+  test("Personal → a specific author (authorIds) narrows to that user's personal apps", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const grace = await makeUser({ name: "Grace Hopper" });
+    await makeMember(grace.id, organizationId);
+    const ada = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(ada.id, organizationId);
+    const gracesApp = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: grace.id,
+      name: "Grace App",
+    });
+    const adasApp = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: ada.id,
+      name: "Ada App",
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/apps?limit=100&offset=0&scope=personal&authorIds=${grace.id}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const ids = (res.json().data as Array<{ id: string }>).map((a) => a.id);
+    expect(ids).toContain(gracesApp.id);
+    expect(ids).not.toContain(adasApp.id);
   });
 
   test("responds with Cache-Control: no-store so intermediaries never cache per-user data", async () => {

@@ -1,3 +1,4 @@
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, test } from "@/test";
 import { SelectLlmProviderApiKeySchema } from "@/types";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
@@ -639,6 +640,51 @@ describe("LlmProviderApiKeyModel", () => {
 
       expect(visible).toHaveLength(1);
       expect(visible[0].name).toBe("Primary%Key");
+    });
+
+    test("flags a ChatGPT-subscription (Codex) key so the edit form can pick the right tab", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const codexSecret = await makeSecret({
+        secret: {
+          apiKey: encodeOpenAiCodexCredential({
+            refreshToken: "rt-abc",
+            accountId: "acct-123",
+          }),
+        },
+      });
+      await makeLlmProviderApiKey(org.id, codexSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "ChatGPT Subscription",
+      });
+
+      const plainSecret = await makeSecret({ secret: { apiKey: "sk-plain" } });
+      await makeLlmProviderApiKey(org.id, plainSecret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "Plain OpenAI Key",
+      });
+
+      const visible = await LlmProviderApiKeyModel.getVisibleKeys(
+        org.id,
+        user.id,
+        [],
+        false,
+      );
+
+      const codexKey = visible.find((k) => k.name === "ChatGPT Subscription");
+      const plainKey = visible.find((k) => k.name === "Plain OpenAI Key");
+      expect(codexKey?.isChatgptSubscription).toBe(true);
+      expect(plainKey?.isChatgptSubscription).toBe(false);
     });
   });
 

@@ -1,15 +1,24 @@
 //! Contracts TOML → baton-core ToolContracts. Parsed strictly
 //! (`deny_unknown_fields`, the baton-check discipline). The prototype's
 //! `unknown_policy`/`taint_policy` knobs are gone on purpose: unknown-handling
-//! is authority registration in current baton-core, and this crate does not
-//! register authorities — it only translates declared tool contracts.
+//! is authority registration in current baton-core. This crate translates
+//! declared tool contracts and declared authorities: inline `allow` (the
+//! narrow acknowledge-only competence a policy may grant itself in TOML) and
+//! external `escalate` (a full-mandate authority whose rulings arrive out of
+//! process — a human channel). The engine routes competent inline authorities
+//! before external ones regardless of declaration order.
 
 use std::collections::{BTreeSet, HashMap};
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, AttentionRule, Audience, AudienceRule, Effect, Effects, KnownTrust, Requirements,
-    ToolContract, ToolName, Trust, UserId, ValueLabel,
+    ArgumentName, ArgumentSchema, AttentionRule, Audience, AudienceRule, Authority, AuthorityMandate, Authorization,
+    Effect, Effects, KnownTrust, Requirements, Ruling, ToolContract, ToolName, TrajectoryView, Trust, UserId,
+    ValueLabel, Violation,
 };
+// Only referenced from the test module's assertions on `Authority::mode`
+// (via `use super::*;`); a plain non-test build never names it.
+#[cfg(test)]
+use baton_core::AuthorityMode;
 use serde::Deserialize;
 
 #[derive(Debug, thiserror::Error)]
@@ -26,6 +35,20 @@ pub enum ContractsError {
     AudienceRulePath(String),
     #[error("tool `{0}` declares an empty audience reader list")]
     EmptyAudience(String),
+    #[error("unknown authority rule `{0}` (use \"allow\" or \"escalate\")")]
+    AuthorityRule(String),
+    #[error(
+        "authority `{0}` has no competence (an allow authority requires acknowledge_unknown = true; an escalate authority must declare at least one mandate field)"
+    )]
+    AuthorityImpotent(String),
+    #[error("allow authority `{0}` may declare only acknowledge_unknown (a full mandate needs rule = \"escalate\")")]
+    AllowAuthorityMandate(String),
+    #[error("authority `{0}` declares an empty audience list")]
+    EmptyAuthorityAudience(String),
+    #[error("authority name may not be empty")]
+    EmptyAuthorityName,
+    #[error("duplicate authority `{0}`")]
+    DuplicateAuthority(String),
 }
 
 /// The parsed policy document: who the requesting user is, and the contracts
@@ -37,6 +60,8 @@ pub struct Contracts {
     pub contracts: Vec<ToolContract>,
     /// Per-tool wire argument that carries recipients (e.g. `to`, `url`).
     pub recipients_args: HashMap<ToolName, String>,
+    /// Authorities declared inline in the policy TOML (`[[authority]]`).
+    pub authorities: Vec<Authority>,
 }
 
 impl Contracts {
@@ -63,6 +88,8 @@ struct RawConfig {
     user: UserSpec,
     #[serde(default)]
     tool: Vec<ToolSpec>,
+    #[serde(default)]
+    authority: Vec<AuthoritySpec>,
 }
 
 impl RawConfig {
@@ -79,21 +106,25 @@ impl RawConfig {
             if !seen.insert(spec.name.clone()) {
                 return Err(ContractsError::DuplicateTool(spec.name));
             }
-            let (sink_audience, recipients_arg) = match &spec.requires.audience {
-                Some(audience) => audience.build(&spec.name)?,
-                None => (AudienceRule::Unrestricted, None),
-            };
             let name = ToolName::new(&spec.name);
-            let arguments = match &recipients_arg {
-                Some(arg) => {
-                    recipients_args.insert(name.clone(), arg.clone());
-                    ArgumentSchema::with_recipients(ArgumentName::new(arg))
+            let mut arguments = ArgumentSchema::opaque();
+            let requires = match spec.requires {
+                None => None,
+                Some(requires_spec) => {
+                    let (sink_audience, recipients_arg) = match &requires_spec.audience {
+                        Some(audience) => audience.build(&spec.name)?,
+                        None => (AudienceRule::Unrestricted, None),
+                    };
+                    if let Some(arg) = &recipients_arg {
+                        recipients_args.insert(name.clone(), arg.clone());
+                        arguments = ArgumentSchema::with_recipients(ArgumentName::new(arg));
+                    }
+                    Some(requires_spec.build(sink_audience))
                 }
-                None => ArgumentSchema::opaque(),
             };
             contracts.push(ToolContract {
                 name,
-                requires: spec.requires.build(sink_audience),
+                requires,
                 output_label: ValueLabel {
                     audience: spec.output.audience.to_audience()?,
                     trust: spec.output.trust.to_trust(),
@@ -107,11 +138,21 @@ impl RawConfig {
             });
         }
 
+        let mut authorities = Vec::new();
+        let mut seen_authorities = BTreeSet::new();
+        for spec in self.authority {
+            if !seen_authorities.insert(spec.name.clone()) {
+                return Err(ContractsError::DuplicateAuthority(spec.name));
+            }
+            authorities.push(spec.build()?);
+        }
+
         Ok(Contracts {
             user_id: UserId::new(&self.user.id),
             user_label,
             contracts,
             recipients_args,
+            authorities,
         })
     }
 }
@@ -144,7 +185,7 @@ struct ToolSpec {
     #[serde(default)]
     output: OutputSpec,
     #[serde(default)]
-    requires: RequiresSpec,
+    requires: Option<RequiresSpec>,
 }
 
 /// How information returned by this tool call is labeled and how the call
@@ -338,6 +379,103 @@ impl EffectSpec {
     }
 }
 
+/// A declared authority. `rule` picks the shape: `"allow"` may declare only
+/// `acknowledge_unknown` (the one competence a policy may grant itself);
+/// `"escalate"` carries a full mandate and is served out of process — its
+/// rulings re-enter through `PolicyEngine::apply_approval`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthoritySpec {
+    name: String,
+    rule: String,
+    // Mandate fields are Options so "explicitly set" is distinguishable from
+    // absent: any of them on an allow authority is an error, not ignored.
+    #[serde(default)]
+    trust: Option<KnownTrustSpec>,
+    #[serde(default)]
+    audience: Option<Vec<String>>,
+    #[serde(default)]
+    waive_prior_effects: Option<bool>,
+    #[serde(default)]
+    confirms: Option<bool>,
+    #[serde(default)]
+    acknowledge_unknown: Option<bool>,
+    #[serde(default)]
+    may_release_control: Option<bool>,
+    #[serde(default)]
+    acquire_effects: Option<bool>,
+}
+
+/// The one inline ruling TOML can declare: approve everything routed here.
+/// Competence is bounded by the mandate, not the ruling — with only
+/// `acknowledge_unknown`, this can clear unprovable facts and nothing else.
+fn allow_ruling(
+    _authorization: &Authorization,
+    violations: &[Violation],
+    _view: &TrajectoryView<'_>,
+) -> Option<Ruling> {
+    let facts = violations
+        .iter()
+        .map(Violation::to_string)
+        .collect::<Vec<_>>()
+        .join("; ");
+    Some(Ruling::Approve {
+        reason: format!("allowed by policy rule: {facts}"),
+    })
+}
+
+impl AuthoritySpec {
+    fn build(self) -> Result<Authority, ContractsError> {
+        if self.name.is_empty() {
+            return Err(ContractsError::EmptyAuthorityName);
+        }
+        match self.rule.as_str() {
+            "allow" => self.build_allow(),
+            "escalate" => self.build_escalate(),
+            _ => Err(ContractsError::AuthorityRule(self.rule)),
+        }
+    }
+
+    fn build_allow(self) -> Result<Authority, ContractsError> {
+        let has_mandate_field = self.trust.is_some()
+            || self.audience.is_some()
+            || self.waive_prior_effects.is_some()
+            || self.confirms.is_some()
+            || self.may_release_control.is_some()
+            || self.acquire_effects.is_some();
+        if has_mandate_field {
+            return Err(ContractsError::AllowAuthorityMandate(self.name));
+        }
+        if self.acknowledge_unknown != Some(true) {
+            return Err(ContractsError::AuthorityImpotent(self.name));
+        }
+        Ok(Authority::inline(
+            &self.name,
+            AuthorityMandate::none().acknowledge_unknown(),
+            allow_ruling,
+        ))
+    }
+
+    fn build_escalate(self) -> Result<Authority, ContractsError> {
+        if self.audience.as_ref().is_some_and(Vec::is_empty) {
+            return Err(ContractsError::EmptyAuthorityAudience(self.name));
+        }
+        let mandate = AuthorityMandate {
+            trust: self.trust.map(KnownTrustSpec::into_known_trust),
+            audience: self.audience.map(|ids| ids.iter().map(UserId::new).collect()),
+            waive_prior_effects: self.waive_prior_effects.unwrap_or(false),
+            confirms: self.confirms.unwrap_or(false),
+            acknowledge_unknown: self.acknowledge_unknown.unwrap_or(false),
+            may_release_control: self.may_release_control.unwrap_or(false),
+            acquire_effects: self.acquire_effects.unwrap_or(false),
+        };
+        if mandate == AuthorityMandate::none() {
+            return Err(ContractsError::AuthorityImpotent(self.name));
+        }
+        Ok(Authority::external(&self.name, mandate))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,6 +487,7 @@ mod tests {
         [[tool]]
         name = "k8s_get_pod_logs"
         output = { trust = "suspicious", audience = ["operator"] }
+        requires = {}
 
         [[tool]]
         name = "k8s_delete_resource"
@@ -384,8 +523,9 @@ mod tests {
             .unwrap();
         assert_eq!(logs.output_label.trust, Trust::SUSPICIOUS);
         assert_eq!(logs.output_label.audience, Audience::readers([UserId::new("operator")]));
-        assert!(logs.requires.trust.is_none());
-        assert_eq!(logs.requires.audience, AudienceRule::Unrestricted);
+        let logs_requires = logs.requires.as_ref().unwrap();
+        assert!(logs_requires.trust.is_none());
+        assert_eq!(logs_requires.audience, AudienceRule::Unrestricted);
         assert_eq!(logs.effects, Effects::none());
 
         let del = c
@@ -393,21 +533,24 @@ mod tests {
             .iter()
             .find(|t| t.name.as_str() == "k8s_delete_resource")
             .unwrap();
-        assert_eq!(del.requires.trust, Some(KnownTrust::Trusted));
-        assert_eq!(del.requires.attention, AttentionRule::ExplicitConfirmation);
+        assert_eq!(del.requires.as_ref().unwrap().trust, Some(KnownTrust::Trusted));
+        assert_eq!(
+            del.requires.as_ref().unwrap().attention,
+            AttentionRule::ExplicitConfirmation
+        );
         assert_eq!(del.effects, Effects::declared([Effect::Mutation]));
 
         let post = c.contracts.iter().find(|t| t.name.as_str() == "http_post").unwrap();
-        assert_eq!(post.requires.audience, AudienceRule::FromRecipients);
+        assert_eq!(post.requires.as_ref().unwrap().audience, AudienceRule::FromRecipients);
         assert_eq!(c.recipients_args.get(&post.name).map(String::as_str), Some("url"));
 
         let issue = c.contracts.iter().find(|t| t.name.as_str() == "create_issue").unwrap();
-        assert_eq!(issue.requires.audience, AudienceRule::Public);
+        assert_eq!(issue.requires.as_ref().unwrap().audience, AudienceRule::Public);
         assert!(!c.recipients_args.contains_key(&issue.name));
 
         let report = c.contracts.iter().find(|t| t.name.as_str() == "send_report").unwrap();
         assert_eq!(
-            report.requires.audience,
+            report.requires.as_ref().unwrap().audience,
             AudienceRule::Readers(BTreeSet::from([UserId::new("ops-hook"), UserId::new("operator")]))
         );
     }
@@ -419,6 +562,7 @@ mod tests {
         assert_eq!(bare.output_label.trust, Trust::UNKNOWN);
         assert_eq!(bare.output_label.audience, Audience::UNKNOWN);
         assert_eq!(bare.effects, Effects::none());
+        assert_eq!(bare.requires, None);
     }
 
     #[test]
@@ -517,5 +661,177 @@ mod tests {
         // The prototype's knob must NOT silently parse.
         let text = r#"unknown_policy = "deny""#;
         assert!(Contracts::from_toml(text).is_err());
+    }
+
+    #[test]
+    fn absent_requires_is_unknown_requirements() {
+        let c = Contracts::from_toml(
+            r#"
+            [[tool]]
+            name = "mystery"
+            output = { trust = "trusted", audience = "public" }
+            "#,
+        )
+        .unwrap();
+        let t = c.contracts.iter().find(|t| t.name.as_str() == "mystery").unwrap();
+        assert_eq!(t.requires, None);
+    }
+
+    #[test]
+    fn empty_requires_is_considered_and_ungated() {
+        let c = Contracts::from_toml(
+            r#"
+            [[tool]]
+            name = "open"
+            requires = {}
+            "#,
+        )
+        .unwrap();
+        let t = c.contracts.iter().find(|t| t.name.as_str() == "open").unwrap();
+        assert_eq!(t.requires, Some(Requirements::default()));
+    }
+
+    #[test]
+    fn allow_authority_parses_with_acknowledge_mandate() {
+        let c = Contracts::from_toml(
+            r#"
+            [[authority]]
+            name = "default-allow"
+            rule = "allow"
+            acknowledge_unknown = true
+            "#,
+        )
+        .unwrap();
+        assert_eq!(c.authorities.len(), 1);
+        assert_eq!(c.authorities[0].name.as_str(), "default-allow");
+        assert!(c.authorities[0].mandate.acknowledge_unknown);
+        assert!(matches!(c.authorities[0].mode, AuthorityMode::Inline(_)));
+    }
+
+    #[test]
+    fn allow_authority_rejects_mandate_fields() {
+        for field in [
+            "trust = \"trusted\"",
+            "audience = [\"alice\"]",
+            "waive_prior_effects = true",
+            "confirms = false",
+            "may_release_control = true",
+            "acquire_effects = true",
+        ] {
+            let text = format!("[[authority]]\nname = \"a\"\nrule = \"allow\"\nacknowledge_unknown = true\n{field}");
+            assert!(
+                matches!(
+                    Contracts::from_toml(&text),
+                    Err(ContractsError::AllowAuthorityMandate(_))
+                ),
+                "field `{field}` should be rejected on an allow authority"
+            );
+        }
+    }
+
+    #[test]
+    fn allow_authority_without_acknowledge_flag_is_impotent() {
+        // Omitting the flag used to be a serde error; it now reads as the
+        // clearer no-competence diagnostic. Same fail-closed outcome.
+        assert!(matches!(
+            Contracts::from_toml("[[authority]]\nname = \"a\"\nrule = \"allow\""),
+            Err(ContractsError::AuthorityImpotent(_))
+        ));
+    }
+
+    #[test]
+    fn escalate_authority_builds_external_with_full_mandate() {
+        let c = Contracts::from_toml(
+            r#"
+            [[authority]]
+            name = "human-in-the-loop"
+            rule = "escalate"
+            trust = "trusted"
+            audience = ["alice", "bob"]
+            waive_prior_effects = true
+            confirms = true
+            acknowledge_unknown = true
+            may_release_control = true
+            acquire_effects = true
+            "#,
+        )
+        .unwrap();
+        assert_eq!(c.authorities.len(), 1);
+        let authority = &c.authorities[0];
+        assert_eq!(authority.name.as_str(), "human-in-the-loop");
+        assert!(matches!(authority.mode, AuthorityMode::External));
+        assert_eq!(authority.mandate.trust, Some(KnownTrust::Trusted));
+        assert_eq!(
+            authority.mandate.audience,
+            Some(BTreeSet::from([UserId::new("alice"), UserId::new("bob")]))
+        );
+        assert!(authority.mandate.waive_prior_effects);
+        assert!(authority.mandate.confirms);
+        assert!(authority.mandate.acknowledge_unknown);
+        assert!(authority.mandate.may_release_control);
+        assert!(authority.mandate.acquire_effects);
+    }
+
+    #[test]
+    fn escalate_authority_with_partial_mandate_leaves_rest_unset() {
+        let c =
+            Contracts::from_toml("[[authority]]\nname = \"h\"\nrule = \"escalate\"\nacquire_effects = true").unwrap();
+        let authority = &c.authorities[0];
+        assert!(matches!(authority.mode, AuthorityMode::External));
+        assert!(authority.mandate.acquire_effects);
+        assert_eq!(authority.mandate.trust, None);
+        assert_eq!(authority.mandate.audience, None);
+        assert!(!authority.mandate.waive_prior_effects);
+        assert!(!authority.mandate.confirms);
+        assert!(!authority.mandate.acknowledge_unknown);
+        assert!(!authority.mandate.may_release_control);
+    }
+
+    #[test]
+    fn escalate_authority_with_empty_mandate_is_impotent() {
+        // All fields absent.
+        assert!(matches!(
+            Contracts::from_toml("[[authority]]\nname = \"h\"\nrule = \"escalate\""),
+            Err(ContractsError::AuthorityImpotent(_))
+        ));
+        // All boolean fields explicitly false — `false` means unset, not a
+        // distinct competence.
+        let all_false = "[[authority]]\nname = \"h\"\nrule = \"escalate\"\n\
+                         waive_prior_effects = false\nconfirms = false\nacknowledge_unknown = false\n\
+                         may_release_control = false\nacquire_effects = false";
+        assert!(matches!(
+            Contracts::from_toml(all_false),
+            Err(ContractsError::AuthorityImpotent(_))
+        ));
+    }
+
+    #[test]
+    fn escalate_authority_rejects_empty_audience_list() {
+        assert!(matches!(
+            Contracts::from_toml("[[authority]]\nname = \"h\"\nrule = \"escalate\"\naudience = []"),
+            Err(ContractsError::EmptyAuthorityAudience(_))
+        ));
+    }
+
+    #[test]
+    fn authority_rejects_unknown_rule_false_flag_and_duplicates() {
+        assert!(matches!(
+            Contracts::from_toml("[[authority]]\nname = \"a\"\nrule = \"deny\"\nacknowledge_unknown = true"),
+            Err(ContractsError::AuthorityRule(_))
+        ));
+        assert!(matches!(
+            Contracts::from_toml("[[authority]]\nname = \"a\"\nrule = \"allow\"\nacknowledge_unknown = false"),
+            Err(ContractsError::AuthorityImpotent(_))
+        ));
+        assert!(matches!(
+            Contracts::from_toml("[[authority]]\nname = \"\"\nrule = \"allow\"\nacknowledge_unknown = true"),
+            Err(ContractsError::EmptyAuthorityName)
+        ));
+        let dup = "[[authority]]\nname = \"a\"\nrule = \"allow\"\nacknowledge_unknown = true\n\
+                   [[authority]]\nname = \"a\"\nrule = \"allow\"\nacknowledge_unknown = true";
+        assert!(matches!(
+            Contracts::from_toml(dup),
+            Err(ContractsError::DuplicateAuthority(_))
+        ));
     }
 }

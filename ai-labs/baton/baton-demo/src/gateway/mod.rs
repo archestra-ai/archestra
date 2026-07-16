@@ -10,5 +10,5 @@ pub mod config;
 pub mod narrate;
 pub mod session;
 
-pub use config::{ConfigError, ESCALATE_TOOL, GatewayConfig, RESPOND_TOOL, ToolSim};
+pub use config::{ConfigError, ConfigFile, ESCALATE_TOOL, GatewayConfig, RESPOND_TOOL, ToolSim};
 pub use session::{Outcome, Session};

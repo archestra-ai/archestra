@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   useApp,
+  useAppAssignableBuiltinTools,
   useAppTools,
   useAssignToolToApp,
   useUnassignToolFromApp,
@@ -41,12 +42,18 @@ type AssignedTool = archestraApiTypes.GetAppToolsResponses["200"][number];
 
 const EMPTY_TOOLS: CatalogTool[] = [];
 
+// Shown in the built-in group's pill popover instead of the catalog's generic
+// description: the file tools' scope depends on where the app is rendered.
+const BUILTIN_FILE_TOOLS_BLURB =
+  "Built-in file tools. When the app runs inside a chat, they let it list and read that conversation's files — or the project's files for a project chat — as the person viewing the app. Outside a chat the app sees no files.";
+
 /**
  * An app's assignable upstream tools, grouped by their MCP server (catalog) to
  * mirror the agent tool selector. Assignment uses dynamic credentials (resolved
  * per viewer at call time) — the only resolution mode that fits an app shared
  * across an org. Built-in Archestra tools (incl. the always-available App Data
- * Store) aren't assignable and are omitted. Only servers in the app's bound
+ * Store) aren't assignable and are omitted — except the app-assignable
+ * read-only file tools, offered as their own built-in group. Only servers in the app's bound
  * environment are offered; a server an existing assignment has left is still
  * shown so the stale assignment can be removed.
  */
@@ -76,6 +83,7 @@ export function AppToolsEditor({
   const { data: app } = useApp(environmentId === undefined ? appId : null);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();
+  const { data: assignableBuiltins = [] } = useAppAssignableBuiltinTools();
   const { data: canEdit } = useHasPermissions({ app: ["update"] });
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
@@ -153,7 +161,8 @@ export function AppToolsEditor({
   // Candidate servers: every one in the app's environment (Playwright is
   // environment-agnostic like a builtin), plus any server a current assignment
   // already references so it can be cleaned up. The Archestra builtin catalog is
-  // never assignable.
+  // never offered through the generic list — its app-assignable subset comes
+  // from the dedicated server-filtered endpoint and renders as its own group.
   const candidates = useMemo(
     () =>
       catalogs.filter((c) => {
@@ -166,6 +175,40 @@ export function AppToolsEditor({
     [catalogs, appEnvironmentId, assignedIdsByCatalog],
   );
 
+  // The built-in group: the server-filtered assignable file tools, plus any
+  // already-assigned built-in row (so a grant left stale by a feature flag
+  // going dark stays visible and removable). Mapped to the checklist's catalog
+  // tool shape — the count fields are not read by the checklist.
+  const builtinCatalog = catalogs.find(
+    (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
+  );
+  const builtinTools = useMemo(() => {
+    const byId = new Map<string, CatalogTool>();
+    const toChecklistShape = (tool: {
+      id: string;
+      name: string;
+      description: string | null;
+      parameters?: unknown;
+      createdAt: AssignedTool["createdAt"];
+    }): CatalogTool => ({
+      id: tool.id,
+      name: tool.name,
+      description: tool.description,
+      parameters: (tool.parameters ?? {}) as CatalogTool["parameters"],
+      createdAt: tool.createdAt,
+      assignedAgentCount: 0,
+      assignedAgents: [],
+    });
+    for (const tool of assignableBuiltins) {
+      byId.set(tool.id, toChecklistShape(tool));
+    }
+    for (const tool of assigned ?? []) {
+      if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID && !byId.has(tool.id)) {
+        byId.set(tool.id, toChecklistShape(tool));
+      }
+    }
+    return [...byId.values()];
+  }, [assignableBuiltins, assigned]);
   // Editors get the interactive checklist, so load each candidate's tools to
   // group, count, and render them. Viewers only see assigned tools (below) and
   // don't fetch catalog tools.
@@ -199,6 +242,23 @@ export function AppToolsEditor({
     );
   }, [candidates, toolsByCatalog, assignedIdsByCatalog]);
 
+  // The pill-model catalog list: the built-in file-tools group (when available)
+  // rendered as a pseudo-server ahead of the real ones, with its tools folded
+  // into the per-catalog tool map so the generic pill/combobox code applies.
+  const pillCatalogs = useMemo(
+    () =>
+      builtinCatalog && builtinTools.length > 0
+        ? [builtinCatalog, ...visibleCatalogs]
+        : visibleCatalogs,
+    [builtinCatalog, builtinTools, visibleCatalogs],
+  );
+  const pillToolsByCatalog = useMemo(() => {
+    if (builtinTools.length === 0) return toolsByCatalog;
+    const map = new Map(toolsByCatalog);
+    map.set(ARCHESTRA_MCP_CATALOG_ID, builtinTools);
+    return map;
+  }, [toolsByCatalog, builtinTools]);
+
   // Assigned tools that map to no listed catalog (server removed, or the
   // catalog list failed/has not loaded) would otherwise be invisible and
   // unremovable in the grouped view; surface them as a removable fallback.
@@ -231,8 +291,8 @@ export function AppToolsEditor({
   // the latter keeps the count right before catalog tools load.
   const selectedByCatalog = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    for (const catalog of visibleCatalogs) {
-      const catalogTools = toolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;
+    for (const catalog of pillCatalogs) {
+      const catalogTools = pillToolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;
       const catalogToolIds = new Set(catalogTools.map((t) => t.id));
       const persisted =
         assignedIdsByCatalog.get(catalog.id) ?? new Set<string>();
@@ -246,18 +306,18 @@ export function AppToolsEditor({
       );
     }
     return map;
-  }, [visibleCatalogs, toolsByCatalog, assignedIdsByCatalog, selection]);
+  }, [pillCatalogs, pillToolsByCatalog, assignedIdsByCatalog, selection]);
 
   // Pilled servers: those with a selection, plus ones just added and not yet
   // removed. Sorted (assigned first) via visibleCatalogs.
   const shownCatalogs = useMemo(
     () =>
-      visibleCatalogs.filter(
+      pillCatalogs.filter(
         (c) =>
           (selectedByCatalog.get(c.id)?.size ?? 0) > 0 ||
           activeCatalogIds.has(c.id),
       ),
-    [visibleCatalogs, selectedByCatalog, activeCatalogIds],
+    [pillCatalogs, selectedByCatalog, activeCatalogIds],
   );
   const shownCatalogIds = useMemo(
     () => shownCatalogs.map((c) => c.id),
@@ -267,9 +327,12 @@ export function AppToolsEditor({
   // Add a server (select all its tools) or remove it (clear all its tools),
   // toggled from the "+ Add" combobox or the pill's remove button.
   const toggleCatalog = (catalogId: string) => {
-    const catalog = candidates.find((c) => c.id === catalogId);
+    const catalog =
+      catalogId === ARCHESTRA_MCP_CATALOG_ID
+        ? builtinCatalog
+        : candidates.find((c) => c.id === catalogId);
     if (!catalog) return;
-    const catalogTools = toolsByCatalog.get(catalogId) ?? EMPTY_TOOLS;
+    const catalogTools = pillToolsByCatalog.get(catalogId) ?? EMPTY_TOOLS;
     const shown =
       (selectedByCatalog.get(catalogId)?.size ?? 0) > 0 ||
       activeCatalogIds.has(catalogId);
@@ -298,8 +361,11 @@ export function AppToolsEditor({
 
   const comboboxItems: AssignmentComboboxItem[] = useMemo(
     () =>
-      candidates.map((catalog) => {
-        const total = toolsByCatalog.get(catalog.id)?.length ?? 0;
+      [
+        ...(builtinCatalog && builtinTools.length > 0 ? [builtinCatalog] : []),
+        ...candidates,
+      ].map((catalog) => {
+        const total = pillToolsByCatalog.get(catalog.id)?.length ?? 0;
         const selected = selectedByCatalog.get(catalog.id)?.size ?? 0;
         const disabled = total === 0;
         return {
@@ -322,7 +388,13 @@ export function AppToolsEditor({
           disabledReason: disabled ? "No tools" : undefined,
         };
       }),
-    [candidates, toolsByCatalog, selectedByCatalog],
+    [
+      builtinCatalog,
+      builtinTools,
+      candidates,
+      pillToolsByCatalog,
+      selectedByCatalog,
+    ],
   );
 
   if (canEdit !== true) {
@@ -338,7 +410,9 @@ export function AppToolsEditor({
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <LoadingWrapper isPending={isPending && !assigned}>
-        {candidates.length === 0 && orphanedVisible.length === 0 ? (
+        {candidates.length === 0 &&
+        orphanedVisible.length === 0 &&
+        builtinTools.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No MCP servers are available in this app's environment. The app can
             still use its data store.
@@ -347,13 +421,15 @@ export function AppToolsEditor({
           <>
             <div className="flex flex-wrap gap-2">
               {shownCatalogs.map((catalog) => {
+                const isBuiltin = catalog.id === ARCHESTRA_MCP_CATALOG_ID;
                 const catalogTools =
-                  toolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;
+                  pillToolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;
                 const selectedInCatalog =
                   selectedByCatalog.get(catalog.id) ?? new Set<string>();
                 const persistedInCatalog =
                   assignedIdsByCatalog.get(catalog.id) ?? new Set<string>();
                 const outOfEnv =
+                  !isBuiltin &&
                   !isPlaywrightCatalogItem(catalog.id) &&
                   !isCatalogInEnvironment(catalog, appEnvironmentId);
                 return (
@@ -366,6 +442,9 @@ export function AppToolsEditor({
                       !setsEqual(selectedInCatalog, persistedInCatalog)
                     }
                     note={outOfEnv ? "(outside this environment)" : undefined}
+                    description={
+                      isBuiltin ? BUILTIN_FILE_TOOLS_BLURB : catalog.description
+                    }
                     onSelectionChange={(next) =>
                       changeCatalogSelection(catalogTools, next)
                     }
@@ -458,6 +537,7 @@ function AppMcpServerPill({
   selectedToolIds,
   highlighted,
   note,
+  description,
   onSelectionChange,
   onRemove,
   autoOpen,
@@ -468,6 +548,7 @@ function AppMcpServerPill({
   selectedToolIds: Set<string>;
   highlighted: boolean;
   note?: string;
+  description?: string | null;
   onSelectionChange: (next: Set<string>) => void;
   onRemove: () => void;
   autoOpen: boolean;
@@ -492,7 +573,7 @@ function AppMcpServerPill({
       isEmpty={selectedToolIds.size === 0}
       highlighted={highlighted}
       note={note}
-      description={catalog.description}
+      description={description ?? catalog.description}
       docsUrl={catalog.docsUrl}
       open={open}
       onOpenChange={setOpen}

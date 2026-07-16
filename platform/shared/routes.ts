@@ -315,6 +315,11 @@ export const RouteId = {
   Microsoft365CopilotDeviceAuthStart: "microsoft365CopilotDeviceAuthStart",
   Microsoft365CopilotDeviceAuthPoll: "microsoft365CopilotDeviceAuthPoll",
 
+  // OpenAI "ChatGPT subscription" (Codex) device-flow sign-in — connects a
+  // ChatGPT/Codex subscription as an OpenAI provider credential
+  OpenaiCodexDeviceAuthStart: "openaiCodexDeviceAuthStart",
+  OpenaiCodexDeviceAuthPoll: "openaiCodexDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
@@ -659,6 +664,7 @@ export const RouteId = {
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",
   GetAppTools: "getAppTools",
+  GetAppAssignableBuiltinTools: "getAppAssignableBuiltinTools",
   AssignToolToApp: "assignToolToApp",
   UnassignToolFromApp: "unassignToolFromApp",
   GetAppTemplates: "getAppTemplates",

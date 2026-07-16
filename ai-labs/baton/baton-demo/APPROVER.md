@@ -72,40 +72,27 @@ its own — the model never sees a dead end.
 
 `policy.toml` declares the requesting user's label, the upstream, and a contract
 per tool (audience readers, trust, effects, requirements, and which arguments
-carry recipients). See the checked-in `policy.toml` for the auditor scenario.
-Tools without a contract are outside the policy and pass through untouched
-(gradual adoption — annotate the risky tools, leave the rest).
+carry recipients). See the checked-in `policy.toml` for the auditor scenario —
+note it is written in this parked flow's retired prototype dialect
+(`unknown_policy`, `recipients_within_context`, …), which no current crate
+parses; the live dialect is `baton-contracts` (see the gateway's
+`gateway-policy.toml`). Tools without a contract are outside the policy and
+pass through untouched (gradual adoption — annotate the risky tools, leave
+the rest).
 
-## Run the demo
+## Run the demo (parked — not currently runnable)
 
-Needs an `OPENROUTER_API_KEY` (the proxy forwards your `Authorization` header
-upstream, so the key is what the demo agent sends).
-
-One command — `run-approver-demo.sh` builds everything, starts the approver and proxy,
-runs the agent, and cleans up on exit. It resolves the key from the environment
-or `ai-labs/.env` (including the main checkout's, when run from a worktree):
-
-```sh
-ai-labs/baton/baton-demo/run-approver-demo.sh
-# or with a different ask: run-approver-demo.sh --task "email bob@archestra.ai the summary"
-```
-
-The agent reads the invoices and tries to email the auditor; the proxy turns
-that into a `baton__request_approval` call; the demo runs it against the
-approver, which elicits — so the y/n prompt appears in your terminal. Answer `y`
-and the send goes through; `n` and the model backs off. This is the whole real
-system (proxy + MCP approver + elicitation); a client like Claude Code would
-replace the demo agent (see "Wire your own harness").
-
-To run the three processes by hand instead:
-
-```sh
-cd ai-labs/baton/baton-proxy
-cargo run --bin baton-approver                      # terminal 1
-cargo run --bin baton-proxy -- --policy policy.toml # terminal 2
-export OPENROUTER_API_KEY=sk-...                    # terminal 3
-cargo run --features demo --bin baton-demo-agent
-```
+There is nothing to run: the flow needs the approval-rewriting proxy behavior
+that `baton-proxy` no longer has (see the banner above), so the one-command
+runner that once drove it has been removed. For the record, when it worked it
+was three processes — the MCP approver, the proxy, and the demo agent — with
+an `OPENROUTER_API_KEY` forwarded upstream via the `Authorization` header. The
+agent read the invoices and tried to email the auditor; the proxy turned that
+into a `baton__request_approval` call; the approver elicited, so the y/n
+prompt appeared in the terminal. Answer `y` and the send went through; `n` and
+the model backed off — proxy + MCP approver + elicitation end to end, with a
+client like Claude Code replacing the demo agent (see "Wire your own
+harness").
 
 ## Trajectory log
 
@@ -131,9 +118,9 @@ baton-proxy render                        # newest wire-logs/model-wire-*.jsonl
 baton-proxy render <file>                 # a specific wire or trajectory log
 ```
 
-## Wire your own harness
+## Wire your own harness (parked, as above)
 
-Two changes, both mechanical:
+When the flow returns, two changes, both mechanical:
 
 1. Point the harness's OpenAI `base_url` at the proxy (e.g.
    `http://127.0.0.1:8730/v1`).

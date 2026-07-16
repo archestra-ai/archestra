@@ -607,6 +607,29 @@ export function isPrefillExemptArchestraToolShortName(
 }
 
 /**
+ * The read-only file tools an app may be granted via the per-app tool
+ * assignment (`app_tools`), unlike the reserved always-on app runtime built-ins
+ * (App Data Store + `llm_complete`). Deliberately excludes the write tools
+ * (`save_file`/`edit_file`/`delete_file`): apps read the embedding chat's files
+ * to visualize them, they don't manage them. Whether the grant is honored at
+ * runtime is decided by the backend's `isAppAssignableArchestraTool`, which
+ * also folds in the feature flags.
+ */
+export const APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_READ_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAMES);
+
+export function isAppAssignableArchestraToolShortName(
+  shortName: string,
+): shortName is ArchestraToolShortName {
+  return APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+/**
  * tools that stay top-level in `tools/list` regardless of an agent's
  * exposure mode. skills and sandbox runtime interaction are
  * progressive-disclosure mechanisms, so hiding their discover/activate/read/run

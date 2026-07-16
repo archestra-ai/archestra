@@ -41,7 +41,17 @@ import { useFeature } from "@/lib/config/config.query";
  */
 type McpAppEndpoint =
   | { kind: "agent"; agentId: string; serverPrefix: string }
-  | { kind: "app"; appId: string }
+  | {
+      kind: "app";
+      appId: string;
+      /**
+       * The chat the app is rendered in, when embedded in a conversation. The
+       * host (this trusted layer, never the sandboxed iframe) forwards it to
+       * the app proxy so assigned built-in file tools resolve that chat's file
+       * scope; the backend re-validates that the viewer can access the chat.
+       */
+      conversationId?: string;
+    }
   | { kind: "server"; mcpServerId: string };
 
 /** MCP CallToolResult — defined inline to avoid direct @modelcontextprotocol/sdk dependency. */
@@ -167,7 +177,7 @@ export const McpAppRuntime = function McpAppRuntime({
       ? `agent:${endpoint.agentId}:${endpoint.serverPrefix}`
       : endpoint.kind === "server"
         ? `server:${endpoint.mcpServerId}`
-        : `app:${endpoint.appId}`;
+        : `app:${endpoint.appId}:${endpoint.conversationId ?? ""}`;
   // Sandbox-subdomain hash seed. Apps get a per-app bucket matching the backend
   // MCP server name; isolation does not depend on this being collision-free.
   const sandboxPrefix =
@@ -374,7 +384,11 @@ export const McpAppRuntime = function McpAppRuntime({
         ? `/api/mcp/${endpoint.agentId}`
         : endpoint.kind === "server"
           ? `/api/mcp/server/${endpoint.mcpServerId}`
-          : `/api/mcp/app/${endpoint.appId}`;
+          : `/api/mcp/app/${endpoint.appId}${
+              endpoint.conversationId
+                ? `?conversationId=${encodeURIComponent(endpoint.conversationId)}`
+                : ""
+            }`;
 
     // Proxy a JSON-RPC method to the backend MCP gateway (agent or app endpoint).
     const mcpProxy = async (method: string, params: unknown) => {

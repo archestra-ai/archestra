@@ -41,6 +41,8 @@ const app = {
   scope: "personal",
   environmentId: null,
   teams: [],
+  viewerRole: "owner",
+  authorName: null,
 } satisfies archestraApiTypes.GetAppResponses["200"];
 
 const server = setupServer();

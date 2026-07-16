@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppCard } from "./app-card";
 
@@ -90,6 +90,12 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
+  // The card now derives "is this someone else's app" from the server-computed
+  // viewerRole, not the session, but useSession is still mocked so the shared
+  // auth.query mock resolves cleanly.
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as ReturnType<typeof useSession>);
 });
 
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
@@ -99,6 +105,8 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   description: "An owned app",
   scope: "org",
   authorId: "user-1",
+  authorName: "Ada Lovelace",
+  viewerRole: "owner",
   latestVersion: 1,
   teams: [],
   executionModel: "viewer-scoped",
@@ -259,9 +267,43 @@ describe("OwnedAppCard", () => {
     expect(screen.getByLabelText("Team: London HQ")).toBeInTheDocument();
   });
 
-  it("hides the scope pill for personal apps", () => {
-    render(<AppCard app={{ ...ownedApp, scope: "personal", teams: [] }} />);
+  it("shows the personal pill (no owner badge) for the viewer's own personal app", () => {
+    // viewerRole "owner" means it's theirs: the scope pill shows, but there is
+    // no "Owned by" attribution.
+    render(
+      <AppCard
+        app={{
+          ...ownedApp,
+          scope: "personal",
+          viewerRole: "owner",
+          authorId: "user-1",
+          teams: [],
+        }}
+      />,
+    );
 
-    expect(screen.queryByLabelText("Personal")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Personal")).toBeInTheDocument();
+    expect(screen.queryByText(/owned by/i)).not.toBeInTheDocument();
+  });
+
+  it("tags another user's personal app with a visible 'Owned by' badge", () => {
+    // An app admin only reaches another user's personal app through oversight
+    // (viewerRole "admin"); a visible text badge (not a hover-only tooltip) lets
+    // them tell it apart from their own at a glance.
+    render(
+      <AppCard
+        app={{
+          ...ownedApp,
+          scope: "personal",
+          viewerRole: "admin",
+          authorId: "user-2",
+          authorName: "Grace Hopper",
+          teams: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Personal")).toBeInTheDocument();
+    expect(screen.getByText("Owned by Grace Hopper")).toBeInTheDocument();
   });
 });

@@ -400,6 +400,57 @@ class ConversationModel {
   }
 
   /**
+   * Cheap accessibility predicate: whether `userId` may view the conversation,
+   * under exactly {@link findAccessibleById}'s rule (owner, share access, or
+   * membership of the chat's project) — but metadata-only, loading no messages,
+   * errors, or compactions. For per-request gates on hot paths (e.g. the MCP
+   * app proxy validating an embedding-chat id), where findAccessibleById's full
+   * hydration would be paid on every call.
+   */
+  static async isAccessibleBy(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [bare] = await db
+      .select({
+        userId: schema.conversationsTable.userId,
+        organizationId: schema.conversationsTable.organizationId,
+        projectId: schema.conversationsTable.projectId,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, params.id))
+      .limit(1);
+    if (!bare || bare.organizationId !== params.organizationId) {
+      return false;
+    }
+    if (bare.userId === params.userId) {
+      return true;
+    }
+    const accessibleShare =
+      await ConversationShareModel.findAccessibleByConversationId({
+        conversationId: params.id,
+        organizationId: params.organizationId,
+        userId: params.userId,
+      });
+    if (accessibleShare) {
+      return true;
+    }
+    if (!bare.projectId) {
+      return false;
+    }
+    const project = await ProjectModel.findById(bare.projectId);
+    return (
+      !!project &&
+      (await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      }))
+    );
+  }
+
+  /**
    * Owner-scoped metadata for eligibility checks (e.g. turning a chat into a
    * project) without loading the conversation's messages, errors, or
    * compactions like {@link findById} does. Null when the chat does not exist

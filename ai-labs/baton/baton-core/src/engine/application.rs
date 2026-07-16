@@ -254,6 +254,11 @@ impl PolicyEngine {
                     .recipients;
                 // The same structural gate the planner filtered candidates
                 // with, rechecked live against the current registries.
+                // The target tool's requirements — including an unstated one,
+                // which the recheck escalates as `RequirementsUnknown` — are
+                // adopted by the re-evaluation below, not mirrored here: the
+                // postcondition simulation this replaced could only predict
+                // what the mandatory recheck now re-derives from the contract.
                 match self.constrain_gate(registered, pending, &checked, trajectory.store(), &recipients) {
                     Ok(_) => {}
                     Err(failure) => {

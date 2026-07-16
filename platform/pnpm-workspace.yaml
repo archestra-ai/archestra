@@ -33,6 +33,9 @@ overrides:
   # botframework-streaming pins ws 8.20.1, which the range selector above doesn't
   # catch; force that edge to the CVE-2026-48779 fix too.
   botframework-streaming>ws: '>=8.21.0'
+  # CVE-2026-54466 (GHSA-xv26-6w52-cph6, message corruption via protocol
+  # length-header abuse) fixed in 0.7.5, the package's latest release.
+  websocket-driver: '>=0.7.5'
   # form-data 3.0.5 / 4.0.6 (fix CVE-2026-12143, HIGH) were published 2026-06-12,
   # inside the 7-day window — excluded from minimumReleaseAge below and pinned
   # exact so a `>=` floor can't pull an unvetted release.
@@ -80,6 +83,9 @@ overrides:
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
+  # CVE-2026-54285 (GHSA-8988-4f7v-96qf, unbounded memory allocation when
+  # W3CBaggagePropagator.extract parses inbound baggage headers) fixed in 2.8.0.
+  '@opentelemetry/core': '>=2.8.0'
   # CVE-2026-48068 / CVE-2026-48069 (uncaught exception) fixed in 1.14.4
   '@grpc/grpc-js': '>=1.14.4'
 packageExtensions:

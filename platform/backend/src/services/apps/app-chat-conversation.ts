@@ -6,6 +6,7 @@ import {
 import { generateId, type UIMessage } from "ai";
 import {
   AgentModel,
+  AppAccessModel,
   AppModel,
   ConversationModel,
   McpServerModel,
@@ -56,6 +57,17 @@ export async function createSeededAppConversation(params: {
     throw new ApiError(404, `No app found with id ${appId}.`);
   }
 
+  // An app-admin can open an app they only see through oversight (someone
+  // else's personal app). They may use it and change its settings, but not edit
+  // it via chat — so the greeting must not invite edits the authoring tools
+  // will refuse. "Reachable without the admin bypass" is exactly "not oversight".
+  const isOversight = !(await AppAccessModel.userHasAppAccess({
+    organizationId,
+    userId,
+    app,
+    isAppAdmin: false,
+  }));
+
   return seedConversationWithRender({
     userId,
     organizationId,
@@ -69,7 +81,7 @@ export async function createSeededAppConversation(params: {
       input: { appId: app.id },
       output: buildAppRenderResult(app),
     },
-    greeting: buildAppOpenedGreeting(app.name),
+    greeting: buildAppOpenedGreeting(app.name, isOversight),
   });
 }
 
@@ -282,10 +294,24 @@ async function resolveDefaultChatAgentId(params: {
   return created;
 }
 
-/** Markdown greeting seeded when an owned app is opened in chat. */
-function buildAppOpenedGreeting(name: string): string {
+/**
+ * Markdown greeting seeded when an owned app is opened in chat. For an admin
+ * viewing an app they only see through oversight, it invites use — not edits —
+ * since the authoring tools refuse to modify someone else's app.
+ */
+function buildAppOpenedGreeting(name: string, isOversight: boolean): string {
+  const heading = `Here's **${escapeAppNameForModelText(name)}**.`;
+  if (isOversight) {
+    return (
+      `${heading}\n\n` +
+      `You're viewing this app as an administrator — it belongs to another ` +
+      `user. You can use it and change its settings, but not modify the app ` +
+      `itself here.\n\n` +
+      `Want to use the app? Use the UI 👉, or ask me to!`
+    );
+  }
   return (
-    `Here's **${escapeAppNameForModelText(name)}**.\n\n` +
+    `${heading}\n\n` +
     `Want to change the app? Tell me how!\n\n` +
     `Want to use the app? Use the UI 👉, or ask me to!`
   );

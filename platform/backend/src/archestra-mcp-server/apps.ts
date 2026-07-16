@@ -25,6 +25,7 @@ import {
   AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
+  McpToolCallModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -32,6 +33,7 @@ import {
   resolveAppToolsByName,
 } from "@/services/agent-tool-assignment";
 import {
+  assertCallerMayAuthorApp,
   assertCallerMayModifyApp,
   callerIsAppAdmin,
   resolveOrgTeams,
@@ -56,7 +58,12 @@ import {
   appRunUrl,
   escapeAppNameForModelText,
 } from "@/services/apps/app-run-link";
-import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
+import {
+  gateAppToolCall,
+  getAssignedAppBuiltin,
+  isAppAssignableArchestraTool,
+  redactAppBuiltinAuditResult,
+} from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
   htmlHasDocumentRoot,
@@ -72,6 +79,7 @@ import {
   RefineAppToolSchema,
   ScaffoldAppSchema,
 } from "@/types/app";
+import { deriveAuthMethod } from "@/utils/auth-method";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
   ARCHESTRA_APP_SDK_SUMMARY,
@@ -652,6 +660,7 @@ const registry = defineArchestraTools([
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId: auth.organizationId,
         userId: auth.userId,
+        isAppAdmin: await callerIsAppAdmin(auth.userId, auth.organizationId),
       });
       const apps = await AppModel.findByOrganization({
         organizationId: auth.organizationId,
@@ -1085,15 +1094,15 @@ const registry = defineArchestraTools([
             ? await resolveOrgTeams(args.teams, organizationId)
             : [];
         // Authorize BOTH the app's current scope and the destination, exactly as
-        // the REST re-scope path does. The source check is what stops a team
-        // admin from demoting or hijacking an org-scoped app they can merely see
-        // into a team they administer; the destination check stops redirecting an
-        // app to teams they don't administer.
-        await assertCallerMayModifyApp({
+        // the REST re-scope path does. The source check is the chat-authoring
+        // gate: it stops a team admin from demoting or hijacking an org-scoped
+        // app they can merely see, AND stops an app-admin from re-scoping a
+        // personal app they only see through oversight. The destination check
+        // stops redirecting an app to teams they don't administer.
+        await assertCallerMayAuthorApp({
           userId,
           organizationId,
-          scope: app.scope,
-          authorId: app.authorId,
+          app: { id: app.id, scope: app.scope, authorId: app.authorId },
           resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         await assertCallerMayModifyApp({
@@ -1163,12 +1172,18 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      // Preview is for the app's assigned upstream MCP tools — the data store
-      // and other built-ins are not run through here.
+      // Preview runs the app's assigned MCP tools — upstream ones, plus the
+      // app-assignable built-ins (the read-only file tools) once granted. The
+      // reserved built-ins (App Data Store, LLM completion) stay
+      // un-previewable: the SDK reaches them through their own namespaces and
+      // their output shape is fixed.
       if (archestraMcpBranding.isToolName(args.toolName)) {
-        return errorResult(
-          "preview_app_tool runs the app's assigned MCP tools; the App Data Store and other built-ins are not previewable.",
-        );
+        const shortName = archestraMcpBranding.getToolShortName(args.toolName);
+        if (!shortName || !isAppAssignableArchestraTool(shortName)) {
+          return errorResult(
+            "preview_app_tool runs the app's assigned MCP tools; the App Data Store and other built-ins are not previewable.",
+          );
+        }
       }
 
       // The exact runtime gate the rendered app hits (allowlist + visibility +
@@ -1206,6 +1221,61 @@ const registry = defineArchestraTools([
         userId,
         organizationId,
       };
+
+      // An assigned built-in (the read-only file tools) runs in-process, the
+      // way the app runtime dispatches it — same fail-closed assignment
+      // re-check, same audit redaction — with the authoring chat's real
+      // conversation, so the preview shows the data the rendered app will see
+      // in this chat. The context deliberately carries no `agentId`: the grant
+      // was authorized against the app, and the chat agent's own assignments
+      // must not gate it.
+      if (decision.kind === "app-builtin") {
+        const assigned = await getAssignedAppBuiltin(args.toolName, app.id);
+        if (!assigned) {
+          return errorResult(
+            `Tool "${args.toolName}" is not assigned to this app.`,
+          );
+        }
+        // Dynamic import avoids the circular import between this file and
+        // ./index (index.ts imports every tool group, including this one).
+        const { executeArchestraTool } = await import("./index");
+        const response = await executeArchestraTool(assigned, args.args ?? {}, {
+          agent: { id: app.id, name: app.name },
+          appId: app.id,
+          conversationId: context.conversationId,
+          userId: context.userId,
+          organizationId: context.organizationId,
+          tokenAuth,
+        });
+        try {
+          await McpToolCallModel.create({
+            ownerType: "app",
+            appId: app.id,
+            agentId: null,
+            mcpServerName: archestraMcpBranding.serverName,
+            method: "tools/call",
+            toolCall: {
+              id: `preview-${context.userId}-${app.id}-${Date.now()}`,
+              name: assigned,
+              arguments: args.args ?? {},
+            },
+            toolResult: redactAppBuiltinAuditResult(assigned, response),
+            userId: context.userId,
+            authMethod: deriveAuthMethod(tokenAuth) ?? null,
+          });
+        } catch (dbError) {
+          logger.warn(
+            { err: dbError, appId: app.id, toolName: assigned },
+            "Failed to persist previewed app builtin tool call",
+          );
+        }
+        return formatPreviewResult(assigned, {
+          content: Array.isArray(response.content) ? response.content : [],
+          structuredContent: response.structuredContent,
+          isError: response.isError,
+        } as CommonToolResult);
+      }
+
       const result = await mcpClient.executeToolCallForOwner(
         {
           id: `preview-${userId}-${app.id}-${Date.now()}`,
@@ -1380,11 +1450,13 @@ async function loadApp(params: {
   }
   if (params.modify) {
     try {
-      await assertCallerMayModifyApp({
+      // The chat authoring path: an app-admin who only sees this app through
+      // oversight (someone else's personal app, or a team app they're not in)
+      // is refused here — they may still change its settings over REST.
+      await assertCallerMayAuthorApp({
         userId: params.userId,
         organizationId: params.organizationId,
-        scope: app.scope,
-        authorId: app.authorId,
+        app: { id: app.id, scope: app.scope, authorId: app.authorId },
         resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
     } catch (error) {

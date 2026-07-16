@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { AgentIcon } from "@/components/agent-icon";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -63,6 +64,14 @@ interface ConversationHeaderProps {
    * non-clickable "scheduled task" breadcrumb segment for orientation.
    */
   scheduleTriggerId?: string | null;
+  /**
+   * True when an admin opened an app they only see through oversight (someone
+   * else's personal app). Shows a "Viewing as administrator" badge next to the
+   * title, exactly as the Projects detail header does.
+   */
+  isAppOversight?: boolean;
+  /** The app owner's display name, appended to the oversight badge. */
+  oversightOwnerName?: string | null;
   onShare: () => void;
   onExportMarkdown: () => void;
   onCreateProject: () => void;
@@ -78,6 +87,8 @@ export function ConversationHeader({
   isShared,
   canCreateProject,
   scheduleTriggerId,
+  isAppOversight,
+  oversightOwnerName,
   onShare,
   onExportMarkdown,
   onCreateProject,
@@ -112,6 +123,19 @@ export function ConversationHeader({
     if (panel.isOpen && resolvedTab === tab) panel.onClose();
   };
 
+  // An app opened in chat titles the conversation with the app's name. Give it
+  // an app glyph and a solid (non-muted, medium-weight) title so it reads as the
+  // app's header — the way the Projects detail page presents a project title —
+  // rather than a faint ordinary chat title.
+  const isAppConversation = conversation?.origin === "app_open";
+  const titleClassName = cn(
+    "truncate max-w-[360px] cursor-default",
+    isAppConversation
+      ? // Replicate the Projects detail title: text-2xl / semibold / tight.
+        "text-2xl font-semibold tracking-tight text-foreground"
+      : "text-base font-normal text-muted-foreground",
+  );
+
   return (
     <div
       className={cn(
@@ -121,14 +145,22 @@ export function ConversationHeader({
     >
       <div className="relative flex min-h-8 items-center justify-between gap-2">
         {/* Left side - conversation title + actions */}
-        <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           {conversationId && conversation && (
-            <div className="flex items-center flex-shrink min-w-0 gap-1">
+            <div className="flex items-center flex-shrink min-w-0 gap-2">
               {/* Project chats read as "{ProjectName}/{Chat title}" — the
                   project segment (emoji + name, like the sidebar) links to the
                   project. Hidden for viewers without project access. */}
               {conversation.projectId && (
                 <ProjectTitlePrefix projectId={conversation.projectId} />
+              )}
+              {/* App-opened chats: an app glyph anchors the title, mirroring the
+                  Projects detail header's icon + name. */}
+              {isAppConversation && (
+                <AppWindow
+                  className="h-[22px] w-[22px] shrink-0 text-foreground"
+                  aria-hidden
+                />
               )}
               {/* Non-clickable "scheduled task" segment (orientation only) when
                   this chat was opened from a schedule's run. */}
@@ -139,7 +171,7 @@ export function ConversationHeader({
                   measurement re-renders on every TypingText tick, which loops
                   past React's nested-update cap. */}
               {isTitleAnimating ? (
-                <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
+                <h1 className={titleClassName}>
                   <TypingText
                     text={getConversationDisplayTitle(
                       conversation.title,
@@ -157,7 +189,7 @@ export function ConversationHeader({
                     conversation.messages,
                   )}
                 >
-                  <h1 className="text-base font-normal text-muted-foreground truncate max-w-[360px] cursor-default">
+                  <h1 className={titleClassName}>
                     {getConversationDisplayTitle(
                       conversation.title,
                       conversation.messages,
@@ -166,6 +198,12 @@ export function ConversationHeader({
                 </TruncatedTooltip>
               )}
             </div>
+          )}
+          {isAppOversight && (
+            <Badge variant="secondary" className="shrink-0">
+              Viewing as administrator
+              {oversightOwnerName ? ` · ${oversightOwnerName}` : ""}
+            </Badge>
           )}
           {/* Desktop: chat actions (Share / Export) next to the title */}
           {conversationId && messageCount > 0 && (

@@ -429,6 +429,15 @@ const ReadFileOutputSchema = z.object({
     .describe(
       "True when more lines follow the returned window (raise `offset` to continue).",
     ),
+  content: z
+    .string()
+    .optional()
+    .describe(
+      "The returned window's text, numbered by line (the same rendering as " +
+        "the text output). Present for text reads so structured consumers " +
+        "(e.g. apps via archestra.tools.call) get the content, not just " +
+        "metadata.",
+    ),
 });
 
 const SaveFileSchema = z
@@ -969,6 +978,7 @@ const registry = defineArchestraTools([
             startLine: 1,
             returnedLines: 0,
             truncated: false,
+            content: "",
           },
           `"${originalName}" is empty.`,
         );
@@ -1030,6 +1040,7 @@ const registry = defineArchestraTools([
           startLine,
           returnedLines: numbered.returnedLines,
           truncated,
+          content: numbered.returnedLines > 0 ? numbered.body : "",
         },
         summary.join("\n"),
       );

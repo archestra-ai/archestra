@@ -1,7 +1,6 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
   isProviderApiKeyOptional,
-  providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -36,6 +35,10 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
+import {
+  credentialRequiresPerUserScope,
+  perUserCredentialLabel,
+} from "@/services/openai-codex-credentials";
 import {
   ApiError,
   constructResponseSchema,
@@ -326,6 +329,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         provider: body.provider,
+        apiKey: body.apiKey,
         headers,
       });
 
@@ -721,12 +725,22 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let newSecretId: string | null = null;
 
       if (body.scope !== undefined || body.teamId !== undefined) {
+        // A scope change on an existing ChatGPT-subscription (Codex) key must be
+        // rejected too, so classify by the effective secret (new or stored).
+        const effectiveApiKey =
+          body.apiKey ??
+          (apiKeyFromDB.secretId
+            ? ((await getSecretValueForLlmProviderApiKey(
+                apiKeyFromDB.secretId,
+              )) as string | undefined)
+            : undefined);
         await validateScopeAndAuthorization({
           scope: newScope,
           teamId: newTeamId,
           userId: user.id,
           organizationId,
           provider: apiKeyFromDB.provider,
+          apiKey: effectiveApiKey,
           headers,
         });
       }
@@ -1069,17 +1083,23 @@ async function validateScopeAndAuthorization(params: {
   userId: string;
   organizationId: string;
   provider: SupportedProvider;
+  apiKey?: string | null;
   headers: IncomingHttpHeaders;
 }): Promise<void> {
-  const { scope, teamId, userId, organizationId, provider, headers } = params;
+  const { scope, teamId, userId, organizationId, provider, apiKey, headers } =
+    params;
 
-  // Per-user-credential providers (GitHub Copilot) hold an individual's token,
-  // so team/org scope would share one person's credential with everyone. Only
-  // personal keys are allowed; each user links their own account.
-  if (providerRequiresPerUserCredential(provider) && scope !== "personal") {
+  // Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
+  // (Codex) key on `openai` — hold an individual's token, so team/org scope
+  // would share one person's credential with everyone. Only personal keys are
+  // allowed; each user links their own account.
+  if (
+    credentialRequiresPerUserScope({ provider, apiKey }) &&
+    scope !== "personal"
+  ) {
     throw new ApiError(
       400,
-      `${provider} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
+      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
     );
   }
 

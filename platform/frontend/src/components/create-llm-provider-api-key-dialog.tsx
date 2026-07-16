@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import {
+  CHATGPT_SUBSCRIPTION_LABEL,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
@@ -90,7 +91,12 @@ export function CreateLlmProviderApiKeyDialog({
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
       await createMutation.mutateAsync({
-        name: values.name?.trim() || PROVIDER_CONFIG[values.provider].name,
+        name:
+          values.name?.trim() ||
+          (values.provider === "openai" &&
+          values.openaiAuthMethod === "chatgpt-subscription"
+            ? CHATGPT_SUBSCRIPTION_LABEL
+            : PROVIDER_CONFIG[values.provider].name),
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
         baseUrl: values.baseUrl || undefined,
@@ -186,6 +192,7 @@ function getDefaultFormValues(params: {
     awsAccessKeyId: null,
     awsSecretAccessKey: null,
     awsSessionToken: null,
+    openaiAuthMethod: "api-key",
     ...defaultValues,
   };
 }

@@ -318,6 +318,62 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(interaction.authMethod).toBe("passthrough_virtual_key");
     });
 
+    test("personal standard virtual key attributes the interaction to its owner", async ({
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      // Virtual-key connection mode: the connect flow mints a personal virtual
+      // key whose author is the acting user (Codex ChatGPT subscription, Claude
+      // Code virtual key). The key is the sole identity signal, so its owner
+      // must attribute the request even though no X-Archestra-User-Id header or
+      // passthrough key is present.
+      const owner = await makeUser();
+      const secret = await makeSecret({ secret: { apiKey: "sk-owned-key" } });
+      const providerKey = await makeLlmProviderApiKey(
+        testAgent.organizationId,
+        secret.id,
+        { provider: "openai" },
+      );
+      const { value: virtualKey, virtualKey: virtualKeyRow } =
+        await VirtualApiKeyModel.create({
+          organizationId: testAgent.organizationId,
+          name: "vk-attribution",
+          scope: "personal",
+          authorId: owner.id,
+          providerApiKeys: [
+            { provider: "openai", providerApiKeyId: providerKey.id },
+          ],
+        });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        // Non-loopback: attribution comes from the virtual key, not a localhost bypass.
+        remoteAddress: "203.0.113.5",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${virtualKey}`,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+
+      const [interaction] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+
+      expect(interaction.userId).toBe(owner.id);
+      expect(interaction.virtualKeyId).toBe(virtualKeyRow.id);
+      expect(interaction.authMethod).toBe("virtual_key");
+    });
+
     test.skip("non-streaming request increments token metrics", async () => {
       // SKIPPED: Mock clients don't use getObservableFetch(), so token metrics
       // are not reported in mock mode. To properly test this, we need to either:

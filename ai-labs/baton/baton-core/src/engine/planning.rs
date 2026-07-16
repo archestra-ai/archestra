@@ -298,7 +298,10 @@ impl PolicyEngine {
                     };
                     let mut next = state.clone();
                     next.sim.tool = transition.to_tool.clone();
-                    next.sim.requires = target.requires.clone();
+                    // Retargeting re-decides the target's requirement fact: a
+                    // narrow may move to a tool whose requirements are unstated
+                    // (escalates) or away from one (the stale unknown drops).
+                    next.sim.adopt_requires(&target.requires);
                     next.sim.recipients = recipients;
                     // The narrow shrinks the proposed effects, so any surface
                     // growth is recomputed against the reduced set — an
@@ -659,7 +662,7 @@ impl PolicyEngine {
                         return false;
                     };
                     sim.tool = registered.to_tool.clone();
-                    sim.requires = target.requires.clone();
+                    sim.adopt_requires(&target.requires);
                     sim.recipients = recipients;
                     sim.proposed_effects = registered.effects.clone();
                 }
@@ -1090,14 +1093,12 @@ impl SimFlow {
         for id in checked.control.iter() {
             control_labels.insert(*id, view.fold_labels([id])?);
         }
-        let (requires, recipients, extra) = match contract {
+        let (recipients, extra) = match contract {
             Some(c) => (
-                c.requires.clone(),
                 c.arguments.resolve_recipients(&checked.arguments, trajectory.store())?,
                 Vec::new(),
             ),
             None => (
-                Requirements::default(),
                 BTreeSet::new(),
                 vec![Violation::Unprovable(Unprovable::NoContract {
                     tool: checked.tool.clone(),
@@ -1114,18 +1115,37 @@ impl SimFlow {
                 Effects::none(),
             ),
         };
-        Ok(Self {
+        let mut sim = Self {
             leaf_labels,
             control_labels,
             tool: checked.tool.clone(),
-            requires,
+            requires: Requirements::default(),
             recipients,
             past_effects: trajectory.past_effects().clone(),
             proposed_effects,
             accepted_effects,
             confirmed: trajectory.pending_confirmation().cloned(),
             extra,
-        })
+        };
+        if let Some(c) = contract {
+            sim.adopt_requires(&c.requires);
+        }
+        Ok(sim)
+    }
+
+    /// Adopt a contract's requirement declaration: known requirements are
+    /// checked; unknown ones (None) contribute the RequirementsUnknown fact
+    /// instead. Keeps `extra` consistent when a constrain retargets the sim.
+    pub(crate) fn adopt_requires(&mut self, requires: &Option<Requirements>) {
+        self.extra
+            .retain(|v| !matches!(v, Violation::Unprovable(Unprovable::RequirementsUnknown)));
+        match requires {
+            Some(requires) => self.requires = requires.clone(),
+            None => {
+                self.requires = Requirements::default();
+                self.extra.push(Violation::Unprovable(Unprovable::RequirementsUnknown));
+            }
+        }
     }
 
     /// The simulation state of one emission flow's check, under the reserved
@@ -1329,6 +1349,7 @@ fn needed_delta(violations: &[Violation]) -> Lift {
                 Unprovable::TrustUnknown
                 | Unprovable::AudienceUnknown
                 | Unprovable::EffectsUnknown
+                | Unprovable::RequirementsUnknown
                 | Unprovable::NoContract { .. },
             ) => {}
         }

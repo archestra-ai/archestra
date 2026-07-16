@@ -1,5 +1,6 @@
 import {
   CLAUDE_CODE_CLIENT_ID,
+  CODEX_CLIENT_ID,
   DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
   type SupportedProvider,
@@ -593,6 +594,38 @@ ARCHESTRA_BEDROCK`
 // Internal helpers — Codex
 // ===================================================================
 
+/**
+ * TOML basic-string quoting for a header name/value in ~/.codex/config.toml.
+ * The inputs here (attribution header names and `arch_`-prefixed key values)
+ * never contain control characters or newlines, so escaping the two basic-string
+ * specials — backslash and double-quote — is sufficient and correct.
+ */
+function tomlBasicString(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Attribution headers Codex sends on every proxied request, emitted as a
+ * `[model_providers.<name>.http_headers]` TOML table (Codex's equivalent of
+ * Claude Code's ANTHROPIC_CUSTOM_HEADERS), one `"Name" = "Value"` per line:
+ *  - X-Archestra-Agent-Id attributes the request to the Codex CLI client.
+ *  - X-Archestra-Virtual-Key (passthrough) attributes it to the user; in
+ *    virtual-key mode the injected key already carries that attribution.
+ */
+export function codexAttributionHeaderLines(
+  proxy: SetupScriptProxySection,
+): string {
+  const lines = [
+    `${tomlBasicString(EXTERNAL_AGENT_ID_HEADER)} = ${tomlBasicString(CODEX_CLIENT_ID)}`,
+  ];
+  if (proxy.passthroughVirtualKey) {
+    lines.push(
+      `${tomlBasicString(VIRTUAL_KEY_HEADER)} = ${tomlBasicString(proxy.passthroughVirtualKey)}`,
+    );
+  }
+  return lines.join("\n");
+}
+
 function codexSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
@@ -610,6 +643,9 @@ name = "${ctx.proxy.proxyName}"
 base_url = "${ctx.proxy.url}"
 wire_api = "responses"
 requires_openai_auth = true
+
+[model_providers.${ctx.proxy.proxyName}.http_headers]
+${codexAttributionHeaderLines(ctx.proxy)}
 # <<< ${marker} <<<`;
 
     sections.push(`say ${sh(`Adding the "${ctx.proxy.proxyName}" provider to ~/.codex/config.toml`)}

@@ -464,6 +464,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               <ConfigureToolView
                 agentId={editingAgent.id}
                 agentName={editingAgent.name}
+                agentScope={(editingAgent.scope as AgentScope) ?? "personal"}
                 catalog={selectedCatalog}
                 onBack={() => setDialogView(configureToolFrom)}
                 onDone={() => setDialogView("settings")}
@@ -1423,12 +1424,14 @@ function AddToolView({
 function ConfigureToolView({
   agentId,
   agentName,
+  agentScope,
   catalog,
   onBack,
   onDone,
 }: {
   agentId: string;
   agentName: string;
+  agentScope: AgentScope;
   catalog: CatalogItem;
   onBack: () => void;
   onDone: () => void;
@@ -1574,6 +1577,7 @@ function ConfigureToolView({
             </Label>
             <TokenSelect
               catalogId={catalog.id}
+              agentScope={agentScope}
               value={credential}
               onValueChange={setCredential}
               shouldSetDefaultValue={false}

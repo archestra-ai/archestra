@@ -2,19 +2,19 @@
 
 import {
   type archestraApiTypes,
-  CLAUDE_CLIENT_LABEL,
   CLIENT_FILTER_OPTIONS,
   type ClientFilter,
+  clientForExternalAgentIds,
   DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
-  isClaudeClientAgentId,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
   ClientFilterOption,
   ProfileFilterOption,
@@ -92,12 +92,10 @@ function getSessionDisplayData(session: SessionData) {
   const conversationTitle = session.conversationTitle;
   const isArchestraChat = conversationTitle && session.sessionId;
   const claudeCodeTitle = session.claudeCodeTitle;
-  // Claude clients get a source badge and a labelled placeholder; other clients
-  // fall back to the last user message. Derived from the client-attribution
-  // column (external_agent_id), not the session-id provenance.
-  const claudeSourceLabel = session.externalAgentIds.some(isClaudeClientAgentId)
-    ? CLAUDE_CLIENT_LABEL
-    : null;
+  // Known clients (Claude, Codex) get a source badge next to the session's last
+  // user message. Derived from the client-attribution column (external_agent_id),
+  // not the session-id provenance.
+  const clientSource = clientForExternalAgentIds(session.externalAgentIds);
 
   let lastUserMessage = "";
   if (session.lastInteractionRequest && session.lastInteractionType) {
@@ -122,7 +120,7 @@ function getSessionDisplayData(session: SessionData) {
     isSingleInteraction,
     conversationTitle,
     isArchestraChat,
-    claudeSourceLabel,
+    clientSource,
     lastUserMessage,
     displayText,
   };
@@ -306,7 +304,7 @@ function SessionsTable({
             conversationTitle,
             displayText,
             isArchestraChat,
-            claudeSourceLabel,
+            clientSource,
             lastUserMessage,
           } = getSessionDisplayData(session);
 
@@ -333,21 +331,23 @@ function SessionsTable({
                     </Badge>
                   </Link>
                 </>
-              ) : claudeSourceLabel ? (
+              ) : clientSource ? (
                 <>
-                  <span className="min-w-0 flex-1 truncate">
-                    {displayText
-                      ? displayText.length > 80
+                  {displayText ? (
+                    <span className="min-w-0 flex-1 truncate">
+                      {displayText.length > 80
                         ? `${displayText.slice(0, 80)}...`
-                        : displayText
-                      : `${claudeSourceLabel} session`}
-                  </span>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
-                  >
-                    {claudeSourceLabel}
-                  </Badge>
+                        : displayText}
+                    </span>
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      No message
+                    </span>
+                  )}
+                  <ClientSourceBadge
+                    client={clientSource}
+                    className="shrink-0"
+                  />
                 </>
               ) : lastUserMessage ? (
                 <span className="min-w-0 max-w-full truncate">
@@ -617,11 +617,13 @@ function SessionsTable({
           placeholder="Filter by Client"
           items={[
             { value: "all", label: "All Clients" },
-            ...CLIENT_FILTER_OPTIONS.map(({ value, label }) => ({
+            ...CLIENT_FILTER_OPTIONS.map(({ value, label, provider }) => ({
               value,
               label,
-              content: <ClientFilterOption label={label} />,
-              selectedContent: <ClientFilterOption label={label} />,
+              content: <ClientFilterOption label={label} provider={provider} />,
+              selectedContent: (
+                <ClientFilterOption label={label} provider={provider} />
+              ),
             })),
           ]}
           className="w-[200px]"

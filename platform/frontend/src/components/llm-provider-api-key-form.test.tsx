@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { type UseFormReturn, useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -42,27 +42,42 @@ let form: UseFormReturn<LlmProviderApiKeyFormValues>;
 
 function Harness({
   existingKeys,
+  existingKey,
+  defaults,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
+  existingKey?: LlmProviderApiKeyResponse;
+  defaults?: Partial<LlmProviderApiKeyFormValues>;
 }) {
-  form = useForm<LlmProviderApiKeyFormValues>({ defaultValues: DEFAULTS });
+  form = useForm<LlmProviderApiKeyFormValues>({
+    defaultValues: { ...DEFAULTS, ...defaults },
+  });
   return (
     <LlmProviderApiKeyForm
       form={form}
       mode="full"
       showConsoleLink={false}
       existingKeys={existingKeys}
+      existingKey={existingKey}
     />
   );
 }
 
-function renderForm(options?: { existingKeys?: LlmProviderApiKeyResponse[] }) {
+function renderForm(options?: {
+  existingKeys?: LlmProviderApiKeyResponse[];
+  existingKey?: LlmProviderApiKeyResponse;
+  defaults?: Partial<LlmProviderApiKeyFormValues>;
+}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <Harness existingKeys={options?.existingKeys} />
+      <Harness
+        existingKeys={options?.existingKeys}
+        existingKey={options?.existingKey}
+        defaults={options?.defaults}
+      />
     </QueryClientProvider>,
   );
 }
@@ -194,6 +209,74 @@ describe("LlmProviderApiKeyForm", () => {
     await waitFor(() => {
       expect(form.getValues("name")).toBe("OpenAI");
     });
+  });
+
+  it("shows the connected card when editing an existing ChatGPT-subscription key", async () => {
+    // Editing a key whose stored credential is already a ChatGPT subscription
+    // must surface the "connected" card (mirroring Copilot), not silently look
+    // like a fresh, unconnected sign-in.
+    const existingKey = {
+      id: "key-1",
+      organizationId: "org-1",
+      name: "ChatGPT Subscription",
+      provider: "openai",
+      secretId: "secret-1",
+      scope: "personal",
+      userId: "user-1",
+      teamId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+      extraHeaders: null,
+      isSystem: false,
+      isPrimary: false,
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+      isChatgptSubscription: true,
+    } as LlmProviderApiKeyResponse;
+
+    renderForm({
+      existingKey,
+      defaults: { openaiAuthMethod: "chatgpt-subscription" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("ChatGPT account connected")).toBeInTheDocument();
+    });
+  });
+
+  it("does not show the connected card when editing a plain OpenAI key on the subscription tab", async () => {
+    // A plain API key being converted to a subscription is not yet connected —
+    // the sign-in prompt must show, no false "connected" card.
+    const existingKey = {
+      id: "key-2",
+      organizationId: "org-1",
+      name: "OpenAI",
+      provider: "openai",
+      secretId: "secret-2",
+      scope: "personal",
+      userId: "user-1",
+      teamId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+      extraHeaders: null,
+      isSystem: false,
+      isPrimary: false,
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+      isChatgptSubscription: false,
+    } as LlmProviderApiKeyResponse;
+
+    renderForm({
+      existingKey,
+      defaults: { openaiAuthMethod: "chatgpt-subscription" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Sign in with ChatGPT/i)).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("ChatGPT account connected"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the credential when the provider is unchanged", async () => {

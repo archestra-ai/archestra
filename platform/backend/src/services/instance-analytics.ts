@@ -1,6 +1,7 @@
 import config from "@/config";
 import logger from "@/logging";
-import { OrganizationModel } from "@/models";
+import { InstanceUsageModel, OrganizationModel } from "@/models";
+import type { InstanceEntityCounts } from "@/types";
 
 const HEARTBEAT_INTERVAL_MS = 60 * 60 * 1000;
 const CAPTURE_TIMEOUT_MS = 10_000;
@@ -82,17 +83,37 @@ class InstanceAnalyticsService {
       analyticsConfig,
       event: INSTANCE_HEARTBEAT_EVENT,
       distinctId: state.analyticsInstanceId,
+      extraProperties: await this.collectEntityCountProperties(),
     });
+  }
+
+  // Best effort: a failed count query must not cost us the heartbeat itself.
+  private async collectEntityCountProperties(): Promise<
+    Record<string, number>
+  > {
+    try {
+      return getEntityCountProperties(
+        await InstanceUsageModel.getEntityCounts(),
+      );
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "Failed to collect instance entity counts for analytics heartbeat",
+      );
+      return {};
+    }
   }
 
   private async capture({
     analyticsConfig,
     event,
     distinctId,
+    extraProperties,
   }: {
     analyticsConfig: InstanceAnalyticsConfig;
     event: string;
     distinctId: string;
+    extraProperties?: Record<string, number>;
   }): Promise<void> {
     const response = await this.getFetch()(getCaptureUrl(analyticsConfig), {
       method: "POST",
@@ -108,6 +129,7 @@ class InstanceAnalyticsService {
           app_version: this.options.appVersion ?? config.api.version,
           instance_id: distinctId,
           source: "backend",
+          ...extraProperties,
           $groups: {
             instance: distinctId,
           },
@@ -139,4 +161,24 @@ export const instanceAnalyticsService = new InstanceAnalyticsService();
 
 function getCaptureUrl(analyticsConfig: InstanceAnalyticsConfig): string {
   return new URL("/capture/", analyticsConfig.posthog.host).toString();
+}
+
+function getEntityCountProperties(
+  counts: InstanceEntityCounts,
+): Record<string, number> {
+  return {
+    user_count: counts.users,
+    team_count: counts.teams,
+    agent_count: counts.agents,
+    profile_count: counts.profiles,
+    mcp_gateway_count: counts.mcpGateways,
+    llm_proxy_count: counts.llmProxies,
+    llm_provider_count: counts.llmProviders,
+    virtual_api_key_count: counts.virtualApiKeys,
+    mcp_server_count: counts.mcpServers,
+    conversation_count: counts.conversations,
+    skill_count: counts.skills,
+    app_count: counts.apps,
+    knowledge_base_count: counts.knowledgeBases,
+  };
 }

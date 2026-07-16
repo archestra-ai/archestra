@@ -240,6 +240,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "You need llmVirtualKey:create permission to use a virtual key. Choose the provider-key option instead.",
             );
           }
+          // The standard key is personal-scoped (authorId = the acting user), so
+          // it carries the user's identity on its own — the proxy attributes the
+          // request to that owner. No passthrough key is needed in this mode.
           ({ virtualApiKeyId, creditWarning } =
             await ensureConnectionVirtualKey({
               organizationId,
@@ -252,14 +255,16 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }));
         } else if (
           // provider-key mode is passthrough: the script only rewires the base
-          // URL. For Claude Code passthrough (Anthropic subscription or the
-          // user's own Bedrock credentials) we also attribute requests to the
-          // user via X-Archestra-Virtual-Key, reusing the (otherwise-null)
-          // virtualApiKeyId column to carry the passthrough key id.
+          // URL and the user keeps their own provider credentials. We also
+          // attribute requests to the user via X-Archestra-Virtual-Key, reusing
+          // the (otherwise-null) virtualApiKeyId column to carry the passthrough
+          // key id. Applies to Claude Code (Anthropic subscription or the user's
+          // own Bedrock credentials) and Codex (the user's own OpenAI key).
           // Best-effort: silently skipped without llmVirtualKey:create.
           attributePassthrough &&
-          clientId === "claude-code" &&
-          (provider === "anthropic" || provider === "bedrock")
+          ((clientId === "claude-code" &&
+            (provider === "anthropic" || provider === "bedrock")) ||
+            (clientId === "codex" && provider === "openai"))
         ) {
           const canCreateVirtualKey = await userHasPermission(
             user.id,

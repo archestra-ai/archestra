@@ -1,12 +1,17 @@
 "use client";
 
-import { E2eTestId, GITHUB_REPO_NEW_ISSUE_URL } from "@archestra/shared";
+import {
+  DocsPage,
+  E2eTestId,
+  GITHUB_REPO_NEW_ISSUE_URL,
+} from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertCircle,
   ExternalLink,
   KeyRound,
   Loader2,
+  LockKeyhole,
   ShieldAlert,
   XCircle,
 } from "lucide-react";
@@ -15,6 +20,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +49,7 @@ import {
   usePublicConfig,
   usePublicEnterpriseCoreActive,
 } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { RecoverAccountView } from "./recover-account-view";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
@@ -474,8 +481,17 @@ export function AuthViewWithErrorHandling({
   );
 }
 
+/**
+ * Number of consecutive failed sign-in attempts after which the password-reset
+ * hint is surfaced over the form. Archestra has no self-service reset, so a user
+ * who keeps failing needs an operator to run the reset CLI — point them at it.
+ */
+const FAILED_ATTEMPTS_BEFORE_RESET_HINT = 3;
+
 function SignInView({ callbackURL }: { callbackURL?: string }) {
   const signIn = useSignInWithEmailMutation();
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const docsUrl = getFrontendDocsUrl(DocsPage.PlatformResetUserPassword);
   const signInForm = useForm<SignInFormValues>({
     resolver: zodResolver(SignInFormSchema),
     defaultValues: {
@@ -491,7 +507,13 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
       callbackURL,
     });
 
-    if (!result) return;
+    // A null result is a failed attempt (wrong credentials, etc.); count
+    // consecutive failures and reset the streak on any success.
+    if (!result) {
+      setFailedAttempts((attempts) => attempts + 1);
+      return;
+    }
+    setFailedAttempts(0);
 
     if (result.twoFactorRedirect) {
       // Forward only the computed callback target (not the raw query string,
@@ -508,77 +530,112 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
     redirectAfterSignIn(result.redirectUrl);
   }
 
+  // The hint's only value over the always-present footer is the docs link, so
+  // only raise it when there is a link to offer.
+  const showResetHint =
+    failedAttempts >= FAILED_ATTEMPTS_BEFORE_RESET_HINT && docsUrl !== null;
+
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="text-xl">Sign In</CardTitle>
-        <CardDescription>
-          Enter your email below to login to your account
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...signInForm}>
-          <form
-            className="space-y-4"
-            onSubmit={signInForm.handleSubmit(onSignIn)}
-          >
-            <FormField
-              control={signInForm.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      autoComplete="email"
-                      disabled={signIn.isPending}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={signInForm.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="password"
-                      autoComplete="current-password"
-                      disabled={signIn.isPending}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={signIn.isPending}
-              data-testid={E2eTestId.SignInSubmitButton}
+    <>
+      {showResetHint && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+          <LockKeyhole className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="text-amber-900 dark:text-amber-100">
+            Forgot your password?
+          </AlertTitle>
+          <AlertDescription className="text-amber-700 dark:text-amber-300">
+            <ExternalDocsLink
+              href={docsUrl}
+              className="text-amber-800 dark:text-amber-200"
             >
-              {signIn.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Sign In
-            </Button>
-          </form>
-        </Form>
-        {/* There is no self-service reset flow (no email provider). An operator
-            with shell access resets any user's password via the
-            reset-user-password CLI (see docs: Disabling Basic Authentication). */}
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          Forgot your password? Ask your administrator to reset it.
-        </p>
-      </CardContent>
-    </Card>
+              Learn how to reset your password.
+            </ExternalDocsLink>
+          </AlertDescription>
+        </Alert>
+      )}
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="text-xl">Sign In</CardTitle>
+          <CardDescription>
+            Enter your email below to login to your account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...signInForm}>
+            <form
+              className="space-y-4"
+              onSubmit={signInForm.handleSubmit(onSignIn)}
+            >
+              <FormField
+                control={signInForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        autoComplete="email"
+                        disabled={signIn.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={signInForm.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        autoComplete="current-password"
+                        disabled={signIn.isPending}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={signIn.isPending}
+                data-testid={E2eTestId.SignInSubmitButton}
+              >
+                {signIn.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Sign In
+              </Button>
+            </form>
+          </Form>
+          {/* There is no self-service reset flow (no email provider). An operator
+              with shell access resets any user's password via the
+              reset-user-password CLI, documented on the Password Reset page. */}
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            {docsUrl ? (
+              <>
+                Forgot your password?{" "}
+                <ExternalDocsLink
+                  href={docsUrl}
+                  className="text-muted-foreground underline hover:text-foreground"
+                >
+                  Learn how to reset your password.
+                </ExternalDocsLink>
+              </>
+            ) : (
+              "Forgot your password? Ask your administrator to reset it."
+            )}
+          </p>
+        </CardContent>
+      </Card>
+    </>
   );
 }
 

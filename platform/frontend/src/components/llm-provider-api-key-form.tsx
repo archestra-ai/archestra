@@ -445,10 +445,12 @@ export function LlmProviderApiKeyForm({
     ? "ChatGPT subscription keys are per-user — each person connects their own ChatGPT account, so they can only be personal."
     : `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
   // The connected card: for Copilot providers editing implies an existing
-  // credential; for the OpenAI ChatGPT-subscription mode we can't tell from a
-  // masked secret, so only show it once a fresh sign-in has set the credential.
+  // credential. For the OpenAI ChatGPT-subscription mode, editing a key whose
+  // stored credential is already a subscription (known from the key metadata)
+  // counts as connected too; otherwise a fresh sign-in must have set it.
   const perUserCredentialConnected = isOpenaiChatgptSub
-    ? !!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER
+    ? (isEditMode && existingKey?.isChatgptSubscription === true) ||
+      (!!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER)
     : hasCopilotCredential;
 
   const visibilityOptions = useMemo(

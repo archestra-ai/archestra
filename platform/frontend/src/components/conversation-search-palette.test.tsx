@@ -153,12 +153,14 @@ describe("ConversationSearchPalette", () => {
           id: "conv-1",
           title: "First conversation",
           updatedAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
           messages: [],
         },
         {
           id: "conv-2",
           title: "Second conversation",
           updatedAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
           messages: [],
         },
       ],
@@ -189,6 +191,40 @@ describe("ConversationSearchPalette", () => {
 
     expect(screen.getByText("First conversation")).toBeInTheDocument();
     expect(screen.getByText("Second conversation")).toBeInTheDocument();
+  });
+
+  it("shows a date bucket label on each row instead of date group headings", () => {
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    // Both mock conversations have lastMessageAt = now → one "Today" label per
+    // row. With date headings there would be a single "Today" for the group.
+    expect(screen.getAllByText("Today")).toHaveLength(2);
+    expect(screen.queryByText("Previous 7 Days")).not.toBeInTheDocument();
+    expect(screen.queryByText("Previous 30 Days")).not.toBeInTheDocument();
+  });
+
+  it("keeps the Pinned heading for pinned conversations", () => {
+    mockUseConversations.mockReturnValue({
+      data: [
+        {
+          id: "conv-1",
+          title: "Pinned conversation",
+          updatedAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
+          pinnedAt: new Date().toISOString(),
+          messages: [],
+        },
+      ],
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    expect(screen.getByText("Pinned conversation")).toBeInTheDocument();
+    // Pinned rows show their date bucket too.
+    expect(screen.getByText("Today")).toBeInTheDocument();
   });
 
   it("routes Connect to the connection page", () => {

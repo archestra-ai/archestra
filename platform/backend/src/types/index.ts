@@ -36,6 +36,7 @@ export * from "./github-app-config";
 export * from "./hook";
 export * from "./identity-provider";
 export * from "./incoming-email";
+export * from "./instance-usage";
 export * from "./interaction";
 export * from "./interaction-guardrails";
 export * from "./invitation";

@@ -181,14 +181,16 @@ function getProviderMessagesCount(messages: unknown): number | null {
 /**
  * The subset of a proxied request body we read for session-id and client-app
  * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
- * → `system`/`metadata`; `extractSessionInfo` → `metadata`/`user`), so one
- * shared view keeps the cast in a single place.
+ * → `system`/`metadata`; `detectCodexClientId` → `client_metadata`;
+ * `extractSessionInfo` → `metadata`/`user`/`client_metadata`), so one shared
+ * view keeps the cast in a single place.
  */
 type RequestBodyForExtraction =
   | {
       system?: unknown;
       metadata?: { user_id?: string | null };
       user?: string | null;
+      client_metadata?: unknown;
     }
   | undefined;
 
@@ -219,10 +221,17 @@ export async function handleLLMProxy<
   const bodyForExtraction = body as RequestBodyForExtraction;
   // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
   // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
-  // app from the request and record it (Claude clients → "anthropic_claude").
+  // app from the request and record it (Claude clients → "anthropic_claude"
+  // from the request body; Codex clients → "openai_codex" from the
+  // client_metadata body shape or the originator/User-Agent headers the Codex
+  // CLI stamps on every request).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
-    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction);
+    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
+    utils.headers.clientApp.detectCodexClientId(
+      headersForExtraction,
+      bodyForExtraction,
+    );
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (
@@ -245,11 +254,14 @@ export async function handleLLMProxy<
   let oauthUserId: string | undefined;
   let regularVirtualKeyUserId: string | undefined;
 
+  // Session extraction reuses the resolved client attribution above to gate
+  // the Codex-specific signals, so client identification lives in one place.
   const { sessionId, sessionSource } =
-    utils.headers.sessionId.extractSessionInfo(
-      headersForExtraction,
-      bodyForExtraction,
-    );
+    utils.headers.sessionId.extractSessionInfo({
+      headers: headersForExtraction,
+      body: bodyForExtraction,
+      externalAgentId,
+    });
 
   // Extract interaction source (chat, chatops, email, etc.)
   // Internal callers set X-Archestra-Source; external API requests default to "api".
@@ -587,6 +599,19 @@ export async function handleLLMProxy<
     oauthUserId,
     regularVirtualKeyUserId,
   ]);
+
+  // Fall back to the personal standard virtual key's owner for user attribution.
+  // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
+  // X-Archestra-User-Id header — already set `userId` above, so this only fills
+  // the gap when a personal virtual key is the sole identity signal. That is the
+  // virtual-key connection mode: the connect flow mints a personal virtual key
+  // whose author is the acting user (Codex ChatGPT subscription, Claude Code
+  // virtual key). Consistency with any other authenticated identity was just
+  // asserted, so this can never disagree with them.
+  if (!userId && regularVirtualKeyUserId) {
+    userId = regularVirtualKeyUserId;
+    resolvedUser = await UserModel.getById(userId);
+  }
 
   if (!authMethod) {
     authMethod = passthroughVirtualKeyId

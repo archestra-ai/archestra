@@ -52,6 +52,7 @@ export const DocsPage = {
   PlatformProjects: "platform-projects",
   PlatformPydanticExample: "platform-pydantic-example",
   PlatformQuickstart: "platform-quickstart",
+  PlatformResetUserPassword: "platform-reset-user-password",
   PlatformSecretsManagement: "platform-secrets-management",
   PlatformSlack: "platform-slack",
   PlatformSsoTeamSync: "platform-sso-team-sync",

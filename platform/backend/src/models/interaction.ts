@@ -4,8 +4,7 @@ import type {
   PaginationQuery,
 } from "@archestra/shared";
 import {
-  CLAUDE_CLIENT_AGENT_IDS,
-  CLAUDE_CLIENT_FILTER,
+  clientFilterToAgentIds,
   isClaudeSessionSource,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
 } from "@archestra/shared";
@@ -1015,15 +1014,15 @@ class InteractionModel {
     }
 
     // Client-app filter — queries external_agent_id (the client-attribution
-    // column). CLAUDE_CLIENT_FILTER expands to every Claude client id, matched
+    // column). Each filter value expands to its client's agent ids, matched
     // case-insensitively (header values, auto-discovered, and backfilled).
-    if (filters?.client === CLAUDE_CLIENT_FILTER) {
+    if (filters?.client) {
       // Lower both sides so the match stays case-insensitive even if a
-      // mixed-case id is ever added to CLAUDE_CLIENT_AGENT_IDS.
+      // mixed-case id is ever added to a client's agent-id set.
       conditions.push(
         inArray(
           sql`lower(${schema.interactionsTable.externalAgentId})`,
-          CLAUDE_CLIENT_AGENT_IDS.map((id) => id.toLowerCase()),
+          clientFilterToAgentIds(filters.client).map((id) => id.toLowerCase()),
         ),
       );
     }
@@ -1352,8 +1351,10 @@ class InteractionModel {
           // We accept any interaction that has a valid request structure, not just text content.
           // This ensures we don't skip requests with images, files, or function calls.
           const request = interaction.request as {
-            // OpenAI/Anthropic format
+            // OpenAI/Anthropic chat-completions format
             messages?: Array<{ content?: string | Array<unknown> }>;
+            // OpenAI Responses format (e.g. Codex) carries turns in `input`
+            input?: Array<unknown>;
             // Gemini format
             contents?: Array<{
               role?: string;
@@ -1361,13 +1362,16 @@ class InteractionModel {
             }>;
           };
 
-          // Check if request has valid content (messages or contents array with items)
+          // Check if request has valid content (a messages / input / contents
+          // array with items) across all supported provider request shapes.
           const hasOpenAiContent =
             Array.isArray(request?.messages) && request.messages.length > 0;
+          const hasResponsesContent =
+            Array.isArray(request?.input) && request.input.length > 0;
           const hasGeminiContent =
             Array.isArray(request?.contents) && request.contents.length > 0;
 
-          if (hasOpenAiContent || hasGeminiContent) {
+          if (hasOpenAiContent || hasResponsesContent || hasGeminiContent) {
             lastMainInteraction = interaction;
           }
         }

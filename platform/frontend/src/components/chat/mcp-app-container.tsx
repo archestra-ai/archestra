@@ -111,12 +111,6 @@ type McpAppSectionProps = {
   uiResourceUri: string;
   agentId: string;
   /**
-   * The chat this render is embedded in. Forwarded (owned apps only) to the
-   * app-bound endpoint so assigned built-in file tools resolve this chat's
-   * file scope; the backend validates the viewer can access the chat.
-   */
-  conversationId?: string;
-  /**
    * Where this render lives. "inline" (default) is the chat-stream render: a pill
    * plus the app under it when open. "panel" is the right-panel host: the fill
    * card only (no pill), rendered directly — no portal.
@@ -282,7 +276,6 @@ export function McpAppEntryContent({
   uiResourceUri,
   agentId,
   appId,
-  conversationId,
   mcpServerId,
   appName,
   appVersion,
@@ -410,7 +403,7 @@ export function McpAppEntryContent({
       toolResourceUri={uiResourceUri}
       endpoint={
         appId
-          ? { kind: "app", appId, conversationId }
+          ? { kind: "app", appId }
           : mcpServerId
             ? { kind: "server", mcpServerId }
             : {

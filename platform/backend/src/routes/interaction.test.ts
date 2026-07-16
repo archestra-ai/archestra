@@ -3,6 +3,8 @@ import {
   CLAUDE_CLIENT_FILTER,
   CLAUDE_CLIENT_ID,
   CLAUDE_DESKTOP_CLIENT_ID,
+  CODEX_CLIENT_FILTER,
+  CODEX_CLIENT_ID,
 } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
@@ -490,6 +492,7 @@ describe("interaction routes", () => {
 
     await make("auto", CLAUDE_CLIENT_ID);
     await make("desktop", CLAUDE_DESKTOP_CLIENT_ID);
+    await make("codex", CODEX_CLIENT_ID);
     await make("customer", "my-custom-agent");
 
     // The Claude filter expands to every Claude client id → both Claude sessions.
@@ -500,13 +503,22 @@ describe("interaction routes", () => {
     expect(filtered.statusCode).toBe(200);
     expect(filtered.json().data).toHaveLength(2);
 
-    // No filter → all three sessions.
+    // The Codex filter → the single Codex session.
+    const codex = await app.inject({
+      method: "GET",
+      url: `/api/interactions/sessions?limit=50&offset=0&client=${CODEX_CLIENT_FILTER}`,
+    });
+    expect(codex.statusCode).toBe(200);
+    expect(codex.json().data).toHaveLength(1);
+    expect(codex.json().data[0].externalAgentIds).toEqual([CODEX_CLIENT_ID]);
+
+    // No filter → all four sessions.
     const all = await app.inject({
       method: "GET",
       url: "/api/interactions/sessions?limit=50&offset=0",
     });
     expect(all.statusCode).toBe(200);
-    expect(all.json().data).toHaveLength(3);
+    expect(all.json().data).toHaveLength(4);
   });
 
   test("counts distinct sessions plus sessionless interactions in the sessions total", async ({

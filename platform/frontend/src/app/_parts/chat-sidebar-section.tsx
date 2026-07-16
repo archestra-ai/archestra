@@ -73,6 +73,7 @@ import {
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
@@ -703,6 +704,13 @@ export function ChatSidebarSection({
   const subClass = flat ? "mx-0 border-l-0 px-0" : "mx-0 ml-3.5 px-0 pl-2.5";
   const showMore = recentUnpinnedChats.length > slots;
 
+  // The list arrives sorted by lastMessageAt desc, so grouping the visible
+  // slice by the same timestamp yields contiguous date sections.
+  const recentChatGroups = groupConversationsByDay(
+    recentUnpinnedChats.slice(0, slots),
+    (c) => c.lastMessageAt,
+  );
+
   return (
     <>
       {isLoading ? (
@@ -730,33 +738,32 @@ export function ChatSidebarSection({
             </SidebarGroup>
           )}
 
-          {recentUnpinnedChats.length > 0 && (
-            <SidebarGroup className="pt-0">
-              <SidebarGroupLabel>Recents</SidebarGroupLabel>
+          {recentChatGroups.map((group, groupIndex) => (
+            <SidebarGroup key={group.label} className="pt-0">
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuSub className={subClass}>
-                      {recentUnpinnedChats
-                        .slice(0, slots)
-                        .map((conv) => renderConversationItem(conv))}
-                      {showMore && (
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton
-                            className="cursor-pointer text-sidebar-foreground/70"
-                            onClick={openConversationSearch}
-                          >
-                            <MoreHorizontal />
-                            <span>More</span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      )}
+                      {group.chats.map((conv) => renderConversationItem(conv))}
+                      {showMore &&
+                        groupIndex === recentChatGroups.length - 1 && (
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton
+                              className="cursor-pointer text-sidebar-foreground/70"
+                              onClick={openConversationSearch}
+                            >
+                              <MoreHorizontal />
+                              <span>More</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
                     </SidebarMenuSub>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-          )}
+          ))}
         </ChatListFadeIn>
       )}
 

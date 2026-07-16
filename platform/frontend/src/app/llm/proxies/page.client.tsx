@@ -271,7 +271,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
-            scope={agent.scope}
             description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
@@ -298,24 +297,21 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         );
       },
     },
-    ...(isAdmin
-      ? [
-          {
-            id: "team",
-            header: "Accessible to",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: ProxyData } }) => (
-              <ResourceVisibilityBadge
-                scope={row.original.scope}
-                teams={row.original.teams}
-                authorId={row.original.authorId}
-                authorName={row.original.authorName}
-                currentUserId={currentUserId}
-              />
-            ),
-          } satisfies ColumnDef<ProxyData>,
-        ]
-      : []),
+    {
+      id: "team",
+      header: "Accessible to",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",

@@ -1981,6 +1981,81 @@ fn narrowing_onto_an_unstated_contract_escalates_rather_than_unlocking() {
     assert_eq!(block.reason, BlockReason::NoRemedy);
 }
 
+/// The same claim, carried through *application*: the mandatory recheck must
+/// re-derive the requirement fact from the tool the narrow landed on.
+///
+/// The planner-side test above never applies its narrow, so it cannot see the
+/// recheck. This one can: with an authority able to acknowledge unknowns the
+/// narrow becomes a real first step, and once it lands the recheck must still
+/// surface the target's unstated requirements. A recheck that inherited the
+/// source's stated requirements — or defaulted the target's absent ones —
+/// would launder a suspicious flow into a permit here.
+#[test]
+fn applying_a_narrow_re_decides_the_targets_requirement_fact() {
+    let fetch = ToolContract {
+        name: ToolName::new("web.fetch"),
+        requires: Some(Requirements {
+            trust: Some(KnownTrust::Trusted),
+            ..Requirements::default()
+        }),
+        output_label: ValueLabel::identity(),
+        effects: Effects::none(),
+        arguments: ArgumentSchema::opaque(),
+    };
+    let mystery = ToolContract {
+        name: ToolName::new("web.fetch.mystery"),
+        requires: None,
+        output_label: ValueLabel::identity(),
+        effects: Effects::none(),
+        arguments: ArgumentSchema::opaque(),
+    };
+    let mut engine = engine_with([fetch, mystery]);
+    engine
+        .register_action_transition(ActionTransition {
+            id: crate::value::TransformerRef {
+                id: "to-mystery".into(),
+                version: 1,
+            },
+            from_tool: ToolName::new("web.fetch"),
+            to_tool: ToolName::new("web.fetch.mystery"),
+            effects: Effects::none(),
+        })
+        .unwrap();
+    // Acknowledge-only: it can clear the target's unknown, but owns no trust
+    // competence, so it can never clear the source's proven breach.
+    engine
+        .register_authority(inline_authority(
+            "acknowledger",
+            crate::transition::AuthorityMandate {
+                acknowledge_unknown: true,
+                ..crate::transition::AuthorityMandate::none()
+            },
+            approve_all,
+        ))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let url = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "http://x");
+    let request = ToolRequest::new(ToolName::new("web.fetch"), ArgumentTree::Value(url), BTreeSet::new());
+
+    let plans = remediable(&engine, &mut trajectory, request);
+    let plan = plans
+        .iter()
+        .find(|p| narrow_step(p.steps.first()).is_some())
+        .expect("the acknowledger makes narrow-then-acknowledge a plan");
+
+    // Apply the narrow. The recheck re-decides against `web.fetch.mystery`,
+    // so the trust breach is gone and the target's own unstated requirements
+    // stand in its place — remediable by acknowledgement, never permitted.
+    match apply_first_step(&engine, &mut trajectory, plan.id) {
+        StepOutcome::Advanced(FlowOutcome::Remediable { violations, .. }) => assert_eq!(
+            violations.as_slice(),
+            [Violation::Unprovable(Unprovable::RequirementsUnknown)],
+            "the recheck must re-derive the target's requirement fact, not inherit the source's"
+        ),
+        other => panic!("expected the narrowed flow to stay remediable on its unknown, got {other:?}"),
+    }
+}
+
 /// With no registered remedy that predicts a clean flow, the block stays
 /// terminal.
 #[test]

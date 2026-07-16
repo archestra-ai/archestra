@@ -2086,51 +2086,6 @@ class ToolModel {
   }
 
   /**
-   * The Archestra-catalog rows for the given full tool names — the resolution
-   * path for the app-assignable built-ins (the read-only file tools), which the
-   * generic app-assignable queries deliberately exclude. Callers are expected
-   * to have allowlisted the names via `isAppAssignableArchestraTool` first;
-   * this only resolves rows within the fixed built-in catalog, so it can never
-   * return an upstream or foreign-org tool.
-   */
-  static async findArchestraCatalogToolsByNames(
-    names: readonly string[],
-  ): Promise<Tool[]> {
-    if (names.length === 0) return [];
-    return await db
-      .select()
-      .from(schema.toolsTable)
-      .where(
-        and(
-          inArray(schema.toolsTable.name, [...names]),
-          eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-        ),
-      );
-  }
-
-  /**
-   * By-id counterpart of {@link findArchestraCatalogToolsByNames}: the tool row
-   * only if it belongs to the fixed Archestra built-in catalog. The caller must
-   * still allowlist the resolved name (`isAppAssignableArchestraTool`) — this
-   * resolves identity, not assignability.
-   */
-  static async findArchestraCatalogToolById(
-    toolId: string,
-  ): Promise<Tool | null> {
-    const [row] = await db
-      .select()
-      .from(schema.toolsTable)
-      .where(
-        and(
-          eq(schema.toolsTable.id, toolId),
-          eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-        ),
-      )
-      .limit(1);
-    return row ?? null;
-  }
-
-  /**
    * Resolve a single app-assignable tool by id within the caller's organization
    * (catalog-backed, org-owned or global). A tool from another org — or a
    * non-catalog/built-in tool — returns null, so the raw-id assignment endpoint

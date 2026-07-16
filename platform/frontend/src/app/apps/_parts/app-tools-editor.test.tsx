@@ -67,7 +67,6 @@ const {
 vi.mock("@/lib/app.query", () => ({
   useApp: useAppMock,
   useAppTools: useAppToolsMock,
-  useAppAssignableBuiltinTools: () => ({ data: [] }),
   useAssignToolToApp: () => ({ mutate: assignMutate }),
   useUnassignToolFromApp: () => ({ mutate: unassignMutate }),
 }));

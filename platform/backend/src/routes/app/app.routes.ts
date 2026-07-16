@@ -22,7 +22,6 @@ import {
   AppToolModel,
   AppVersionModel,
   McpServerModel,
-  ToolModel,
   UserModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
@@ -45,7 +44,6 @@ import {
   deleteAppBacking,
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
-import { getAppAssignableBuiltinFullNames } from "@/services/apps/app-tool-runtime-gate";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
@@ -927,31 +925,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.get(
-    "/api/apps/assignable-builtin-tools",
-    {
-      schema: {
-        operationId: RouteId.GetAppAssignableBuiltinTools,
-        description:
-          "List the built-in Archestra tools that can be assigned to apps (the read-only file tools). Empty when the governing feature flags are off.",
-        tags: ["Apps"],
-        response: constructResponseSchema(z.array(SelectToolSchema)),
-      },
-    },
-    async (_request, reply) => {
-      // The canonical availability predicate is the single filter: the tools
-      // editor renders exactly what this returns, so the frontend never
-      // duplicates the allowlist or the feature-flag logic.
-      const names = getAppAssignableBuiltinFullNames();
-      if (names.length === 0) {
-        return reply.send([]);
-      }
-      return reply.send(
-        await ToolModel.findArchestraCatalogToolsByNames(names),
-      );
-    },
-  );
-
   fastify.post(
     "/api/apps/:appId/diagnostics",
     {
@@ -1060,8 +1033,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.AssignToolToApp,
-        description:
-          "Assign a tool to an app: an upstream MCP-server tool, or one of the app-assignable built-in file tools.",
+        description: "Assign an upstream tool to an app.",
         tags: ["Apps"],
         params: z.object({ appId: UuidIdSchema, toolId: UuidIdSchema }),
         body: z

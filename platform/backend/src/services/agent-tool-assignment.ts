@@ -12,7 +12,6 @@ import {
   ToolModel,
 } from "@/models";
 import { resolveAppAssignableToolRows } from "@/services/apps/app-assignable-tools";
-import { isAppAssignableArchestraTool } from "@/services/apps/app-tool-runtime-gate";
 import type {
   AgentScope,
   CredentialResolutionMode,
@@ -174,8 +173,8 @@ export async function validateAssignment(
  * shared surface `search_tools` and the app runtime resolve against, so a
  * duplicate name (unique only per catalog) collapses to the SAME canonical row
  * the model saw and the app will execute — never an ambiguity error the caller
- * cannot disambiguate. Built-ins are rejected (except the app-assignable
- * read-only file tools) and an unknown name errors with the offenders listed. The resulting assignments use dynamic credential
+ * cannot disambiguate. Built-ins are rejected and an unknown name errors with
+ * the offenders listed. The resulting assignments use dynamic credential
  * resolution: the server (and so the credential) is picked per viewing user at
  * call time, which both makes the assignment valid without an explicit
  * mcpServerId and gives shared apps per-viewer auth.
@@ -191,38 +190,14 @@ export async function resolveAppToolsByName(params: {
 }): Promise<
   { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
 > {
-  // The authoring guidance names the app-assignable built-ins by their short
-  // names (search_files, read_file) — accept those alongside the full prefixed
-  // form, normalizing to the canonical prefixed name the catalog row carries.
-  // A bare short name can never collide with an upstream tool: catalog tool
-  // names are always `<server>__<tool>`-prefixed.
-  const requested = [
-    ...new Set(
-      params.toolNames.map((name) =>
-        isAppAssignableArchestraTool(name)
-          ? archestraMcpBranding.getToolName(name)
-          : name,
-      ),
-    ),
-  ];
+  const requested = [...new Set(params.toolNames)];
 
-  // Built-ins are unassignable — except the app-assignable file tools (behind
-  // the canonical availability predicate), which are the whole point of the
-  // per-app grant. They live in the fixed built-in catalog, outside the
-  // org/environment-scoped query below, so they resolve separately.
   const builtIns = requested.filter((name) =>
     archestraMcpBranding.isToolName(name),
   );
-  const assignableBuiltIns = builtIns.filter((name) => {
-    const shortName = archestraMcpBranding.getToolShortName(name);
-    return shortName !== null && isAppAssignableArchestraTool(shortName);
-  });
-  const rejectedBuiltIns = builtIns.filter(
-    (name) => !assignableBuiltIns.includes(name),
-  );
-  if (rejectedBuiltIns.length > 0) {
+  if (builtIns.length > 0) {
     return appToolsValidationError(
-      `Built-in tools cannot be assigned to apps (app HTML reaches the data store via archestra.storage automatically): ${rejectedBuiltIns.join(", ")}`,
+      `Built-in tools cannot be assigned to apps (app HTML reaches the data store via archestra.storage automatically): ${builtIns.join(", ")}`,
     );
   }
 
@@ -232,14 +207,6 @@ export async function resolveAppToolsByName(params: {
     organizationId: params.organizationId,
     environmentId: params.environmentId,
   });
-  // The app-assignable built-ins live in the fixed built-in catalog, which
-  // resolveAppAssignableToolRows deliberately excludes — resolve them
-  // separately (their names were allowlisted above).
-  for (const row of await ToolModel.findArchestraCatalogToolsByNames(
-    assignableBuiltIns,
-  )) {
-    byName.set(row.name, row);
-  }
 
   const unknown = requested.filter((name) => !byName.has(name));
   if (unknown.length > 0) {
@@ -310,23 +277,11 @@ export async function assignToolToApp(params: {
   }
 
   // Org-scoped: a tool from another organization is indistinguishable from a
-  // nonexistent one, so this raw-id endpoint cannot attach or probe foreign
-  // tools. The app-assignable built-ins live in the fixed Archestra catalog
-  // (global, excluded by the org-scoped query), so they resolve separately —
-  // and only through the canonical availability allowlist.
-  let tool = await ToolModel.findAppAssignableToolById(
+  // nonexistent one, so this raw-id endpoint cannot attach or probe foreign tools.
+  const tool = await ToolModel.findAppAssignableToolById(
     params.organizationId,
     params.toolId,
   );
-  if (!tool) {
-    const builtin = await ToolModel.findArchestraCatalogToolById(params.toolId);
-    const shortName = builtin
-      ? archestraMcpBranding.getToolShortName(builtin.name)
-      : null;
-    if (builtin && shortName && isAppAssignableArchestraTool(shortName)) {
-      tool = builtin;
-    }
-  }
   if (!tool) {
     return {
       code: "not_found",

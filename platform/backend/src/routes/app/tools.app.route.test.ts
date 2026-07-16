@@ -1,12 +1,5 @@
-import {
-  ADMIN_ROLE_NAME,
-  ARCHESTRA_MCP_CATALOG_ID,
-  TOOL_SAVE_FILE_FULL_NAME,
-  TOOL_SEARCH_FILES_FULL_NAME,
-} from "@archestra/shared";
-import config from "@/config";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import EnvironmentModel from "@/models/environment";
-import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -231,61 +224,5 @@ describe("/api/apps/:appId/tools", () => {
       payload: { credentialResolutionMode: "dynamic" },
     });
     expect(response.statusCode).toBe(200);
-  });
-
-  // Registration of the built-in file tools is gated on the sandbox flag, so
-  // it must be on before seeding. Config is restored pristine before every
-  // test.
-  async function seedAppAssignableBuiltins() {
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
-    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-  }
-
-  test("assigns the built-in search_files tool by id, lists it, then unassigns it", async ({
-    makeApp,
-  }) => {
-    await seedAppAssignableBuiltins();
-    const [searchFiles] = await ToolModel.findArchestraCatalogToolsByNames([
-      TOOL_SEARCH_FILES_FULL_NAME,
-    ]);
-    const created = await makeApp({ organizationId, scope: "org" });
-
-    const assigned = await app.inject({
-      method: "POST",
-      url: `/api/apps/${created.id}/tools/${searchFiles.id}`,
-      payload: { credentialResolutionMode: "dynamic" },
-    });
-    expect(assigned.statusCode).toBe(200);
-
-    const tools = await app.inject({
-      method: "GET",
-      url: `/api/apps/${created.id}/tools`,
-    });
-    expect(tools.json().map((t: { id: string }) => t.id)).toContain(
-      searchFiles.id,
-    );
-
-    const unassigned = await app.inject({
-      method: "DELETE",
-      url: `/api/apps/${created.id}/tools/${searchFiles.id}`,
-    });
-    expect(unassigned.statusCode).toBe(200);
-  });
-
-  test("assigning the built-in save_file tool by id returns 404", async ({
-    makeApp,
-  }) => {
-    await seedAppAssignableBuiltins();
-    const [saveFile] = await ToolModel.findArchestraCatalogToolsByNames([
-      TOOL_SAVE_FILE_FULL_NAME,
-    ]);
-    const created = await makeApp({ organizationId, scope: "org" });
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/apps/${created.id}/tools/${saveFile.id}`,
-      payload: { credentialResolutionMode: "dynamic" },
-    });
-    expect(response.statusCode).toBe(404);
   });
 });

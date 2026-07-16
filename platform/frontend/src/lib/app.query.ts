@@ -9,7 +9,6 @@ const {
   getExternalApp,
   getAppVersions,
   getAppTools,
-  getAppAssignableBuiltinTools,
   createApp,
   updateApp,
   deleteApp,
@@ -107,22 +106,6 @@ export function useAppTools(appId: string | null) {
         path: { appId: appId as string },
       });
       throwOnApiError(error, { allowNotFound: true });
-      return data ?? [];
-    },
-  });
-}
-
-/**
- * The built-in Archestra tools an app may be granted (the read-only file
- * tools). Server-filtered: empty when the governing feature flags are off, so
- * the editor never re-implements the availability rule client-side.
- */
-export function useAppAssignableBuiltinTools() {
-  return useQuery({
-    queryKey: ["apps", "assignable-builtin-tools"],
-    queryFn: async () => {
-      const { data, error } = await getAppAssignableBuiltinTools();
-      throwOnApiError(error);
       return data ?? [];
     },
   });

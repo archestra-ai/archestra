@@ -165,6 +165,36 @@ async function runClaudeSettingsMerge(params: {
   }
 }
 
+/**
+ * Runs the real `cli` helper (lifted out of a rendered script) the way
+ * `curl | bash` runs it: bash reads the script from a pipe, so every command it
+ * starts inherits that pipe on stdin unless `cli` redirects it. Returns what the
+ * invoked command actually read.
+ */
+async function runCliWithScriptOnStdin(archStdin: string): Promise<string> {
+  const helpers = renderSetupScript(fullContext("claude-code"))
+    .split("set -euo pipefail\n\n")[1]
+    .split("\n\ncat <<'ARCHESTRA_BANNER'")[0];
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-cli-"));
+  try {
+    const file = path.join(dir, "setup.sh");
+    await writeFile(
+      file,
+      `set -euo pipefail\n${helpers}\nARCH_STDIN=${archStdin}\ncli cat\n`,
+      "utf8",
+    );
+    const { stdout } = await execFileAsync("bash", [
+      "-c",
+      `printf '%s\\n' 'FROM-THE-CURL-PIPE' | bash "$1"`,
+      "bash",
+      file,
+    ]);
+    return stdout;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 const ALL_CLIENTS = ["claude-code", "codex", "copilot-cli", "cursor"] as const;
 
 describe("renderSetupScript", () => {
@@ -188,6 +218,24 @@ describe("renderSetupScript", () => {
       expect(script).toContain(SKILLS.marketplaceName);
     });
 
+    test(`${clientId}: client CLIs are never left on the curl pipe`, () => {
+      const script = renderSetupScript(fullContext(clientId));
+      // `curl | bash` puts the download pipe on stdin, and every command the
+      // script starts inherits it. A client CLI probes the terminal for its
+      // theme/capabilities by writing to stdout, but it can only silence the
+      // echo and read the reply back when stdin is a tty — so on the pipe the
+      // terminal's replies ("rgb:1e1e/1e1e/1e1e", "^[[?1;2c") echo into this
+      // script's output, and the CLI could read the script itself as input.
+      // Every invocation goes through `cli`, which redirects stdin.
+      const onThePipe = script
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) =>
+          /^(?:if\s+!\s+|!\s+)?(?:claude|codex|copilot)\s/.test(line),
+        );
+      expect(onThePipe).toEqual([]);
+    });
+
     test(`${clientId}: sections are omitted when not selected`, async () => {
       const script = renderSetupScript({
         clientId,
@@ -205,22 +253,47 @@ describe("renderSetupScript", () => {
     });
   }
 
+  test("bash: `cli` keeps the piped-in script off a command's stdin", async () => {
+    // No terminal to hand over (CI, or any non-interactive run): the command
+    // gets EOF — never the rest of this script.
+    expect(await runCliWithScriptOnStdin("/dev/null")).toBe("");
+  });
+
+  test("bash: `cli` gives a command the terminal, not the download pipe", async () => {
+    // Stand-in for /dev/tty. A real terminal is what lets a client CLI turn the
+    // echo off and consume its own probe replies, so they stop leaking into the
+    // output as stray "rgb:1e1e/1e1e/1e1e" / "^[[?1;2c" text. /dev/null alone
+    // would not do: the probe is keyed on stdout, so it still fires and echoes.
+    const dir = await mkdtemp(path.join(tmpdir(), "archestra-tty-"));
+    try {
+      const fakeTty = path.join(dir, "tty");
+      await writeFile(fakeTty, "FROM-THE-TERMINAL\n", "utf8");
+      expect(await runCliWithScriptOnStdin(fakeTty)).toBe(
+        "FROM-THE-TERMINAL\n",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("claude-code: registers gateway idempotently and merges settings.json", () => {
     const script = renderSetupScript(fullContext("claude-code"));
+    // The real terminal is preferred over /dev/null when there is one.
+    expect(script).toContain("ARCH_STDIN=/dev/tty");
     expect(script).toContain(
-      "claude mcp remove 'prod_gateway' >/dev/null 2>&1 || true",
+      "cli claude mcp remove 'prod_gateway' >/dev/null 2>&1 || true",
     );
     expect(script).toContain(
-      `claude mcp add --transport http 'prod_gateway' '${MCP.url}'`,
+      `cli claude mcp add --transport http 'prod_gateway' '${MCP.url}'`,
     );
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain(
-      `claude plugin marketplace add '${SKILLS.cloneUrl}'`,
+      `cli claude plugin marketplace add '${SKILLS.cloneUrl}'`,
     );
     // The skill bundle is installed by the script, not via a manual browse step.
     expect(script).toContain(
-      `claude plugin install '${SKILLS.marketplaceName}@${SKILLS.marketplaceName}'`,
+      `cli claude plugin install '${SKILLS.marketplaceName}@${SKILLS.marketplaceName}'`,
     );
     expect(script).not.toContain("marketplace browse");
     // python3 fallback prints a manual snippet rather than failing.

@@ -200,6 +200,10 @@ function sanitizeAppName(appName: string): string {
  * file or a non-interactive shell keeps it clean ANSI-free text. `say` marks
  * section headers, `ok` a success, `warn`/`err` advisory and failure lines
  * (err goes to stderr so `curl -f | bash` surfaces it).
+ *
+ * `cli` runs an external client CLI with a usable stdin — see the comment it
+ * carries into the script. Every `claude`/`codex`/`copilot` invocation must go
+ * through it, except ones already fed by a pipe (they own their stdin).
  */
 const SCRIPT_HELPERS = `if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ]; then
   ARCH_C_RESET=$'\\033[0m'; ARCH_C_HEAD=$'\\033[1;36m'; ARCH_C_OK=$'\\033[1;32m'
@@ -210,7 +214,18 @@ fi
 say()  { printf '\\n%s==> %s%s\\n' "$ARCH_C_HEAD" "$1" "$ARCH_C_RESET"; }
 ok()   { printf '%s==>%s %s\\n' "$ARCH_C_OK" "$ARCH_C_RESET" "$1"; }
 warn() { printf '%swarning:%s %s\\n' "$ARCH_C_WARN" "$ARCH_C_RESET" "$1"; }
-err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }`;
+err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }
+
+# This script is piped into bash, so its stdin is the download pipe rather than
+# the terminal, and every command it starts inherits that. A CLI that probes the
+# terminal for its theme or capabilities writes the query to stdout but needs a
+# tty on stdin to switch the echo off and read the answer back; handed a pipe it
+# can do neither, so the terminal's answers echo into this output as stray text
+# like "rgb:1e1e/1e1e/1e1e" and "^[[?1;2c". Run those CLIs against the real
+# terminal when there is one — /dev/null is not enough, the probe is keyed on
+# stdout and would still echo — and never let them read this script as input.
+if (exec </dev/tty) 2>/dev/null; then ARCH_STDIN=/dev/tty; else ARCH_STDIN=/dev/null; fi
+cli() { "$@" <"$ARCH_STDIN"; }`;
 
 function header(ctx: SetupScriptContext): string {
   const label = CLIENT_LABELS[ctx.clientId];
@@ -450,8 +465,8 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-claude mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
+cli claude mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   }
 
   if (ctx.proxy) {
@@ -465,10 +480,10 @@ claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   if (ctx.skills) {
     const pluginRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
     sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" skills bundle`)}
-if ! claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+if ! cli claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — continuing."
 fi
-if ! claude plugin install ${sh(pluginRef)}; then
+if ! cli claude plugin install ${sh(pluginRef)}; then
   warn ${sh(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)}
 fi`);
   }
@@ -631,8 +646,8 @@ function codexSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
+cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
   }
 
   if (ctx.proxy) {
@@ -678,7 +693,7 @@ echo "Codex keeps using your own OpenAI API key login."`
 
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
-if ! codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run /plugins inside Codex to inspect."
 fi`);
   }
@@ -695,9 +710,9 @@ function copilotSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-copilot mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}
-copilot mcp get ${sh(ctx.mcp.serverName)}`);
+cli copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli copilot mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}
+cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
   }
 
   if (ctx.proxy) {
@@ -723,7 +738,7 @@ ARCHESTRA_COPILOT`);
 
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
-if ! copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+if ! cli copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
 fi`);
   }

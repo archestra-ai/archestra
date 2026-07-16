@@ -26,7 +26,6 @@ import {
   AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
-  FileModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -1444,9 +1443,9 @@ function requireAuthed(
  * existence oracle for other people's files. The caller's capability to read
  * files at all is checked separately, before this runs.
  *
- * Bytes are refused before they are loaded when the file is already too large
- * to be an app: a saved artifact may be many times the app limit, and there is
- * no reason to materialize one only to reject it.
+ * Nothing is reported about a file before that resolution — not even its size.
+ * Answering "too large" ahead of the ACL would confirm the file exists, and
+ * name it, to a caller with no right to know either.
  */
 async function resolveHtmlSource(params: {
   userId: string;
@@ -1458,18 +1457,6 @@ async function resolveHtmlSource(params: {
       `No file ${params.fileId} that you can read. Check the id from download_file, save_file, or search_files.`,
     ),
   });
-
-  const metadata = await FileModel.findById(params.fileId);
-  if (!metadata || metadata.organizationId !== params.organizationId) {
-    return notFound();
-  }
-  if (metadata.sizeBytes > APP_HTML_MAX_BYTES) {
-    return {
-      error: errorResult(
-        `"${metadata.filename}" is ${metadata.sizeBytes} bytes, over the ${APP_HTML_MAX_BYTES}-byte limit for an app document. Nothing was saved.`,
-      ),
-    };
-  }
 
   let resolved: Awaited<ReturnType<typeof fileStore.get>>;
   try {
@@ -1489,12 +1476,24 @@ async function resolveHtmlSource(params: {
     throw error;
   }
   if (!resolved) return notFound();
+  const displayName = escapeAppNameForModelText(resolved.filename);
+
+  // buildValidatedVersionPayload enforces this cap again on the assembled
+  // document, which is what actually guards the write; checking here only buys
+  // a message that names the file and its real size.
+  if (resolved.data.byteLength > APP_HTML_MAX_BYTES) {
+    return {
+      error: errorResult(
+        `"${displayName}" is ${resolved.data.byteLength} bytes, over the ${APP_HTML_MAX_BYTES}-byte limit for an app document. Nothing was saved.`,
+      ),
+    };
+  }
 
   const html = decodeUtf8Text(resolved.data);
   if (html === null) {
     return {
       error: errorResult(
-        `"${resolved.filename}" (${resolved.mimeType}) is not UTF-8 text, so it cannot be an app document. Nothing was saved.`,
+        `"${displayName}" (${resolved.mimeType}) is not UTF-8 text, so it cannot be an app document. Nothing was saved.`,
       ),
     };
   }
@@ -1503,7 +1502,7 @@ async function resolveHtmlSource(params: {
   if (html.length === 0) {
     return {
       error: errorResult(
-        `"${resolved.filename}" is empty, so there is no document to save. Nothing was saved.`,
+        `"${displayName}" is empty, so there is no document to save. Nothing was saved.`,
       ),
     };
   }

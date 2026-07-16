@@ -6,7 +6,12 @@
 // the model, and — once the repeats cross a ceiling — so the run's stop policy
 // can terminate the loop instead of nudging into the void.
 
-import { NoSuchToolError, type StopCondition, type ToolSet } from "ai";
+import {
+  NoSuchToolError,
+  type StopCondition,
+  type ToolSet,
+  type TypedToolCall,
+} from "ai";
 
 /**
  * Consecutive identical tool calls that execute normally before the tracker
@@ -32,7 +37,7 @@ export const REPEAT_CALL_TERMINATION_CEILING = 6;
  * not need this — it renders the breaker's terminal tool-result part directly.
  */
 export const REPEAT_CALL_TERMINATION_NOTICE =
-  "The run was stopped because the agent repeatedly issued the same tool call with identical arguments without making progress.";
+  "The run was stopped because the agent repeatedly issued the same tool call without making progress.";
 
 /**
  * How the breaker should respond to a recorded call:
@@ -139,62 +144,77 @@ export function repeatCeilingStopCondition(
 }
 
 /**
- * `onChunk` handler bound to one run's tracker, fingerprinting calls to tools
- * that are not in the request's tool list.
+ * Fingerprints a finished step in which the model called a tool that is not in
+ * its tool list. Call from `onStepFinish` on every `streamText` config that
+ * wires {@link repeatCeilingStopCondition}, or that config keeps the blind spot.
  *
  * Such a call never reaches a tool's `execute` wrapper — the SDK turns it into
  * an invalid tool-call plus a synthetic tool-error, feeds that back to the
  * model, and takes another step — so {@link ToolCallRepeatTracker.record} is
  * never reached for it and the ceiling can never fire. A model that keeps
  * asking for a hidden or misremembered tool would otherwise spin to
- * MAX_AGENT_STEPS. Add this to every `streamText` config that wires
- * {@link repeatCeilingStopCondition}, or that config keeps the blind spot.
+ * MAX_AGENT_STEPS.
  *
- * The SDK awaits `onChunk` per parsed tool call before the step is finalized,
- * and finalization precedes stop evaluation, so the streak this records is
- * already visible to the stop condition for the same step.
+ * A step counts once, however many such calls it made. Six parallel calls at
+ * one missing tool are a single decision, not six attempts: counting each would
+ * reach the ceiling inside that step and kill the run before the errors it
+ * needs in order to recover ever reach it. Counting per step also means the
+ * streak measures what it claims — how many times the model saw the failure and
+ * repeated it anyway.
+ *
+ * The SDK awaits `onStepFinish` before it resolves the step, and the step
+ * resolves before stop conditions are evaluated, so a streak recorded here is
+ * already visible to the ceiling for the same step.
  */
-export function unavailableToolCallRecorder(tracker: ToolCallRepeatTracker) {
-  return ({ chunk }: { chunk: ObservedStreamChunk }): void => {
-    if (!isUnavailableToolCall(chunk)) return;
-    // Args are deliberately left out of the fingerprint. The call failed
-    // because the tool does not exist, which is a function of the name alone —
-    // it would fail identically with any arguments. Fingerprinting the args
-    // would make every retry a fresh streak and the ceiling would never fire,
-    // which is the blind spot this closes.
-    tracker.record(chunk.toolName, undefined);
-  };
+export function recordUnavailableToolCallStep(
+  tracker: ToolCallRepeatTracker,
+  step: { toolCalls?: readonly ObservedToolCall[] },
+): void {
+  // A step naming two different missing tools counts as the first: the streak
+  // tracks one wall being hit repeatedly, and there is no meaningful streak
+  // across a model that reaches for a different absent tool each time.
+  const unavailable = step.toolCalls?.find(isUnavailableToolCall);
+  if (!unavailable) return;
+  // Args are deliberately left out of the fingerprint. The call failed because
+  // the tool does not exist, which is a function of the name alone — it would
+  // fail identically with any arguments. Fingerprinting them would make every
+  // retry a fresh streak and the ceiling would never fire, which is the blind
+  // spot this closes.
+  tracker.record(unavailable.toolName, undefined);
 }
 
 /**
- * The fields {@link unavailableToolCallRecorder} reads off a stream chunk. Every
- * `onChunk` part the SDK emits is assignable to this, and it is deliberately
- * structural rather than the SDK's `TextStreamPart` union: the recorder needs
- * four fields, not a tool-generic type that would push `ToolSet` inference
- * through this module for nothing.
+ * The fields {@link recordUnavailableToolCallStep} reads off a step's tool call.
+ * Deliberately structural rather than the SDK's tool-generic `TypedToolCall`,
+ * which would push `ToolSet` inference through this module for three fields —
+ * but the assertion below keeps it honest: if the SDK renames or retypes any of
+ * them, this stops compiling instead of silently never matching again and
+ * quietly restoring the bug.
  */
-type ObservedStreamChunk = {
-  type: string;
+type ObservedToolCall = {
   toolName?: unknown;
   invalid?: boolean;
   error?: unknown;
 };
 
+type _SdkToolCallIsObservable =
+  TypedToolCall<ToolSet> extends ObservedToolCall ? true : never;
+const _assertSdkToolCallIsObservable: _SdkToolCallIsObservable = true;
+
 /**
- * Narrows a stream chunk to a tool call the SDK rejected because no such tool
+ * Narrows a step's tool call to one the SDK rejected because no such tool
  * exists. `invalid` also covers unparsable arguments for a tool that *does*
  * exist, so the error identity — not the flag alone — is what selects this
  * case: an unparsable call is repaired or surfaced elsewhere, and its retry is
  * fingerprinted normally by the tool wrapper once it parses.
  */
 function isUnavailableToolCall(
-  chunk: ObservedStreamChunk,
-): chunk is ObservedStreamChunk & { toolName: string } {
+  call: ObservedToolCall,
+): call is ObservedToolCall & { toolName: string } {
   return (
-    chunk.type === "tool-call" &&
-    chunk.invalid === true &&
-    typeof chunk.toolName === "string" &&
-    NoSuchToolError.isInstance(chunk.error)
+    call.invalid === true &&
+    typeof call.toolName === "string" &&
+    NoSuchToolError.isInstance(call.error)
   );
 }
 

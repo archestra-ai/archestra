@@ -3168,8 +3168,9 @@ describe("edit_app replacementHtmlSource", () => {
     expect(head?.html).not.toContain("aaaa");
   });
 
-  test("refuses bytes that are not text", async () => {
+  test("refuses bytes that are not text and leaves the app alone", async () => {
     const appId = await scaffoldApp("Binary");
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
     const file = await saveFile({
       filename: "image.html",
       data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a]),
@@ -3179,10 +3180,15 @@ describe("edit_app replacementHtmlSource", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not UTF-8 text");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+    expect((await AppVersionModel.findByAppAndVersion(appId, 1))?.html).toBe(
+      seeded?.html,
+    );
   });
 
   test("refuses an empty file rather than emptying the app", async () => {
     const appId = await scaffoldApp("Empty");
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
     const file = await saveFile({
       filename: "empty.html",
       data: Buffer.alloc(0),
@@ -3192,36 +3198,60 @@ describe("edit_app replacementHtmlSource", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("empty");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+    expect((await AppVersionModel.findByAppAndVersion(appId, 1))?.html).toBe(
+      seeded?.html,
+    );
   });
 
-  test("reports an unknown file and another user's file identically", async ({
+  test("tells a caller nothing about a file they may not read, whatever its size", async ({
     makeUser,
     makeMember,
   }) => {
     const appId = await scaffoldApp("Not Mine");
     const stranger = await makeUser();
     await makeMember(stranger.id, organizationId, { role: ADMIN_ROLE_NAME });
-    const theirFile = await saveFile({
-      filename: "theirs.html",
+    const theirSmallFile = await saveFile({
+      filename: "theirs-small.html",
       data: Buffer.from(DOCUMENT, "utf8"),
       owner: stranger.id,
     });
+    // Over the app limit: the branch that answers "too big" must not run before
+    // the ACL, or the size of the reply alone reveals the file is real and
+    // names it.
+    const theirHugeFile = await saveFile({
+      filename: "theirs-secret-name.html",
+      data: Buffer.alloc(APP_HTML_MAX_BYTES + 1, "a"),
+      owner: stranger.id,
+    });
 
-    const foreign = await editFromSource(appId, theirFile.id);
     const missing = await editFromSource(
       appId,
       "00000000-0000-4000-8000-000000000000",
     );
+    const foreignSmall = await editFromSource(appId, theirSmallFile.id);
+    const foreignHuge = await editFromSource(appId, theirHugeFile.id);
 
-    expect(foreign.isError).toBe(true);
+    const withoutId = (result: { content: unknown[] }, id: string) =>
+      ((result.content[0] as any).text as string).replace(id, "ID");
+    const missingText = withoutId(
+      missing,
+      "00000000-0000-4000-8000-000000000000",
+    );
+
     expect(missing.isError).toBe(true);
-    // Identical wording: a file the caller may not read must not be
-    // distinguishable from one that does not exist.
-    expect((foreign.content[0] as any).text.replace(theirFile.id, "ID")).toBe(
-      (missing.content[0] as any).text.replace(
-        "00000000-0000-4000-8000-000000000000",
-        "ID",
-      ),
+    expect(foreignSmall.isError).toBe(true);
+    expect(foreignHuge.isError).toBe(true);
+    // All three identical: a file the caller may not read is indistinguishable
+    // from one that does not exist, whether it is under or over the size limit.
+    expect(withoutId(foreignSmall, theirSmallFile.id)).toBe(missingText);
+    expect(withoutId(foreignHuge, theirHugeFile.id)).toBe(missingText);
+    // And neither their filename nor their file's size is disclosed.
+    expect(withoutId(foreignHuge, theirHugeFile.id)).not.toContain(
+      "theirs-secret-name",
+    );
+    expect(withoutId(foreignHuge, theirHugeFile.id)).not.toContain(
+      String(APP_HTML_MAX_BYTES + 1),
     );
   });
 

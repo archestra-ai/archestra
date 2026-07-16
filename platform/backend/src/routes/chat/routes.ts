@@ -58,9 +58,9 @@ import {
   createSubagentToolStreamBridge,
 } from "@/clients/subagent-tool-stream";
 import {
+  recordUnavailableToolCallStep,
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
-  unavailableToolCallRecorder,
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
@@ -1008,10 +1008,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   messages: modelMessages,
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
-                  // Feeds the repeat ceiling in stopWhen the one call shape it
-                  // cannot otherwise see: a tool that is not in the tool list
-                  // never reaches an execute wrapper, so nothing fingerprints it.
-                  onChunk: unavailableToolCallRecorder(repeatTracker),
                   abortSignal: chatAbortController.signal,
                   // Recover tool-call parse failures that would otherwise abort
                   // the turn: a leaked harmony token in the tool name
@@ -1120,10 +1116,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // discarded retry attempts (empty/abortive) that the probe
                   // drains before a result is committed, so their usage never
                   // reaches the client.
-                  onStepFinish: ({ usage, finishReason }) => {
+                  onStepFinish: (step) => {
+                    const { usage, finishReason } = step;
                     if (!hasCommittedResult) {
                       return;
                     }
+                    // Feeds the repeat ceiling in stopWhen the one call shape it
+                    // cannot otherwise see: a tool outside the tool list never
+                    // reaches an execute wrapper, so nothing fingerprints it.
+                    recordUnavailableToolCallStep(repeatTracker, step);
                     // Fires for the truncated step before the tracker's flush,
                     // so this holds the finishReason the tracker keys off.
                     lastFinishReason = finishReason;

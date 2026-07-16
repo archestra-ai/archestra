@@ -14,8 +14,10 @@ import {
   consumeStream as consumeReadableStream,
   convertToModelMessages,
   NoOutputGeneratedError,
+  type StepResult,
   stepCountIs,
   type streamText,
+  type ToolSet,
 } from "ai";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
@@ -30,9 +32,9 @@ import mcpClient from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import {
   REPEAT_CALL_TERMINATION_NOTICE,
+  recordUnavailableToolCallStep,
   repeatCeilingStopCondition,
   ToolCallRepeatTracker,
-  unavailableToolCallRecorder,
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import logger from "@/logging";
@@ -423,7 +425,8 @@ export async function executeA2AMessage(
       // Feeds the repeat ceiling above the one call shape it cannot otherwise
       // see: a tool that is not in the tool list never reaches an execute
       // wrapper, so nothing fingerprints it.
-      onChunk: unavailableToolCallRecorder(repeatTracker),
+      onStepFinish: (step: StepResult<ToolSet>) =>
+        recordUnavailableToolCallStep(repeatTracker, step),
       abortSignal,
       // Request the model's real output ceiling (clamped by the operator
       // ceiling), or a safe fallback when unknown. Without this, providers that

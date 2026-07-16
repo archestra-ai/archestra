@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_IDENTICAL_TOOL_CALLS,
   REPEAT_CALL_TERMINATION_CEILING,
+  recordUnavailableToolCallStep,
   repeatCeilingStopCondition,
   ToolCallRepeatTracker,
-  unavailableToolCallRecorder,
 } from "./tool-call-repeat-tracker";
 
 describe("ToolCallRepeatTracker", () => {
@@ -172,14 +172,14 @@ describe("repeatCeilingStopCondition", () => {
   });
 });
 
-describe("unavailableToolCallRecorder", () => {
-  // The shape the SDK emits when a model calls a tool that is not in the
-  // request's tool list: a dynamic tool call flagged invalid, carrying the
-  // NoSuchToolError that rejected it.
+describe("recordUnavailableToolCallStep", () => {
+  // The shape the SDK puts on a finished step when the model called a tool that
+  // is not in the request's tool list: a dynamic tool call flagged invalid,
+  // carrying the NoSuchToolError that rejected it.
   function unavailableCall(toolName: string, input: unknown) {
     return {
       type: "tool-call",
-      toolCallId: `call-${toolName}`,
+      toolCallId: `call-${toolName}-${JSON.stringify(input)}`,
       toolName,
       input,
       dynamic: true,
@@ -188,43 +188,64 @@ describe("unavailableToolCallRecorder", () => {
     };
   }
 
-  function boundRecorder() {
+  function boundTracker() {
     const tracker = new ToolCallRepeatTracker();
     const stop = repeatCeilingStopCondition(tracker);
     return {
       tracker,
-      onChunk: unavailableToolCallRecorder(tracker),
+      step: (toolCalls: unknown[]) =>
+        recordUnavailableToolCallStep(tracker, {
+          toolCalls: toolCalls as Parameters<
+            typeof recordUnavailableToolCallStep
+          >[1]["toolCalls"],
+        }),
       stopped: () =>
         stop({ steps: [] } as unknown as Parameters<typeof stop>[0]),
     };
   }
 
   it("stops a run that keeps calling a tool outside the tool list, even as the arguments change", () => {
-    const { onChunk, stopped } = boundRecorder();
+    const { step, stopped } = boundTracker();
 
-    // Distinct arguments every time: without the recorder this call shape is
-    // never fingerprinted at all, and fingerprinting it *with* its arguments
-    // would restart the streak on each retry. Neither can ever reach the
-    // ceiling; both spin to MAX_AGENT_STEPS.
+    // Distinct arguments every step: this call shape is never fingerprinted by
+    // a tool wrapper (it has none), and fingerprinting it *with* its arguments
+    // would restart the streak on each retry. Neither reaches the ceiling; both
+    // spin to MAX_AGENT_STEPS.
     for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
-      onChunk({ chunk: unavailableCall("ghost_tool", { attempt: i }) });
+      step([unavailableCall("ghost_tool", { attempt: i })]);
       expect(stopped()).toBe(false);
     }
 
-    onChunk({ chunk: unavailableCall("ghost_tool", { attempt: 99 }) });
+    step([unavailableCall("ghost_tool", { attempt: 99 })]);
     expect(stopped()).toBe(true);
   });
 
-  it("leaves a valid tool call to the execute wrapper instead of counting it twice", () => {
-    const { tracker, onChunk } = boundRecorder();
+  it("counts one step as one attempt however many calls it made", () => {
+    const { step, stopped } = boundTracker();
 
-    const validCall = {
-      type: "tool-call",
-      toolCallId: "call-1",
-      toolName: "real_tool",
-      input: { q: "x" },
-    };
-    onChunk({ chunk: validCall });
+    // A model firing a whole batch at one missing tool has made a single
+    // decision. Counting each call would hit the ceiling inside this step and
+    // stop the run before the errors it needs to recover ever reach it.
+    step(
+      Array.from({ length: REPEAT_CALL_TERMINATION_CEILING * 2 }, (_, i) =>
+        unavailableCall("ghost_search", { query: `q${i}` }),
+      ),
+    );
+
+    expect(stopped()).toBe(false);
+  });
+
+  it("leaves a valid tool call to the execute wrapper instead of counting it twice", () => {
+    const { tracker, step } = boundTracker();
+
+    step([
+      {
+        type: "tool-call",
+        toolCallId: "call-1",
+        toolName: "real_tool",
+        input: { q: "x" },
+      },
+    ]);
 
     // Untouched: the wrapper is what records executed calls, so a count here
     // would inflate every real tool's streak toward the ceiling.
@@ -232,52 +253,53 @@ describe("unavailableToolCallRecorder", () => {
   });
 
   it("ignores an invalid call whose arguments failed to parse", () => {
-    const { tracker, onChunk } = boundRecorder();
+    const { tracker, step } = boundTracker();
 
     // `invalid` also covers unparsable arguments for a tool that does exist.
     // That call gets repaired or retried and is fingerprinted by the wrapper
     // once it parses, so recording it here would double-count.
-    const unparsableCall = {
-      type: "tool-call",
-      toolCallId: "call-1",
-      toolName: "real_tool",
-      input: "{ not json",
-      dynamic: true,
-      invalid: true,
-      error: new InvalidToolInputError({
+    step([
+      {
+        type: "tool-call",
+        toolCallId: "call-1",
         toolName: "real_tool",
-        toolInput: "{ not json",
-        cause: new Error("bad json"),
-      }),
-    };
-    onChunk({ chunk: unparsableCall });
+        input: "{ not json",
+        dynamic: true,
+        invalid: true,
+        error: new InvalidToolInputError({
+          toolName: "real_tool",
+          toolInput: "{ not json",
+          cause: new Error("bad json"),
+        }),
+      },
+    ]);
 
     expect(tracker.record("real_tool", undefined).count).toBe(1);
   });
 
-  it("ignores chunks that are not tool calls", () => {
-    const { tracker, onChunk } = boundRecorder();
+  it("ignores a step that called no tools at all", () => {
+    const { tracker, step } = boundTracker();
 
-    const textDelta = { type: "text-delta", id: "t1", text: "thinking" };
-    onChunk({ chunk: textDelta });
+    step([]);
+    recordUnavailableToolCallStep(tracker, {});
 
     expect(tracker.record("anything", undefined).count).toBe(1);
   });
 
   it("resets the streak when a different unavailable tool interleaves", () => {
-    const { onChunk, stopped } = boundRecorder();
+    const { step, stopped } = boundTracker();
 
     for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
-      onChunk({ chunk: unavailableCall("ghost_tool", {}) });
+      step([unavailableCall("ghost_tool", {})]);
     }
     // Reaching for a different missing tool is a change of approach, not the
     // same wall — the streak restarts rather than inheriting the count.
-    onChunk({ chunk: unavailableCall("other_ghost", {}) });
+    step([unavailableCall("other_ghost", {})]);
     expect(stopped()).toBe(false);
 
     for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
       expect(stopped()).toBe(false);
-      onChunk({ chunk: unavailableCall("other_ghost", {}) });
+      step([unavailableCall("other_ghost", {})]);
     }
     expect(stopped()).toBe(true);
   });

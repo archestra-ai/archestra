@@ -693,26 +693,35 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
 
     // A tool the model asks for but which is not in its tool list never reaches
     // an execute wrapper, so nothing on the normal path counts it. Distinct
-    // arguments each time, since that is what the real loop did.
-    const unavailableCall = (attempt: number) => ({
-      type: "tool-call",
-      toolCallId: `call-${attempt}`,
-      toolName: "archestra__edit_app",
-      input: { attempt },
-      dynamic: true,
-      invalid: true,
-      error: new NoSuchToolError({
-        toolName: "archestra__edit_app",
-        availableTools: ["archestra__search_tools", "archestra__run_tool"],
-      }),
+    // arguments each step, since that is what the real loop did.
+    const unavailableStep = (attempt: number) => ({
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      finishReason: "tool-calls",
+      toolCalls: [
+        {
+          type: "tool-call",
+          toolCallId: `call-${attempt}`,
+          toolName: "archestra__edit_app",
+          input: { attempt },
+          dynamic: true,
+          invalid: true,
+          error: new NoSuchToolError({
+            toolName: "archestra__edit_app",
+            availableTools: ["archestra__search_tools", "archestra__run_tool"],
+          }),
+        },
+      ],
     });
 
+    // Drives the route's own onStepFinish and its own stopWhen, so this fails
+    // if they are ever handed different tracker instances — which would leave
+    // the ceiling silently inert no matter how correct the recorder is.
     for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
-      await streamConfig.onChunk({ chunk: unavailableCall(i) });
+      await streamConfig.onStepFinish(unavailableStep(i));
       expect(runIsStopped()).toBe(false);
     }
 
-    await streamConfig.onChunk({ chunk: unavailableCall(99) });
+    await streamConfig.onStepFinish(unavailableStep(99));
     expect(runIsStopped()).toBe(true);
   });
 

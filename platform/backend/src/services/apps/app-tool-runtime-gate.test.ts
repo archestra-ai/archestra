@@ -1,6 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
-  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolShortName,
   CONTEXT_TEAM_IDS,
   getArchestraToolFullName,
@@ -9,13 +8,9 @@ import {
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
-  TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
-  TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
-import config from "@/config";
-import { ToolModel } from "@/models";
 import EnvironmentModel from "@/models/environment";
 import { expect, test } from "@/test";
 import { gateAppToolCall } from "./app-tool-runtime-gate";
@@ -515,157 +510,4 @@ test("allows an assigned tool in the app's bound environment", async ({
     kind: "upstream",
     resolvedToolName: tool.name,
   });
-});
-
-// --- App-assignable built-ins (the read-only file tools) ---
-
-// Registration of the file tools is itself gated on the sandbox flag, so it
-// must be on BEFORE seeding. Config is restored pristine before every test, so
-// this is per-test, never module-scope.
-async function enableFlagsAndSeedBuiltins() {
-  (config.skillsSandbox as { enabled: boolean }).enabled = true;
-  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-}
-
-async function findSeededBuiltin(shortName: ArchestraToolShortName) {
-  const [tool] = await ToolModel.findArchestraCatalogToolsByNames([
-    getArchestraToolFullName(shortName),
-  ]);
-  if (!tool) throw new Error(`built-in tool ${shortName} was not seeded`);
-  return tool;
-}
-
-test("allows an app-assignable built-in with a live app_tools grant", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeAppTool,
-}) => {
-  const org = await makeOrganization();
-  const user = await makeUser();
-  const app = await makeApp({ organizationId: org.id });
-  await enableFlagsAndSeedBuiltins();
-  const searchFiles = await findSeededBuiltin(TOOL_SEARCH_FILES_SHORT_NAME);
-  await makeAppTool(app.id, searchFiles.id);
-
-  const decision = await gateAppToolCall({
-    appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
-    toolName: searchFiles.name,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(decision).toEqual({ allowed: true, kind: "app-builtin" });
-});
-
-test("refuses an app-assignable built-in without an app_tools grant", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-}) => {
-  const org = await makeOrganization();
-  const user = await makeUser();
-  const app = await makeApp({ organizationId: org.id });
-  await enableFlagsAndSeedBuiltins();
-  const searchFiles = await findSeededBuiltin(TOOL_SEARCH_FILES_SHORT_NAME);
-
-  const decision = await gateAppToolCall({
-    appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
-    toolName: searchFiles.name,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(decision.allowed).toBe(false);
-  if (!decision.allowed) {
-    expect(decision.reason).toContain("not assigned to this app");
-  }
-});
-
-test("a stale file-tool grant is dead when the sandbox flag is dark", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeAppTool,
-}) => {
-  const org = await makeOrganization();
-  const user = await makeUser();
-  const app = await makeApp({ organizationId: org.id });
-  await enableFlagsAndSeedBuiltins();
-  const searchFiles = await findSeededBuiltin(TOOL_SEARCH_FILES_SHORT_NAME);
-  await makeAppTool(app.id, searchFiles.id);
-
-  (config.skillsSandbox as { enabled: boolean }).enabled = false;
-
-  const decision = await gateAppToolCall({
-    appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
-    toolName: searchFiles.name,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(decision.allowed).toBe(false);
-  if (!decision.allowed) {
-    expect(decision.reason).toContain("not available to apps");
-  }
-});
-
-test("save_file stays rejected even with an app_tools row", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeAppTool,
-}) => {
-  const org = await makeOrganization();
-  const user = await makeUser();
-  const app = await makeApp({ organizationId: org.id });
-  await enableFlagsAndSeedBuiltins();
-  const saveFile = await findSeededBuiltin(TOOL_SAVE_FILE_SHORT_NAME);
-  // A grant row for a non-allowlisted built-in (e.g. hand-inserted) must not
-  // open the gate — the allowlist is checked before the assignment.
-  await makeAppTool(app.id, saveFile.id);
-
-  const decision = await gateAppToolCall({
-    appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
-    toolName: saveFile.name,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(decision.allowed).toBe(false);
-  if (!decision.allowed) {
-    expect(decision.reason).toContain("not available to apps");
-  }
-});
-
-test("an unprefixed name resolving to an assigned built-in demands the full name", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeAppTool,
-}) => {
-  const org = await makeOrganization();
-  const user = await makeUser();
-  const app = await makeApp({ organizationId: org.id });
-  await enableFlagsAndSeedBuiltins();
-  const searchFiles = await findSeededBuiltin(TOOL_SEARCH_FILES_SHORT_NAME);
-  await makeAppTool(app.id, searchFiles.id);
-
-  const decision = await gateAppToolCall({
-    appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
-    toolName: TOOL_SEARCH_FILES_SHORT_NAME,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(decision.allowed).toBe(false);
-  if (!decision.allowed) {
-    expect(decision.reason).toContain("must be called by its full name");
-    expect(decision.reason).toContain(searchFiles.name);
-  }
 });

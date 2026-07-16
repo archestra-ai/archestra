@@ -139,10 +139,7 @@ export function RightSidePanel({
                   </p>
                 </div>
               ) : (
-                <PanelAppHost
-                  agentId={agentId}
-                  conversationId={conversationId}
-                />
+                <PanelAppHost agentId={agentId} />
               )}
             </div>
           </div>
@@ -157,13 +154,7 @@ export function RightSidePanel({
  * Switching the hosted app remounts via the key; the app-endpoint is rebuilt from
  * the list entry (owned apps need no extra data, external apps use the agent).
  */
-function PanelAppHost({
-  agentId,
-  conversationId,
-}: {
-  agentId?: string;
-  conversationId?: string;
-}) {
+function PanelAppHost({ agentId }: { agentId?: string }) {
   const { apps, panelToolCallId } = useApps();
   const app = apps.find((a) => a.toolCallId === panelToolCallId);
   if (!app) {
@@ -183,7 +174,6 @@ function PanelAppHost({
       uiResourceUri={app.uiResourceUri}
       agentId={agentId ?? ""}
       appId={app.appId ?? undefined}
-      conversationId={conversationId}
       mcpServerId={app.mcpServerId}
       appName={app.label}
       appVersion={app.version}

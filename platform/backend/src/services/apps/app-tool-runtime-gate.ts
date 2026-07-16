@@ -1,20 +1,13 @@
-import type { ArchestraToolShortName } from "@archestra/shared";
 import {
-  APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAMES,
-  ARCHESTRA_MCP_CATALOG_ID,
-  isAppAssignableArchestraToolShortName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_APP_DATA_DELETE_SHORT_NAME,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
-  TOOL_READ_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { McpUiToolMeta } from "@modelcontextprotocol/ext-apps";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import config from "@/config";
 import {
   AppModel,
   TeamModel,
@@ -39,100 +32,6 @@ export const APP_RUNTIME_BUILTIN_SHORT_NAMES = new Set<string>([
   ...APP_DATA_SHORT_NAMES,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
 ]);
-
-/**
- * The canonical availability predicate for the second, opt-in tier of
- * app-callable Archestra built-ins (the read-only file tools). One place folds
- * the shared allowlist and the feature flags together, and every consumer —
- * the runtime gate, the dispatch re-check, tools/list, the SDK bootstrap, the
- * assignment paths, `preview_app_tool`, and the tools-editor candidate route —
- * asks it, so a dark flag turns the whole surface off at once. The file tools
- * are registered only under `skillsSandbox` (see the backend
- * `getArchestraMcpTools` gate).
- */
-export function isAppAssignableArchestraTool(
-  shortName: string,
-): shortName is ArchestraToolShortName {
-  return (
-    isAppAssignableArchestraToolShortName(shortName) &&
-    config.skillsSandbox.enabled
-  );
-}
-
-/**
- * The full (branded) tool names an app may currently be granted — empty when
- * any governing feature flag is dark. The candidate source for the app
- * tools-editor's built-in group; names go through the branding singleton so a
- * white-labeled prefix matches the seeded rows.
- */
-export function getAppAssignableBuiltinFullNames(): string[] {
-  return APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAMES.filter((shortName) =>
-    isAppAssignableArchestraTool(shortName),
-  ).map((shortName) => archestraMcpBranding.getToolName(shortName));
-}
-
-/**
- * Fail-closed re-check that an app-assignable built-in is (still) granted to
- * the app: the allowlist + feature flags via the canonical predicate, and a
- * live `app_tools` row. Returns the tool's stored full name, or null. Shared by
- * the dispatch handlers (`createAppServer`, `preview_app_tool`) so an
- * assignment revoked between the route gate and execution is refused by both.
- */
-export async function getAssignedAppBuiltin(
-  toolName: string,
-  appId: string,
-): Promise<string | null> {
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  if (!shortName || !isAppAssignableArchestraTool(shortName)) return null;
-  // Filter (not first-row) by catalog: a same-named upstream tool assigned via
-  // the raw-id endpoint could otherwise shadow the built-in grant depending on
-  // row ordering.
-  const assigned = await ToolModel.getMcpToolsAssignedToApp([toolName], appId);
-  const builtin = assigned.find(
-    (tool) => tool.catalogId === ARCHESTRA_MCP_CATALOG_ID,
-  );
-  return builtin?.toolName ?? null;
-}
-
-/**
- * Redact an app-dispatched built-in's result before it is persisted as an
- * audit row. `read_file` returns the file's contents (numbered text lines or an
- * inline image), and a read-only app operation must not create a second,
- * long-lived database copy of them — the structured metadata (filename, size,
- * line window) is kept, the content blocks are replaced. Every other built-in's
- * result passes through unchanged. Audit persistence stays best-effort; this
- * only shapes WHAT is stored, never whether the call proceeds.
- */
-export function redactAppBuiltinAuditResult(
-  toolName: string,
-  response: CallToolResult,
-): CallToolResult {
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  if (shortName !== TOOL_READ_FILE_SHORT_NAME) return response;
-  // Error results carry diagnostics (not-found, size caps), never file bytes —
-  // keep them intact for the audit trail.
-  if (response.isError) return response;
-  // structuredContent mirrors the read window in its `content` field — strip
-  // it the same way, keeping the metadata for the audit trail.
-  const structured =
-    response.structuredContent && typeof response.structuredContent === "object"
-      ? (() => {
-          const { content: _content, ...meta } =
-            response.structuredContent as Record<string, unknown>;
-          return meta;
-        })()
-      : response.structuredContent;
-  return {
-    ...response,
-    structuredContent: structured,
-    content: [
-      {
-        type: "text",
-        text: "[file content not persisted in audit logs]",
-      },
-    ],
-  };
-}
 
 type AppToolGateDecision =
   | { allowed: true; kind: "app-builtin" }
@@ -169,26 +68,13 @@ export async function gateAppToolCall(params: {
 }): Promise<AppToolGateDecision> {
   const { appId, userId, toolName, toolInput } = params;
 
-  // Archestra built-ins: two tiers. The reserved app-runtime tools (App Data
-  // Store + the LLM completion) are always dispatchable; the app-assignable
-  // file tools additionally require a live `app_tools` grant. Both run
-  // in-process and bypass invocation policy (consistent with the rest of the
-  // engine — Archestra tools are trusted; RBAC still applies inside
-  // executeArchestraTool).
+  // Archestra built-ins: only the reserved app-runtime tools (App Data Store +
+  // the LLM completion) are dispatchable from an app; they bypass invocation
+  // policy (consistent with the rest of the engine).
   if (archestraMcpBranding.isToolName(toolName)) {
     const shortName = archestraMcpBranding.getToolShortName(toolName);
     if (shortName && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)) {
       return { allowed: true, kind: "app-builtin" };
-    }
-    if (shortName && isAppAssignableArchestraTool(shortName)) {
-      if (await getAssignedAppBuiltin(toolName, appId)) {
-        return { allowed: true, kind: "app-builtin" };
-      }
-      return {
-        allowed: false,
-        code: -32601,
-        reason: `Tool "${toolName}" is not assigned to this app.`,
-      };
     }
     return {
       allowed: false,
@@ -208,16 +94,6 @@ export async function gateAppToolCall(params: {
       allowed: false,
       code: -32601,
       reason: `Tool "${toolName}" is not assigned to this app.`,
-    };
-  }
-  // An assigned Archestra built-in reached by an unprefixed suffix would fall
-  // through to the upstream dispatch path (which cannot execute it). Require
-  // the full branded name, which the branch above handles in-process.
-  if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-    return {
-      allowed: false,
-      code: -32601,
-      reason: `Tool "${toolName}" must be called by its full name "${tool.toolName}".`,
     };
   }
 

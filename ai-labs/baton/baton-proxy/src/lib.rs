@@ -10,13 +10,10 @@
 //! Only inline `allow` authorities declared in the policy TOML are registered;
 //! `escalate` (external) authorities are rejected at load — the proxy has no
 //! human channel. A flow no declared authority covers is blocked, fail
-//! closed. The prototype's human-approval flow (the
-//! `baton-approver` / `baton-demo-agent` binaries) predates current baton-core's
-//! authority model; it is parked in the `baton-demo` crate (behind its
-//! `approver` feature) and returns as a port to External authorities
-//! (`PendingApproval` + `apply_approval`). The tool-layer successor to that
-//! flow — soft blocks, escalation, canonical dispatch — is the `baton-demo`
-//! gateway.
+//! closed. Human-in-the-loop approval lives on the tool layer instead — soft
+//! blocks, escalation, canonical dispatch — in the `baton-demo` gateway; an
+//! inference-layer approval flow would be a port to External authorities
+//! (`PendingApproval` + `apply_approval`).
 //!
 //! Nothing here is cryptographic: authenticity rests on the harness only
 //! recording tool results that real MCP servers returned. See `README.md`.

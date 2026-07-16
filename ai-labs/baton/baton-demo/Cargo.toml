@@ -3,21 +3,13 @@ name = "baton-demo"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Ad-hoc demo harnesses for the baton prototype: the tool-layer MCP gateway (built) and the parked inference-layer approval flow"
+description = "Ad-hoc demo harness for the baton prototype: the tool-layer MCP gateway"
 autobins = false
 
 # Standalone on purpose, like the sibling baton crates — and deliberately out
 # of the shared ai-labs workspace, to keep the heavy demo deps (a full agent
 # framework and LLM client) out of the workspace build.
 [workspace]
-
-[features]
-default = []
-# The parked human-in-the-loop approval demo. It compiles, but does not run
-# end-to-end: the flow needs the approval-rewriting `baton-proxy` behavior that
-# no longer exists (the proxy now blocks fail-closed). Gated off by default so
-# the standard build only produces the working gateway bins.
-approver = []
 
 [dependencies]
 baton-core = { path = "../baton-core" }
@@ -49,14 +41,3 @@ path = "src/bin/gateway.rs"
 [[bin]]
 name = "baton-gateway-agent"
 path = "src/bin/gateway_agent.rs"
-
-# Parked (see the `approver` feature).
-[[bin]]
-name = "baton-approver"
-path = "src/bin/approver.rs"
-required-features = ["approver"]
-
-[[bin]]
-name = "baton-demo-agent"
-path = "src/bin/demo_agent.rs"
-required-features = ["approver"]

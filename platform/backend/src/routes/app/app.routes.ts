@@ -930,7 +930,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
-"/api/apps/:appId/files",
+    "/api/apps/:appId/files",
     {
       schema: {
         operationId: RouteId.GetAppConversationFiles,

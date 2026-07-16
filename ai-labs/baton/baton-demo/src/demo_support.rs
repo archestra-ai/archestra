@@ -1,9 +1,8 @@
-//! Shared plumbing for the demo agents (`bin/demo_agent.rs`,
-//! `bin/gateway_agent.rs`): the terminal-prompting MCP elicitation handler and
-//! OpenRouter key resolution.
+//! Plumbing for the demo agent (`bin/gateway_agent.rs`): the
+//! terminal-prompting MCP elicitation handler and OpenRouter key resolution.
 //!
 //! Deliberately NOT part of the `baton_demo` library — demo scaffolding must
-//! not sit in its API. Each demo bin includes this file directly with
+//! not sit in its API. The demo bin includes this file directly with
 //! `#[path = "../demo_support.rs"] mod demo_support;`.
 
 use rmcp::ClientHandler;

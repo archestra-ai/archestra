@@ -63,18 +63,13 @@ calls that fail their contract before the agent sees them, loading contracts
 via `baton-contracts/`, a small crate that translates the declarative policy
 into baton-core `ToolContract`s. See its README.
 
-`baton-demo/` is the ad-hoc demo harness. Its built, tested demo is the
-**tool-layer gateway** (`README.md`, the demo above): a real rig agent talking
-to an MCP server that mimics an Archestra-style tool gateway — it serves a
-scenario's tools from TOML, checks every call against baton-core,
-**soft-blocks** breaches as ordinary tool results the model can act on,
-escalates to a human through MCP elicitation, and on approval dispatches the
-exact canonical request the engine checked. The crate also parks the earlier
-inference-layer human-approval flow (behind its `approver` feature — a blocked
-call becomes an approval request a person rules on over MCP); that flow still
-compiles but **no longer runs end-to-end** (it needs the approval-rewriting
-proxy behavior baton-proxy dropped) and returns once ported to External
-authorities. See `APPROVER.md`.
+`baton-demo/` is the ad-hoc demo harness: the **tool-layer gateway**
+(`README.md`, the demo above), a real rig agent talking to an MCP server that
+mimics an Archestra-style tool gateway — it serves a scenario's tools from
+TOML, checks every call against baton-core, **soft-blocks** breaches as
+ordinary tool results the model can act on, escalates to a human through MCP
+elicitation, and on approval dispatches the exact canonical request the engine
+checked.
 
 `demo/kagent/` wires baton-proxy into a stock [kagent](https://kagent.dev)
 agent as a pod sidecar: the agent is prompt-injected by a crashlooping pod's

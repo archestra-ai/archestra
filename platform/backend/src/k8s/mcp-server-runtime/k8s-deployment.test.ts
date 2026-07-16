@@ -499,9 +499,9 @@ describe("K8sDeployment.constructDeploymentName", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
     } as any;
 
-    expect(
-      K8sDeployment.constructDeploymentName(mockServer, mockCatalog),
-    ).toBe("mcp-mt-aaaabbbb-original");
+    expect(K8sDeployment.constructDeploymentName(mockServer, mockCatalog)).toBe(
+      "mcp-mt-aaaabbbb-original",
+    );
   });
 
   test("multitenant falls back to the legacy mt recompute when the catalog is not frozen", () => {
@@ -519,9 +519,9 @@ describe("K8sDeployment.constructDeploymentName", () => {
       // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
     } as any;
 
-    expect(
-      K8sDeployment.constructDeploymentName(mockServer, mockCatalog),
-    ).toBe("mcp-mt-aaaabbbb-shared-catalog");
+    expect(K8sDeployment.constructDeploymentName(mockServer, mockCatalog)).toBe(
+      "mcp-mt-aaaabbbb-shared-catalog",
+    );
   });
 });
 

@@ -38,6 +38,7 @@ export { default as EnvironmentDefaultUserLimitModel } from "./environment-defau
 export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
 export { default as HookFileModel } from "./hook-file";
+export { default as InstanceUsageModel } from "./instance-usage";
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";

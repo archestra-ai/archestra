@@ -245,6 +245,102 @@ describe("/v1/bedrock/openai/chat/completions — non-streaming", () => {
       ],
     });
   });
+
+  test("sanitizes client tool names Bedrock would reject, and restores them in the response", async ({
+    makeAgent,
+  }) => {
+    const clientToolName = "weather.get current@v2";
+    const providerToolName = "weather_get_current_v2";
+    const captured: Record<string, unknown>[] = [];
+    vi.spyOn(bedrockAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          converse: async (modelId: string, req: Record<string, unknown>) => {
+            captured.push({ modelId, ...req });
+            // Bedrock only ever echoes the provider-facing name back.
+            return {
+              $metadata: { requestId: "req_3" },
+              output: {
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      toolUse: {
+                        toolUseId: "t_new",
+                        name: providerToolName,
+                        input: { city: "Berlin" },
+                      },
+                    },
+                  ],
+                },
+              },
+              stopReason: "tool_use",
+              usage: { inputTokens: 20, outputTokens: 10 },
+            };
+          },
+          converseStream: async () => asyncIterable([]),
+        }) as never,
+    );
+
+    const app = createFastifyApp();
+    await app.register(bedrockOpenaiProxyRoutes);
+    const agent = await makeAgent({ name: "bedrock-openai-tool-name" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/bedrock/openai/${agent.id}/chat/completions`,
+      headers: HEADERS,
+      payload: {
+        model: "zai.glm-4.7",
+        messages: [{ role: "user", content: "weather?" }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: clientToolName,
+              description: "gets weather",
+              parameters: {
+                type: "object",
+                properties: { city: { type: "string" } },
+              },
+            },
+          },
+        ],
+        tool_choice: {
+          type: "function",
+          function: { name: clientToolName },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Bedrock rejects ^[a-zA-Z0-9_-]{1,64}$ violations, so the name that
+    // reaches it must be sanitized everywhere it appears.
+    const sent = captured[0] as Record<string, unknown> & {
+      toolConfig: {
+        tools: Array<{ toolSpec: { name: string } }>;
+        toolChoice: unknown;
+      };
+    };
+    expect(sent.toolConfig.tools[0].toolSpec.name).toBe(providerToolName);
+    expect(sent.toolConfig.toolChoice).toEqual({
+      tool: { name: providerToolName },
+    });
+
+    // The client still sees the name it sent.
+    const body = response.json();
+    expect(body.choices[0].message.tool_calls).toEqual([
+      {
+        id: "t_new",
+        type: "function",
+        function: {
+          name: clientToolName,
+          arguments: '{"city":"Berlin"}',
+        },
+      },
+    ]);
+  });
 });
 
 describe("/v1/bedrock/openai/chat/completions — streaming", () => {

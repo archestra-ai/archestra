@@ -1,0 +1,49 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/bedrock/model/.*/converse",
+    "headers": {
+      "Authorization": {
+        "contains": "bedrock-tool-name-sanitization"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.toolConfig.tools[?(@.toolSpec.name == 'weather_get_current_v2')]"
+      },
+      {
+        "matchesJsonPath": "$.toolConfig.toolChoice.tool[?(@.name == 'weather_get_current_v2')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "output": {
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "toolUse": {
+                "toolUseId": "tooluse_bedrock_tool_name_e2e",
+                "name": "weather_get_current_v2",
+                "input": {
+                  "city": "Berlin"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "stopReason": "tool_use",
+      "usage": {
+        "inputTokens": 100,
+        "outputTokens": 20
+      }
+    }
+  }
+}

@@ -9,10 +9,13 @@
 //! unrepresentable rather than tested for.
 //!
 //! [`Trajectory`](crate::turn::Trajectory) holds one [`TrajectoryProjection`]
-//! and rebuilds it in full after each admitted batch. Full reprojection per
-//! mutation is O(events), i.e. quadratic over a trajectory's life; that is a
-//! deliberate trade — an incremental update would be a second fold, which is
-//! precisely what this module exists to avoid.
+//! and rebuilds it in full after each admitted batch. That costs O(dependency
+//! edges) per mutation — [`value_labels`] refolds every historical value's
+//! whole dependency set — so a trajectory of `n` values each citing Θ(n)
+//! predecessors is cubic over its life, where admission-time folding was
+//! quadratic. A deliberate trade at prototype scale: an incremental update
+//! would be a second fold, which is precisely what this module exists to
+//! avoid.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -74,9 +77,8 @@ pub fn value_labels(events: &EventSet) -> BTreeMap<ValueId, ValueLabel> {
                     label
                 }
                 ValueOrigin::Transformed { declared, .. } => declared.clone(),
-                // Recomputed from the source label and the granted delta —
-                // never the fact's own copy — so rebuild equivalence can
-                // detect a recorded `raised` inconsistent with the raise.
+                // The authority's raise, applied to the source's label. The
+                // fact carries the delta, not the result: one representation.
                 ValueOrigin::Endorsed { source, delta, .. } => delta.raise(
                     labels
                         .get(source)
@@ -410,6 +412,12 @@ impl TrajectoryProjection {
         self.provenance.get(&value)
     }
 
+    /// How many values the log has admitted. Ids are minted sequentially, so
+    /// this is also one past the highest admitted [`ValueId`].
+    pub fn admitted_values(&self) -> usize {
+        self.value_labels.len()
+    }
+
     /// Fold the labels of `ids`. Fails loudly on an unknown id: silently
     /// treating a missing dependency as `Unknown` would hide a caller bug.
     pub fn fold_labels<'a>(&self, ids: impl IntoIterator<Item = &'a ValueId>) -> Result<ValueLabel, UnknownValue> {
@@ -698,6 +706,31 @@ mod tests {
         assert_eq!(
             projection.fold_labels([&missing]).unwrap_err(),
             UnknownValue { id: missing }
+        );
+    }
+
+    /// Admission prevalidates against the projection *before* committing, so
+    /// naming an unknown dependency is refused and writes nothing — no fact,
+    /// no revision advance, no body.
+    #[test]
+    fn admitting_an_unknown_dependency_is_refused_without_touching_state() {
+        let mut trajectory = crate::turn::Trajectory::new();
+        let before = trajectory.revision();
+        let missing = ValueId::new(41);
+
+        let err = trajectory
+            .admit_model_output(
+                crate::value::OpaqueValue::new("x"),
+                BTreeSet::from([missing]),
+                BTreeSet::new(),
+            )
+            .unwrap_err();
+
+        assert_eq!(err, UnknownValue { id: missing });
+        assert_eq!(trajectory.revision(), before, "a refused admission advances nothing");
+        assert!(
+            trajectory.events().events().is_empty(),
+            "a refused admission appends nothing"
         );
     }
 

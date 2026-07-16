@@ -785,7 +785,6 @@ impl Trajectory {
                     source,
                     authority: authority.clone(),
                     delta,
-                    raised: raised.clone(),
                 },
             },
             self.substitution_fact(site, source, derived),
@@ -913,10 +912,11 @@ impl Trajectory {
     /// reprojection. The batch mirrors validations that already passed, so an
     /// admission conflict here is a crate bug — it fails loudly.
     ///
-    /// Reprojecting everything is O(events) per mutation, and deliberately
-    /// so: updating the projection incrementally would be a second fold over
-    /// the facts, and a second fold is exactly the thing that can disagree
-    /// with the first.
+    /// Reprojecting everything is deliberate: updating the projection
+    /// incrementally would be a second fold over the facts, and a second fold
+    /// is exactly the thing that can disagree with the first. It costs
+    /// O(dependency edges) per mutation — see [`crate::projection`] for why
+    /// that is cubic, not quadratic, on dependency-dense trajectories.
     fn commit(&mut self, facts: Vec<Fact>) {
         self.events
             .append_batch(facts)

@@ -67,8 +67,12 @@ observable; preserve it (there is a typed-order test).
   add a second, incremental fold over `Fact` (that is what this design
   deleted: a parallel `apply` plus a parity suite to police it, whose state
   half was tautological — it rebuilt with the same `apply` it was checking).
-  Full reprojection per mutation is O(events) and deliberate; if that ever
-  matters, make the *one* path incremental, never add a second. The
+  Full reprojection per mutation is deliberate. Its cost is O(dependency
+  edges), not O(events): `value_labels` refolds every historical value's whole
+  dependency set, so a trajectory whose values cite many predecessors is cubic
+  over its life, not quadratic (the old admission-time fold paid each value's
+  fold once). If that ever matters, make the *one* path incremental, never add
+  a second. The
   `ValueStore` holds **bodies only**: a label lives in the projection, and
   `ValueRef` composes the two for reading.
 - `Revision` digests the event frontier; every appended batch advances it.

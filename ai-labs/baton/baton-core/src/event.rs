@@ -130,12 +130,14 @@ pub enum ValueOrigin {
         transformer: TransformerRef,
         declared: ValueLabel,
     },
-    /// Authority fiat relabel: `source`'s bytes under the raised label.
+    /// Authority fiat relabel: `source`'s bytes under the label `delta`
+    /// raises `source`'s to. The raised label itself is deliberately absent —
+    /// it is derivable (`delta.raise(source_label)`), and storing it too
+    /// would be a second representation that could contradict the first.
     Endorsed {
         source: ValueId,
         authority: AuthorityName,
         delta: LabelRaise,
-        raised: ValueLabel,
     },
 }
 

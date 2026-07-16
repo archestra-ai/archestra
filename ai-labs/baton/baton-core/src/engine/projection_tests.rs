@@ -105,9 +105,32 @@ fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) ->
     )
 }
 
+/// Every value the log admits has its bytes in the store, and the store holds
+/// nothing the log did not admit.
+///
+/// Not tautological, and the one claim the single build path cannot make for
+/// itself: bodies live *outside* the projection (the log deliberately does not
+/// carry them), so a mutation that commits a `ValueAdmitted` fact without its
+/// paired `store_body` call would desynchronize them. `store_body`'s own check
+/// is a `debug_assert`, which says nothing in a release build.
+fn assert_bodies_track_the_log(trajectory: &Trajectory) {
+    let projected = trajectory.view().admitted_values();
+    for id in 0..projected {
+        let id = ValueId::new(id as u64);
+        assert!(
+            trajectory.value(id).is_ok(),
+            "{id} is admitted by the log but has no body in the store"
+        );
+    }
+    assert!(
+        trajectory.value(ValueId::new(projected as u64)).is_err(),
+        "the store holds a body for a value the log never admitted"
+    );
+}
+
 /// Run one operation asserting the one-mutation-one-batch discipline: the
 /// frontier (which the revision digests) advances by exactly
-/// `expected_batches` batches.
+/// `expected_batches` batches, and the bodies still track the log.
 fn tracked<R>(trajectory: &mut Trajectory, expected_batches: u64, op: impl FnOnce(&mut Trajectory) -> R) -> R {
     let revision = trajectory.revision();
     let frontier = trajectory.events().frontier();
@@ -120,6 +143,7 @@ fn tracked<R>(trajectory: &mut Trajectory, expected_batches: u64, op: impl FnOnc
         "staleness parity: the frontier must advance exactly when the revision does"
     );
     assert_eq!(batches, expected_batches, "batch count for this operation");
+    assert_bodies_track_the_log(trajectory);
     out
 }
 

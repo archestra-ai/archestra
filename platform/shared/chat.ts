@@ -410,6 +410,21 @@ export type ChatAppDiagnosticsMetadata = z.infer<
   typeof ChatAppDiagnosticsMetadataSchema
 >;
 
+/**
+ * The app the chat UI reports as currently open, attached to each outgoing user
+ * message so the backend can restate its context in that turn's system prompt.
+ * Exactly one family: an owned Archestra app (`appId`) or an external MCP-server
+ * app (`appMcpServerId`). An untrusted hint — the backend re-resolves the id
+ * through the caller's own access check before injecting anything, so a forged
+ * id can only ever surface an app the caller could already see.
+ */
+export const ChatOpenedAppMetadataSchema = z.union([
+  z.object({ appId: z.string().uuid() }),
+  z.object({ appMcpServerId: z.string().uuid() }),
+]);
+
+export type ChatOpenedAppMetadata = z.infer<typeof ChatOpenedAppMetadataSchema>;
+
 export const ChatMessageFeedbackSchema = z.enum(["up", "down"]);
 export type ChatMessageFeedback = z.infer<typeof ChatMessageFeedbackSchema>;
 
@@ -418,6 +433,7 @@ export const ChatMessageMetadataSchema = z
   .object({
     skill: ChatSkillMetadataSchema.optional(),
     appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
+    openedApp: ChatOpenedAppMetadataSchema.optional(),
     /**
      * Owner's thumbs verdict on an assistant message. Projected from the
      * `messages.feedback` column on read — the column is authoritative, any

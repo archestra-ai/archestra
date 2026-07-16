@@ -494,7 +494,10 @@ class McpServerModel {
   }): Promise<{
     catalogId: string;
     serverName: string;
+    serverDescription: string | null;
     toolName: string;
+    /** The tool's stored, dispatchable name — never recombine the display pair. */
+    fullToolName: string;
     resourceUri: string;
     toolParameters: ToolParametersContent;
     /** How many UI tools the whole catalog exposes — decides the app label. */
@@ -521,10 +524,49 @@ class McpServerModel {
     return {
       catalogId: server.catalogId,
       serverName: match.serverName,
+      serverDescription: match.serverDescription,
       toolName: match.toolName,
+      fullToolName: match.fullToolName,
       resourceUri: match.resourceUri,
       toolParameters: match.toolParameters,
       uiToolCount: uiApps.length,
+    };
+  }
+
+  /**
+   * The caller-visible identity of an external (MCP-server) app install: its
+   * display name and description, plus the `<slug>__` prefix its tools are
+   * really stored under (read off a stored name, since the prefix is a slug of
+   * the display name and cannot be derived back from it). Backs the opened-app
+   * system-prompt injection, which needs a namespace the model can actually
+   * search and call. Returns null when the install is gone, no longer
+   * accessible, or exposes no UI resource.
+   */
+  static async findUiAppIdentityForCaller(params: {
+    userId: string;
+    mcpServerId: string;
+  }): Promise<{
+    serverName: string;
+    serverDescription: string | null;
+    toolNamespace: string | null;
+  } | null> {
+    const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
+      params.userId,
+    );
+    if (!accessibleServerIds.includes(params.mcpServerId)) return null;
+
+    const server = await McpServerModel.findById(params.mcpServerId);
+    if (!server?.catalogId) return null;
+
+    const [uiApp] = await McpServerModel.getUiApps({
+      catalogIds: [server.catalogId],
+    });
+    if (!uiApp) return null;
+
+    return {
+      serverName: uiApp.serverName,
+      serverDescription: uiApp.serverDescription,
+      toolNamespace: parseFullToolName(uiApp.fullToolName).serverName,
     };
   }
 
@@ -661,6 +703,12 @@ class McpServerModel {
       serverDescription: string | null;
       serverIcon: string | null;
       toolName: string;
+      /**
+       * The tool's stored, dispatchable name (`<server-slug>__<tool>`). Unlike
+       * `serverName`/`toolName` — a display pair that cannot be recombined into
+       * it — this is the only form a tool call may use.
+       */
+      fullToolName: string;
       toolDescription: string | null;
       resourceUri: string;
       toolParameters: ToolParametersContent;
@@ -706,8 +754,13 @@ class McpServerModel {
                 serverDescription: row.serverDescription,
                 serverIcon: row.serverIcon,
                 // Strip the server prefix: catalog tools are stored as
-                // `<server>__<tool>`, but the card shows just the tool.
+                // `<server>__<tool>`, but the card shows just the tool. The
+                // stripped pair is for display only — `serverName` is the
+                // catalog's human name while the stored prefix is a slug of it,
+                // so recombining the two fabricates a name that dispatches
+                // nowhere. Carry the stored name for anything that must call it.
                 toolName: parseFullToolName(row.toolName).toolName,
+                fullToolName: row.toolName,
                 toolDescription: row.toolDescription,
                 resourceUri: row.resourceUri,
                 toolParameters: row.toolParameters,

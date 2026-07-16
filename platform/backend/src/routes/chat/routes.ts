@@ -99,6 +99,10 @@ import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
+import {
+  type OpenedApp,
+  resolveOpenedApp,
+} from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -164,6 +168,7 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
+import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
   detectSandboxCommand,
   runSandboxCommandTurn,
@@ -623,6 +628,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 })
             : Promise.resolve(undefined);
 
+        // When an app is open in the chat, the client reports it on the turn's
+        // last user message; we restate that app in the system prompt so the
+        // model keeps treating the conversation as being about it. The client
+        // hint is untrusted — `resolveOpenedApp` re-runs the caller's access
+        // check, so a forged id only surfaces an app they could already see.
+        // Same posture as the project instructions above: concurrent, and
+        // best-effort — a resolve failure (or an app since deleted or made
+        // inaccessible) drops the injection rather than breaking the chat.
+        const openedAppRef = readOpenedAppRef(messages as ChatMessage[]);
+        const openedAppPromise: Promise<OpenedApp | undefined> = openedAppRef
+          ? resolveOpenedApp({
+              openedApp: openedAppRef,
+              userId: user.id,
+              organizationId,
+            }).catch((error) => {
+              logger.warn(
+                { error, conversationId },
+                "Failed to load the chat's open app, proceeding without its context",
+              );
+              return undefined;
+            })
+          : Promise.resolve(undefined);
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -635,20 +663,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          projectInstructionsPromise.then((projectInstructions) =>
-            buildChatContext({
-              conversationId,
-              agentId,
-              agent,
-              user: { id: user.id, email: user.email, name: user.name },
-              organizationId,
-              hookSessionContext,
-              projectInstructions,
-              hookRunCollector,
-              elicitation: chatMcpElicitation,
-              subagentToolStream,
-              abortSignal: chatAbortController.signal,
-            }),
+          Promise.all([projectInstructionsPromise, openedAppPromise]).then(
+            ([projectInstructions, openedApp]) =>
+              buildChatContext({
+                conversationId,
+                agentId,
+                agent,
+                user: { id: user.id, email: user.email, name: user.name },
+                organizationId,
+                hookSessionContext,
+                projectInstructions,
+                openedApp,
+                hookRunCollector,
+                elicitation: chatMcpElicitation,
+                subagentToolStream,
+                abortSignal: chatAbortController.signal,
+              }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),

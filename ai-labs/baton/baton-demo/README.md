@@ -1,10 +1,8 @@
 # baton-demo — the gateway demo
 
-`baton-demo` is the ad-hoc demo harness for the baton prototype. Its built,
-tested demo is the **tool-layer gateway** described here; the crate also parks
-the earlier inference-layer human-approval flow behind its `approver` feature
-(see [APPROVER.md](APPROVER.md) — it compiles but no longer runs end-to-end).
-The inference-layer proxy is a separate crate, `baton-proxy`.
+`baton-demo` is the ad-hoc demo harness for the baton prototype: the
+**tool-layer gateway** described here. The inference-layer proxy is a separate
+crate, `baton-proxy`.
 
 A real agent, a real MCP gateway, and the policy engine between them. An rmcp
 server mimics an Archestra-style **tool gateway**: it serves a scenario's

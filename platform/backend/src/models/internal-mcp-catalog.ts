@@ -11,6 +11,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { constructLegacyMultitenantMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -42,8 +43,20 @@ class InternalMcpCatalogModel {
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
 
+    // Multitenant catalogs own one shared K8s deployment; freeze its name at
+    // creation (needs the id up front — supplying one is equivalent to the
+    // column's defaultRandom()). Byte-identical to the legacy recompute so
+    // pre-existing deployments of this shape never churn. Renames must never
+    // touch it.
+    const id = dbValues.id ?? crypto.randomUUID();
+    const deploymentName = dbValues.multitenant
+      ? constructLegacyMultitenantMcpDeploymentName(id, dbValues.name)
+      : null;
+
     const insertValues = {
       ...dbValues,
+      id,
+      deploymentName,
       ...(context?.organizationId
         ? { organizationId: context.organizationId }
         : {}),

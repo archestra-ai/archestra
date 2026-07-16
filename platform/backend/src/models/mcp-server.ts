@@ -14,6 +14,7 @@ import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema, type Transaction } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
@@ -101,10 +102,22 @@ class McpServerModel {
       teamId: serverData.teamId ?? null,
     });
 
+    // Freeze K8s deployment identity at creation (needs the id up front —
+    // supplying one is equivalent to the column's defaultRandom()). Renames
+    // update `name` but must never re-derive the deployment name; that would
+    // orphan the running deployment. Remote installs have no deployment.
+    // Multitenant installs share the catalog-level deployment, so this
+    // per-install name is simply never read for them.
+    const id = crypto.randomUUID();
+    const deploymentName =
+      serverData.serverType === "local"
+        ? constructFrozenMcpDeploymentName(mcpServerName, id)
+        : null;
+
     // ownerId is part of serverData and will be inserted
     const [createdServer] = await (tx ?? db)
       .insert(schema.mcpServersTable)
-      .values({ ...serverData, name: mcpServerName })
+      .values({ ...serverData, id, name: mcpServerName, deploymentName })
       .returning();
 
     // Assign user to the MCP server if provided (personal auth)

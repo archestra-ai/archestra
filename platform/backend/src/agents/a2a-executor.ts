@@ -32,6 +32,7 @@ import {
   REPEAT_CALL_TERMINATION_NOTICE,
   repeatCeilingStopCondition,
   ToolCallRepeatTracker,
+  unavailableToolCallRecorder,
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import logger from "@/logging";
@@ -419,6 +420,10 @@ export async function executeA2AMessage(
         stepCountIs(MAX_AGENT_STEPS),
         repeatCeilingStopCondition(repeatTracker),
       ],
+      // Feeds the repeat ceiling above the one call shape it cannot otherwise
+      // see: a tool that is not in the tool list never reaches an execute
+      // wrapper, so nothing fingerprints it.
+      onChunk: unavailableToolCallRecorder(repeatTracker),
       abortSignal,
       // Request the model's real output ceiling (clamped by the operator
       // ceiling), or a safe fallback when unknown. Without this, providers that

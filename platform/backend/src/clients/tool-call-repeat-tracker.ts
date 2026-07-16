@@ -6,7 +6,7 @@
 // the model, and — once the repeats cross a ceiling — so the run's stop policy
 // can terminate the loop instead of nudging into the void.
 
-import type { StopCondition, ToolSet } from "ai";
+import { NoSuchToolError, type StopCondition, type ToolSet } from "ai";
 
 /**
  * Consecutive identical tool calls that execute normally before the tracker
@@ -136,6 +136,66 @@ export function repeatCeilingStopCondition(
   tracker: ToolCallRepeatTracker,
 ): StopCondition<ToolSet> {
   return () => tracker.hasReachedTerminationCeiling();
+}
+
+/**
+ * `onChunk` handler bound to one run's tracker, fingerprinting calls to tools
+ * that are not in the request's tool list.
+ *
+ * Such a call never reaches a tool's `execute` wrapper — the SDK turns it into
+ * an invalid tool-call plus a synthetic tool-error, feeds that back to the
+ * model, and takes another step — so {@link ToolCallRepeatTracker.record} is
+ * never reached for it and the ceiling can never fire. A model that keeps
+ * asking for a hidden or misremembered tool would otherwise spin to
+ * MAX_AGENT_STEPS. Add this to every `streamText` config that wires
+ * {@link repeatCeilingStopCondition}, or that config keeps the blind spot.
+ *
+ * The SDK awaits `onChunk` per parsed tool call before the step is finalized,
+ * and finalization precedes stop evaluation, so the streak this records is
+ * already visible to the stop condition for the same step.
+ */
+export function unavailableToolCallRecorder(tracker: ToolCallRepeatTracker) {
+  return ({ chunk }: { chunk: ObservedStreamChunk }): void => {
+    if (!isUnavailableToolCall(chunk)) return;
+    // Args are deliberately left out of the fingerprint. The call failed
+    // because the tool does not exist, which is a function of the name alone —
+    // it would fail identically with any arguments. Fingerprinting the args
+    // would make every retry a fresh streak and the ceiling would never fire,
+    // which is the blind spot this closes.
+    tracker.record(chunk.toolName, undefined);
+  };
+}
+
+/**
+ * The fields {@link unavailableToolCallRecorder} reads off a stream chunk. Every
+ * `onChunk` part the SDK emits is assignable to this, and it is deliberately
+ * structural rather than the SDK's `TextStreamPart` union: the recorder needs
+ * four fields, not a tool-generic type that would push `ToolSet` inference
+ * through this module for nothing.
+ */
+type ObservedStreamChunk = {
+  type: string;
+  toolName?: unknown;
+  invalid?: boolean;
+  error?: unknown;
+};
+
+/**
+ * Narrows a stream chunk to a tool call the SDK rejected because no such tool
+ * exists. `invalid` also covers unparsable arguments for a tool that *does*
+ * exist, so the error identity — not the flag alone — is what selects this
+ * case: an unparsable call is repaired or surfaced elsewhere, and its retry is
+ * fingerprinted normally by the tool wrapper once it parses.
+ */
+function isUnavailableToolCall(
+  chunk: ObservedStreamChunk,
+): chunk is ObservedStreamChunk & { toolName: string } {
+  return (
+    chunk.type === "tool-call" &&
+    chunk.invalid === true &&
+    typeof chunk.toolName === "string" &&
+    NoSuchToolError.isInstance(chunk.error)
+  );
 }
 
 function severityFor(

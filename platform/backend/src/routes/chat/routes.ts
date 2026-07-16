@@ -60,6 +60,7 @@ import {
 import {
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
+  unavailableToolCallRecorder,
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import { withDbTransaction } from "@/database";
@@ -1007,6 +1008,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   messages: modelMessages,
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
+                  // Feeds the repeat ceiling in stopWhen the one call shape it
+                  // cannot otherwise see: a tool that is not in the tool list
+                  // never reaches an execute wrapper, so nothing fingerprints it.
+                  onChunk: unavailableToolCallRecorder(repeatTracker),
                   abortSignal: chatAbortController.signal,
                   // Recover tool-call parse failures that would otherwise abort
                   // the turn: a leaked harmony token in the tool name

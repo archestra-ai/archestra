@@ -105,8 +105,9 @@ pub enum Issuer {
 }
 
 /// How an admitted value came to exist, carrying exactly the admission-time
-/// label *inputs* (never the computed fold), so the label projection can
-/// recompute the fold and be meaningfully parity-tested against the store.
+/// label *inputs* (never the computed fold), so the label projection is the
+/// thing that computes the fold — a stored copy could disagree with the
+/// algebra, an input cannot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ValueOrigin {
     /// Caller-labeled admission at the trust boundary.
@@ -422,6 +423,8 @@ pub enum EventConflict {
     },
     #[error("{turn} is not an admitted confirming user turn")]
     UnknownConfirmation { turn: TurnId },
+    #[error("turn {turn} contributes value {value}, which was never admitted")]
+    UnknownTurnValue { turn: TurnId, value: ValueId },
 }
 
 /// Lifecycle a live action has reached, tracked for conflict refusal.
@@ -634,10 +637,19 @@ impl ProbeState {
                 true => Err(EventConflict::DuplicateValue { value: *value }),
                 false => Ok(()),
             },
-            Fact::TurnAppended { turn, .. } => match self.admitted_turns.contains(turn) {
-                true => Err(EventConflict::DuplicateTurn { turn: *turn }),
-                false => Ok(()),
-            },
+            // A turn *is* `(actor, value)`, so the value it names must already
+            // be admitted (the same batch admits it first) — otherwise the turn
+            // projection resolves to a value that does not exist.
+            Fact::TurnAppended { turn, value, .. } => {
+                match (self.admitted_turns.contains(turn), self.admitted_values.contains(value)) {
+                    (true, _) => Err(EventConflict::DuplicateTurn { turn: *turn }),
+                    (false, false) => Err(EventConflict::UnknownTurnValue {
+                        turn: *turn,
+                        value: *value,
+                    }),
+                    (false, true) => Ok(()),
+                }
+            }
             Fact::ActionProposed { action, .. } => match self.live_action {
                 Some(_) => Err(EventConflict::ActionSlotOccupied { action: *action }),
                 None => Ok(()),
@@ -933,7 +945,8 @@ mod tests {
     #[test]
     fn double_confirmation_spend_is_refused() {
         let mut set = EventSet::default();
-        set.append_batch(vec![confirming_turn_fact(0)]).unwrap();
+        set.append_batch(vec![ingress_fact(0, ValueLabel::identity()), confirming_turn_fact(0)])
+            .unwrap();
         set.append_batch(vec![Fact::ConfirmationSpent { turn: TurnId::new(0) }])
             .unwrap();
         assert!(matches!(
@@ -951,11 +964,29 @@ mod tests {
             set.append_batch(vec![Fact::ConfirmationSpent { turn: TurnId::new(0) }]),
             Err(EventConflict::UnknownConfirmation { .. })
         ));
-        set.append_batch(vec![turn_fact(0)]).unwrap();
+        set.append_batch(vec![ingress_fact(0, ValueLabel::identity()), turn_fact(0)])
+            .unwrap();
         assert!(matches!(
             set.append_batch(vec![Fact::ConfirmationSpent { turn: TurnId::new(0) }]),
             Err(EventConflict::UnknownConfirmation { .. })
         ));
+    }
+
+    /// A turn *is* `(actor, value)`: naming a value no fact admitted would
+    /// project a turn whose value cannot be resolved, so admission refuses it.
+    /// The value may be admitted by an earlier batch or earlier in this one.
+    #[test]
+    fn a_turn_naming_an_unadmitted_value_is_refused() {
+        let mut set = EventSet::default();
+        assert_eq!(
+            set.append_batch(vec![turn_fact(0)]),
+            Err(EventConflict::UnknownTurnValue {
+                turn: TurnId::new(0),
+                value: ValueId::new(0),
+            })
+        );
+        set.append_batch(vec![ingress_fact(0, ValueLabel::identity()), turn_fact(0)])
+            .unwrap();
     }
 
     #[test]

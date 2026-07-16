@@ -422,8 +422,8 @@ fn label_projection_is_causal_not_trajectory_wide() {
 }
 
 /// Provenance replays exactly through diamonds and transformed derivations:
-/// the projection rebuilt from the log names the same edges the store
-/// materialized at admission.
+/// the projection rebuilt from the log names the edges each value was
+/// admitted with, however deep the derivation chain.
 #[test]
 fn provenance_replays_diamonds_and_transforms() {
     let mut trajectory = Trajectory::new();

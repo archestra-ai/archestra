@@ -154,23 +154,6 @@ export function isCodexClientAgentId(
 }
 
 /**
- * The UI label for whichever known client family an interaction's
- * `external_agent_id` list belongs to ("Claude" / "Codex"), or `null` when none
- * match. Drives the client badge on the logs table + session details page.
- */
-export function clientLabelForExternalAgentIds(
-  externalAgentIds: ReadonlyArray<string | null | undefined>,
-): string | null {
-  if (externalAgentIds.some(isClaudeClientAgentId)) {
-    return CLAUDE_CLIENT_LABEL;
-  }
-  if (externalAgentIds.some(isCodexClientAgentId)) {
-    return CODEX_CLIENT_LABEL;
-  }
-  return null;
-}
-
-/**
  * Values used by the `/llm/logs` "Client" filter (URL/query key). Distinct from
  * the stored ids above: the backend expands each to its client's agent-id set
  * (see {@link clientFilterToAgentIds}).
@@ -185,16 +168,64 @@ export const ClientFilterSchema = z.enum([
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
 
+/**
+ * Everything the UI derives per known client family: its display label, the
+ * provider whose logo represents it, its logs-filter value, and the
+ * `external_agent_id` values it covers.
+ */
+export interface ClientFamily {
+  filter: ClientFilter;
+  label: string;
+  provider: SupportedProvider;
+  agentIds: ReadonlyArray<string>;
+  isClientAgentId: (externalAgentId: string | null | undefined) => boolean;
+}
+
+/**
+ * The known client families — the single source for every per-client piece of
+ * UI/filter logic ({@link CLIENT_FILTER_OPTIONS},
+ * {@link clientFilterToAgentIds}, {@link clientForExternalAgentIds}). A new
+ * client family is added here, once, and inherits all of them.
+ */
+const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
+  {
+    filter: CLAUDE_CLIENT_FILTER,
+    label: CLAUDE_CLIENT_LABEL,
+    provider: "anthropic",
+    agentIds: CLAUDE_CLIENT_AGENT_IDS,
+    isClientAgentId: isClaudeClientAgentId,
+  },
+  {
+    filter: CODEX_CLIENT_FILTER,
+    label: CODEX_CLIENT_LABEL,
+    provider: "openai",
+    agentIds: CODEX_CLIENT_AGENT_IDS,
+    isClientAgentId: isCodexClientAgentId,
+  },
+];
+
+/**
+ * The client family an interaction's `external_agent_id` list belongs to, or
+ * `null` when none match. Drives the client badge on the logs table + session
+ * details page (vendor logo via `provider` + `label`).
+ */
+export function clientForExternalAgentIds(
+  externalAgentIds: ReadonlyArray<string | null | undefined>,
+): ClientFamily | null {
+  return (
+    CLIENT_FAMILIES.find((family) =>
+      externalAgentIds.some(family.isClientAgentId),
+    ) ?? null
+  );
+}
+
 /** The client-attribution agent ids a given filter value expands to. */
 export function clientFilterToAgentIds(
   filter: ClientFilter,
 ): ReadonlyArray<string> {
-  switch (filter) {
-    case CLAUDE_CLIENT_FILTER:
-      return CLAUDE_CLIENT_AGENT_IDS;
-    case CODEX_CLIENT_FILTER:
-      return CODEX_CLIENT_AGENT_IDS;
-  }
+  return (
+    CLIENT_FAMILIES.find((family) => family.filter === filter)?.agentIds ?? []
+  );
 }
 
 /**
@@ -205,11 +236,8 @@ export const CLIENT_FILTER_OPTIONS: ReadonlyArray<{
   value: ClientFilter;
   label: string;
   provider: SupportedProvider;
-}> = [
-  {
-    value: CLAUDE_CLIENT_FILTER,
-    label: CLAUDE_CLIENT_LABEL,
-    provider: "anthropic",
-  },
-  { value: CODEX_CLIENT_FILTER, label: CODEX_CLIENT_LABEL, provider: "openai" },
-];
+}> = CLIENT_FAMILIES.map(({ filter, label, provider }) => ({
+  value: filter,
+  label,
+  provider,
+}));

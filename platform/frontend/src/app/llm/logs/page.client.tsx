@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   CLIENT_FILTER_OPTIONS,
   type ClientFilter,
-  clientLabelForExternalAgentIds,
+  clientForExternalAgentIds,
   DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
@@ -95,9 +95,7 @@ function getSessionDisplayData(session: SessionData) {
   // Known clients (Claude, Codex) get a source badge next to the session's last
   // user message. Derived from the client-attribution column (external_agent_id),
   // not the session-id provenance.
-  const clientSourceLabel = clientLabelForExternalAgentIds(
-    session.externalAgentIds,
-  );
+  const clientSource = clientForExternalAgentIds(session.externalAgentIds);
 
   let lastUserMessage = "";
   if (session.lastInteractionRequest && session.lastInteractionType) {
@@ -122,7 +120,7 @@ function getSessionDisplayData(session: SessionData) {
     isSingleInteraction,
     conversationTitle,
     isArchestraChat,
-    clientSourceLabel,
+    clientSource,
     lastUserMessage,
     displayText,
   };
@@ -306,7 +304,7 @@ function SessionsTable({
             conversationTitle,
             displayText,
             isArchestraChat,
-            clientSourceLabel,
+            clientSource,
             lastUserMessage,
           } = getSessionDisplayData(session);
 
@@ -333,7 +331,7 @@ function SessionsTable({
                     </Badge>
                   </Link>
                 </>
-              ) : clientSourceLabel ? (
+              ) : clientSource ? (
                 <>
                   {displayText ? (
                     <span className="min-w-0 flex-1 truncate">
@@ -347,7 +345,7 @@ function SessionsTable({
                     </span>
                   )}
                   <ClientSourceBadge
-                    label={clientSourceLabel}
+                    client={clientSource}
                     className="shrink-0"
                   />
                 </>

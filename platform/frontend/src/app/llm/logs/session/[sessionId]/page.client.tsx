@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  clientLabelForExternalAgentIds,
+  clientForExternalAgentIds,
   DynamicInteraction,
 } from "@archestra/shared";
 import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
@@ -105,9 +105,9 @@ export default function SessionDetailPage({
   const totalToonCostSavings = sessionData?.totalToonCostSavings;
 
   // Session metadata from API
-  // Badge label for known clients (Claude, Codex); null for non-client agent
-  // ids. Derived from the client-attribution column (external_agent_id).
-  const clientSourceLabel = clientLabelForExternalAgentIds(
+  // Badge for known clients (Claude, Codex); null for non-client agent ids.
+  // Derived from the client-attribution column (external_agent_id).
+  const clientSource = clientForExternalAgentIds(
     sessionData?.externalAgentIds ?? [],
   );
   const profileName = sessionData?.profileName;
@@ -189,9 +189,7 @@ export default function SessionDetailPage({
         title={sessionTitle || "Session"}
         badges={
           <>
-            {clientSourceLabel && (
-              <ClientSourceBadge label={clientSourceLabel} />
-            )}
+            {clientSource && <ClientSourceBadge client={clientSource} />}
             <SourceBadge source={sessionData?.source} />
             {profileName && (
               <Badge variant="secondary" className="text-xs">

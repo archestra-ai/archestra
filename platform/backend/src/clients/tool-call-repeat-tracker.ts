@@ -7,6 +7,7 @@
 // can terminate the loop instead of nudging into the void.
 
 import {
+  type DynamicToolCall,
   NoSuchToolError,
   type StopCondition,
   type ToolSet,
@@ -187,9 +188,7 @@ export function recordUnavailableToolCallStep(
  * The fields {@link recordUnavailableToolCallStep} reads off a step's tool call.
  * Deliberately structural rather than the SDK's tool-generic `TypedToolCall`,
  * which would push `ToolSet` inference through this module for three fields —
- * but the assertion below keeps it honest: if the SDK renames or retypes any of
- * them, this stops compiling instead of silently never matching again and
- * quietly restoring the bug.
+ * the assertions below are what keep that honest.
  */
 type ObservedToolCall = {
   toolName?: unknown;
@@ -197,9 +196,24 @@ type ObservedToolCall = {
   error?: unknown;
 };
 
+// Two assertions, because either alone is decorative. Assignability catches a
+// field whose type changed, but never a rename: every field above is optional,
+// so a tool call carrying none of them still satisfies it. Key presence catches
+// the rename. Together, an SDK change that would otherwise leave the guard
+// silently matching nothing — quietly restoring the bug this module exists to
+// prevent — fails the build instead.
 type _SdkToolCallIsObservable =
   TypedToolCall<ToolSet> extends ObservedToolCall ? true : never;
 const _assertSdkToolCallIsObservable: _SdkToolCallIsObservable = true;
+
+// Tuples on both sides: bare, `A | B extends C` binds `extends` to the last
+// member only, which silently evaluates to `A | B | true` and asserts nothing.
+type _SdkToolCallKeepsObservedKeys = [
+  "toolName" | "invalid" | "error",
+] extends [keyof DynamicToolCall]
+  ? true
+  : never;
+const _assertSdkToolCallKeepsObservedKeys: _SdkToolCallKeepsObservedKeys = true;
 
 /**
  * Narrows a step's tool call to one the SDK rejected because no such tool

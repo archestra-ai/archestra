@@ -101,4 +101,4 @@ Archestra stores the tool list discovered at install time. When the upstream ser
 
 Rename a registry entry from its edit dialog. Tools take the new name prefix (`newname__tool`) immediately — no reinstall, and running servers keep running. Tool assignments and policies are preserved.
 
-Connected MCP clients cache the tool list. After a rename they must reload it, or calls using the old tool names fail. Names are unique within the organization — a rename to a name another entry already uses is rejected.
+Connected MCP clients cache the tool list. After a rename they must reload it, or calls using the old tool names fail. Names are unique within the organization — a rename to a name another entry already uses is rejected. Built-in servers, like the browser preview server, cannot be renamed.

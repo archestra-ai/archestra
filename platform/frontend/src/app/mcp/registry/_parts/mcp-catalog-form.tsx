@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  isBuiltInCatalogId,
+} from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
@@ -511,6 +515,13 @@ export function McpCatalogForm({
   // was actually edited. `isReallyDirty` walks the tree and only returns
   // true when SOME leaf is actually true.
   const isNameDirty = mode === "edit" && isReallyDirty(dirtyFields.name);
+  // Built-in items (the browser-preview Playwright server) are system-managed:
+  // the backend silently strips `name` from their PUTs, so an editable field
+  // would be a lie — lock it instead.
+  const isNameLocked =
+    mode === "edit" &&
+    initialValues !== undefined &&
+    isBuiltInCatalogId(initialValues.id);
   const isServerUrlDirty =
     mode === "edit" && isReallyDirty(dirtyFields.serverUrl);
   const isAuthDirty =
@@ -1001,9 +1012,16 @@ export function McpCatalogForm({
                       <FormControl>
                         <Input
                           placeholder="e.g., GitHub MCP Server"
+                          disabled={isNameLocked}
                           {...field}
                         />
                       </FormControl>
+                      {isNameLocked && (
+                        <FormDescription>
+                          This is a built-in server — its name is system-managed
+                          and cannot be changed.
+                        </FormDescription>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}

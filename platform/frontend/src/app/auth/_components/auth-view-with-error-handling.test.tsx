@@ -1,5 +1,6 @@
-import { E2eTestId } from "@archestra/shared";
-import { render, screen, waitFor } from "@testing-library/react";
+import { DocsPage, E2eTestId, getDocsUrl } from "@archestra/shared";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -141,6 +142,52 @@ describe("AuthViewWithErrorHandling", () => {
     await waitFor(() => {
       expect(screen.getByText("Sign-In Failed")).toBeInTheDocument();
     });
+  });
+
+  it("links the forgot-password hint to the password reset docs", () => {
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<AuthViewWithErrorHandling path="sign-in" callbackURL="/" />);
+
+    const link = screen.getByRole("link", { name: /reset your password/i });
+    expect(link).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformResetUserPassword),
+    );
+  });
+
+  it("surfaces the password-reset hint over the form after three failed sign-in attempts", async () => {
+    const user = userEvent.setup();
+    mockSignInMutateAsync.mockResolvedValue(null);
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<AuthViewWithErrorHandling path="sign-in" callbackURL="/" />);
+
+    await user.type(screen.getByLabelText("Email"), "user@example.com");
+    await user.type(screen.getByLabelText("Password"), "wrong-password");
+
+    const submit = screen.getByTestId(E2eTestId.SignInSubmitButton);
+
+    // First two failures leave the hint alert hidden.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      await user.click(submit);
+      await waitFor(() =>
+        expect(mockSignInMutateAsync).toHaveBeenCalledTimes(attempt),
+      );
+    }
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    // The third consecutive failure reveals the hint alert with the docs link.
+    await user.click(submit);
+    const alert = await screen.findByRole("alert");
+    expect(
+      within(alert).getByText("Forgot your password?"),
+    ).toBeInTheDocument();
+    expect(
+      within(alert).getByRole("link", {
+        name: /learn how to reset your password/i,
+      }),
+    ).toHaveAttribute("href", getDocsUrl(DocsPage.PlatformResetUserPassword));
   });
 
   it("keeps the generic failed SSO message visible under React Strict Mode", async () => {

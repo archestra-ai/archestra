@@ -3,6 +3,7 @@ import {
   getChatItemUnreadIndicatorTestId,
 } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
+import { format, subDays } from "date-fns";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock ResizeObserver used by Radix UI components
@@ -268,16 +269,23 @@ beforeEach(() => {
 function makeConv(
   id: string,
   title: string,
-  opts?: { pinnedAt?: string; updatedAt?: string },
+  opts?: { pinnedAt?: string; updatedAt?: string; lastMessageAt?: string },
 ) {
+  const updatedAt = opts?.updatedAt ?? new Date().toISOString();
   return {
     id,
     title,
     pinnedAt: opts?.pinnedAt ?? null,
-    updatedAt: opts?.updatedAt ?? new Date().toISOString(),
+    updatedAt,
+    lastMessageAt: opts?.lastMessageAt ?? updatedAt,
     messages: [],
     agent: { id: "agent-1", name: "Test Agent" },
   };
+}
+
+/** ISO timestamp n days before now (0 = today, 1 = always the previous calendar day). */
+function daysAgo(n: number) {
+  return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
 }
 
 describe("ChatSidebarSection", () => {
@@ -344,9 +352,10 @@ describe("ChatSidebarSection", () => {
 
     render(<ChatSidebarSection fadeIn={fadeIn} />);
 
-    // Section labels
+    // Section labels: recents render under a date bucket, not "Recents"
+    // (2026-01-02 is long past, so it lands in "Older").
     expect(screen.getByText("Pinned")).toBeInTheDocument();
-    expect(screen.getByText("Recents")).toBeInTheDocument();
+    expect(screen.getByText("Older")).toBeInTheDocument();
 
     // Pinned chats are not capped by the recents budget — all 3 show...
     expect(screen.getByText("Pinned One")).toBeInTheDocument();
@@ -383,7 +392,7 @@ describe("ChatSidebarSection", () => {
     expect(screen.queryByText("More")).not.toBeInTheDocument();
   });
 
-  it("does not render a Recents section or 'More' when all chats are pinned", () => {
+  it("does not render date sections or 'More' when all chats are pinned", () => {
     mockConversations = [
       makeConv("c1", "Pinned A", {
         pinnedAt: "2026-01-05T00:00:00Z",
@@ -401,9 +410,57 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByText("Pinned A")).toBeInTheDocument();
     expect(screen.getByText("Pinned B")).toBeInTheDocument();
 
-    // No unpinned chats → no Recents section and no dangling "More".
-    expect(screen.queryByText("Recents")).not.toBeInTheDocument();
+    // No unpinned chats → no date sections and no dangling "More".
+    expect(screen.queryByText("Today")).not.toBeInTheDocument();
+    expect(screen.queryByText("Older")).not.toBeInTheDocument();
     expect(screen.queryByText("More")).not.toBeInTheDocument();
+  });
+
+  it("groups recents into per-day date sections by lastMessageAt", () => {
+    mockConversations = [
+      makeConv("c1", "Today Chat", { lastMessageAt: daysAgo(0) }),
+      makeConv("c2", "Yesterday Chat", { lastMessageAt: daysAgo(1) }),
+      makeConv("c3", "This Week Chat", { lastMessageAt: daysAgo(3) }),
+      makeConv("c4", "Old Chat", { lastMessageAt: daysAgo(30) }),
+    ];
+
+    render(<ChatSidebarSection slots={4} fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Today")).toBeInTheDocument();
+    expect(screen.getByText("Yesterday")).toBeInTheDocument();
+    // Days 2-6 back get their own "Jul 14"-style section.
+    expect(
+      screen.getByText(format(subDays(new Date(), 3), "MMM d")),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Older")).toBeInTheDocument();
+
+    expect(screen.getByText("Today Chat")).toBeInTheDocument();
+    expect(screen.getByText("Yesterday Chat")).toBeInTheDocument();
+    expect(screen.getByText("This Week Chat")).toBeInTheDocument();
+    expect(screen.getByText("Old Chat")).toBeInTheDocument();
+
+    // All 4 fit the slot budget, so no "More".
+    expect(screen.queryByText("More")).not.toBeInTheDocument();
+  });
+
+  it("only renders date sections for non-empty buckets and keeps 'More' in the last one", () => {
+    mockConversations = [
+      makeConv("c1", "Today One", { lastMessageAt: daysAgo(0) }),
+      makeConv("c2", "Today Two", { lastMessageAt: daysAgo(0) }),
+      makeConv("c3", "Today Three", { lastMessageAt: daysAgo(0) }),
+      makeConv("c4", "Today Four", { lastMessageAt: daysAgo(0) }),
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    // Only the "Today" bucket has visible chats (default 3 slots).
+    expect(screen.getByText("Today")).toBeInTheDocument();
+    expect(screen.queryByText("Yesterday")).not.toBeInTheDocument();
+    expect(screen.queryByText("Older")).not.toBeInTheDocument();
+
+    // 4th chat falls behind the slot budget → "More" affordance.
+    expect(screen.queryByText("Today Four")).not.toBeInTheDocument();
+    expect(screen.getByText("More")).toBeInTheDocument();
   });
 
   it("does not show 'More' when total conversations fit in slots", () => {

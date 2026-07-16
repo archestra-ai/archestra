@@ -43,7 +43,7 @@ mod planning;
 mod pursue;
 
 #[cfg(test)]
-mod parity_tests;
+mod projection_tests;
 #[cfg(test)]
 mod tests;
 

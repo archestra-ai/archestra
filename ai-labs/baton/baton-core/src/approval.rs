@@ -27,11 +27,12 @@ use serde::Serialize;
 use crate::audit::AuthorityName;
 use crate::contract::Violation;
 use crate::engine::EngineId;
+use crate::projection::TrajectoryProjection;
 use crate::remedy::Authorization;
 use crate::revision::{FlowId, PlanId, Revision, ValueId};
 use crate::transition::AuthorityMandate;
 use crate::turn::TrajectoryId;
-use crate::value::{Provenance, ValueLabel, ValueStore};
+use crate::value::{Provenance, ValueLabel};
 
 /// A ruling outcome, from an inline or external authority.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -47,22 +48,22 @@ pub enum Ruling {
 /// authority, so abstention keeps the contract total.
 pub type AuthorityFn = fn(&Authorization, &[Violation], &TrajectoryView<'_>) -> Option<Ruling>;
 
-/// A read-only projection of the trajectory handed to an inline authority: the
+/// A read-only slice of the trajectory handed to an inline authority: the
 /// label and provenance of any value it needs to judge a grant. Borrowed and
 /// taken before any mutation, so an inline ruling cannot observe its own
 /// effects.
 pub struct TrajectoryView<'a> {
-    store: &'a ValueStore,
+    projection: &'a TrajectoryProjection,
 }
 
 impl<'a> TrajectoryView<'a> {
-    pub(crate) fn new(store: &'a ValueStore) -> Self {
-        Self { store }
+    pub(crate) fn new(projection: &'a TrajectoryProjection) -> Self {
+        Self { projection }
     }
 
     /// The label of a value the trajectory admitted, if any.
     pub fn label(&self, value: ValueId) -> Option<&ValueLabel> {
-        self.store.get(value).ok().map(|stored| stored.label())
+        self.projection.label(value)
     }
 
     /// The transitive provenance ancestry of `value` — the value and every
@@ -72,12 +73,10 @@ impl<'a> TrajectoryView<'a> {
     /// fold does not name a suspicious ancestor in its own label; only walking
     /// the closure reveals it.
     pub fn ancestry(&self, value: ValueId) -> impl Iterator<Item = (ValueId, &ValueLabel, &Provenance)> {
-        self.store.provenance_closure([value]).into_iter().filter_map(|id| {
-            self.store
-                .get(id)
-                .ok()
-                .map(|stored| (id, stored.label(), stored.provenance()))
-        })
+        self.projection
+            .provenance_closure([value])
+            .into_iter()
+            .filter_map(|id| Some((id, self.projection.label(id)?, self.projection.provenance_of(id)?)))
     }
 }
 
@@ -108,20 +107,18 @@ impl AncestrySnapshot {
     /// Snapshot the label and provenance of the transitive provenance closure
     /// of `ids`, taken before any mutation. Unknown ids are skipped — the
     /// snapshot is context for a ruling, not a check.
-    pub(crate) fn of(store: &ValueStore, ids: impl IntoIterator<Item = ValueId>) -> Self {
-        let values = store
+    pub(crate) fn of(projection: &TrajectoryProjection, ids: impl IntoIterator<Item = ValueId>) -> Self {
+        let values = projection
             .provenance_closure(ids)
             .into_iter()
             .filter_map(|id| {
-                store.get(id).ok().map(|stored| {
-                    (
-                        id,
-                        ValueView {
-                            label: stored.label().clone(),
-                            provenance: stored.provenance().clone(),
-                        },
-                    )
-                })
+                Some((
+                    id,
+                    ValueView {
+                        label: projection.label(id)?.clone(),
+                        provenance: projection.provenance_of(id)?.clone(),
+                    },
+                ))
             })
             .collect();
         Self { values }
@@ -314,7 +311,7 @@ mod tests {
         let mid = trajectory.seed_transformed(root, ValueLabel::identity());
         let leaf = trajectory.seed_transformed(mid, ValueLabel::identity());
 
-        let snapshot = AncestrySnapshot::of(trajectory.store(), [leaf]);
+        let snapshot = AncestrySnapshot::of(trajectory.view(), [leaf]);
 
         let ids: BTreeSet<ValueId> = snapshot.iter().map(|(id, _)| id).collect();
         assert_eq!(ids, BTreeSet::from([root, mid, leaf]));
@@ -334,7 +331,7 @@ mod tests {
             )
             .unwrap();
 
-        let snapshot = AncestrySnapshot::of(trajectory.store(), [joined]);
+        let snapshot = AncestrySnapshot::of(trajectory.view(), [joined]);
 
         assert_eq!(snapshot.iter().filter(|(id, _)| *id == root).count(), 1);
         assert_eq!(snapshot.iter().count(), 4);
@@ -346,7 +343,7 @@ mod tests {
         let known = ingress(&mut trajectory, ValueLabel::identity(), "hi");
         let missing = ValueId::new(u64::MAX);
 
-        let snapshot = AncestrySnapshot::of(trajectory.store(), [known, missing]);
+        let snapshot = AncestrySnapshot::of(trajectory.view(), [known, missing]);
 
         assert!(snapshot.get(known).is_some());
         assert_eq!(snapshot.get(missing), None);
@@ -358,9 +355,9 @@ mod tests {
         let mut trajectory = Trajectory::new();
         let value = ingress(&mut trajectory, suspicious_for("bob"), "secret");
 
-        let snapshot = AncestrySnapshot::of(trajectory.store(), [value]);
+        let snapshot = AncestrySnapshot::of(trajectory.view(), [value]);
         let view = snapshot.get(value).unwrap();
-        let stored = trajectory.store().get(value).unwrap();
+        let stored = trajectory.value(value).unwrap();
 
         assert_eq!(&view.label, stored.label());
         assert_eq!(&view.provenance, stored.provenance());

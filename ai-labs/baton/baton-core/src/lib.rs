@@ -8,10 +8,10 @@
 //! The moving parts:
 //!
 //! - A [`turn::Trajectory`] is an append-only [`event::EventSet`] of scoped
-//!   facts with derived [`projection`]s and materialized read models: values
-//!   ([`value::StoredValue`] with full [`value::Provenance`]), effects,
-//!   action/emission lifecycle, grants, and audit are all facts or
-//!   projections over them. One public mutation = prevalidation, then one
+//!   facts. Everything else is a [`projection`] of it — value labels and
+//!   [`value::Provenance`], effects, action/emission lifecycle, grants,
+//!   turns, and audit are all facts or derived from them, with the store
+//!   holding nothing but the opaque bodies. One public mutation = prevalidation, then one
 //!   atomic event batch. Admission is engine-owned: ingress is the only
 //!   caller-labeled path (the explicit trust boundary); every other value's
 //!   label is computed inside the crate as the conservative fold of its

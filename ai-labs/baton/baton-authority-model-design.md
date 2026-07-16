@@ -96,8 +96,8 @@ semantics live in `baton-core/src/lib.rs`.
    release, a completion before release, a second consumption of a grant) are
    refused at admission — the single enforcement point. Labels, effects,
    action/emission lifecycle, grant availability, confirmation, provenance,
-   and audit are projections or materialized read models (rebuild equivalence
-   pinned by the parity suite). `Revision` is the digest of the event frontier;
+   turns, and audit are **projections** — one build path, reprojected from the
+   log after each batch, so there is no second representation to drift. `Revision` is the digest of the event frontier;
    permits, plans, and approvals bind to it, so any appended fact stales
    everything minted before it. Release appends the may-effect commitment
    before dispatch; failure appends and removes nothing.

@@ -2,10 +2,9 @@
 //!
 //! The authoritative trajectory state: every public
 //! [`Trajectory`](crate::turn::Trajectory) mutation prevalidates, then
-//! appends one atomic batch of facts here. Reads go through pure
-//! projections ([`crate::projection`]) or materialized read models written
-//! only as facts are applied; rebuild equivalence is pinned by the parity
-//! suite.
+//! appends one atomic batch of facts here. Every read goes through the pure
+//! projections ([`crate::projection`]) — the single build path for derived
+//! state, so nothing can drift from the log.
 //!
 //! The algebra is `L' = L ∪ {event}` with union as the combine. Under the
 //! single-writer `&mut Trajectory` discipline the set is totally ordered by
@@ -151,6 +150,10 @@ pub enum Fact {
     TurnAppended {
         turn: TurnId,
         actor: Actor,
+        /// The value the turn contributed. A turn *is* `(actor, value)`, so the
+        /// fact names both — without it the turn sequence would not be
+        /// derivable from the log alone.
+        value: ValueId,
     },
     ActionProposed {
         action: ActionId,
@@ -729,7 +732,7 @@ impl ProbeState {
             Fact::ValueAdmitted { value, .. } => {
                 self.admitted_values.insert(*value);
             }
-            Fact::TurnAppended { turn, actor } => {
+            Fact::TurnAppended { turn, actor, .. } => {
                 self.admitted_turns.insert(*turn);
                 if matches!(actor, Actor::User(crate::turn::UserTurn { confirms: Some(_), .. })) {
                     self.confirming_turns.insert(*turn);
@@ -803,6 +806,7 @@ mod tests {
                 id: crate::dimension::UserId::new("alice"),
                 confirms: None,
             }),
+            value: ValueId::new(index),
         }
     }
 
@@ -813,6 +817,7 @@ mod tests {
                 id: crate::dimension::UserId::new("alice"),
                 confirms: Some(crate::ToolName::new("db.drop")),
             }),
+            value: ValueId::new(index),
         }
     }
 

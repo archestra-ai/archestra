@@ -1,12 +1,15 @@
-//! Rebuild equivalence: [`projection::TrajectoryView`] must agree with the
-//! hand-maintained read models on every representative flow — the log is
-//! authoritative, the read models are rebuildable from it.
+//! The event log's discipline and the projections' semantics, walked through
+//! real engine flows.
 //!
-//! This suite is **transitional evidence**: it exists to prove the view is a
-//! faithful, complete build path before the read models are deleted in favour
-//! of it. Once `Trajectory` holds only the view, the two sides of every assert
-//! here become the same value and the suite goes with them; what survives is
-//! the behaviour each scenario drives.
+//! Every mutation must append exactly one atomic batch and advance the
+//! revision exactly when the frontier moves (`tracked`), and the projections
+//! must tell the causal truth: a label folds exactly a value's dependencies,
+//! never the whole trajectory; provenance replays diamonds and transforms.
+//!
+//! These began as shadow-phase parity tests against the hand-maintained read
+//! models. Those models are gone — the projections are the only build path —
+//! so the parity half was deleted rather than kept as `project(e) ==
+//! project(e)`; what remains are the claims that can still fail.
 
 use std::collections::BTreeSet;
 
@@ -102,67 +105,6 @@ fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) ->
     )
 }
 
-/// The projected view == the hand-maintained read models, across every
-/// domain the projections cover. This is the cutover evidence: it must hold
-/// before the read models can be deleted in favour of the view.
-///
-/// Two different strengths of claim live here, and conflating them is how the
-/// previous version of this assert became vacuous (it rebuilt
-/// `TrajectoryState` with the same `apply` that maintained it, asserting
-/// `apply(e) == apply(e)`):
-///
-/// - Labels, provenance, effects and audit are **independently recomputed**
-///   by the projections from the admission facts, while the read models build
-///   them at admission time. Agreement is a real check of the algebra.
-/// - The pending slots share one fold ([`projection::apply_flow_fact`]) by
-///   design — a second implementation would be the duplication we are
-///   removing. Agreement there is the weaker but load-bearing claim that
-///   *bulk replay reproduces incremental maintenance*.
-fn assert_parity(trajectory: &Trajectory) {
-    let events = trajectory.events();
-    let view = projection::TrajectoryView::project(events);
-
-    for (id, label) in view.value_labels() {
-        let stored = trajectory.value(*id).expect("projected value exists in the store");
-        assert_eq!(stored.label(), label, "label parity for {id}");
-        assert_eq!(
-            stored.provenance(),
-            view.provenance_of(*id).expect("provenance projected"),
-            "provenance parity for {id}"
-        );
-    }
-    // The projection is complete: the store holds exactly the projected ids.
-    assert!(
-        trajectory
-            .value(ValueId::new(view.value_labels().len() as u64))
-            .is_err()
-    );
-
-    assert_eq!(
-        view.committed_effects(),
-        trajectory.state().past_effects(),
-        "committed-effects parity"
-    );
-    assert_eq!(view.audit(), trajectory.state().audit(), "audit parity");
-
-    assert_eq!(
-        view.pending_action(),
-        trajectory.pending_action(),
-        "pending-action parity (bulk replay == incremental maintenance)"
-    );
-    assert_eq!(
-        view.pending_emission(),
-        trajectory.pending_emission(),
-        "pending-emission parity (bulk replay == incremental maintenance)"
-    );
-
-    assert_eq!(
-        view.confirmation_available().map(|(_, tool)| tool.clone()),
-        trajectory.pending_confirmation().cloned(),
-        "confirmation parity"
-    );
-}
-
 /// Run one operation asserting the one-mutation-one-batch discipline: the
 /// frontier (which the revision digests) advances by exactly
 /// `expected_batches` batches.
@@ -178,12 +120,11 @@ fn tracked<R>(trajectory: &mut Trajectory, expected_batches: u64, op: impl FnOnc
         "staleness parity: the frontier must advance exactly when the revision does"
     );
     assert_eq!(batches, expected_batches, "batch count for this operation");
-    assert_parity(trajectory);
     out
 }
 
 #[test]
-fn permitted_dispatch_projects_the_legacy_truth() {
+fn permitted_dispatch_advances_one_batch_per_mutation() {
     let mut engine = PolicyEngine::new();
     engine.register(email_contract(Effects::none())).unwrap();
     let mut trajectory = Trajectory::new();
@@ -215,7 +156,7 @@ fn permitted_dispatch_projects_the_legacy_truth() {
 /// committed-effects projection is exercised against a real growth
 /// acquisition rather than seeded state.
 #[test]
-fn accepted_egress_dispatch_projects_the_legacy_truth() {
+fn accepted_egress_dispatch_advances_one_batch_per_mutation() {
     let mut engine = PolicyEngine::new();
     engine
         .register(email_contract(Effects::declared([Effect::Egress])))
@@ -254,7 +195,7 @@ fn accepted_egress_dispatch_projects_the_legacy_truth() {
 }
 
 #[test]
-fn transform_remedy_walk_projects_the_legacy_truth() {
+fn transform_remedy_walk_advances_one_batch_per_mutation() {
     let mut engine = PolicyEngine::new();
     engine.register(email_contract(Effects::none())).unwrap();
     engine.register_transformer(redact_transformer()).unwrap();
@@ -306,7 +247,7 @@ fn transform_remedy_walk_projects_the_legacy_truth() {
 }
 
 #[test]
-fn endorse_approval_walk_projects_the_legacy_truth() {
+fn endorse_approval_walk_advances_one_batch_per_mutation() {
     let mut engine = PolicyEngine::new();
     engine.register(email_contract(Effects::none())).unwrap();
     engine.register_authority(approving_human()).unwrap();
@@ -341,7 +282,7 @@ fn endorse_approval_walk_projects_the_legacy_truth() {
 }
 
 #[test]
-fn declared_failure_projects_the_legacy_truth() {
+fn declared_failure_advances_one_batch_per_mutation() {
     let mut engine = PolicyEngine::new();
     engine
         .register(email_contract(Effects::declared([Effect::Egress])))
@@ -375,7 +316,7 @@ fn declared_failure_projects_the_legacy_truth() {
 }
 
 #[test]
-fn confirmation_spend_projects_the_legacy_truth() {
+fn confirmation_spend_advances_one_batch_per_mutation() {
     let mut engine = PolicyEngine::new();
     engine.register(email_contract(Effects::none())).unwrap();
     let mut trajectory = Trajectory::new();
@@ -454,7 +395,6 @@ fn label_projection_is_causal_not_trajectory_wide() {
         .unwrap();
     let labels = projection::value_labels(trajectory.events());
     assert_eq!(labels.get(&derived).map(|l| l.trust), Some(Trust::SUSPICIOUS));
-    assert_parity(&trajectory);
 }
 
 /// Provenance replays exactly through diamonds and transformed derivations:
@@ -514,5 +454,4 @@ fn provenance_replays_diamonds_and_transforms() {
         }
     }
     assert!(reached_seed, "the transitive walk reaches the ingress seed");
-    assert_parity(&trajectory);
 }

@@ -201,7 +201,7 @@ impl ArgumentSchema {
         subtree
             .leaves()
             .into_iter()
-            .map(|id| Ok(UserId::new(store.get(id)?.body().as_str())))
+            .map(|id| Ok(UserId::new(store.body(id)?.as_str())))
             .collect()
     }
 }
@@ -399,7 +399,7 @@ pub(crate) fn render(tree: &ArgumentTree<ValueId>, store: &ValueStore) -> Result
 fn render_into(tree: &ArgumentTree<ValueId>, store: &ValueStore, out: &mut String) -> Result<(), UnknownValue> {
     match tree {
         ArgumentTree::Value(id) => {
-            render_string(store.get(*id)?.body().as_str(), out);
+            render_string(store.body(*id)?.as_str(), out);
         }
         ArgumentTree::List(items) => {
             out.push('[');
@@ -446,18 +446,11 @@ fn render_string(s: &str, out: &mut String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::revision::TurnId;
-    use crate::value::{OpaqueValue, ValueLabel};
+    use crate::value::OpaqueValue;
 
     fn store_with(bodies: &[&str]) -> (ValueStore, Vec<ValueId>) {
         let mut store = ValueStore::default();
-        let ids = bodies
-            .iter()
-            .enumerate()
-            .map(|(i, body)| {
-                store.admit_ingress(TurnId::new(i as u64), ValueLabel::identity(), OpaqueValue::new(*body))
-            })
-            .collect();
+        let ids = bodies.iter().map(|body| store.admit(OpaqueValue::new(*body))).collect();
         (store, ids)
     }
 

@@ -1081,19 +1081,19 @@ impl SimFlow {
         checked: &ToolRequest,
         contract: Option<&ToolContract>,
     ) -> Result<Self, UnknownValue> {
-        let store = trajectory.store();
+        let view = trajectory.view();
         let mut leaf_labels = BTreeMap::new();
         for leaf in checked.arguments.leaves() {
-            leaf_labels.insert(leaf, store.get(leaf)?.label().clone());
+            leaf_labels.insert(leaf, view.fold_labels([&leaf])?);
         }
         let mut control_labels = BTreeMap::new();
         for id in checked.control.iter() {
-            control_labels.insert(*id, store.get(*id)?.label().clone());
+            control_labels.insert(*id, view.fold_labels([id])?);
         }
         let (requires, recipients, extra) = match contract {
             Some(c) => (
                 c.requires.clone(),
-                c.arguments.resolve_recipients(&checked.arguments, store)?,
+                c.arguments.resolve_recipients(&checked.arguments, trajectory.store())?,
                 Vec::new(),
             ),
             None => (
@@ -1120,7 +1120,7 @@ impl SimFlow {
             tool: checked.tool.clone(),
             requires,
             recipients,
-            past_effects: trajectory.state().past_effects().clone(),
+            past_effects: trajectory.past_effects().clone(),
             proposed_effects,
             accepted_effects,
             confirmed: trajectory.pending_confirmation().cloned(),
@@ -1139,14 +1139,14 @@ impl SimFlow {
         checked: &EmissionRequest,
         policy: Option<&ResponsePolicy>,
     ) -> Result<Self, UnknownValue> {
-        let store = trajectory.store();
+        let view = trajectory.view();
         let mut leaf_labels = BTreeMap::new();
         for leaf in checked.body.leaves() {
-            leaf_labels.insert(leaf, store.get(leaf)?.label().clone());
+            leaf_labels.insert(leaf, view.fold_labels([&leaf])?);
         }
         let mut control_labels = BTreeMap::new();
         for id in checked.control.iter() {
-            control_labels.insert(*id, store.get(*id)?.label().clone());
+            control_labels.insert(*id, view.fold_labels([id])?);
         }
         let (requires, recipients, extra) = match policy {
             Some(policy) => (policy.requires.clone(), policy.readers.clone(), Vec::new()),
@@ -1164,7 +1164,7 @@ impl SimFlow {
             tool: ToolName::new(RESPONSE_SINK),
             requires,
             recipients,
-            past_effects: trajectory.state().past_effects().clone(),
+            past_effects: trajectory.past_effects().clone(),
             proposed_effects: Effects::none(),
             accepted_effects: Effects::none(),
             confirmed: None,

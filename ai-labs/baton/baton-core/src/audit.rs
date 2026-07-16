@@ -206,136 +206,57 @@ impl fmt::Display for AuditEvent {
     }
 }
 
-/// The monotone control-plane read model of one trajectory: may-effects that
-/// were committed at dispatch time, and the audit log. Nothing here is ever
-/// removed or loosened.
-///
-/// Demoted from authoritative state to a **materialized projection** of the
-/// append-only event log: its effect surface is updated exclusively by
-/// [`TrajectoryState::apply`] as facts are admitted, so it stays rebuildable
-/// from the log by construction (values never change after admission and the
-/// log only grows, so there is no invalidation to manage).
-#[derive(Debug, Serialize)]
-pub struct TrajectoryState {
-    past_effects: Effects,
-    audit: Vec<AuditEvent>,
-}
-
-impl Default for TrajectoryState {
-    fn default() -> Self {
-        Self {
-            past_effects: Effects::none(),
-            audit: Vec::new(),
-        }
-    }
-}
-
-impl TrajectoryState {
-    pub fn past_effects(&self) -> &Effects {
-        &self.past_effects
-    }
-
-    pub fn audit(&self) -> &[AuditEvent] {
-        &self.audit
-    }
-
-    /// Append one audit event. Append-only by construction; private — every
-    /// record originates from an admitted fact via [`TrajectoryState::apply`].
-    fn record(&mut self, event: AuditEvent) {
-        self.audit.push(event);
-    }
-
-    /// Materialize one admitted fact into the read model — the only writer
-    /// of both the effect surface and the audit log: every audit record
-    /// originates from a fact (typed facts synthesize their records;
-    /// audit-only history rides `Fact::ControlPlane` verbatim).
-    pub(crate) fn apply(&mut self, fact: &crate::event::Fact) {
-        use crate::event::Fact;
-        match fact {
-            Fact::EffectsCommitted { action, effects } => {
-                self.commit_effects(effects.clone());
-                self.record(AuditEvent::EffectsCommitted {
-                    action: *action,
-                    effects: effects.clone(),
-                });
-            }
-            Fact::DispatchFailed { action } => {
-                self.record(AuditEvent::DispatchFailed { action: *action });
-            }
-            Fact::AuthorizationApplied {
-                transition,
-                authorization,
-                authority,
-                resolved,
-                derived,
-                labels,
-            } => {
-                self.record(AuditEvent::AuthorizationApplied {
-                    transition: *transition,
-                    authorization: authorization.clone(),
-                    authority: authority.clone(),
-                    resolved: resolved.clone(),
-                    derived: *derived,
-                    labels: labels.clone(),
-                });
-            }
-            Fact::AuthorizationDenied {
-                authorization,
-                authority,
-                reason,
-            } => {
-                self.record(AuditEvent::AuthorizationDenied {
-                    authorization: authorization.clone(),
-                    authority: authority.clone(),
-                    reason: reason.clone(),
-                });
-            }
-            Fact::ControlPlane { event } => {
-                self.record(event.clone());
-            }
-            _ => {}
-        }
-    }
-
-    /// Fold newly committed effects into the monotone past. Combine is a
-    /// union, so effects can only accumulate; failure of a later dispatch
-    /// never removes them.
-    fn commit_effects(&mut self, effects: Effects) {
-        self.past_effects = self.past_effects.clone().combine(effects);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::dimension::Effect;
+    use crate::event::EventSet;
+    use crate::projection::committed_effects;
 
-    fn commitment(effects: Effects) -> crate::event::Fact {
-        crate::event::Fact::EffectsCommitted {
-            action: crate::revision::ActionId::new(0),
-            effects,
-        }
+    /// Commit `effects` as a real dispatch would — propose, commit, release,
+    /// fail — since admission refuses a commitment for an action that was
+    /// never proposed. The commitment fact is the only thing the effect
+    /// surface is derived from; the rest is the lifecycle it must ride.
+    fn commit(events: &mut EventSet, action: u64, effects: Effects) {
+        let action = crate::revision::ActionId::new(action);
+        events
+            .append_batch(vec![
+                crate::event::Fact::ActionProposed {
+                    action,
+                    flow: crate::revision::FlowId::new(action.index()),
+                    request: crate::request::ToolRequest::new(
+                        crate::ToolName::new("seed.dispatch"),
+                        crate::request::ArgumentTree::empty(),
+                        std::collections::BTreeSet::new(),
+                    ),
+                    effects: effects.clone(),
+                },
+                crate::event::Fact::EffectsCommitted { action, effects },
+                crate::event::Fact::ActionReleased { action },
+                crate::event::Fact::DispatchFailed { action },
+            ])
+            .expect("the synthetic dispatch is a well-formed lifecycle");
     }
 
     #[test]
     fn effects_only_accumulate() {
-        let mut state = TrajectoryState::default();
-        state.apply(&commitment(Effects::declared([Effect::Egress])));
-        state.apply(&commitment(Effects::none()));
-        assert_eq!(state.past_effects(), &Effects::declared([Effect::Egress]));
+        let mut events = EventSet::default();
+        commit(&mut events, 0, Effects::declared([Effect::Egress]));
+        commit(&mut events, 1, Effects::none());
+        assert_eq!(committed_effects(&events), Effects::declared([Effect::Egress]));
 
-        state.apply(&commitment(Effects::declared([Effect::Mutation])));
+        commit(&mut events, 2, Effects::declared([Effect::Mutation]));
         assert_eq!(
-            state.past_effects(),
-            &Effects::declared([Effect::Egress, Effect::Mutation])
+            committed_effects(&events),
+            Effects::declared([Effect::Egress, Effect::Mutation])
         );
     }
 
     #[test]
     fn unknown_effects_absorb_permanently() {
-        let mut state = TrajectoryState::default();
-        state.apply(&commitment(Effects::UNKNOWN));
-        state.apply(&commitment(Effects::none()));
-        assert_eq!(state.past_effects(), &Effects::UNKNOWN);
+        let mut events = EventSet::default();
+        commit(&mut events, 0, Effects::UNKNOWN);
+        commit(&mut events, 1, Effects::none());
+        assert_eq!(committed_effects(&events), Effects::UNKNOWN);
     }
 }

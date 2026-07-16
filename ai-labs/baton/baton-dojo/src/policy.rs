@@ -553,17 +553,11 @@ mod tests {
         allow(&mut gate, "list_invoices", json!({}));
         gate.commit("invoice data").unwrap();
         allow(&mut gate, "send_email", json!({ "to": AUDITOR }));
-        assert_eq!(
-            gate.trajectory.state().past_effects(),
-            &Effects::declared([Effect::Egress])
-        );
+        assert_eq!(gate.trajectory.past_effects(), &Effects::declared([Effect::Egress]));
         // The tool errored after release; committing the error result closes
         // the dispatch and the committed effects stay.
         gate.commit("{\"error\":\"smtp down\"}").unwrap();
-        assert_eq!(
-            gate.trajectory.state().past_effects(),
-            &Effects::declared([Effect::Egress])
-        );
+        assert_eq!(gate.trajectory.past_effects(), &Effects::declared([Effect::Egress]));
     }
 
     fn auditor_authority() -> Authority {

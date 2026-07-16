@@ -461,7 +461,7 @@ impl Session {
     }
 
     pub fn audit(&self) -> impl Iterator<Item = String> {
-        self.trajectory.state().audit().iter().map(|event| event.to_string())
+        self.trajectory.audit().iter().map(|event| event.to_string())
     }
 }
 

@@ -61,9 +61,16 @@ observable; preserve it (there is a typed-order test).
   mutation prevalidates, then appends **one atomic batch** of facts; lifecycle
   contradictions (double release, completion-before-release, double grant
   consumption) are refused at admission — the single enforcement point.
-  `TrajectoryState` and `StoredValue`'s embedded label/provenance are
-  **materialized read models** written only as facts are applied
-  (rebuild-equivalence is test-pinned); never mutate one without its fact.
+- **One build path.** Every derived read model — labels, provenance, turns,
+  committed effects, audit, both pending slots — is a `TrajectoryProjection`
+  of the log, rebuilt in full by `Trajectory::commit` after each batch. Never
+  add a second, incremental fold over `Fact` (that is what this design
+  deleted: a parallel `apply` plus a parity suite to police it, whose state
+  half was tautological — it rebuilt with the same `apply` it was checking).
+  Full reprojection per mutation is O(events) and deliberate; if that ever
+  matters, make the *one* path incremental, never add a second. The
+  `ValueStore` holds **bodies only**: a label lives in the projection, and
+  `ValueRef` composes the two for reading.
 - `Revision` digests the event frontier; every appended batch advances it.
   Plans live in a side cache bound to their basis and append nothing — the
   per-evaluation `CheckPerformed` fact is what preserves cross-evaluate

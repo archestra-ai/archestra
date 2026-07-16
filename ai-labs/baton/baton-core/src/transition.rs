@@ -21,7 +21,7 @@ use crate::ToolName;
 use crate::audit::TransitionFailure;
 use crate::dimension::{Audience, Effects, KnownTrust, Trust, UserId};
 use crate::request::PendingAction;
-use crate::value::{OpaqueValue, StoredValue, TransformerRef, ValueLabel};
+use crate::value::{OpaqueValue, TransformerRef, ValueLabel, ValueRef};
 
 /// A registered transformer's input predicate: which source values it
 /// declares itself applicable to. `None` on a dimension means "any".
@@ -84,7 +84,7 @@ impl RegisteredTransformer {
     /// Pure precondition check against a concrete source value. Identity was
     /// already fixed by the caller holding the `ValueId`; this validates the
     /// declared label predicate.
-    pub fn accepts(&self, source: &StoredValue) -> Result<(), TransitionFailure> {
+    pub fn accepts(&self, source: &ValueRef<'_>) -> Result<(), TransitionFailure> {
         if self.descriptor.precondition.matches(source.label()) {
             Ok(())
         } else {

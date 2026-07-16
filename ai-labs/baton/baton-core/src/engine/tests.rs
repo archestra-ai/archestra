@@ -341,9 +341,9 @@ fn clean_flow_is_permitted_and_result_admitted_with_folded_label() {
 
     let token = walk_to_permit(&engine, &mut trajectory, request);
     assert!(trajectory.pending_action().is_some());
-    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    assert_eq!(trajectory.past_effects(), &Effects::none());
     // The permit came through acquisition, not a bypassed growth check.
-    assert!(trajectory.state().audit().iter().any(|e| applied_acquire(e).is_some()));
+    assert!(trajectory.audit().iter().any(|e| applied_acquire(e).is_some()));
 
     let result = dispatch(&mut trajectory, token, "sent").unwrap();
     assert!(trajectory.pending_action().is_none());
@@ -353,7 +353,7 @@ fn clean_flow_is_permitted_and_result_admitted_with_folded_label() {
         Audience::readers([user("alice"), user("bob")])
     );
     // Effects were committed at dispatch, not before.
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 }
 
 #[test]
@@ -453,14 +453,12 @@ fn unregistered_tool_acknowledged_dispatches_with_unknown_output() {
     let token = walk_to_permit(&engine, &mut trajectory, request);
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| applied_lift(e).is_some_and(delta_acknowledges))
     );
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| applied_acquire(e).is_some_and(|effects| *effects == Effects::UNKNOWN))
@@ -470,7 +468,7 @@ fn unregistered_tool_acknowledged_dispatches_with_unknown_output() {
     // Intrinsic unknown poisons the output despite trusted inputs...
     assert_eq!(trajectory.value(result).unwrap().label(), &ValueLabel::unknown());
     // ...and the unknown effect commits at dispatch, absorbing the past.
-    assert_eq!(trajectory.state().past_effects(), &Effects::UNKNOWN);
+    assert_eq!(trajectory.past_effects(), &Effects::UNKNOWN);
 }
 
 /// A grant-fixable unprovable (unknown trust at a Trusted-requiring sink)
@@ -687,12 +685,12 @@ fn effects_survive_a_declared_dispatch_failure() {
     let (canonical, receipt) = trajectory.release(token).unwrap();
     assert_eq!(canonical.tool, ToolName::new("email.send"));
     // Effects are committed at release, before any result exists.
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 
     trajectory.record_failure(receipt).unwrap();
     assert!(trajectory.pending_action().is_none());
     // Failure removes nothing.
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 }
 
 #[test]
@@ -736,9 +734,9 @@ fn pursue_permit_commits_nothing_before_release() {
     let Pursuit::Permitted(token) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
         panic!("expected a permit");
     };
-    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    assert_eq!(trajectory.past_effects(), &Effects::none());
     let (_, receipt) = trajectory.release(token).unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
     trajectory.record_output(receipt, OpaqueValue::new("pong")).unwrap();
 }
 
@@ -896,7 +894,7 @@ fn egress_sink_contract_resolves_recipients_and_blocks_undeclared() {
     let request = email_request(&mut trajectory, body, "bob");
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "sent").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 
     let body = ingress(&mut trajectory, &["bob"], Trust::TRUSTED, "doc two");
     let bare = ToolRequest::new(ToolName::new("email.send"), ArgumentTree::object([("body", body)]), []);
@@ -986,7 +984,7 @@ fn a_receipt_closes_a_failed_dispatch_after_an_interleaved_emission() {
     trajectory.record_failure(receipt).unwrap();
     assert!(trajectory.pending_action().is_none());
     // The may-effects committed at release survive the failure.
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 }
 
 #[test]
@@ -1485,7 +1483,7 @@ fn a_granted_endorse_durably_relabels_the_source_and_permits() {
     let mut trajectory = Trajectory::new();
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
     let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private doc");
-    let doc_label = trajectory.store().get(doc).unwrap().label().clone();
+    let doc_label = trajectory.value(doc).unwrap().label().clone();
     let request = email_request(&mut trajectory, doc, "charlie");
 
     // The breach enumerates an Endorse route; applying its step defers to
@@ -1517,9 +1515,8 @@ fn a_granted_endorse_durably_relabels_the_source_and_permits() {
 
     // Durability by construction: the source is untouched; a new value
     // carries the raised label with Endorsed provenance naming the authority.
-    assert_eq!(trajectory.store().get(doc).unwrap().label(), &doc_label);
+    assert_eq!(trajectory.value(doc).unwrap().label(), &doc_label);
     let (derived, authority) = trajectory
-        .state()
         .audit()
         .iter()
         .find_map(|e| applied_raise(e).map(|(derived, authority)| (derived, authority.clone())))
@@ -1528,7 +1525,6 @@ fn a_granted_endorse_durably_relabels_the_source_and_permits() {
     // The audit record is self-contained: it carries the exact before and
     // after labels of the raise.
     let labels = trajectory
-        .state()
         .audit()
         .iter()
         .find_map(|e| match e {
@@ -1541,7 +1537,7 @@ fn a_granted_endorse_durably_relabels_the_source_and_permits() {
         })
         .expect("a durable raise audits its labels");
     assert_eq!(labels.input, doc_label);
-    let derived_stored = trajectory.store().get(derived).unwrap();
+    let derived_stored = trajectory.value(derived).unwrap();
     assert_eq!(&labels.raised, derived_stored.label());
     assert_ne!(
         derived_stored.label(),
@@ -1562,7 +1558,7 @@ fn an_endorse_routes_only_within_the_mandate_bounds() {
     engine.register_authority(human()).unwrap(); // may vouch alice/bob/charlie
     let mut trajectory = Trajectory::new();
     let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "doc");
-    let view = TrajectoryView::new(trajectory.store());
+    let view = TrajectoryView::new(trajectory.view());
 
     let beyond = crate::remedy::Authorization::new(
         crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
@@ -1633,7 +1629,6 @@ fn a_denied_endorse_is_terminal_and_mints_no_value() {
     );
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| denied_delta(e).is_some_and(delta_raises))
@@ -1988,7 +1983,7 @@ fn transform_step_applies_and_flow_permits() {
     // declared failure, then this flow's applied transform — and nothing
     // else.
     assert!(matches!(
-        trajectory.state().audit(),
+        trajectory.audit(),
         [
             AuditEvent::EffectsCommitted { .. },
             AuditEvent::DispatchFailed { .. },
@@ -2023,7 +2018,7 @@ fn rule_approved_endorse_permits_inline() {
     let Some(_token) = advanced_execution(outcome) else {
         panic!("expected inline endorse permit");
     };
-    assert!(trajectory.state().audit().iter().any(|e| applied_raise(e).is_some()));
+    assert!(trajectory.audit().iter().any(|e| applied_raise(e).is_some()));
 }
 
 /// An inline authority that abstains falls through to the next competent
@@ -2048,7 +2043,6 @@ fn inline_abstention_falls_through_to_the_next_authority() {
     // The applied endorse is attributed to the authority that actually ruled.
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| applied_raise(e).is_some_and(|(_, authority)| authority.as_str() == "second"))
@@ -2117,7 +2111,6 @@ fn inline_denial_is_decisive_and_does_not_fall_through() {
     // as one.
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| denied_delta(e).is_some_and(delta_raises))
@@ -2252,7 +2245,7 @@ fn surface_growth_blocks_without_an_acquire_authority() {
         [Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth })]
             if *growth == Effects::declared([Effect::Egress])
     ));
-    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    assert_eq!(trajectory.past_effects(), &Effects::none());
 }
 
 /// With an acquirer, the growth routes to an `AcceptGrowth` step; applying
@@ -2274,12 +2267,11 @@ fn accept_authority_acquires_the_growth_and_permits() {
         panic!("the acceptance should clear the flow and permit");
     };
     // No early commit.
-    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    assert_eq!(trajectory.past_effects(), &Effects::none());
     dispatch(&mut trajectory, token, "pong").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| applied_acquire(e).is_some_and(|effects| *effects == Effects::declared([Effect::Egress])))
@@ -2336,7 +2328,7 @@ fn no_contract_growth_needs_both_acknowledge_and_acquire() {
     let request = mystery(&mut trajectory);
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "???").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::UNKNOWN);
+    assert_eq!(trajectory.past_effects(), &Effects::UNKNOWN);
 }
 
 /// An external acquirer defers to an out-of-process ruling carrying the
@@ -2371,7 +2363,7 @@ fn external_accept_roundtrip() {
         panic!("the approval should permit");
     };
     dispatch(&mut trajectory, token, "pong").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 }
 
 /// Acquisition authorizes the growth on the pending action but commits
@@ -2390,11 +2382,10 @@ fn accepted_growth_then_abandon_commits_nothing() {
         panic!("expected a permit after acceptance");
     };
     drop(token);
-    assert_eq!(trajectory.state().past_effects(), &Effects::none());
-    assert!(trajectory.state().audit().iter().any(|e| applied_acquire(e).is_some()));
+    assert_eq!(trajectory.past_effects(), &Effects::none());
+    assert!(trajectory.audit().iter().any(|e| applied_acquire(e).is_some()));
     assert!(
         !trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| matches!(e, AuditEvent::EffectsCommitted { .. }))
@@ -2417,7 +2408,7 @@ fn second_egress_is_downhill_after_the_first() {
         panic!("expected a permit after acceptance");
     };
     dispatch(&mut trajectory, token, "pong").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 
     let body2 = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping-again");
     let Ok(FlowOutcome::AllowedNow(_)) = engine.evaluate(&mut trajectory, ping_request(body2)) else {
@@ -2465,13 +2456,7 @@ fn accept_re_entry_writes_no_duplicate_audit() {
     let Some(_) = advanced_execution(apply_first_step(&engine, &mut trajectory, plans.first().id)) else {
         panic!("expected a permit after acceptance");
     };
-    let accepts = |t: &Trajectory| {
-        t.state()
-            .audit()
-            .iter()
-            .filter(|e| applied_acquire(e).is_some())
-            .count()
-    };
+    let accepts = |t: &Trajectory| t.audit().iter().filter(|e| applied_acquire(e).is_some()).count();
     assert_eq!(accepts(&trajectory), 1);
     let Ok(FlowOutcome::AllowedNow(_)) = engine.evaluate(&mut trajectory, request) else {
         panic!("re-entry after acceptance should permit idempotently");
@@ -2843,7 +2828,7 @@ fn a_two_hop_transition_chain_unlocks() {
 
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "previewed").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    assert_eq!(trajectory.past_effects(), &Effects::none());
 }
 
 /// A derivation composes with the two-hop chain when every tool on the
@@ -3033,7 +3018,7 @@ fn constrain_then_accept_covers_only_the_residual_growth() {
     };
     // Both steps ran at runtime — the constrain, then the acquisition of the
     // reduced growth — not merely predicted by the planner.
-    let audit = trajectory.state().audit();
+    let audit = trajectory.audit();
     assert!(audit.iter().any(|e| matches!(e, AuditEvent::ActionConstrained { .. })));
     assert!(
         audit
@@ -3041,7 +3026,7 @@ fn constrain_then_accept_covers_only_the_residual_growth() {
             .any(|e| applied_acquire(e).is_some_and(|effects| *effects == Effects::declared([Effect::Egress])))
     );
     dispatch(&mut trajectory, token, "exported").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 }
 
 /// The discriminant of a step, for asserting the order steps ran.
@@ -3187,7 +3172,7 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
     assert_eq!(applied, ["sanitize", "constrain", "endorse", "accept"]);
     // Only the reduced effect commits.
     dispatch(&mut trajectory, token, "sent").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 }
 
 /// The frontier is deterministic: the same engine and flow evaluated twice
@@ -3317,12 +3302,11 @@ fn external_waiver_approval_roundtrip() {
     assert!(matches!(decision, FlowOutcome::AllowedNow(_)));
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| matches!(e, AuditEvent::ApprovalRequested { .. }))
     );
-    assert!(trajectory.state().audit().iter().any(|e| applied_lift(e).is_some()));
+    assert!(trajectory.audit().iter().any(|e| applied_lift(e).is_some()));
 
     // The applied check-scoped authorization is a full one-off grant
     // lifecycle in the log: issued, and consumed by exactly this check —
@@ -3538,7 +3522,6 @@ fn external_waiver_denial_blocks_terminally() {
     // attributed as one.
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| denied_delta(e).is_some_and(delta_raises))
@@ -3626,7 +3609,7 @@ fn foreign_trajectory_step_capability_is_refused() {
     // Refusal touched nothing on the foreign trajectory.
     assert_eq!(other.revision(), revision_before);
     assert!(other.turns().is_empty());
-    assert!(other.state().audit().is_empty());
+    assert!(other.audit().is_empty());
 }
 
 /// A pending approval minted on one trajectory is refused on another
@@ -3657,7 +3640,7 @@ fn foreign_trajectory_approval_is_refused() {
     ));
     assert_eq!(other.revision(), revision_before);
     assert!(other.turns().is_empty());
-    assert!(other.state().audit().is_empty());
+    assert!(other.audit().is_empty());
 }
 
 /// Only a plan's head step is executable: later steps are predictions and
@@ -3805,7 +3788,7 @@ fn transformer_error_fails_the_step_and_audits() {
     // The complete audit: the seeded prior dispatch's records, then the
     // failed transform — no derived value, and nothing else.
     assert!(matches!(
-        trajectory.state().audit(),
+        trajectory.audit(),
         [
             AuditEvent::EffectsCommitted { .. },
             AuditEvent::DispatchFailed { .. },
@@ -4104,7 +4087,7 @@ fn constrained_effects_survive_to_release_and_later_sinks() {
     assert_eq!(canonical.tool, ToolName::new("web.fetch.cached"));
     // The narrowed (empty) effects were committed, not the original
     // tool's egress.
-    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    assert_eq!(trajectory.past_effects(), &Effects::none());
     trajectory
         .record_output(receipt, OpaqueValue::new("cached page"))
         .unwrap();
@@ -4175,14 +4158,8 @@ fn unprovable_re_entry_writes_no_audit() {
         BTreeSet::new(),
     );
 
-    let waiver_audits = |trajectory: &Trajectory| {
-        trajectory
-            .state()
-            .audit()
-            .iter()
-            .filter(|e| applied_lift(e).is_some())
-            .count()
-    };
+    let waiver_audits =
+        |trajectory: &Trajectory| trajectory.audit().iter().filter(|e| applied_lift(e).is_some()).count();
 
     let Ok(FlowOutcome::Remediable { .. }) = engine.evaluate(&mut trajectory, request.clone()) else {
         panic!("expected a remediable block");
@@ -4255,14 +4232,12 @@ fn an_inline_accept_denial_audits_accept_denied() {
     assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| denied_delta(e).is_some_and(delta_acquires))
     );
     assert!(
         !trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| denied_delta(e).is_some_and(|d| !delta_acquires(d) && !delta_raises(d)))
@@ -4295,7 +4270,6 @@ fn an_external_accept_denial_audits_accept_denied() {
     assert!(matches!(decision, FlowOutcome::Terminal { .. }));
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| denied_delta(e).is_some_and(delta_acquires))
@@ -4322,7 +4296,6 @@ fn an_inline_control_release_denial_audits_waiver_denied() {
     assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| denied_delta(e).is_some_and(|d| !delta_acquires(d) && !delta_raises(d)))
@@ -4359,7 +4332,6 @@ fn an_external_control_release_denial_audits_waiver_denied() {
     assert!(matches!(decision, FlowOutcome::Terminal { .. }));
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| denied_delta(e).is_some_and(|d| !delta_acquires(d) && !delta_raises(d)))
@@ -4720,7 +4692,7 @@ fn rescue_composes_endorse_then_release_for_a_masked_flow() {
 
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "published").unwrap();
-    let audit = trajectory.state().audit();
+    let audit = trajectory.audit();
     assert!(audit.iter().any(|e| applied_raise(e).is_some()));
     assert!(audit.iter().any(|e| applied_lift(e).is_some()));
 }
@@ -4845,7 +4817,7 @@ fn rescue_composes_an_accept_for_projected_growth() {
     assert!(plans.first().steps.iter().any(|step| acquire_step(step).is_some()));
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "published").unwrap();
-    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    assert_eq!(trajectory.past_effects(), &Effects::declared([Effect::Egress]));
 
     let mut engine = engine_with([masked_contract()]);
     authorities(&mut engine, false);
@@ -4907,7 +4879,6 @@ fn rescue_carries_acknowledge_only_facts() {
     dispatch(&mut trajectory, token, "published").unwrap();
     assert!(
         trajectory
-            .state()
             .audit()
             .iter()
             .any(|e| applied_lift(e).is_some_and(|d| delta_acknowledges(d) && delta_releases_control(d)))
@@ -5076,7 +5047,7 @@ fn rescue_does_not_over_endorse_re_masked_leaves() {
     assert_eq!(steps.len(), 2);
     assert!(raise_step(steps.first()).is_some_and(|(source, _)| source == first));
     assert!(release_step(steps.get(1).unwrap()).is_some());
-    let endorsed = |t: &Trajectory| t.state().audit().iter().filter(|e| applied_raise(e).is_some()).count();
+    let endorsed = |t: &Trajectory| t.audit().iter().filter(|e| applied_raise(e).is_some()).count();
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "published").unwrap();
     assert_eq!(endorsed(&trajectory), 1);

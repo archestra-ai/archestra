@@ -83,7 +83,7 @@ fn main() {
     }
 
     println!("\naudit trail:");
-    for event in trajectory.state().audit() {
+    for event in trajectory.audit() {
         println!("   * {event}");
     }
 }

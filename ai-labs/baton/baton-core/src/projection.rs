@@ -1,28 +1,18 @@
-//! Derived projections over the append-only [`EventSet`].
+//! Derived projections over the append-only [`EventSet`] — the **one** build
+//! path for every read model of a trajectory.
 //!
-//! Pure functions recomputed from the events on every call — nothing is
-//! cached, so rebuild equivalence holds by construction and determinism is
-//! exactly replay determinism. Labels are *recomputed* from each value's
-//! admission-time inputs (the fold over its dependency projections), never
-//! copied from the store, so agreement with the materialized read models is
-//! a real check of the algebra, not of a copy.
+//! Pure functions of the log: a value's label is *computed here* from its
+//! admission fact's inputs, the pending slots are folded here from their
+//! lifecycle facts, the audit history is synthesized here from the facts that
+//! record it. Nothing recomputes them anywhere else, so nothing can drift —
+//! the class of bug a second, hand-maintained representation invites is
+//! unrepresentable rather than tested for.
 //!
-//! Two kinds of projection live here, and the distinction matters when
-//! reading the parity suite:
-//!
-//! - **Independently recomputed** ([`value_labels`], [`provenance`],
-//!   [`committed_effects`], [`audit_events`], [`confirmation_available`],
-//!   [`grant_availability`]) — these re-derive from the facts what the
-//!   read models compute at admission time, so agreeing with them is a real
-//!   check.
-//! - **The shared flow fold** ([`apply_flow_fact`]) — the *single* writer of
-//!   the pending-action and pending-emission slots. `Trajectory` applies it
-//!   per admitted batch (incremental) and [`pending_action`] /
-//!   [`pending_emission`] fold it over the whole log (bulk). There is
-//!   deliberately no second implementation to cross-check against: writing
-//!   one would recreate the very duplication this module exists to remove.
-//!   What parity checks here is that bulk replay reproduces incremental
-//!   maintenance — exactly the property the cutover depends on.
+//! [`Trajectory`](crate::turn::Trajectory) holds one [`TrajectoryProjection`]
+//! and rebuilds it in full after each admitted batch. Full reprojection per
+//! mutation is O(events), i.e. quadratic over a trajectory's life; that is a
+//! deliberate trade — an incremental update would be a second fold, which is
+//! precisely what this module exists to avoid.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -32,8 +22,8 @@ use crate::dimension::Effects;
 use crate::event::{EventSet, Fact, ValueOrigin};
 use crate::request::{PendingAction, PendingEmission};
 use crate::revision::{GrantId, TurnId, ValueId};
-use crate::turn::Actor;
-use crate::value::{Provenance, ValueLabel};
+use crate::turn::{Actor, Turn};
+use crate::value::{Provenance, UnknownValue, ValueLabel};
 
 /// Per-value labels: each value's label recomputed from its origin — the
 /// caller label at ingress, the declared/raised label for transformed and
@@ -53,15 +43,36 @@ pub fn value_labels(events: &EventSet) -> BTreeMap<ValueId, ValueLabel> {
             let label = match origin {
                 ValueOrigin::Ingress { label, .. } => label.clone(),
                 ValueOrigin::ModelOutput { reads, control } => fold(&labels, reads).combine(fold(&labels, control)),
+                // The contract's intrinsic label can only worsen the causal
+                // fold, never override it.
                 ValueOrigin::ToolOutput {
                     intrinsic,
                     arguments,
                     control,
                     ..
-                } => intrinsic
-                    .clone()
-                    .combine(fold(&labels, arguments))
-                    .combine(fold(&labels, control)),
+                } => {
+                    let dependencies = fold(&labels, arguments).combine(fold(&labels, control));
+                    let label = intrinsic.clone().combine(dependencies.clone());
+                    // The general no-widening law, trust/audience instances:
+                    // unaided admission never exposes more than the causal
+                    // dependency fold — a contract-declared wider output
+                    // (trust laundering, audience widening) is absorbed by the
+                    // combine above, so the invariant holds by construction
+                    // (the fold's worst-wins resolution of Unknown is not a
+                    // widening — see `Trust::widening_over`). Only a
+                    // *validated* transformer derivation or an
+                    // *authority-granted* endorsement may sit below the fold.
+                    // The effects instance binds at the flow check
+                    // (`Effects::widening_over`). Always-on: this is the
+                    // admission half of the no-widening law, cheap and
+                    // load-bearing.
+                    assert!(
+                        label.trust.widening_over(&dependencies.trust).is_none()
+                            && label.audience.widening_over(&dependencies.audience).is_none(),
+                        "tool-output admission widened the dependency fold"
+                    );
+                    label
+                }
                 ValueOrigin::Transformed { declared, .. } => declared.clone(),
                 // Recomputed from the source label and the granted delta —
                 // never the fact's own copy — so rebuild equivalence can
@@ -129,6 +140,32 @@ pub fn provenance(events: &EventSet) -> BTreeMap<ValueId, Provenance> {
         .collect()
 }
 
+/// The turn sequence: who acted and the value they contributed, in log order.
+pub fn turns(events: &EventSet) -> Vec<Turn> {
+    events
+        .events()
+        .iter()
+        .filter_map(|event| match &event.fact {
+            Fact::TurnAppended { actor, value, .. } => Some(Turn {
+                actor: actor.clone(),
+                value: *value,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The values a provenance names as its direct ancestors — the edges the
+/// closure walk follows.
+fn provenance_parents(provenance: &Provenance) -> Vec<ValueId> {
+    match provenance {
+        Provenance::Ingress { .. } => Vec::new(),
+        Provenance::ModelOutput { reads, control } => reads.iter().chain(control).copied().collect(),
+        Provenance::ToolOutput { arguments, control, .. } => arguments.iter().chain(control).copied().collect(),
+        Provenance::Transformed { source, .. } | Provenance::Endorsed { source, .. } => vec![*source],
+    }
+}
+
 /// The monotone committed effect surface: the union of every commitment
 /// fact. Failure facts never remove anything by construction — there is no
 /// removing fact.
@@ -142,20 +179,10 @@ pub fn committed_effects(events: &EventSet) -> Effects {
         })
 }
 
-/// Materialize one admitted fact into the pending-slot read models — the
-/// **only** writer of either slot, so the log is authoritative for the action
-/// and emission lifecycles by construction (admission already refused any
-/// fact contradicting them).
-///
-/// [`Trajectory::commit`](crate::turn::Trajectory) applies this per admitted
-/// batch; [`flow_slots`] folds it over an entire log. Same function, so the
-/// two can only disagree if a slot is written without a fact or facts are
-/// replayed out of order — which is what the parity suite pins.
-pub(crate) fn apply_flow_fact(
-    pending: &mut Option<PendingAction>,
-    pending_emission: &mut Option<PendingEmission>,
-    fact: &Fact,
-) {
+/// Fold one fact into the pending slots. Private to [`flow_slots`]: the slots
+/// exist only as a projection, so this runs over the whole log or not at all
+/// (admission has already refused any fact contradicting a lifecycle).
+fn apply_flow_fact(pending: &mut Option<PendingAction>, pending_emission: &mut Option<PendingEmission>, fact: &Fact) {
     match fact {
         Fact::ActionProposed {
             action,
@@ -245,7 +272,7 @@ pub fn confirmation_available(events: &EventSet) -> Option<(TurnId, ToolName)> {
     let mut spent: BTreeSet<TurnId> = BTreeSet::new();
     for event in events.events() {
         match &event.fact {
-            Fact::TurnAppended { turn, actor } => {
+            Fact::TurnAppended { turn, actor, .. } => {
                 let confirms = match actor {
                     Actor::User(user) => user.confirms.clone(),
                     Actor::Assistant | Actor::Tool(_) => None,
@@ -331,13 +358,16 @@ pub fn audit_events(events: &EventSet) -> Vec<AuditEvent> {
 }
 
 /// Every derived read model of one trajectory, projected from the log in one
-/// place. This is the sole build path for derived state: the engine holds one
-/// of these and rebuilds it after each admitted batch, so there is no
-/// hand-maintained field to drift.
+/// place — the sole build path for derived state.
+///
+/// Named a *projection*, not a view, to keep it distinct from
+/// [`crate::approval::TrajectoryView`], which is the narrow read-only slice an
+/// inline authority is handed.
 #[derive(Debug)]
-pub struct TrajectoryView {
+pub struct TrajectoryProjection {
     value_labels: BTreeMap<ValueId, ValueLabel>,
     provenance: BTreeMap<ValueId, Provenance>,
+    turns: Vec<Turn>,
     committed_effects: Effects,
     audit: Vec<AuditEvent>,
     pending_action: Option<PendingAction>,
@@ -346,13 +376,21 @@ pub struct TrajectoryView {
     grant_availability: BTreeMap<GrantId, crate::remedy::Authorization>,
 }
 
-impl TrajectoryView {
+impl Default for TrajectoryProjection {
+    /// The projection of an empty log.
+    fn default() -> Self {
+        Self::project(&EventSet::default())
+    }
+}
+
+impl TrajectoryProjection {
     /// Project every read model from the log. The one build path.
     pub fn project(events: &EventSet) -> Self {
         let (pending_action, pending_emission) = flow_slots(events);
         Self {
             value_labels: value_labels(events),
             provenance: provenance(events),
+            turns: turns(events),
             committed_effects: committed_effects(events),
             audit: audit_events(events),
             pending_action,
@@ -362,20 +400,48 @@ impl TrajectoryView {
         }
     }
 
+    /// The label of an admitted value. `None` is a caller naming a value this
+    /// trajectory never admitted — see [`Self::fold_labels`], which reports it.
     pub fn label(&self, value: ValueId) -> Option<&ValueLabel> {
         self.value_labels.get(&value)
-    }
-
-    pub fn value_labels(&self) -> &BTreeMap<ValueId, ValueLabel> {
-        &self.value_labels
     }
 
     pub fn provenance_of(&self, value: ValueId) -> Option<&Provenance> {
         self.provenance.get(&value)
     }
 
-    pub fn provenance(&self) -> &BTreeMap<ValueId, Provenance> {
-        &self.provenance
+    /// Fold the labels of `ids`. Fails loudly on an unknown id: silently
+    /// treating a missing dependency as `Unknown` would hide a caller bug.
+    pub fn fold_labels<'a>(&self, ids: impl IntoIterator<Item = &'a ValueId>) -> Result<ValueLabel, UnknownValue> {
+        let mut folded = ValueLabel::identity();
+        for id in ids {
+            folded = folded.combine(self.label(*id).ok_or(UnknownValue { id: *id })?.clone());
+        }
+        Ok(folded)
+    }
+
+    /// Every value reachable from `seeds` by following provenance edges — the
+    /// transitive ancestry, seeds included. A visited-set graph walk; it
+    /// terminates because provenance names only already-admitted values (minted
+    /// with a lower id), so the ancestry graph is a DAG. Powers the D3 ruling
+    /// context so an authority can inspect an endorsed value's suspicious
+    /// ancestors, not just the immediate operation scope.
+    pub fn provenance_closure(&self, seeds: impl IntoIterator<Item = ValueId>) -> BTreeSet<ValueId> {
+        let mut seen = BTreeSet::new();
+        let mut queue: Vec<ValueId> = seeds.into_iter().collect();
+        while let Some(id) = queue.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            if let Some(provenance) = self.provenance_of(id) {
+                queue.extend(provenance_parents(provenance));
+            }
+        }
+        seen
+    }
+
+    pub fn turns(&self) -> &[Turn] {
+        &self.turns
     }
 
     /// The monotone committed effect surface.
@@ -402,5 +468,277 @@ impl TrajectoryView {
 
     pub fn grant_availability(&self) -> &BTreeMap<GrantId, crate::remedy::Authorization> {
         &self.grant_availability
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dimension::{Audience, Trust, UserId};
+    use crate::event::EventSet;
+    use crate::revision::TransitionId;
+    use crate::value::TransformerRef;
+
+    fn readers(names: &[&str]) -> Audience {
+        Audience::readers(names.iter().map(|n| UserId::new(*n)))
+    }
+
+    /// Admit one value-admission fact and hand back the id it names.
+    fn admit(events: &mut EventSet, id: u64, origin: ValueOrigin) -> ValueId {
+        let value = ValueId::new(id);
+        events
+            .append_batch(vec![Fact::ValueAdmitted { value, origin }])
+            .expect("test facts are well formed");
+        value
+    }
+
+    fn ingress(events: &mut EventSet, id: u64, label: ValueLabel) -> ValueId {
+        admit(
+            events,
+            id,
+            ValueOrigin::Ingress {
+                turn: TurnId::new(id),
+                label,
+            },
+        )
+    }
+
+    #[test]
+    fn ingress_wears_the_caller_label() {
+        let mut events = EventSet::default();
+        let label = ValueLabel {
+            audience: readers(&["alice"]),
+            trust: Trust::TRUSTED,
+        };
+        let id = ingress(&mut events, 0, label.clone());
+        assert_eq!(value_labels(&events).get(&id), Some(&label));
+    }
+
+    #[test]
+    fn model_output_folds_reads_and_control() {
+        let mut events = EventSet::default();
+        let clean = ingress(&mut events, 0, ValueLabel::identity());
+        let tainted = ingress(
+            &mut events,
+            1,
+            ValueLabel {
+                audience: readers(&["alice"]),
+                trust: Trust::SUSPICIOUS,
+            },
+        );
+        let derived = admit(
+            &mut events,
+            2,
+            ValueOrigin::ModelOutput {
+                reads: BTreeSet::from([clean]),
+                control: BTreeSet::from([tainted]),
+            },
+        );
+        let labels = value_labels(&events);
+        let label = &labels[&derived];
+        assert_eq!(label.trust, Trust::SUSPICIOUS);
+        assert_eq!(label.audience, readers(&["alice"]));
+    }
+
+    #[test]
+    fn tool_output_keeps_intrinsic_taint_despite_clean_inputs() {
+        let mut events = EventSet::default();
+        let clean = ingress(&mut events, 0, ValueLabel::identity());
+        let out = admit(
+            &mut events,
+            1,
+            ValueOrigin::ToolOutput {
+                action: crate::revision::ActionId::new(0),
+                intrinsic: ValueLabel {
+                    audience: Audience::PUBLIC,
+                    trust: Trust::SUSPICIOUS,
+                },
+                arguments: BTreeSet::from([clean]),
+                control: BTreeSet::new(),
+            },
+        );
+        assert_eq!(value_labels(&events)[&out].trust, Trust::SUSPICIOUS);
+    }
+
+    #[test]
+    fn identity_intrinsic_cannot_improve_tainted_dependencies() {
+        let mut events = EventSet::default();
+        let tainted = ingress(
+            &mut events,
+            0,
+            ValueLabel {
+                audience: Audience::PUBLIC,
+                trust: Trust::SUSPICIOUS,
+            },
+        );
+        let out = admit(
+            &mut events,
+            1,
+            ValueOrigin::ToolOutput {
+                action: crate::revision::ActionId::new(0),
+                intrinsic: ValueLabel::identity(),
+                arguments: BTreeSet::from([tainted]),
+                control: BTreeSet::new(),
+            },
+        );
+        assert_eq!(value_labels(&events)[&out].trust, Trust::SUSPICIOUS);
+    }
+
+    /// The general no-widening law holds at tool-output admission by
+    /// construction: a declared wider output (trusted over a suspicious fold,
+    /// public over a bounded fold) is absorbed by the conservative combine —
+    /// the derived label never widens the dependency fold on any value
+    /// dimension. The effects instance binds at the flow check instead
+    /// (effects are trajectory state, not a value dimension).
+    #[test]
+    fn tool_output_admission_never_widens_the_dependency_fold() {
+        let mut events = EventSet::default();
+        let bounded_suspicious = ingress(
+            &mut events,
+            0,
+            ValueLabel {
+                audience: readers(&["alice"]),
+                trust: Trust::SUSPICIOUS,
+            },
+        );
+        let fold = value_labels(&events)[&bounded_suspicious].clone();
+        let out = admit(
+            &mut events,
+            1,
+            ValueOrigin::ToolOutput {
+                action: crate::revision::ActionId::new(0),
+                intrinsic: ValueLabel {
+                    audience: Audience::PUBLIC,
+                    trust: Trust::TRUSTED,
+                },
+                arguments: BTreeSet::from([bounded_suspicious]),
+                control: BTreeSet::new(),
+            },
+        );
+        let labels = value_labels(&events);
+        let admitted = &labels[&out];
+        assert_eq!(admitted, &fold);
+        assert!(admitted.trust.widening_over(&fold.trust).is_none());
+        assert!(admitted.audience.widening_over(&fold.audience).is_none());
+    }
+
+    /// The fold's worst-wins resolution is not a widening: an intrinsically
+    /// suspicious output over an unknown dependency admits at known
+    /// `Suspicious` (so it satisfies a `Suspicious` floor the unknown input
+    /// could not) without tripping the no-widening invariant — becoming
+    /// known-bad grants nothing upward.
+    #[test]
+    fn suspicious_intrinsic_over_unknown_fold_is_not_a_widening() {
+        let mut events = EventSet::default();
+        let unknown_dep = ingress(
+            &mut events,
+            0,
+            ValueLabel {
+                audience: readers(&["alice"]),
+                trust: Trust::UNKNOWN,
+            },
+        );
+        let out = admit(
+            &mut events,
+            1,
+            ValueOrigin::ToolOutput {
+                action: crate::revision::ActionId::new(0),
+                intrinsic: ValueLabel {
+                    audience: readers(&["alice"]),
+                    trust: Trust::SUSPICIOUS,
+                },
+                arguments: BTreeSet::from([unknown_dep]),
+                control: BTreeSet::new(),
+            },
+        );
+        let labels = value_labels(&events);
+        let admitted = &labels[&out];
+        // Worst wins: the known-bad judgement resolves the unknown downward.
+        assert_eq!(admitted.trust, Trust::SUSPICIOUS);
+        assert!(matches!(
+            admitted.trust.at_least(crate::dimension::KnownTrust::Suspicious),
+            crate::preset::Adequacy::Holds
+        ));
+        assert!(admitted.trust.widening_over(&Trust::UNKNOWN).is_none());
+    }
+
+    #[test]
+    fn transformed_value_wears_declared_label_and_source_is_untouched() {
+        let mut events = EventSet::default();
+        let raw = ingress(
+            &mut events,
+            0,
+            ValueLabel {
+                audience: readers(&["alice"]),
+                trust: Trust::SUSPICIOUS,
+            },
+        );
+        let derived = admit(
+            &mut events,
+            1,
+            ValueOrigin::Transformed {
+                source: raw,
+                transition: TransitionId::new(0),
+                transformer: TransformerRef {
+                    id: "pii.redact".into(),
+                    version: 1,
+                },
+                declared: ValueLabel::identity(),
+            },
+        );
+        let labels = value_labels(&events);
+        assert_eq!(labels[&derived], ValueLabel::identity());
+        assert_eq!(labels[&raw].trust, Trust::SUSPICIOUS);
+    }
+
+    #[test]
+    fn folding_an_unknown_dependency_fails_loudly() {
+        let projection = TrajectoryProjection::project(&EventSet::default());
+        let missing = ValueId::new(41);
+        assert_eq!(
+            projection.fold_labels([&missing]).unwrap_err(),
+            UnknownValue { id: missing }
+        );
+    }
+
+    /// The ancestry walk follows provenance edges transitively, so a value
+    /// laundered below the fold still names its suspicious ancestor.
+    #[test]
+    fn provenance_closure_reaches_transitive_ancestors() {
+        let mut events = EventSet::default();
+        let raw = ingress(
+            &mut events,
+            0,
+            ValueLabel {
+                audience: Audience::PUBLIC,
+                trust: Trust::SUSPICIOUS,
+            },
+        );
+        let redacted = admit(
+            &mut events,
+            1,
+            ValueOrigin::Transformed {
+                source: raw,
+                transition: TransitionId::new(0),
+                transformer: TransformerRef {
+                    id: "pii.redact".into(),
+                    version: 1,
+                },
+                declared: ValueLabel::identity(),
+            },
+        );
+        let summary = admit(
+            &mut events,
+            2,
+            ValueOrigin::ModelOutput {
+                reads: BTreeSet::from([redacted]),
+                control: BTreeSet::new(),
+            },
+        );
+        let projection = TrajectoryProjection::project(&events);
+        assert_eq!(
+            projection.provenance_closure([summary]),
+            BTreeSet::from([summary, redacted, raw])
+        );
     }
 }

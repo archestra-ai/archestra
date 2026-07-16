@@ -201,13 +201,10 @@ impl PolicyEngine {
                     .iter()
                     .find(|t| t.descriptor.transformer == transformer)
                     .expect("plans reference only registered transformers");
-                let source_value = trajectory
-                    .store()
-                    .get(source)
-                    .expect("plans reference only admitted values");
+                let source_value = trajectory.value(source).expect("plans reference only admitted values");
                 // The registered reduction relation, rechecked live: a failed
                 // relation creates no value and no substitution.
-                if let Err(failure) = registered.accepts(source_value) {
+                if let Err(failure) = registered.accepts(&source_value) {
                     trajectory.fail_transform(
                         source,
                         registered.descriptor.transformer.clone(),
@@ -374,7 +371,7 @@ impl PolicyEngine {
         resolved: Vec<Violation>,
     ) -> RoutedStep {
         let routed = {
-            let view = TrajectoryView::new(trajectory.store());
+            let view = TrajectoryView::new(trajectory.view());
             self.route_grant(&grant, &resolved, &view)
         };
         match routed {
@@ -395,7 +392,7 @@ impl PolicyEngine {
                     resolved: resolved.clone(),
                 });
                 let basis = self.flow_basis(trajectory, kind);
-                let ancestry = AncestrySnapshot::of(trajectory.store(), basis);
+                let ancestry = AncestrySnapshot::of(trajectory.view(), basis);
                 RoutedStep::NeedsApproval(PendingApproval::new(
                     capability.plan,
                     capability.flow,
@@ -661,11 +658,7 @@ impl PolicyEngine {
         kind: FlowKind,
     ) -> FlowOutcome<FlowPermit> {
         let raised = {
-            let source_label = trajectory
-                .store()
-                .get(source)
-                .expect("plans reference only admitted values")
-                .label();
+            let source_label = trajectory.label(source).expect("plans reference only admitted values");
             delta.raise(source_label)
         };
         trajectory.endorse_value(source, authority, delta, raised, kind.site());

@@ -443,7 +443,7 @@ fn would_degrade(trajectory: &Trajectory, context: &ValueLabel, contract: Option
         None => (ValueLabel::unknown(), Effects::UNKNOWN),
     };
     context.clone().combine(output_label) != *context
-        || trajectory.state().past_effects().clone().combine(effects) != *trajectory.state().past_effects()
+        || trajectory.past_effects().clone().combine(effects) != *trajectory.past_effects()
 }
 
 fn blocked_violations<P>(blocked: &FlowOutcome<P>) -> &[Violation] {

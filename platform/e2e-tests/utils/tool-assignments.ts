@@ -51,7 +51,7 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
  * applies; non-personal connections and personal-scope targets don't prompt.
  * Returns whether a confirmation was handled.
  */
-export async function confirmPersonalCredentialPinIfPrompted(
+async function confirmPersonalCredentialPinIfPrompted(
   page: Page,
 ): Promise<boolean> {
   const confirmButton = page

@@ -51,6 +51,7 @@ import {
 import { asSandboxId, type PersistedFile, type SandboxId } from "@/types";
 import { isUuid } from "@/utils/uuid";
 import {
+  decodeUtf8Text,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -1656,21 +1657,6 @@ interface LoadedUpload {
   data: Buffer;
   mimeType?: string;
   originalName?: string;
-}
-
-/**
- * Decode bytes as text for read_file / edit_file, or null when they are not
- * safe to treat as text. The mime label is never trusted (a binary payload can
- * be saved as e.g. text/plain), so readability is decided by the bytes: a NUL
- * byte or any invalid UTF-8 sequence means "binary".
- */
-function decodeUtf8Text(data: Buffer): string | null {
-  if (data.includes(0)) return null;
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(data);
-  } catch {
-    return null;
-  }
 }
 
 /** Count non-overlapping occurrences of a non-empty needle (literal). */

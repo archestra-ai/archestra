@@ -58,7 +58,9 @@ async function confirmPersonalCredentialPinIfPrompted(
     .getByRole("button", { name: /^Pin to .+$/ })
     .first();
   if (await confirmButton.isVisible({ timeout: 1500 }).catch(() => false)) {
-    await confirmButton.click();
+    // Force past the actionability wait: the dialog's entrance animation keeps
+    // the button from being "stable" long enough for a normal click to land.
+    await confirmButton.click({ force: true });
     await expect(confirmButton).toBeHidden({ timeout: 5000 });
     return true;
   }

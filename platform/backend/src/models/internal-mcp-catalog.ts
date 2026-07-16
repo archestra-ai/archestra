@@ -10,7 +10,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { constructLegacyMultitenantMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -107,6 +107,23 @@ class InternalMcpCatalogModel {
     };
     await InternalMcpCatalogModel.populateAuthorNames([result]);
     return result;
+  }
+
+  /**
+   * Writes the frozen `deployment_name` of a multitenant catalog's shared
+   * deployment. Deliberately bypasses the UpdateInternalMcpCatalog
+   * type-omit: deployment identity is written exactly once — by `create`,
+   * the startup adopt pass, or the rename cascade's freeze-fallback — and
+   * never follows the mutable display name.
+   */
+  static async setDeploymentName(
+    params: { id: string; deploymentName: string },
+    tx?: Transaction,
+  ): Promise<void> {
+    await (tx ?? db)
+      .update(schema.internalMcpCatalogTable)
+      .set({ deploymentName: params.deploymentName })
+      .where(eq(schema.internalMcpCatalogTable.id, params.id));
   }
 
   static async findAll(options?: {

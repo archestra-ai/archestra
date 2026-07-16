@@ -136,6 +136,22 @@ class McpServerModel {
   }
 
   /**
+   * Writes the frozen `deployment_name`. Deliberately bypasses the
+   * UpdateMcpServer type-omit: deployment identity is written exactly once —
+   * by `create`, the startup adopt pass, or the rename cascade's
+   * freeze-fallback — and never follows the mutable display name.
+   */
+  static async setDeploymentName(
+    params: { id: string; deploymentName: string },
+    tx?: Transaction,
+  ): Promise<void> {
+    await (tx ?? db)
+      .update(schema.mcpServersTable)
+      .set({ deploymentName: params.deploymentName })
+      .where(eq(schema.mcpServersTable.id, params.id));
+  }
+
+  /**
    * Get all MCP server IDs that a user has access to through team membership.
    * Simplified query now that teamId is directly on mcp_server table.
    */

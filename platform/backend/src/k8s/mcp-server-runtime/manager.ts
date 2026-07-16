@@ -66,11 +66,32 @@ export class McpServerRuntimeManager {
   private egressBaselineByNamespace: Map<string, Promise<void>> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
+  /**
+   * Settles once the startup adopt pass has frozen every local install's
+   * `deployment_name` (rejected if the pass failed or the runtime never
+   * initialized). The rename cascade awaits this before its freeze-fallback:
+   * post-adopt, a still-NULL row provably has no live deployment, so
+   * freezing a recomputed name there cannot orphan anything. Single-shot —
+   * a failed adopt keeps renames blocked until the process restarts
+   * (churn-prevention outranks availability).
+   */
+  readonly deploymentNamesAdopted: Promise<void>;
+  private resolveDeploymentNamesAdopted!: () => void;
+  private rejectDeploymentNamesAdopted!: (error: Error) => void;
+
   // Callbacks for initialization events
   onRuntimeStartupSuccess: () => void = () => {};
   onRuntimeStartupError: (error: Error) => void = () => {};
 
   constructor() {
+    this.deploymentNamesAdopted = new Promise((resolve, reject) => {
+      this.resolveDeploymentNamesAdopted = resolve;
+      this.rejectDeploymentNamesAdopted = reject;
+    });
+    // A rename may never happen — don't let an un-awaited adopt failure
+    // surface as an unhandled rejection.
+    this.deploymentNamesAdopted.catch(() => {});
+
     try {
       const { kubeConfig, namespace } = loadKubeConfig();
       const clients = createK8sClients(kubeConfig, namespace);
@@ -86,6 +107,11 @@ export class McpServerRuntimeManager {
       this.namespace = clients.namespace;
     } catch (error) {
       logger.error({ err: error }, "Failed to load Kubernetes config");
+      this.rejectDeploymentNamesAdopted(
+        new Error(
+          "Kubernetes runtime failed to initialize; deployment names were not adopted",
+        ),
+      );
       this.status = "error";
       this.k8sApi = undefined;
       this.k8sAppsApi = undefined;
@@ -172,6 +198,22 @@ export class McpServerRuntimeManager {
       }
 
       logger.info(`Found ${localServers.length} local MCP servers to start`);
+
+      // Freeze deployment identity BEFORE anything touches K8s: the
+      // startServer loop below redeploys every install, so a pre-upgrade row
+      // whose DB name diverged from its live deployment would otherwise
+      // deploy under a freshly recomputed name and orphan the live one.
+      // Errors are fatal by design — churn-prevention outranks runtime
+      // availability.
+      try {
+        await this.adoptDeploymentNames({ localServers, localCatalogItems });
+        this.resolveDeploymentNamesAdopted();
+      } catch (error) {
+        this.rejectDeploymentNamesAdopted(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        throw error;
+      }
 
       const networkPolicyCapabilities = (
         await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
@@ -1414,6 +1456,136 @@ export class McpServerRuntimeManager {
    * Sweep deployments whose names no longer match the current name produced by
    * K8sDeployment.constructDeploymentName for their owning server.
    */
+  /**
+   * One-shot startup pass that freezes each local install's K8s deployment
+   * name into the DB. The live cluster is the source of truth: a row whose
+   * DB name diverged from its running deployment (renamed via API before the
+   * upgrade, never reinstalled) adopts the deployment's ACTUAL name, so
+   * nothing churns — recomputing from the DB name is only safe for rows with
+   * no live deployment at all.
+   *
+   * Multitenant catalogs share one deployment per catalog (the
+   * `mcp-server-id` label carries the catalog id there — see
+   * `getPodSelectorServerId`), so their name freezes onto the catalog row.
+   *
+   * Idempotent (already-frozen rows are skipped). Errors propagate — the
+   * caller treats them as fatal to start().
+   */
+  private async adoptDeploymentNames(params: {
+    localServers: McpServer[];
+    localCatalogItems: CatalogItem[];
+  }): Promise<void> {
+    const { localServers, localCatalogItems } = params;
+    if (!this.k8sAppsApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+
+    // One list call; group live deployments by their selector identity label
+    // (server id single-tenant, catalog id multitenant).
+    const deployments = await this.k8sAppsApi.listNamespacedDeployment({
+      namespace: this.namespace,
+      labelSelector: "app=mcp-server",
+    });
+    const deploymentsBySelectorId = new Map<string, k8s.V1Deployment[]>();
+    for (const deployment of deployments.items) {
+      const selectorId = deployment.metadata?.labels?.["mcp-server-id"];
+      if (!selectorId || !deployment.metadata?.name) continue;
+      const group = deploymentsBySelectorId.get(selectorId) ?? [];
+      group.push(deployment);
+      deploymentsBySelectorId.set(selectorId, group);
+    }
+
+    // Duplicate deployments for one id are the historical orphan bug itself.
+    // Prefer the one matching the legacy recompute (the row's current name
+    // still points at it); otherwise adopt the newest. Losers stay
+    // name-mismatched against the frozen name and the orphan sweep deletes
+    // them.
+    const pickLiveName = (
+      selectorId: string,
+      legacyRecompute: string,
+    ): string | null => {
+      const candidates = deploymentsBySelectorId.get(selectorId);
+      if (!candidates || candidates.length === 0) return null;
+      const legacyMatch = candidates.find(
+        (d) => d.metadata?.name === legacyRecompute,
+      );
+      if (legacyMatch) return legacyMatch.metadata?.name ?? null;
+      const newest = [...candidates].sort(
+        (a, b) =>
+          (b.metadata?.creationTimestamp?.getTime() ?? 0) -
+          (a.metadata?.creationTimestamp?.getTime() ?? 0),
+      )[0];
+      return newest.metadata?.name ?? null;
+    };
+
+    let adopted = 0;
+    let recomputed = 0;
+    const frozenByCatalogId = new Map<string, string>();
+
+    for (let i = 0; i < localServers.length; i++) {
+      const server = localServers[i];
+      const catalog = localCatalogItems[i];
+
+      if (catalog?.multitenant && server.catalogId) {
+        // Shared deployment — freeze on the catalog row, once per catalog.
+        if (catalog.deploymentName || frozenByCatalogId.has(catalog.id)) {
+          continue;
+        }
+        const legacyRecompute = K8sDeployment.constructDeploymentName(
+          server,
+          catalog,
+        );
+        const liveName = pickLiveName(catalog.id, legacyRecompute);
+        const frozen = liveName ?? legacyRecompute;
+        await InternalMcpCatalogModel.setDeploymentName({
+          id: catalog.id,
+          deploymentName: frozen,
+        });
+        frozenByCatalogId.set(catalog.id, frozen);
+        if (liveName) adopted++;
+        else recomputed++;
+        continue;
+      }
+
+      if (server.deploymentName) continue;
+      const legacyRecompute = K8sDeployment.constructDeploymentName(
+        server,
+        catalog,
+      );
+      const liveName = pickLiveName(server.id, legacyRecompute);
+      const frozen = liveName ?? legacyRecompute;
+      await McpServerModel.setDeploymentName({
+        id: server.id,
+        deploymentName: frozen,
+      });
+      // Mutate in place — the same row objects feed startServer, the egress
+      // reconcile, and the orphan sweep this startup.
+      server.deploymentName = frozen;
+      if (liveName) adopted++;
+      else recomputed++;
+    }
+
+    // start() fetches a separate catalog object per install, so every copy of
+    // a just-frozen multitenant catalog must be updated — not only the one
+    // that happened to trigger the freeze.
+    if (frozenByCatalogId.size > 0) {
+      for (const catalog of localCatalogItems) {
+        if (!catalog) continue;
+        const frozen = frozenByCatalogId.get(catalog.id);
+        if (frozen && !catalog.deploymentName) {
+          catalog.deploymentName = frozen;
+        }
+      }
+    }
+
+    if (adopted > 0 || recomputed > 0) {
+      logger.info(
+        { adopted, recomputed },
+        "Froze MCP deployment names (adopted from live cluster / recomputed for rows with no deployment)",
+      );
+    }
+  }
+
   private async cleanupOrphanedDeployments(
     installedServers: McpServer[],
   ): Promise<void> {
@@ -1454,6 +1626,12 @@ export class McpServerRuntimeManager {
 
         const server = serverById.get(serverId);
         if (!server) continue;
+
+        // Only ever compare against a FROZEN name. The adopt pass runs
+        // before this sweep and freezes every local single-tenant row, so
+        // NULL here means the expected name can't be proven — never delete
+        // on a recomputed guess.
+        if (!server.deploymentName) continue;
 
         const catalog = await getCatalog(server.catalogId);
         const expectedName = K8sDeployment.constructDeploymentName(

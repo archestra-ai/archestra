@@ -2,13 +2,9 @@ import {
   CLAUDE_METADATA_SESSION_SOURCE,
   codexClientMetadataSessionId,
   isCodexClientAgentId,
-  isCodexClientMetadata,
-  isCodexOriginator,
   isCodexSessionId,
-  isCodexUserAgent,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
-import { getExternalAgentId } from "./external-agent-id";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
@@ -16,8 +12,8 @@ const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
 /**
  * The Codex CLI stamps its session id on every request in a `session-id` header
  * (codex-rs `build_session_headers`) and in the `client_metadata` body object.
- * Both are read only after the request is positively identified as Codex — see
- * {@link isCodexRequest}.
+ * Both are read only when the request's resolved client attribution is a Codex
+ * client id — the header name is too generic to trust on its own.
  */
 const CODEX_SESSION_ID_HEADER = "session-id";
 
@@ -56,28 +52,37 @@ export interface SessionInfo {
  * 1. Explicit X-Archestra-Session-Id header (source: 'header')
  * 2. X-Archestra-Meta third segment (source: 'meta_header')
  * 3. Open WebUI X-OpenWebUI-Chat-Id header (source: 'openwebui_chat')
- * 4. Codex session id — only when the request is positively identified as
- *    Codex (see {@link isCodexRequest}): `client_metadata.session_id` body
- *    field first, then the `session-id` request header (source:
- *    'codex_session')
+ * 4. Codex session id — only when `externalAgentId` is a Codex client id:
+ *    `client_metadata.session_id` body field first, then the `session-id`
+ *    request header (source: 'codex_session')
  * 5. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
  * 6. OpenAI user field (source: 'openai_user')
  *
  * @param headers - The request headers object
  * @param body - The request body (may contain metadata.user_id, user, or
  *   client_metadata)
+ * @param externalAgentId - The request's resolved client attribution: the
+ *   caller-supplied X-Archestra-Agent-Id header or, when absent, client-app
+ *   auto-discovery (see {@link ./client-app}). Gates the Codex session signals
+ *   so a non-Codex request never gets 'codex_session' provenance, and keeps
+ *   client identification in one place.
  * @returns SessionInfo with sessionId and sessionSource
  */
-export function extractSessionInfo(
-  headers: Record<string, string | string[] | undefined>,
+export function extractSessionInfo({
+  headers,
+  body,
+  externalAgentId,
+}: {
+  headers: Record<string, string | string[] | undefined>;
   body:
     | {
         metadata?: { user_id?: string | null };
         user?: string | null;
         client_metadata?: unknown;
       }
-    | undefined,
-): SessionInfo {
+    | undefined;
+  externalAgentId: string | undefined;
+}): SessionInfo {
   // Priority 1: Explicit header
   const headerSessionId = getHeaderValue(headers, SESSION_ID_HEADER);
   if (headerSessionId) {
@@ -97,10 +102,10 @@ export function extractSessionInfo(
     return { sessionId: openwebuiChatId, sessionSource: "openwebui_chat" };
   }
 
-  // Priority 4: Codex session id, gated on the request being positively
-  // identified as Codex first — the `session-id` header name is generic, so it
-  // is never read as a Codex session on its own.
-  if (isCodexRequest(headers, body)) {
+  // Priority 4: Codex session id, gated on the resolved client attribution —
+  // the `session-id` header name is generic, so it is never read as a Codex
+  // session on its own.
+  if (isCodexClientAgentId(externalAgentId)) {
     const metadataSessionId = codexClientMetadataSessionId(
       body?.client_metadata,
     );
@@ -135,32 +140,6 @@ export function extractSessionInfo(
   }
 
   return { sessionId: null, sessionSource: null };
-}
-
-/**
- * Whether a request is positively identified as coming from a Codex client,
- * checked in order:
- * 1. Explicit `X-Archestra-Agent-Id` header carrying a Codex client id (set by
- *    the connect-page setup script).
- * 2. The Codex `client_metadata` body shape.
- * 3. A first-party Codex `originator` header.
- * 4. A Codex User-Agent (originator as the leading product token).
- *
- * Only then are the generic `session-id` header / `client_metadata` field read
- * as Codex session signals — a non-Codex request never gets `codex_session`
- * provenance, mirroring how the Claude path validates the `metadata.user_id`
- * format before attributing.
- */
-function isCodexRequest(
-  headers: Record<string, string | string[] | undefined>,
-  body: { client_metadata?: unknown } | undefined,
-): boolean {
-  return (
-    isCodexClientAgentId(getExternalAgentId(headers)) ||
-    isCodexClientMetadata(body?.client_metadata) ||
-    isCodexOriginator(getHeaderValue(headers, "originator")) ||
-    isCodexUserAgent(getHeaderValue(headers, "user-agent"))
-  );
 }
 
 /**

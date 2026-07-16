@@ -14,6 +14,7 @@ import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
   ClientFilterOption,
   ProfileFilterOption,
@@ -345,12 +346,10 @@ function SessionsTable({
                       No message
                     </span>
                   )}
-                  <Badge
-                    variant="secondary"
-                    className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 shrink-0"
-                  >
-                    {clientSourceLabel}
-                  </Badge>
+                  <ClientSourceBadge
+                    label={clientSourceLabel}
+                    className="shrink-0"
+                  />
                 </>
               ) : lastUserMessage ? (
                 <span className="min-w-0 max-w-full truncate">

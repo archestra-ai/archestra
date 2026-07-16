@@ -16,6 +16,7 @@ import type {
   LlmProviderApiKey,
   LlmProviderApiKeyWithScopeInfo,
   ResourceVisibilityScope,
+  SecretStorageType,
   SecretValue,
   UpdateLlmProviderApiKey,
 } from "@/types";
@@ -217,32 +218,7 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    // Decrypt each secret once, then derive metadata (vault ref, codex marker)
-    // from the value; the value itself never leaves this mapper.
-    return apiKeys.map((key) => {
-      const apiKeyValue = decryptApiKeyValue(key.secret);
-      const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
-      const secretStorageType = computeSecretStorageType(
-        key.secretId,
-        key.secretIsVault,
-        key.secretIsByosVault,
-      );
-      const {
-        secret: _secret,
-        secretIsVault: _isVault,
-        secretIsByosVault: _isByosVault,
-        ...rest
-      } = key;
-      return {
-        ...rest,
-        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-        secretStorageType,
-        isChatgptSubscription:
-          key.provider === "openai" &&
-          isOpenAiCodexCredential(apiKeyValue ?? undefined),
-      };
-    });
+    return apiKeys.map(toApiKeyWithScopeInfo);
   }
 
   /**
@@ -349,32 +325,7 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    // Decrypt each secret once, then derive metadata (vault ref, codex marker)
-    // from the value; the value itself never leaves this mapper.
-    return apiKeys.map((key) => {
-      const apiKeyValue = decryptApiKeyValue(key.secret);
-      const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
-      const secretStorageType = computeSecretStorageType(
-        key.secretId,
-        key.secretIsVault,
-        key.secretIsByosVault,
-      );
-      const {
-        secret: _secret,
-        secretIsVault: _isVault,
-        secretIsByosVault: _isByosVault,
-        ...rest
-      } = key;
-      return {
-        ...rest,
-        vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
-        vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
-        secretStorageType,
-        isChatgptSubscription:
-          key.provider === "openai" &&
-          isOpenAiCodexCredential(apiKeyValue ?? undefined),
-      };
-    });
+    return apiKeys.map(toApiKeyWithScopeInfo);
   }
 
   /**
@@ -846,10 +797,59 @@ class LlmProviderApiKeyModel {
 }
 
 /**
+ * Maps a list-query row (key + joined secret columns) to the response shape,
+ * deriving the secret-value metadata (vault reference, ChatGPT-subscription
+ * marker) and dropping the secret columns.
+ *
+ * The secret is decrypted only when its value is actually inspected: BYOS-vault
+ * secrets carry the "path#key" reference to surface (the BYOS manager is the
+ * only writer of vault references, and it always sets `isByosVault`), and
+ * OpenAI secrets may carry the ChatGPT-subscription marker. Every other key
+ * skips the decrypt; the decrypted value never leaves this mapper either way.
+ */
+function toApiKeyWithScopeInfo<
+  T extends {
+    provider: string;
+    secretId: string | null;
+    secret: SecretValue | null;
+    secretIsVault: boolean | null;
+    secretIsByosVault: boolean | null;
+  },
+>(
+  key: T,
+): Omit<T, "secret" | "secretIsVault" | "secretIsByosVault"> & {
+  vaultSecretPath: string | null;
+  vaultSecretKey: string | null;
+  secretStorageType: SecretStorageType;
+  isChatgptSubscription: boolean;
+} {
+  const apiKeyValue =
+    key.provider === "openai" || key.secretIsByosVault
+      ? decryptApiKeyValue(key.secret)
+      : null;
+  const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
+  const { secret: _secret, secretIsVault, secretIsByosVault, ...rest } = key;
+  return {
+    ...rest,
+    vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
+    vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
+    secretStorageType: computeSecretStorageType(
+      key.secretId,
+      secretIsVault,
+      secretIsByosVault,
+    ),
+    isChatgptSubscription:
+      key.provider === "openai" &&
+      isOpenAiCodexCredential(apiKeyValue ?? undefined),
+  };
+}
+
+/**
  * Decrypts a stored secret and returns its `apiKey` string (LLM provider key
- * secrets are `{ apiKey: "..." }`), or null when absent/non-string. List
- * mappers call this once per key and derive metadata from the returned value —
- * the value itself is never included in a response.
+ * secrets are `{ apiKey: "..." }`), or null when absent/non-string.
+ * {@link toApiKeyWithScopeInfo} calls this at most once per key and derives
+ * metadata from the returned value — the value itself is never included in a
+ * response.
  */
 function decryptApiKeyValue(secret: SecretValue | null): string | null {
   if (!secret || typeof secret !== "object") return null;

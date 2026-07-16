@@ -254,11 +254,14 @@ export async function handleLLMProxy<
   let oauthUserId: string | undefined;
   let regularVirtualKeyUserId: string | undefined;
 
+  // Session extraction reuses the resolved client attribution above to gate
+  // the Codex-specific signals, so client identification lives in one place.
   const { sessionId, sessionSource } =
-    utils.headers.sessionId.extractSessionInfo(
-      headersForExtraction,
-      bodyForExtraction,
-    );
+    utils.headers.sessionId.extractSessionInfo({
+      headers: headersForExtraction,
+      body: bodyForExtraction,
+      externalAgentId,
+    });
 
   // Extract interaction source (chat, chatops, email, etc.)
   // Internal callers set X-Archestra-Source; external API requests default to "api".

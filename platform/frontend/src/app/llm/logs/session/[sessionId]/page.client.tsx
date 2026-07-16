@@ -8,6 +8,7 @@ import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use } from "react";
+import { ClientSourceBadge } from "@/components/client-source-badge";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { Savings } from "@/components/savings";
@@ -189,12 +190,7 @@ export default function SessionDetailPage({
         badges={
           <>
             {clientSourceLabel && (
-              <Badge
-                variant="secondary"
-                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
-              >
-                {clientSourceLabel}
-              </Badge>
+              <ClientSourceBadge label={clientSourceLabel} />
             )}
             <SourceBadge source={sessionData?.source} />
             {profileName && (

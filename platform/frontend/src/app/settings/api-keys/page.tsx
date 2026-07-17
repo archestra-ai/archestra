@@ -34,7 +34,12 @@ import {
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
 import { useSetSettingsAction } from "../layout";
-import { shouldSkipCreateApiKeySubmit } from "./page.utils";
+import {
+  getExpiresAtError,
+  MAX_EXPIRY_DAYS,
+  MAX_KEY_NAME_LENGTH,
+  shouldSkipCreateApiKeySubmit,
+} from "./page.utils";
 
 type CreateApiKeyFormValues = {
   name: string;
@@ -72,6 +77,15 @@ export default function ApiKeysSettingsPage() {
   const form = useForm<CreateApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
   });
+  form.register("expiresAt", {
+    validate: (value) =>
+      getExpiresAtError({ expiresAt: value, now: Date.now() }) ?? true,
+  });
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const expiresMinDate = new Date(now + dayMs);
+  const expiresMaxDate = new Date(now + MAX_EXPIRY_DAYS * dayMs);
 
   useEffect(() => {
     setActionButton(
@@ -179,10 +193,7 @@ export default function ApiKeysSettingsPage() {
 
     hasSubmittedCreateDialogRef.current = true;
     const expiresIn = values.expiresAt
-      ? Math.max(
-          1,
-          Math.floor((values.expiresAt.getTime() - Date.now()) / 1000),
-        )
+      ? Math.floor((values.expiresAt.getTime() - Date.now()) / 1000)
       : null;
 
     const createdApiKey = await createApiKeyMutation.mutateAsync({
@@ -292,19 +303,33 @@ export default function ApiKeysSettingsPage() {
                   <Input
                     id="name"
                     placeholder="CI token"
+                    maxLength={MAX_KEY_NAME_LENGTH}
                     {...form.register("name")}
                   />
                 </div>
-                <ExpirationDateTimeField
-                  value={form.watch("expiresAt")}
-                  onChange={(value) => form.setValue("expiresAt", value)}
-                  noExpirationText="Key will never expire"
-                  formatExpiration={(value) =>
-                    value
-                      ? formatDate({ date: new Date(value).toISOString() })
-                      : ""
-                  }
-                />
+                <div className="space-y-1">
+                  <ExpirationDateTimeField
+                    value={form.watch("expiresAt")}
+                    onChange={(value) =>
+                      form.setValue("expiresAt", value, {
+                        shouldValidate: true,
+                      })
+                    }
+                    noExpirationText="Key will never expire"
+                    minDate={expiresMinDate}
+                    maxDate={expiresMaxDate}
+                    formatExpiration={(value) =>
+                      value
+                        ? formatDate({ date: new Date(value).toISOString() })
+                        : ""
+                    }
+                  />
+                  {form.formState.errors.expiresAt && (
+                    <p className="text-xs text-destructive">
+                      {form.formState.errors.expiresAt.message}
+                    </p>
+                  )}
+                </div>
               </>
             )}
           </div>

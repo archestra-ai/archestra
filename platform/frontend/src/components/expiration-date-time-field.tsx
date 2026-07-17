@@ -11,6 +11,8 @@ export function ExpirationDateTimeField({
   placeholder = "No expiration",
   noExpirationText = "Will never expire",
   formatExpiration,
+  minDate,
+  maxDate,
 }: {
   value: Date | null;
   onChange: (value: Date | null) => void;
@@ -18,6 +20,8 @@ export function ExpirationDateTimeField({
   placeholder?: string;
   noExpirationText?: string;
   formatExpiration: (value: Date | string | null) => string;
+  minDate?: Date;
+  maxDate?: Date;
 }) {
   return (
     <div className="space-y-2">
@@ -34,7 +38,18 @@ export function ExpirationDateTimeField({
           disabledDate={(date) => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            return date < today;
+            if (date < today) return true;
+            if (minDate) {
+              const min = new Date(minDate);
+              min.setHours(0, 0, 0, 0);
+              if (date < min) return true;
+            }
+            if (maxDate) {
+              const max = new Date(maxDate);
+              max.setHours(0, 0, 0, 0);
+              if (date > max) return true;
+            }
+            return false;
           }}
           placeholder={placeholder}
           className="flex-1"

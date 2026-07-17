@@ -222533,7 +222533,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -222935,7 +222935,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -223492,7 +223492,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -223894,7 +223894,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -224737,7 +224737,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -225139,7 +225139,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -225554,7 +225554,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -225956,7 +225956,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -226260,7 +226260,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "onlineCatalogEnabled": {
+                  "onlineMcpCatalogEnabled": {
                     "type": "boolean"
                   }
                 }
@@ -226364,7 +226364,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -226766,7 +226766,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -227189,7 +227189,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -227591,7 +227591,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -228090,7 +228090,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -228492,7 +228492,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -228971,7 +228971,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -229373,7 +229373,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -229786,7 +229786,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -230188,7 +230188,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -230614,7 +230614,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -231016,7 +231016,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -231409,7 +231409,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -231811,7 +231811,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -232517,7 +232517,7 @@
                         "team"
                       ]
                     },
-                    "onlineCatalogEnabled": {
+                    "onlineMcpCatalogEnabled": {
                       "type": "boolean"
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -232919,7 +232919,7 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "onlineCatalogEnabled",
+                    "onlineMcpCatalogEnabled",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",

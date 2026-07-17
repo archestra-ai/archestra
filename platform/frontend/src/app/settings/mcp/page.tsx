@@ -32,11 +32,11 @@ export default function McpSettingsPage() {
     "Failed to update MCP settings",
   );
 
-  const serverCatalogEnabled = organization?.onlineCatalogEnabled ?? true;
+  const serverCatalogEnabled = organization?.onlineMcpCatalogEnabled ?? true;
   const [catalogEnabled, setCatalogEnabled] = useState(serverCatalogEnabled);
 
   useEffect(() => {
-    if (organization) setCatalogEnabled(organization.onlineCatalogEnabled);
+    if (organization) setCatalogEnabled(organization.onlineMcpCatalogEnabled);
   }, [organization]);
 
   const hasChanges = !isPending && catalogEnabled !== serverCatalogEnabled;
@@ -44,7 +44,7 @@ export default function McpSettingsPage() {
   const handleSave = async () => {
     if (!hasChanges) return;
     await updateMcpSettingsMutation.mutateAsync({
-      onlineCatalogEnabled: catalogEnabled,
+      onlineMcpCatalogEnabled: catalogEnabled,
     });
   };
 

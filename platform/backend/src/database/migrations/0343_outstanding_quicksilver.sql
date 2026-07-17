@@ -1,1 +1,0 @@
-ALTER TABLE "organization" ADD COLUMN "online_catalog_enabled" boolean DEFAULT true NOT NULL;

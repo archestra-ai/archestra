@@ -60,7 +60,7 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCompressionScope>()
     .notNull()
     .default("organization"),
-  onlineCatalogEnabled: boolean("online_catalog_enabled")
+  onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
     .notNull()
     .default(true),
   /**

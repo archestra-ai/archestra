@@ -42,7 +42,7 @@ export default function NewMcpCatalogItemPage() {
   // skipped entirely and the manual create form opens directly. Fail closed:
   // if the org read is missing (error/stale), honor the disable rather than
   // exposing the public catalog against an admin's intent.
-  const catalogEnabled = organization?.onlineCatalogEnabled === true;
+  const catalogEnabled = organization?.onlineMcpCatalogEnabled === true;
 
   // ?clone=<catalogId> seeds the form from an existing item (used by the
   // Clone action on the item detail page) and skips the source step.

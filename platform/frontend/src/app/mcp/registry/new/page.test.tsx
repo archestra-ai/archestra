@@ -32,9 +32,9 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import NewMcpCatalogItemPage from "./page";
 
-function mockOrganization(onlineCatalogEnabled: boolean, isPending = false) {
+function mockOrganization(onlineMcpCatalogEnabled: boolean, isPending = false) {
   vi.mocked(useOrganization).mockReturnValue({
-    data: isPending ? undefined : { onlineCatalogEnabled },
+    data: isPending ? undefined : { onlineMcpCatalogEnabled },
     isPending,
   } as ReturnType<typeof useOrganization>);
 }

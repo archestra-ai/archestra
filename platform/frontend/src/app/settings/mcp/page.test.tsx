@@ -27,9 +27,9 @@ function setPermission(hasPermission: boolean) {
   );
 }
 
-function setOrganization(onlineCatalogEnabled: boolean) {
+function setOrganization(onlineMcpCatalogEnabled: boolean) {
   vi.mocked(useOrganization).mockReturnValue({
-    data: { onlineCatalogEnabled },
+    data: { onlineMcpCatalogEnabled },
     isPending: false,
   } as ReturnType<typeof useOrganization>);
 }

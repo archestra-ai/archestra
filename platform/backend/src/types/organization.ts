@@ -411,7 +411,7 @@ export const UpdateLlmSettingsSchema = z.object({
 });
 
 export const UpdateMcpSettingsSchema = z.object({
-  onlineCatalogEnabled: z.boolean().optional(),
+  onlineMcpCatalogEnabled: z.boolean().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({

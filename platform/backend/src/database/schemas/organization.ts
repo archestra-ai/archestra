@@ -60,6 +60,9 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCompressionScope>()
     .notNull()
     .default("organization"),
+  onlineCatalogEnabled: boolean("online_catalog_enabled")
+    .notNull()
+    .default(true),
   /**
    * @deprecated The "security engine on/off" toggle (permissive/restrictive) was
    * removed — the security engine is always enabled now. This column is inert:

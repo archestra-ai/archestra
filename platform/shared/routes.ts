@@ -449,6 +449,9 @@ export const RouteId = {
   // LLM Settings Routes (organization-level)
   UpdateLlmSettings: "updateLlmSettings",
 
+  // MCP Settings Routes (organization-level)
+  UpdateMcpSettings: "updateMcpSettings",
+
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
 

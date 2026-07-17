@@ -146,8 +146,7 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
     const { conversationId, mode, prompt } = res.json();
     expect(mode).toBe("prompt");
     // The opening prompt names the app (a single-UI-tool server labels as the
-    // bare server name), the tool, and the server, so the agent can find and
-    // call it — the exact wording is not pinned.
+    // bare server name) and the tool, so the agent can find and call it.
     expect(prompt).toContain("Atlassian");
     expect(prompt).toContain("createjiraissue");
 

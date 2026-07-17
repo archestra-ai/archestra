@@ -11,6 +11,7 @@ import {
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import EnvironmentModel from "@/models/environment";
 import { expect, test } from "@/test";
 import { gateAppToolCall } from "./app-tool-runtime-gate";
@@ -275,6 +276,12 @@ test("enforces a block_always policy on the target (runtime gap fix)", async ({
       treatRequireApprovalAsBlock,
     });
     expect(decision.allowed).toBe(false);
+    if (!decision.allowed) {
+      // The reason attributes the block to the gateway brand and names the
+      // blocked tool, so the app knows the tool itself did not fail.
+      expect(decision.reason).toContain(toolName);
+      expect(decision.reason).toContain(archestraMcpBranding.catalogName);
+    }
   }
 });
 

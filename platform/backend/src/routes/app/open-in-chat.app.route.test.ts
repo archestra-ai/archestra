@@ -88,7 +88,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(message.role).toBe("assistant");
     const part = message.content.parts[0] as { type: string; text: string };
     expect(part.type).toBe("text");
-    // The greeting names the app; its exact wording is not pinned.
+    // The greeting names the app.
     expect(part.text).toContain(appName);
     return part.text;
   }

@@ -179,8 +179,7 @@ describe("buildAppCapabilityContext", () => {
       environmentId: null,
     });
 
-    // The grounding text is the canonical SDK summary, verbatim — identity, not
-    // wording, is the contract.
+    // The grounding text is the canonical SDK summary, verbatim.
     expect(context.sdkSummary).toBe(ARCHESTRA_APP_SDK_SUMMARY);
   });
 });

@@ -8,6 +8,7 @@ import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
 import { PROJECT_INSTRUCTIONS_PREFIX } from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
 import { MessageModel, ModelModel, ProjectModel, SkillModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
@@ -666,6 +667,62 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       { ...compactedMessages[0], ...cacheBreakpoint },
       { ...compactedMessages[1], ...cacheBreakpoint },
     ]);
+  });
+
+  test("stops the run once the model repeatedly calls a tool outside the tool list", async () => {
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const streamConfig = mockStreamText.mock.calls[0]?.[0];
+    const stopWhen = streamConfig.stopWhen as ((arg: unknown) => boolean)[];
+    const noSteps = { steps: [] };
+    const runIsStopped = () => stopWhen.some((cond) => cond(noSteps));
+
+    // A tool the model asks for but which is not in its tool list never reaches
+    // an execute wrapper, so nothing on the normal path counts it. Distinct
+    // arguments each step, since that is what the real loop did.
+    const unavailableStep = (attempt: number) => ({
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      finishReason: "tool-calls",
+      toolCalls: [
+        {
+          type: "tool-call",
+          toolCallId: `call-${attempt}`,
+          toolName: "archestra__edit_app",
+          input: { attempt },
+          dynamic: true,
+          invalid: true,
+          error: new NoSuchToolError({
+            toolName: "archestra__edit_app",
+            availableTools: ["archestra__search_tools", "archestra__run_tool"],
+          }),
+        },
+      ],
+    });
+
+    // Drives the route's own onStepFinish and its own stopWhen, so this fails
+    // if they are ever handed different tracker instances — which would leave
+    // the ceiling silently inert no matter how correct the recorder is.
+    for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
+      await streamConfig.onStepFinish(unavailableStep(i));
+      expect(runIsStopped()).toBe(false);
+    }
+
+    await streamConfig.onStepFinish(unavailableStep(99));
+    expect(runIsStopped()).toBe(true);
   });
 
   test("forwards a provided temperature to streamText", async () => {

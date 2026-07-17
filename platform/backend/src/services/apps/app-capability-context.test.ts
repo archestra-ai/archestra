@@ -1,3 +1,4 @@
+import { ARCHESTRA_APP_SDK_SUMMARY } from "@/archestra-mcp-server/app-authoring-guidance";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { EnvironmentModel } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -178,8 +179,7 @@ describe("buildAppCapabilityContext", () => {
       environmentId: null,
     });
 
-    expect(context.sdkSummary.length).toBeGreaterThan(0);
-    expect(context.sdkSummary).toContain("archestra.storage");
-    expect(context.sdkSummary).toContain("archestra.tools.call");
+    // The grounding text is the canonical SDK summary, verbatim.
+    expect(context.sdkSummary).toBe(ARCHESTRA_APP_SDK_SUMMARY);
   });
 });

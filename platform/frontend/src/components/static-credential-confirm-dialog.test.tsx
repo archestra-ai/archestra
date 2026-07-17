@@ -2,10 +2,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StaticCredentialConfirmDialog } from "@/components/static-credential-confirm-dialog";
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
-
 // Render the shell inline (no Radix portal) so the copy and footer are directly
 // assertable.
 vi.mock("@/components/standard-dialog", () => ({
@@ -59,14 +55,15 @@ describe("StaticCredentialConfirmDialog", () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(container.textContent).toContain("Everyone who uses this agent");
-    expect(container.textContent).toContain("member@example.com's connection");
-    expect(
-      screen.getByText("Pin to member@example.com's connection"),
-    ).toBeInTheDocument();
+    expect(container.textContent).toContain("Every user of this agent");
+    expect(container.textContent).toContain("connect to");
+    expect(container.textContent).toContain("as member@example.com");
+    expect(container.textContent).toContain("no matter who is calling");
+    expect(container.textContent).toContain("member@example.com's access");
+    expect(screen.getByText("Use this connection")).toBeInTheDocument();
   });
 
-  it("agent context uses 'your' wording for the caller's own connection", () => {
+  it("agent context uses 'you' / 'your' wording for the caller's own connection", () => {
     const { container } = render(
       <StaticCredentialConfirmDialog
         open
@@ -81,12 +78,14 @@ describe("StaticCredentialConfirmDialog", () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(container.textContent).toContain("through your connection");
-    expect(container.textContent).toContain("comes from you");
-    expect(screen.getByText("Pin to your connection")).toBeInTheDocument();
+    expect(container.textContent).toContain("Every user of this agent");
+    expect(container.textContent).toContain("connect to");
+    expect(container.textContent).toContain("as you");
+    expect(container.textContent).toContain("your access");
+    expect(screen.getByText("Use this connection")).toBeInTheDocument();
   });
 
-  it("server context describes the default connection and labels the action", () => {
+  it("server context describes the default connection", () => {
     const { container } = render(
       <StaticCredentialConfirmDialog
         open
@@ -102,15 +101,14 @@ describe("StaticCredentialConfirmDialog", () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(container.textContent).toContain("connects as");
+    expect(container.textContent).toContain("Every agent that resolves");
+    expect(container.textContent).toContain("at call time will connect as");
     expect(container.textContent).toContain("member@example.com");
-    expect(
-      screen.getByText("Use member@example.com's account"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Use this connection")).toBeInTheDocument();
   });
 
-  it("server context uses 'you' / 'Use your account' for the caller's own connection", () => {
-    render(
+  it("server context uses 'you' for the caller's own connection", () => {
+    const { container } = render(
       <StaticCredentialConfirmDialog
         open
         context="server"
@@ -125,7 +123,8 @@ describe("StaticCredentialConfirmDialog", () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(screen.getByText("Use your account")).toBeInTheDocument();
+    expect(container.textContent).toContain("will connect as you");
+    expect(container.textContent).toContain("your access");
   });
 
   it("wires the confirm and cancel actions", () => {
@@ -141,7 +140,7 @@ describe("StaticCredentialConfirmDialog", () => {
     );
     fireEvent.click(screen.getByText("Cancel"));
     expect(onCancel).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByText("Pin to e@x.com's connection"));
+    fireEvent.click(screen.getByText("Use this connection"));
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
@@ -158,9 +157,9 @@ describe("StaticCredentialConfirmDialog", () => {
       />,
     );
     expect(container.textContent).toContain("ServerA");
-    expect(container.textContent).toContain("a@x.com");
+    expect(container.textContent).toContain("as a@x.com");
     expect(container.textContent).toContain("ServerB");
     expect(container.textContent).toContain("as you");
-    expect(screen.getByText("Pin anyway")).toBeInTheDocument();
+    expect(screen.getByText("Use these connections")).toBeInTheDocument();
   });
 });

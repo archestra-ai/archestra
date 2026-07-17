@@ -273,9 +273,7 @@ describe("MCP backing for apps", () => {
     expect(toolAfter.name.endsWith("__open")).toBe(true);
     // The launch tool's derived description IS refreshed on rename, so stored
     // metadata never keeps a stale (or pre-sanitization) app name.
-    expect(toolAfter.description).toBe(
-      'Open the "Renamed Dashboard" app and render its UI.',
-    );
+    expect(toolAfter.description).toContain("Renamed Dashboard");
     expect(toolAfter.description).not.toBe(toolBefore.description);
   });
 

@@ -43,7 +43,7 @@ describe("skillSandboxRuntimeService", () => {
     vi.unstubAllEnvs();
   });
 
-  test("is disabled when ARCHESTRA_AGENTS_SKILLS_ENABLED or ARCHESTRA_CODE_RUNTIME_ENABLED is unset", () => {
+  test("is disabled when no Dagger runner host is configured", () => {
     expect(skillSandboxRuntimeService.isEnabled).toBe(false);
     expect(skillSandboxRuntimeService.isReady).toBe(false);
   });
@@ -212,8 +212,6 @@ describe("skillSandboxRuntimeService", () => {
  */
 async function importEnabledService() {
   vi.resetModules();
-  vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-  vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
   vi.stubEnv(
     "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
     "tcp://dagger-runtime.dagger.svc.cluster.local:1234",

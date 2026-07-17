@@ -45,17 +45,17 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
 }
 
 /**
- * Pinning a personal-scope connection to a shared (team/org) agent or gateway
- * prompts a confirmation ("Pin every user to a personal account?") because every
- * caller would then authenticate as that one owner. Confirm it so the pin
- * applies; non-personal connections and personal-scope targets don't prompt.
- * Returns whether a confirmation was handled.
+ * Choosing a personal-scope connection for a shared (team/org) agent or gateway
+ * prompts a confirmation ("Use this connection for everyone?") because every
+ * caller would then connect as that one owner. Confirm it so the choice applies;
+ * non-personal connections and personal-scope targets don't prompt. Returns
+ * whether a confirmation was handled.
  */
 async function confirmPersonalCredentialPinIfPrompted(
   page: Page,
 ): Promise<boolean> {
   const confirmButton = page
-    .getByRole("button", { name: /^Pin to .+$/ })
+    .getByRole("button", { name: /^Use th(is|ese) connections?$/ })
     .first();
   if (await confirmButton.isVisible({ timeout: 1500 }).catch(() => false)) {
     // Force past the actionability wait: the dialog's entrance animation keeps

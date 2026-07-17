@@ -404,7 +404,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Skill Sandbox Runtime** (gated behind the sandbox feature flag):
 
 - DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
-- MCP tools exposed by `archestra-mcp-server/sandbox.ts`, all gated by `sandbox:execute` (`archestra-mcp-server/rbac.ts`). Each accepts a `target?: { fresh: true } | { id }` — omitted resolves a lazy per-conversation default sandbox:
+- MCP tools exposed by `archestra-mcp-server/sandbox.ts` (`archestra-mcp-server/rbac.ts`): the execution tools (`run_command`, `upload_file`, `download_file`) are gated by `sandbox:execute`, the file tools (`search_files`, `read_file`, `save_file`, `edit_file`, `delete_file`) by `file:manage`. The execution tools accept a `target?: { fresh: true } | { id }` — omitted resolves a lazy per-conversation default sandbox:
   - `run_command` — materializes the sandbox in a fresh Dagger container, replays the persisted ordered replay log, executes a command, appends it to the log. Python runs in a uv project at `/home/sandbox` (`python3` is the project venv; install packages with `uv add --project /home/sandbox <pkg>`)
   - `upload_file` — writes an input file (chat attachment, base64, or text) into the sandbox as an ordered replay event so it materializes on later runs
   - `download_file` — exports a file from a materialized sandbox into `skill_sandbox_files` (kind `artifact`) and returns a metadata reference (no download link; the file is reached via the chat Files panel, which fetches bytes from the `/api/skill-sandbox/artifacts/:id` route directly)

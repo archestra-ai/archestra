@@ -737,11 +737,11 @@ If your nodes can't host the managed pod, you have two options:
 - Run the engine elsewhere. Set `archestra.codeRuntime.dagger.managed.enabled=false` and point `archestra.codeRuntime.dagger.runnerHost` (or `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`) at it.
 - Turn the sandbox off. Set both `archestra.codeRuntime.enabled=false` and `archestra.codeRuntime.dagger.managed.enabled=false` in Helm. The second key is what stops the engine pod. For the Docker quickstart, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false`.
 
-- **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Enables the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. Needs a Dagger runner host (below) to run; without one the feature stays off. When off, `run_command` and the other sandbox tools are unavailable and skills cannot execute. The quickstart Docker image and the Helm chart set both variables by default; opt out with `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm values.
+- **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Deployment toggle for the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. In the quickstart Docker image it deploys the bundled Dagger engine and wires its runner host. The backend enables the sandbox whenever a Dagger runner host (below) is reachable, so a deployment that points at an external engine stays on regardless of this flag. Set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker (or `archestra.codeRuntime.enabled=false` in Helm) to skip deploying the engine.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of the Dagger engine that materializes sandboxes, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. Required for the code runtime: if it is unset or unreachable, `ARCHESTRA_CODE_RUNTIME_ENABLED` has no effect and the sandbox stays disabled.
+- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of the Dagger engine that materializes sandboxes, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. A reachable host is what enables the backend sandbox; unset it to turn the sandbox off.
   - Default: unset
   - Values: a `tcp://` or `kube-pod://` URL
 

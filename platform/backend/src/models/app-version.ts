@@ -76,14 +76,6 @@ class AppVersionModel {
     return version;
   }
 
-  static async findById(id: string): Promise<AppVersion | null> {
-    const [row] = await db
-      .select()
-      .from(schema.appVersionsTable)
-      .where(eq(schema.appVersionsTable.id, id));
-    return row ?? null;
-  }
-
   /** Resolve a specific `(app, version)` pair, e.g. the app's head version. */
   static async findByAppAndVersion(
     appId: string,

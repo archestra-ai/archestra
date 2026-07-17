@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -39,14 +40,19 @@ import {
   useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
+import {
+  useMcpServers,
+  useMcpServersGroupedByCatalog,
+} from "@/lib/mcp/mcp-server.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
   computeMcpEnvConflicts,
+  computeSharedPersonalPins,
   getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
   isCatalogInEnvironment,
+  type SharedPersonalPin,
   shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
@@ -95,6 +101,14 @@ export interface AgentToolsEditorRef {
   }) => Promise<void>;
   /** Unselect every MCP catalog flagged as not belonging to the agent's environment. */
   removeIncompatibleTools: () => void;
+  /** Switch the named catalogs' credential from a personal static pin to resolve-at-call-time. */
+  convertPersonalPinsToDynamic: (catalogIds: string[]) => void;
+  /**
+   * True while the catalog, assigned-tool, or credential queries are still
+   * loading, so the personal-pin set is incomplete. The save guard fails closed
+   * on this rather than treating an incomplete "no personal pins" as safe.
+   */
+  isCredentialClassificationLoading: () => boolean;
 }
 
 interface AgentToolsEditorProps {
@@ -127,6 +141,12 @@ interface AgentToolsEditorProps {
    * setter) to avoid effect loops.
    */
   onConflictsChange?: (conflicts: McpEnvConflict[]) => void;
+  /**
+   * Reports the active tools currently pinned to a still-resolvable personal
+   * connection — the pins that would be shared if the agent is team/org scope.
+   * Pass a referentially-stable callback (e.g. a `useState` setter).
+   */
+  onSharedPersonalPinsChange?: (pins: SharedPersonalPin[]) => void;
   /** "pills" (default): compact pills + dropdown combobox. "cards": inline grid of MCP server cards. */
   layout?: "pills" | "cards";
   /** When true, the "Add MCP server" combobox starts open. */
@@ -154,6 +174,7 @@ export const AgentToolsEditor = forwardRef<
     agentEnvironmentId,
     agentEnvironmentName,
     onConflictsChange,
+    onSharedPersonalPinsChange,
     layout = "pills",
     openComboboxOnMount,
     includeAppCatalogs,
@@ -171,6 +192,7 @@ export const AgentToolsEditor = forwardRef<
       agentEnvironmentId={agentEnvironmentId}
       agentEnvironmentName={agentEnvironmentName}
       onConflictsChange={onConflictsChange}
+      onSharedPersonalPinsChange={onSharedPersonalPinsChange}
       layout={layout}
       openComboboxOnMount={openComboboxOnMount}
       includeAppCatalogs={includeAppCatalogs}
@@ -193,6 +215,7 @@ const AgentToolsEditorContent = forwardRef<
     agentEnvironmentId = null,
     agentEnvironmentName,
     onConflictsChange,
+    onSharedPersonalPinsChange,
     layout = "pills",
     openComboboxOnMount,
     includeAppCatalogs = false,
@@ -200,6 +223,8 @@ const AgentToolsEditorContent = forwardRef<
   ref,
 ) {
   const { catalogName } = useArchestraMcpIdentity();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
@@ -215,6 +240,24 @@ const AgentToolsEditorContent = forwardRef<
     assignmentScope,
     assignmentTeamIds,
   });
+  // Unfiltered accessible installs, used to classify a pin's scope/owner. Not
+  // the scope-filtered `allCredentials` above: that answers "what can be picked
+  // for this scope" and drops a personal pin whose owner isn't in the target
+  // group — but such a pin still persists on the agent and gets shared, so it
+  // must still be classified (and warned about). Scope-independent, so it does
+  // not refetch on a scope flip.
+  const { data: accessibleServers = [], isLoading: credentialsLoading } =
+    useMcpServers();
+  const accessibleServersByCatalog = useMemo(() => {
+    const map = new Map<string, typeof accessibleServers>();
+    for (const server of accessibleServers) {
+      if (!server.catalogId) continue;
+      const list = map.get(server.catalogId) ?? [];
+      list.push(server);
+      map.set(server.catalogId, list);
+    }
+    return map;
+  }, [accessibleServers]);
 
   // Fetch tool counts for all catalog items to enable sorting
   const toolCountQueries = useQueries({
@@ -241,7 +284,8 @@ const AgentToolsEditorContent = forwardRef<
   // Fetch assigned tools for this resource (only when editing an existing one).
   // Use the resource-scoped endpoint so MCP gateway members do not need the
   // broader tool-policy table permission just to edit their gateway tools.
-  const { data: assignedToolsData = [] } = useProfileToolsWithIds(agentId);
+  const { data: assignedToolsData = [], isLoading: assignedToolsLoading } =
+    useProfileToolsWithIds(agentId);
 
   // Group assigned tools by catalogId
   const assignedToolsByCatalog = useMemo(() => {
@@ -285,6 +329,14 @@ const AgentToolsEditorContent = forwardRef<
 
   // State counter to force re-renders when pendingChangesRef updates
   const [pendingVersion, setPendingVersion] = useState(0);
+
+  // Per-catalog remount counter. A bulk credential conversion writes
+  // pendingChangesRef directly, but each pill owns its credential selection in
+  // mount-time state; bumping a catalog's epoch remounts its pill so it re-seeds
+  // from the freshly-written pending change instead of showing the stale pin.
+  const [credentialEpoch, setCredentialEpoch] = useState<
+    Record<string, number>
+  >({});
 
   // Track which catalog pill should auto-open its popover after being added
   const [autoOpenCatalogId, setAutoOpenCatalogId] = useState<string | null>(
@@ -409,6 +461,73 @@ const AgentToolsEditorContent = forwardRef<
     lastReportedSelectionKeyRef.current = key;
     onSelectedToolIdsChange(effectiveSelectedToolIds);
   }, [effectiveSelectedToolIds, onSelectedToolIdsChange]);
+
+  // Each active catalog's effective credential: the pending edit when the user
+  // touched it, else the saved assignment. `pinnedServerId` is the static pin
+  // (null when it resolves at call time).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingVersion triggers re-computation when pendingChangesRef updates
+  const pinnedCatalogs = useMemo(() => {
+    return catalogItems.flatMap((catalog) => {
+      const pending = pendingChangesRef.current.get(catalog.id);
+      const assigned = assignedToolsByCatalog.get(catalog.id) ?? [];
+      const selectedCount = pending
+        ? pending.selectedToolIds.size
+        : assigned.length;
+      if (selectedCount === 0) return [];
+      const effectiveCred = pending
+        ? pending.credentialSourceId
+        : assigned[0]?.credentialResolutionMode === "static"
+          ? (assigned[0]?.mcpServerId ?? null)
+          : DYNAMIC_CREDENTIAL_VALUE;
+      const pinnedServerId =
+        effectiveCred && effectiveCred !== DYNAMIC_CREDENTIAL_VALUE
+          ? effectiveCred
+          : null;
+      return [
+        {
+          catalogId: catalog.id,
+          pinnedServerId,
+          resolvableServers: accessibleServersByCatalog.get(catalog.id) ?? [],
+        },
+      ];
+    });
+  }, [
+    catalogItems,
+    assignedToolsByCatalog,
+    accessibleServersByCatalog,
+    pendingVersion,
+  ]);
+
+  // The pins the dialog warns about when the agent is (being made) team/org
+  // scope: a static pin whose server is a `personal` install. A pin the user
+  // already switched back to resolve-at-call-time drops out because its
+  // effective credential is no longer a server id.
+  const sharedPersonalPins = useMemo(
+    () => computeSharedPersonalPins(pinnedCatalogs, currentUserId),
+    [pinnedCatalogs, currentUserId],
+  );
+
+  // Until the catalog, assigned-tool, and credential queries have all settled,
+  // the pin set and its scopes are incomplete — a still-loading assigned-tools
+  // query hides a pin, a still-loading credential query hides its scope. The
+  // save guard fails closed on this rather than treat an incomplete "no
+  // personal pins" as safe to share.
+  const credentialClassificationLoading =
+    isPending || assignedToolsLoading || credentialsLoading;
+
+  const lastReportedPinsKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onSharedPersonalPinsChange) return;
+    const key = sharedPersonalPins
+      .map(
+        (p) => `${p.catalogId}:${p.mcpName}:${p.ownerEmail}:${p.isCurrentUser}`,
+      )
+      .sort()
+      .join("|");
+    if (lastReportedPinsKeyRef.current === key) return;
+    lastReportedPinsKeyRef.current = key;
+    onSharedPersonalPinsChange(sharedPersonalPins);
+  }, [sharedPersonalPins, onSharedPersonalPinsChange]);
 
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({
@@ -552,6 +671,38 @@ const AgentToolsEditorContent = forwardRef<
         });
       }
     },
+    convertPersonalPinsToDynamic: (catalogIds) => {
+      for (const catalogId of catalogIds) {
+        const catalog = catalogItems.find((c) => c.id === catalogId);
+        if (!catalog) continue;
+        const pending = pendingChangesRef.current.get(catalogId);
+        // Keep the tools; only swap the credential to resolve-at-call-time. An
+        // untouched pin has no pending entry, so seed the selection from the
+        // saved assignment or saveChanges would skip the catalog entirely.
+        const selectedToolIds = pending
+          ? pending.selectedToolIds
+          : new Set(
+              (assignedToolsByCatalog.get(catalogId) ?? []).map(
+                (at) => at.tool.id,
+              ),
+            );
+        registerPendingChanges(catalogId, {
+          selectedToolIds,
+          credentialSourceId: DYNAMIC_CREDENTIAL_VALUE,
+          catalogItem: catalog,
+          selectAll: false,
+          isActive: pending?.isActive ?? true,
+        });
+      }
+      setCredentialEpoch((prev) => {
+        const next = { ...prev };
+        for (const catalogId of catalogIds) {
+          next[catalogId] = (next[catalogId] ?? 0) + 1;
+        }
+        return next;
+      });
+    },
+    isCredentialClassificationLoading: () => credentialClassificationLoading,
   }));
 
   // Compute which catalog IDs are "selected" (have tools assigned or pending)
@@ -779,7 +930,7 @@ const AgentToolsEditorContent = forwardRef<
       <div className="flex flex-wrap gap-2">
         {selectedCatalogs.map((catalog) => (
           <McpServerPill
-            key={catalog.id}
+            key={`${catalog.id}:${credentialEpoch[catalog.id] ?? 0}`}
             catalogItem={catalog}
             displayName={
               catalog.id === ARCHESTRA_MCP_CATALOG_ID

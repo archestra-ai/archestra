@@ -36,7 +36,10 @@ import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils";
+import {
+  collectBrowserToolCallIds,
+  openedAppMetadataFromApps,
+} from "@/components/chat/chat-messages.utils";
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
@@ -1035,6 +1038,14 @@ export function ChatPageContent({
     earlyToolUiStarts: chatSession?.earlyToolUiStarts ?? {},
     filterDeleted: true,
   });
+  // The app currently open in the chat, reported to the backend on each user
+  // message so it can restate that app's context in the turn's system prompt.
+  // The backend re-resolves the id under the caller's own access, so this is a
+  // hint, never an authorization.
+  const openedAppMetadata = useMemo(
+    () => openedAppMetadataFromApps(mcpApps),
+    [mcpApps],
+  );
   // When an admin opens another user's app, the seeded conversation (origin
   // "app_open") renders that app, but its server-computed viewerRole is "admin":
   // they may use it and change its settings, not modify it via chat. Mirror the
@@ -1791,6 +1802,7 @@ export function ChatPageContent({
         ...(skillToAttach ? { skill: skillToAttach } : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
+        ...(openedAppMetadata ? { openedApp: openedAppMetadata } : {}),
       },
     });
     // Mark the turn as in flight synchronously so follow-up submits queue

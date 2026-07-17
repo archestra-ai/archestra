@@ -1,6 +1,5 @@
 import {
   ARCHESTRA_TOOL_PREFIX,
-  buildFullToolName,
   TOOL_RENDER_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { generateId, type UIMessage } from "ai";
@@ -162,7 +161,11 @@ export async function createSeededExternalAppConversation(params: {
     title: label,
     part: {
       type: "dynamic-tool",
-      toolName: buildFullToolName(uiResource.serverName, uiResource.toolName),
+      // The tool's stored name, verbatim. `serverName`/`toolName` are a display
+      // pair — the stored prefix is a slug of the catalog's human name (and may
+      // be truncated), so recombining them names a tool that dispatches nowhere
+      // and puts a fake name in front of the model.
+      toolName: uiResource.fullToolName,
       toolCallId: generateId(),
       state: "output-available",
       input: {},

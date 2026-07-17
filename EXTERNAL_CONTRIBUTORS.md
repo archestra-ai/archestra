@@ -713,3 +713,6 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Stan-lee13
 - @mateuszingano
 - @Ahavahdev1
+- @darkflareplays8
+- @familom
+- @OshTekk

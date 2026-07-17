@@ -200,8 +200,27 @@ function sanitizeAppName(appName: string): string {
  * file or a non-interactive shell keeps it clean ANSI-free text. `say` marks
  * section headers, `ok` a success, `warn`/`err` advisory and failure lines
  * (err goes to stderr so `curl -f | bash` surfaces it).
+ *
+ * `cli` runs an external client CLI with its stdout/stderr detached from the
+ * terminal — see the comment it carries into the script. Every
+ * `claude`/`codex`/`copilot` invocation must go through it, except ones already
+ * fed by a pipe (they own their stdin).
+ *
+ * The leading block normalizes the terminal's line discipline: a child that put
+ * the terminal in raw mode on an earlier run can leave it wedged (output no
+ * longer returns to column 0 and every line marches right), so we reset it up
+ * front and restore it on exit — the script both survives a wedged terminal and
+ * never hands one back.
  */
-const SCRIPT_HELPERS = `if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ]; then
+const SCRIPT_HELPERS = `# If stdout is a terminal, make sure its line discipline is sane: a CLI that
+# grabbed it (raw mode) on a previous run can leave newline handling off, which
+# staircases every following line to the right. Reset on entry so this run reads
+# cleanly, and on exit so the shell gets a usable terminal back.
+if [ -t 1 ] && command -v stty >/dev/null 2>&1 && { : </dev/tty; } 2>/dev/null; then
+  stty sane </dev/tty 2>/dev/null || true
+  trap 'stty sane </dev/tty 2>/dev/null || true' EXIT
+fi
+if [ -t 1 ] && [ -z "\${NO_COLOR:-}" ]; then
   ARCH_C_RESET=$'\\033[0m'; ARCH_C_HEAD=$'\\033[1;36m'; ARCH_C_OK=$'\\033[1;32m'
   ARCH_C_WARN=$'\\033[1;33m'; ARCH_C_ERR=$'\\033[1;31m'
 else
@@ -210,7 +229,19 @@ fi
 say()  { printf '\\n%s==> %s%s\\n' "$ARCH_C_HEAD" "$1" "$ARCH_C_RESET"; }
 ok()   { printf '%s==>%s %s\\n' "$ARCH_C_OK" "$ARCH_C_RESET" "$1"; }
 warn() { printf '%swarning:%s %s\\n' "$ARCH_C_WARN" "$ARCH_C_RESET" "$1"; }
-err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }`;
+err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }
+
+# Run a client CLI (claude/codex/copilot) so it prints plain text instead of
+# driving the terminal. Those CLIs render a full-screen TUI whenever stdout is a
+# tty: they probe the terminal for its theme/capabilities and position output
+# with absolute cursor moves, both of which assume they own the screen. Under
+# "curl | bash" they don't — this script is already writing to it — so the probe
+# replies echo in as stray text ("rgb:1e1e/1e1e/1e1e", "^[[?1;2c") and the
+# cursor moves land at the wrong column, cascading every following line to the
+# right. Piping stdout+stderr through cat makes stdout a pipe, not a tty, so each
+# CLI falls back to linear plain-text output; </dev/null keeps them off this
+# script's own stdin (the download pipe). pipefail preserves their exit status.
+cli() { "$@" </dev/null 2>&1 | cat; }`;
 
 function header(ctx: SetupScriptContext): string {
   const label = CLIENT_LABELS[ctx.clientId];
@@ -450,8 +481,8 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-claude mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
+cli claude mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   }
 
   if (ctx.proxy) {
@@ -465,10 +496,10 @@ claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   if (ctx.skills) {
     const pluginRef = `${ctx.skills.marketplaceName}@${ctx.skills.marketplaceName}`;
     sections.push(`say ${sh(`Installing the "${ctx.skills.marketplaceName}" skills bundle`)}
-if ! claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+if ! cli claude plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — continuing."
 fi
-if ! claude plugin install ${sh(pluginRef)}; then
+if ! cli claude plugin install ${sh(pluginRef)}; then
   warn ${sh(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)}
 fi`);
   }
@@ -631,8 +662,8 @@ function codexSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
+cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
   }
 
   if (ctx.proxy) {
@@ -678,7 +709,7 @@ echo "Codex keeps using your own OpenAI API key login."`
 
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
-if ! codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run /plugins inside Codex to inspect."
 fi`);
   }
@@ -695,9 +726,9 @@ function copilotSections(ctx: SetupScriptContext): string[] {
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-copilot mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}
-copilot mcp get ${sh(ctx.mcp.serverName)}`);
+cli copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli copilot mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}
+cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
   }
 
   if (ctx.proxy) {
@@ -723,7 +754,7 @@ ARCHESTRA_COPILOT`);
 
   if (ctx.skills) {
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" skills marketplace`)}
-if ! copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
+if ! cli copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
 fi`);
   }

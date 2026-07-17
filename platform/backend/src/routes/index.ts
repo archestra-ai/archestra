@@ -6,7 +6,7 @@ export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
 export { default as appRoutes } from "./app/app.routes";
 export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-proxy";
-export { default as auditLogRoutes } from "./audit-log";
+export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
 export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatRoutes } from "./chat/routes";

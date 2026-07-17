@@ -74,14 +74,19 @@ export function AppSettingsForm({
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const [toolsSeeded, setToolsSeeded] = useState(false);
+  // The server assignment set this form's staged selection is relative to;
+  // null until the first successful load. Save diffs staged vs this snapshot,
+  // never vs a later refetch — otherwise a tool assigned concurrently by
+  // another client would be unassigned by an unrelated save here.
+  const [seededToolIds, setSeededToolIds] = useState<Set<string> | null>(null);
+  const toolsSeeded = seededToolIds !== null;
 
   // Seed the staged tool selection once, when the assignments first land — a
   // later background refetch must not overwrite the user's staged edits.
   useEffect(() => {
     if (!toolsSeeded && assignedTools) {
       setSelectedToolIds(new Set(assignedTools.map((t) => t.id)));
-      setToolsSeeded(true);
+      setSeededToolIds(new Set(assignedTools.map((t) => t.id)));
     }
   }, [assignedTools, toolsSeeded]);
 
@@ -154,25 +159,46 @@ export function AppSettingsForm({
     const result = await updateApp.mutateAsync({ appId: app.id, body });
     if (!result) return;
 
-    if (canUpdate && toolsSeeded) {
-      const current = new Set((assignedTools ?? []).map((t) => t.id));
+    if (canUpdate && seededToolIds) {
       const results = await Promise.all([
         ...[...selectedToolIds]
-          .filter((id) => !current.has(id))
-          .map((id) =>
-            assignTool.mutateAsync({
-              appId: app.id,
-              toolId: id,
-              body: { credentialResolutionMode: "dynamic" },
-            }),
-          ),
-        ...[...current]
+          .filter((id) => !seededToolIds.has(id))
+          .map(async (id) => ({
+            id,
+            kind: "assign" as const,
+            ok:
+              (await assignTool.mutateAsync({
+                appId: app.id,
+                toolId: id,
+                body: { credentialResolutionMode: "dynamic" },
+              })) !== null,
+          })),
+        ...[...seededToolIds]
           .filter((id) => !selectedToolIds.has(id))
-          .map((id) => unassignTool.mutateAsync({ appId: app.id, toolId: id })),
+          .map(async (id) => ({
+            id,
+            kind: "unassign" as const,
+            ok:
+              (await unassignTool.mutateAsync({
+                appId: app.id,
+                toolId: id,
+              })) !== null,
+          })),
       ]);
+      // Fold the applied changes into the snapshot so a retry after a partial
+      // failure re-sends only the still-unapplied diff.
+      setSeededToolIds((prev) => {
+        const next = new Set(prev);
+        for (const r of results) {
+          if (!r.ok) continue;
+          if (r.kind === "assign") next.add(r.id);
+          else next.delete(r.id);
+        }
+        return next;
+      });
       // A failed tool change already toasted; stay open so the staged
       // selection survives and Save can retry the remaining diff.
-      if (results.some((r) => r === null)) return;
+      if (results.some((r) => !r.ok)) return;
     }
     onBack();
   });
@@ -267,12 +293,23 @@ export function AppSettingsForm({
 
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Tools</h3>
-              <AppToolsEditor
-                appId={app.id}
-                environmentId={environmentId}
-                selectedToolIds={selectedToolIds}
-                onSelectionChange={setSelectedToolIds}
-              />
+              {toolsSeeded ? (
+                <AppToolsEditor
+                  appId={app.id}
+                  environmentId={environmentId}
+                  selectedToolIds={selectedToolIds}
+                  onSelectionChange={setSelectedToolIds}
+                />
+              ) : (
+                // Unseeded selection: the checklist would misrepresent every
+                // assigned tool as unchecked, and staged edits would be
+                // dropped by the save's unseeded-diff skip.
+                <p className="text-sm text-muted-foreground">
+                  {appToolsQuery.isPending
+                    ? "Loading tools…"
+                    : "Tool assignments couldn't be loaded. Saving keeps the app's current tools."}
+                </p>
+              )}
             </div>
           </>
         )}

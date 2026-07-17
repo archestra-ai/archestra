@@ -180,6 +180,9 @@ describe("AppSettingsForm save", () => {
 
     const lastStatus = onStatusChange.mock.calls.at(-1)?.[0];
     expect(lastStatus).toEqual({ saving: false, disabled: false });
+    // The editor is not rendered unseeded — it would show every assigned tool
+    // unchecked and let the user stage edits the save would drop.
+    expect(screen.queryByTestId("stage-tool-t2")).not.toBeInTheDocument();
 
     submitForm(container);
 
@@ -214,15 +217,34 @@ describe("AppSettingsForm save", () => {
 
     await waitFor(() => expect(onBack).toHaveBeenCalled());
     // The staged selection {tool-1, tool-2} survives the refetch: tool-2 is
-    // assigned and the diff runs against the fresh server set (tool-3 goes).
+    // assigned. tool-3 — assigned concurrently by someone else after this
+    // dialog seeded — is untouched: the diff runs against the seeded
+    // snapshot, so an unrelated save here must not unassign it.
     expect(assignMutateAsync).toHaveBeenCalledWith({
       appId: "app-1",
       toolId: "tool-2",
       body: { credentialResolutionMode: "dynamic" },
     });
-    expect(unassignMutateAsync).toHaveBeenCalledWith({
+    expect(unassignMutateAsync).not.toHaveBeenCalled();
+  });
+
+  test("retrying after a failed tool change re-sends the remaining diff", async () => {
+    assignMutateAsync.mockResolvedValueOnce(null);
+    const { container, onBack } = renderForm();
+
+    fireEvent.click(screen.getByTestId("stage-tool-t2"));
+    submitForm(container);
+    await waitFor(() => expect(assignMutateAsync).toHaveBeenCalledTimes(1));
+    expect(onBack).not.toHaveBeenCalled();
+
+    // Retry: the failed assign is still in the diff and now succeeds.
+    submitForm(container);
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(assignMutateAsync).toHaveBeenCalledTimes(2);
+    expect(assignMutateAsync).toHaveBeenLastCalledWith({
       appId: "app-1",
-      toolId: "tool-3",
+      toolId: "tool-2",
+      body: { credentialResolutionMode: "dynamic" },
     });
   });
 

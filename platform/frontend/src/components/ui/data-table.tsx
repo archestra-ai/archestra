@@ -191,6 +191,20 @@ export function DataTable<TData, TValue>({
     },
   });
 
+  // autoResetPageIndex is off (so sorting/refetch don't jump to page 1), which
+  // also disables TanStack's built-in clamp. When client-side filtering shrinks
+  // the row count below the current page, snap back to the last valid page so we
+  // never strand on a nonexistent page (e.g. "Page 4 of 1"). Issue #6639.
+  const currentPageIndex = table.getState().pagination.pageIndex;
+  const clientPageCount = manualPagination ? null : table.getPageCount();
+  React.useEffect(() => {
+    if (clientPageCount === null) return;
+    const lastValidPage = Math.max(0, clientPageCount - 1);
+    if (currentPageIndex > lastValidPage) {
+      table.setPageIndex(lastValidPage);
+    }
+  }, [clientPageCount, currentPageIndex, table]);
+
   return (
     <div className="w-full space-y-4">
       <div className="overflow-x-auto rounded-md border">

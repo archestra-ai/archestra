@@ -931,7 +931,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }),
               )
               .describe(
-                "Per created skill, resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable",
+                "Per created skill, resource paths not imported: oversized, beyond the per-skill file cap, unfetchable, or unsafe to persist",
               ),
           }),
         ),

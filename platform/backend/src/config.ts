@@ -1004,15 +1004,10 @@ const mcpServerBaseImage =
  *
  * @public — exported for testability
  */
-export const parseCodeRuntimeDaggerRunnerHost = ({
-  enabled,
-  envValue,
-}: {
-  enabled: boolean;
-  envValue: string | undefined;
-}): string | undefined => {
+export const parseCodeRuntimeDaggerRunnerHost = (
+  envValue: string | undefined,
+): string | undefined => {
   const runnerHost = envValue?.trim();
-  if (!enabled) return runnerHost || undefined;
 
   // No host configured is the normal "this deployment runs no code sandbox"
   // case, not a misconfiguration — stay silent and leave the sandbox off.
@@ -1058,10 +1053,9 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 // configured and stays off otherwise — presence of the host is the switch. it
 // is independent of the skills *read* feature — skills can be listed/activated/
 // read with the sandbox off.
-const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: true,
-  envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
-});
+const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost(
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+);
 const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
 
 // the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
@@ -1583,7 +1577,8 @@ const config = {
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
    * runs commands, holds uploaded files, and materializes activated skills.
-   * gated by `ARCHESTRA_CODE_RUNTIME_ENABLED` + a Dagger runner host.
+   * runs when a Dagger runner host is configured
+   * (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`), off otherwise.
    */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
@@ -1639,24 +1634,6 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
-    defaults: {
-      outputBytesLimit: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_OUTPUT_BYTES_LIMIT,
-        256 * 1024,
-      ),
-      fileSizeLimitBytes: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_FILE_SIZE_LIMIT_BYTES,
-        16 * 1024 * 1024,
-      ),
-      cpuSeconds: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_CPU_SECONDS,
-        30,
-      ),
-      memoryBytes: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_MEMORY_BYTES,
-        1024 * 1024 * 1024,
-      ),
-    },
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the

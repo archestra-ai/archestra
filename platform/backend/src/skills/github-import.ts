@@ -241,7 +241,9 @@ export async function importSkills(params: {
     skippedFiles: string[];
   }[] = [];
   for (const skillPath of params.skillPaths) {
-    const manifestPath = skillPath ? `${skillPath}/SKILL.md` : "SKILL.md";
+    const manifestPath = skillPath
+      ? `${skillPath}/${SKILL_MANIFEST_FILENAME}`
+      : SKILL_MANIFEST_FILENAME;
     let parsed = snapshot.manifests.get(manifestPath);
     if (!parsed) {
       const raw = await fetchRawFile(

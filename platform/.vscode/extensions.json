@@ -3,6 +3,9 @@
     "biomejs.biome",
     "Tchoupinax.tilt",
     "ms-kubernetes-tools.vscode-kubernetes-tools",
-    "bierner.markdown-mermaid"
+    "bierner.markdown-mermaid",
+    "rust-lang.rust-analyzer",
+    "ms-playwright.playwright",
+    "bradlc.vscode-tailwindcss"
   ]
 }

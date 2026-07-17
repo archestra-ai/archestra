@@ -41,8 +41,6 @@ export async function createSeededAppConversation(params: {
   appId: string;
   userId: string;
   organizationId: string;
-  /** Agent to bind the chat to; defaults to the caller's default chat agent. */
-  agentId?: string;
 }): Promise<{ conversationId: string }> {
   const { appId, userId, organizationId } = params;
 
@@ -70,7 +68,6 @@ export async function createSeededAppConversation(params: {
   return seedConversationWithRender({
     userId,
     organizationId,
-    agentId: params.agentId,
     title: app.name,
     part: {
       type: "dynamic-tool",
@@ -118,8 +115,6 @@ export async function createSeededExternalAppConversation(params: {
   resourceUri: string;
   userId: string;
   organizationId: string;
-  /** Agent to bind the chat to; defaults to the caller's default chat agent. */
-  agentId?: string;
 }): Promise<ExternalAppOpenResult> {
   const { mcpServerId, resourceUri, userId, organizationId } = params;
 
@@ -141,7 +136,6 @@ export async function createSeededExternalAppConversation(params: {
     const { conversationId } = await createAppChatConversation({
       userId,
       organizationId,
-      agentId: params.agentId,
       title: label,
     });
     return {
@@ -157,7 +151,6 @@ export async function createSeededExternalAppConversation(params: {
   const { conversationId } = await seedConversationWithRender({
     userId,
     organizationId,
-    agentId: params.agentId,
     title: label,
     part: {
       type: "dynamic-tool",
@@ -189,14 +182,11 @@ export async function createSeededExternalAppConversation(params: {
 async function createAppChatConversation(params: {
   userId: string;
   organizationId: string;
-  agentId?: string;
   title: string;
 }): Promise<{ conversationId: string }> {
   const { userId, organizationId, title } = params;
 
-  const agentId =
-    params.agentId ??
-    (await resolveDefaultChatAgentId({ userId, organizationId }));
+  const agentId = await resolveDefaultChatAgentId({ userId, organizationId });
   const agent = await AgentModel.findById(agentId);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, "Agent not found");
@@ -237,17 +227,15 @@ async function createAppChatConversation(params: {
 async function seedConversationWithRender(params: {
   userId: string;
   organizationId: string;
-  agentId?: string;
   title: string;
   part: UIMessage["parts"][number];
   greeting?: string;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, agentId, title, part, greeting } = params;
+  const { userId, organizationId, title, part, greeting } = params;
 
   const { conversationId } = await createAppChatConversation({
     userId,
     organizationId,
-    agentId,
     title,
   });
 

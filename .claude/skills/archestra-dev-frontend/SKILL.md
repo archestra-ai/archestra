@@ -29,7 +29,7 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 
 ## API clients
 
-- Frontend `.query.ts` files should never use `fetch()` directly.
+- Frontend `.query.ts` files should never call the Archestra backend with `fetch()` directly — use the generated SDK. Raw `fetch()` is only for third-party APIs the SDK does not cover (e.g. GitHub, see `lib/github/*.query.ts`).
 - Run `pnpm codegen` first to ensure the generated SDK is up to date (`codegen:api-client` alone only exists inside `@archestra/shared` and needs the env var: `CODEGEN=true pnpm --filter @archestra/shared codegen:api-client` — without `CODEGEN=true` it reads a live `localhost:9000` instead of the committed spec).
 - Use generated SDK methods instead of manual API calls for type safety and consistency.
 - Reuse API types from `@archestra/shared`, especially `archestraApiTypes` types such as `archestraApiTypes.CreateXxxData["body"]` and `archestraApiTypes.GetXxxResponses["200"]`.

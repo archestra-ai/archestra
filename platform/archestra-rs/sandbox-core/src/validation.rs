@@ -32,7 +32,10 @@ pub(crate) fn validate_snapshot_file_path(path: &str) -> Result<()> {
 }
 
 pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
-    if path.contains('\0') || path.split('/').any(|segment| matches!(segment, ".." | ".")) {
+    if path.contains('\0')
+        || path.split('/').any(|segment| segment == "..")
+        || resolves_to_directory(path)
+    {
         return Err(SandboxError::InvalidInput(format!(
             "invalid artifact path: {path:?}"
         )));
@@ -58,10 +61,14 @@ pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
 /// absolute file under the sandbox roots, free of traversal, null bytes, and
 /// shell metacharacters (defense in depth on top of the single-quoting).
 pub(crate) fn validate_upload_path(path: &str) -> Result<()> {
-    // reject `.` segments as well as `..`: a path like `/home/sandbox/.`
-    // resolves to a directory, so the replayed `base64 -d > <path>` redirect
-    // fails on every run and permanently wedges the sandbox.
-    if path.contains('\0') || path.split('/').any(|segment| matches!(segment, ".." | ".")) {
+    // a path whose final component is `.` (e.g. `/home/sandbox/.`) resolves to a
+    // directory, so the replayed `base64 -d > <path>` redirect fails on every
+    // run and permanently wedges the sandbox. a non-terminal `.` (`a/./b`)
+    // resolves to a regular file and is left alone.
+    if path.contains('\0')
+        || path.split('/').any(|segment| segment == "..")
+        || resolves_to_directory(path)
+    {
         return Err(SandboxError::InvalidInput(format!(
             "invalid upload path: {path:?}"
         )));
@@ -156,6 +163,14 @@ fn within_sandbox_roots(path: &str) -> bool {
         .any(|root| path == *root || path.strip_prefix(root).is_some_and(|r| r.starts_with('/')))
 }
 
+/// true when the path's final component makes it resolve to a directory rather
+/// than a file — a terminal `.` (`/home/sandbox/.` or a bare `.`). Such a path
+/// breaks the `> <path>` redirect that writes an uploaded/exported file. a
+/// non-terminal `.` (`a/./b`) normalizes to a regular file and is left alone.
+fn resolves_to_directory(path: &str) -> bool {
+    path == "." || path.ends_with("/.")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,10 +216,11 @@ mod tests {
         ("/home/sandbox/../etc/passwd", false, false),
         // directory, not a file
         ("/home/sandbox/", false, false),
-        // `.` segment resolves to a directory: rejected before it can be
+        // terminal `.` resolves to a directory: rejected before it can be
         // persisted as a replay event that fails `base64 -d > <dir>` forever
         ("/home/sandbox/.", false, false),
-        ("/home/sandbox/./x", false, false),
+        // non-terminal `.` normalizes to a regular file: accepted
+        ("/home/sandbox/./x", true, true),
         // a root itself: replay would fail on the existing directory, so the
         // TS layer rejects it before it is persisted as an unreplayable event
         ("/home/sandbox", true, false),
@@ -227,8 +243,10 @@ mod tests {
         ("/etc/passwd", false, false),
         // traversal
         ("a/../b.txt", false, false),
-        // `.` segment resolves to a directory
+        // terminal `.` resolves to a directory
         ("/skills/alpha/.", false, false),
+        // non-terminal `.` normalizes to a regular file: accepted
+        ("/skills/alpha/./x", true, true),
         // null byte
         ("a\0b.txt", false, false),
         // shell metacharacters: only this boundary rejects them; the TS layer

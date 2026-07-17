@@ -3,7 +3,11 @@ import {
   MAX_SKILL_FILE_BYTES,
   MAX_SKILL_FILE_CONTENT_CHARS,
 } from "@/skills/github-import";
-import { deriveSkillFileKind, type ParsedSkill } from "@/skills/parser";
+import {
+  deriveSkillFileKind,
+  isSafeSkillResourcePath,
+  type ParsedSkill,
+} from "@/skills/parser";
 import {
   type InsertSkill,
   SkillFileEncodingSchema,
@@ -19,14 +23,10 @@ export const SkillFileInputSchema = z.object({
   path: z
     .string()
     .min(1)
-    .refine(
-      (p) =>
-        !p.startsWith("/") &&
-        p.split("/").every((s) => s !== "" && s !== "." && s !== ".."),
-      {
-        message: "path must be relative, with no empty, `.`, or `..` segments",
-      },
-    )
+    .refine(isSafeSkillResourcePath, {
+      message:
+        "path must be relative, must not traverse (`..`), and must not resolve to a directory (no trailing slash or `.`)",
+    })
     .describe("Resource path, e.g. references/API.md or scripts/run.py"),
   content: z
     .string()

@@ -6,6 +6,7 @@ import logger from "@/logging";
 import type { SkillFileEncoding, SkillFileKind } from "@/types";
 import {
   deriveSkillFileKind,
+  isSafeSkillResourcePath,
   type ParsedSkill,
   parseSkillManifest,
   SKILL_MANIFEST_FILENAME,
@@ -312,7 +313,10 @@ export async function importSkills(params: {
       const fetched = fetchedFiles[cursor];
       cursor += 1;
       const relativePath = plan.toRelative(absolutePath);
-      if (fetched === null) {
+      // git blob paths are structurally clean, but this keeps the importer
+      // behind the same resource-path boundary as create/update so a path that
+      // would wedge the sandbox on replay is never persisted from any source.
+      if (fetched === null || !isSafeSkillResourcePath(relativePath)) {
         plan.skippedFiles.push(relativePath);
         continue;
       }

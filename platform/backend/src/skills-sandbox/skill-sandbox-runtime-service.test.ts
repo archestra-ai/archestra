@@ -380,6 +380,24 @@ describe("__internals", () => {
     }
   });
 
+  test("validateSkillMountName rejects names that collapse or escape the mount root", () => {
+    // covers names that skip parseSkillManifest (e.g. a built-in skill seeded
+    // with a white-label app name containing "/") and would otherwise persist
+    // an unreplayable mount.
+    for (const bad of ["", ".", "a/b", "..", "a..b", "skills/../x"]) {
+      expect(
+        () => __internals.validateSkillMountName(bad),
+        `name: ${JSON.stringify(bad)}`,
+      ).toThrow();
+    }
+    for (const ok of ["alpha", "my-skill", "Data Analysis"]) {
+      expect(
+        () => __internals.validateSkillMountName(ok),
+        `name: ${JSON.stringify(ok)}`,
+      ).not.toThrow();
+    }
+  });
+
   test("sanitizeAttachmentName strips unsafe chars and directory/leading dots", () => {
     const { sanitizeAttachmentName } = __internals;
     expect(sanitizeAttachmentName("pi mc.gif", "id")).toBe("pi_mc.gif");
@@ -761,10 +779,11 @@ describe("path validation vectors (mirrored with sandbox-core)", () => {
     ["/home/sandbox/../etc/passwd", false, false],
     // directory, not a file
     ["/home/sandbox/", false, false],
-    // `.` segment resolves to a directory: rejected before it can be persisted
+    // terminal `.` resolves to a directory: rejected before it can be persisted
     // as a replay event that fails `base64 -d > <dir>` forever
     ["/home/sandbox/.", false, false],
-    ["/home/sandbox/./x", false, false],
+    // non-terminal `.` normalizes to a regular file: accepted
+    ["/home/sandbox/./x", true, true],
     // a root itself: rejected here before it is persisted as an unreplayable
     // event; the boundary alone would accept it
     ["/home/sandbox", false, true],
@@ -786,8 +805,10 @@ describe("path validation vectors (mirrored with sandbox-core)", () => {
     ["/etc/passwd", false, false],
     // traversal
     ["a/../b.txt", false, false],
-    // `.` segment resolves to a directory
+    // terminal `.` resolves to a directory
     ["/skills/alpha/.", false, false],
+    // non-terminal `.` normalizes to a regular file: accepted
+    ["/skills/alpha/./x", true, true],
     // null byte
     ["a\0b.txt", false, false],
     // shell metacharacters: pass through here; the Rust boundary rejects them

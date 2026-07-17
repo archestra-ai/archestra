@@ -462,6 +462,7 @@ class SkillSandboxRuntimeService {
     this.ensureEnabled();
 
     return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+      validateSkillMountName(params.skill.skillName);
       const files = await SkillVersionModel.findFiles(
         params.skill.skillVersionId,
       );
@@ -879,17 +880,20 @@ function resolveArtifactPath(params: {
       `invalid artifact path: ${JSON.stringify(params.path)}`,
     );
   }
-  // reject `.` segments as well as `..`: `/home/sandbox/.` resolves to a
-  // directory, so a persisted upload event would fail `base64 -d > <dir>` on
-  // every later replay and wedge the sandbox permanently.
-  if (
-    params.path
-      .split("/")
-      .some((segment) => segment === ".." || segment === ".")
-  ) {
+  if (params.path.split("/").some((segment) => segment === "..")) {
     rejectPath(
       "artifact_path_traversal",
       `invalid artifact path: ${JSON.stringify(params.path)}`,
+    );
+  }
+  // a terminal `.` (`/home/sandbox/.`, or a bare `.` against the cwd) resolves
+  // to a directory, so a persisted upload event would fail `base64 -d > <dir>`
+  // on every later replay and wedge the sandbox permanently. a non-terminal `.`
+  // (`a/./b`) normalizes to a regular file and is left alone.
+  if (params.path === "." || params.path.endsWith("/.")) {
+    rejectPath(
+      "artifact_path_directory",
+      `artifact path must be a file, not a directory: ${JSON.stringify(params.path)}`,
     );
   }
   if (params.path.startsWith("/")) {
@@ -960,6 +964,28 @@ function validateSkillMountFilePath(skillName: string, path: string): void {
     segments[0] === SKILL_MANIFEST_FILE
   ) {
     throw new SkillInvalidFilePathError(skillName, path);
+  }
+}
+
+/**
+ * Reject a skill name that cannot become the mount root `/skills/<name>` before
+ * it is persisted as a mount event. Skill names authored through create/update
+ * are already gated at `parseSkillManifest`, but other sources reach the mount
+ * unvalidated — built-in skills seeded with a white-label app name, for one —
+ * so this mount-boundary check mirrors the Rust `skill_root_path` boundary
+ * (archestra-rs/sandbox-core/src/validation.rs) to keep an unreplayable mount
+ * out of the log regardless of where the name came from.
+ */
+function validateSkillMountName(skillName: string): void {
+  if (
+    skillName === "" ||
+    skillName === "." ||
+    skillName.includes("/") ||
+    skillName.includes("..")
+  ) {
+    throw new SkillSandboxError(
+      `Skill "${skillName}" has a name that cannot be mounted into a sandbox (it must not be "." or contain "/" or ".."). Rename the skill, then load it again.`,
+    );
   }
 }
 
@@ -1165,6 +1191,7 @@ export const __internals = {
   resolveArtifactPath,
   validateUploadPath,
   validateSkillMountFilePath,
+  validateSkillMountName,
   requirementsInstallCommands,
   stageConversationAttachments,
   planAttachmentStaging,

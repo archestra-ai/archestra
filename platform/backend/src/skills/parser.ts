@@ -126,6 +126,24 @@ export function deriveSkillFileKind(path: string): SkillFileKind {
   return /\.(md|mdx|txt|markdown)$/.test(normalized) ? "reference" : "asset";
 }
 
+/**
+ * A skill resource path is safe to persist when it is relative (no leading
+ * `/`), carries no `..` traversal segment, and does not resolve to a directory
+ * — its final segment is neither empty (a trailing slash) nor `.`. A path that
+ * resolves to a directory makes the Rust replay writer's `base64 -d > <path>`
+ * redirect fail on every run, permanently wedging the sandbox. Non-terminal
+ * `.`/empty segments (`a/./b`, `a//b`) normalize to a regular file and are
+ * allowed. Shared by the input schema and the GitHub importer so every
+ * persistence path applies the same boundary.
+ */
+export function isSafeSkillResourcePath(path: string): boolean {
+  if (path.startsWith("/")) return false;
+  const segments = path.split("/");
+  if (segments.some((s) => s === "..")) return false;
+  const last = segments[segments.length - 1];
+  return last !== "" && last !== ".";
+}
+
 // ===== Internal helpers =====
 
 function readString(value: unknown): string {

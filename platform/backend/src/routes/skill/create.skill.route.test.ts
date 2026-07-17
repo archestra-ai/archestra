@@ -130,6 +130,20 @@ describe("POST /api/skills", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  test("rejects a resource path that would break the sandbox mount with a 400", async () => {
+    for (const path of ["scripts/", "./run.py", "a//b.py", "run.py/."]) {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: MANIFEST,
+          files: [{ path, content: "print(1)" }],
+        },
+      });
+      expect(response.statusCode, `path: ${JSON.stringify(path)}`).toBe(400);
+    }
+  });
+
   test("rejects a manifest larger than the size cap", async () => {
     const response = await ctx.app.inject({
       method: "POST",

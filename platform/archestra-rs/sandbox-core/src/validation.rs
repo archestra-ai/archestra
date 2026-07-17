@@ -32,7 +32,7 @@ pub(crate) fn validate_snapshot_file_path(path: &str) -> Result<()> {
 }
 
 pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
-    if path.contains('\0') || path.split('/').any(|segment| segment == "..") {
+    if path.contains('\0') || path.split('/').any(|segment| matches!(segment, ".." | ".")) {
         return Err(SandboxError::InvalidInput(format!(
             "invalid artifact path: {path:?}"
         )));
@@ -58,7 +58,10 @@ pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
 /// absolute file under the sandbox roots, free of traversal, null bytes, and
 /// shell metacharacters (defense in depth on top of the single-quoting).
 pub(crate) fn validate_upload_path(path: &str) -> Result<()> {
-    if path.contains('\0') || path.split('/').any(|segment| segment == "..") {
+    // reject `.` segments as well as `..`: a path like `/home/sandbox/.`
+    // resolves to a directory, so the replayed `base64 -d > <path>` redirect
+    // fails on every run and permanently wedges the sandbox.
+    if path.contains('\0') || path.split('/').any(|segment| matches!(segment, ".." | ".")) {
         return Err(SandboxError::InvalidInput(format!(
             "invalid upload path: {path:?}"
         )));
@@ -198,6 +201,10 @@ mod tests {
         ("/home/sandbox/../etc/passwd", false, false),
         // directory, not a file
         ("/home/sandbox/", false, false),
+        // `.` segment resolves to a directory: rejected before it can be
+        // persisted as a replay event that fails `base64 -d > <dir>` forever
+        ("/home/sandbox/.", false, false),
+        ("/home/sandbox/./x", false, false),
         // a root itself: replay would fail on the existing directory, so the
         // TS layer rejects it before it is persisted as an unreplayable event
         ("/home/sandbox", true, false),
@@ -220,6 +227,8 @@ mod tests {
         ("/etc/passwd", false, false),
         // traversal
         ("a/../b.txt", false, false),
+        // `.` segment resolves to a directory
+        ("/skills/alpha/.", false, false),
         // null byte
         ("a\0b.txt", false, false),
         // shell metacharacters: only this boundary rejects them; the TS layer

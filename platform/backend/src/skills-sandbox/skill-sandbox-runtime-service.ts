@@ -879,7 +879,14 @@ function resolveArtifactPath(params: {
       `invalid artifact path: ${JSON.stringify(params.path)}`,
     );
   }
-  if (params.path.split("/").some((segment) => segment === "..")) {
+  // reject `.` segments as well as `..`: `/home/sandbox/.` resolves to a
+  // directory, so a persisted upload event would fail `base64 -d > <dir>` on
+  // every later replay and wedge the sandbox permanently.
+  if (
+    params.path
+      .split("/")
+      .some((segment) => segment === ".." || segment === ".")
+  ) {
     rejectPath(
       "artifact_path_traversal",
       `invalid artifact path: ${JSON.stringify(params.path)}`,

@@ -134,6 +134,22 @@ describe("parseSkillManifest", () => {
     expect(() => parseSkillManifest(raw)).toThrow(/description/);
   });
 
+  test("rejects a name that breaks the sandbox mount root", () => {
+    for (const name of ["foo/bar", "..", "a/../b", ".", "skills/../x"]) {
+      const raw = [
+        "---",
+        `name: "${name}"`,
+        "description: A skill.",
+        "---",
+        "Body.",
+      ].join("\n");
+      expect(
+        () => parseSkillManifest(raw),
+        `name: ${JSON.stringify(name)}`,
+      ).toThrow(SkillParseError);
+    }
+  });
+
   test("throws on invalid YAML frontmatter", () => {
     const raw = ["---", "name: : :", "  bad", "---", "Body."].join("\n");
     expect(() => parseSkillManifest(raw)).toThrow(SkillParseError);

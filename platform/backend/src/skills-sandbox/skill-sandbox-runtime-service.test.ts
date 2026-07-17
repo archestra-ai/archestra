@@ -761,6 +761,10 @@ describe("path validation vectors (mirrored with sandbox-core)", () => {
     ["/home/sandbox/../etc/passwd", false, false],
     // directory, not a file
     ["/home/sandbox/", false, false],
+    // `.` segment resolves to a directory: rejected before it can be persisted
+    // as a replay event that fails `base64 -d > <dir>` forever
+    ["/home/sandbox/.", false, false],
+    ["/home/sandbox/./x", false, false],
     // a root itself: rejected here before it is persisted as an unreplayable
     // event; the boundary alone would accept it
     ["/home/sandbox", false, true],
@@ -782,6 +786,8 @@ describe("path validation vectors (mirrored with sandbox-core)", () => {
     ["/etc/passwd", false, false],
     // traversal
     ["a/../b.txt", false, false],
+    // `.` segment resolves to a directory
+    ["/skills/alpha/.", false, false],
     // null byte
     ["a\0b.txt", false, false],
     // shell metacharacters: pass through here; the Rust boundary rejects them

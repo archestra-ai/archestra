@@ -75,6 +75,15 @@ export function parseSkillManifest(raw: string): ParsedSkill {
   if (!name) {
     throw new SkillParseError("SKILL.md frontmatter is missing `name`");
   }
+  // the name becomes the sandbox mount root `/skills/<name>`; a name that is
+  // `.` or carries `/` or `..` collapses or escapes that root and makes every
+  // later mount replay-fail, permanently wedging the sandbox. mirror the Rust
+  // `skill_root_path` boundary (archestra-rs/sandbox-core/src/validation.rs).
+  if (name === "." || name.includes("/") || name.includes("..")) {
+    throw new SkillParseError(
+      "SKILL.md `name` must not be `.` or contain `/` or `..`",
+    );
+  }
   if (!description) {
     throw new SkillParseError("SKILL.md frontmatter is missing `description`");
   }

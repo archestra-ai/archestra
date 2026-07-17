@@ -2474,3 +2474,42 @@ describe("McpServerRuntimeManager.adoptDeploymentNames", () => {
     expect(server.deploymentName).toBe("mcp-frozen-earlier");
   });
 });
+
+describe("McpServerRuntimeManager.start — adopt gate settling", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // A boot failure BEFORE the adopt block (here: verifyK8sConnection's pod-list
+  // rejects, simulating a transient K8s blip) must still settle
+  // deploymentNamesAdopted. Otherwise the rename route — which awaits that
+  // promise with no timeout — hangs the request for the process lifetime, since
+  // start() is fire-and-forget with no retry.
+  test("rejects deploymentNamesAdopted when start() throws before the adopt pass", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    // All four clients set so start() clears its "not initialized" guard and
+    // reaches verifyK8sConnection; k8sApi's pod-list rejects to fail there.
+    const injected = manager as unknown as {
+      k8sApi: unknown;
+      k8sAppsApi: unknown;
+      k8sNetworkingApi: unknown;
+      k8sCustomObjectsApi: unknown;
+    };
+    injected.k8sApi = {
+      listNamespacedPod: vi.fn().mockRejectedValue(new Error("k8s boot blip")),
+    };
+    injected.k8sAppsApi = {};
+    injected.k8sNetworkingApi = {};
+    injected.k8sCustomObjectsApi = {};
+
+    // The gate is still pending after construction (the mocked kubeconfig loads
+    // fine), so this exercises start()'s outer catch, not the constructor's.
+    const adopted = manager.deploymentNamesAdopted;
+
+    // start() still rethrows (behavior unchanged); the gate now settles too.
+    await expect(manager.start()).rejects.toThrow("k8s boot blip");
+    await expect(adopted).rejects.toThrow("k8s boot blip");
+  });
+});

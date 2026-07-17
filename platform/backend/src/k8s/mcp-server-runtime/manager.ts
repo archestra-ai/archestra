@@ -279,6 +279,17 @@ export class McpServerRuntimeManager {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
       this.status = "error";
+      // Guarantee the adopt gate is always settled. A throw BEFORE the adopt
+      // block (verifyK8sConnection, node-selector/tolerations fetch, findAll,
+      // the per-server catalog lookup) would otherwise leave this promise
+      // pending forever, and the rename route awaits it with no timeout —
+      // hanging the request for the process lifetime. Safe to call
+      // unconditionally: a promise ignores repeated settles, so an
+      // already-resolved (adopt succeeded, a later await threw) or
+      // already-rejected (constructor / adopt-block) promise is unaffected.
+      this.rejectDeploymentNamesAdopted(
+        error instanceof Error ? error : new Error(errorMsg),
+      );
       this.onRuntimeStartupError(new Error(errorMsg));
       throw error;
     }

@@ -158,21 +158,30 @@ export default function UnifiedOAuthClientsPage() {
     return () => setCredentialsAction(null);
   }, [setCredentialsAction]);
 
-  const rows: UnifiedRow[] = useMemo(
+  const allClients: UnifiedRow[] = useMemo(
     () => [
-      ...(providerKeyFilterActive
-        ? []
-        : mcpClients.map((c) => ({ kind: "mcp" as const, ...c }))),
+      ...mcpClients.map((c) => ({ kind: "mcp" as const, ...c })),
       ...llmClients.map((c) => ({ kind: "llm" as const, ...c })),
     ],
-    [mcpClients, llmClients, providerKeyFilterActive],
+    [mcpClients, llmClients],
+  );
+
+  const rows: UnifiedRow[] = useMemo(
+    () =>
+      providerKeyFilterActive
+        ? allClients.filter((row) => row.kind === "llm")
+        : allClients,
+    [allClients, providerKeyFilterActive],
   );
 
   // No by-id endpoint for either client type; the URL id resolves against the
-  // merged rows (the page fetches both lists unpaginated).
+  // full merged list — NOT the filtered `rows`, which drop MCP clients under
+  // an active provider-key filter, so an MCP-client deep link would otherwise
+  // never open. (A `search` in the URL still narrows both lists — resolving
+  // those needs a by-id endpoint. ponytail: known ceiling, add if it bites.)
   const editIdFromUrl = searchParams.get("edit");
   const editingFromUrl = editIdFromUrl
-    ? rows.find((row) => row.id === editIdFromUrl)
+    ? allClients.find((row) => row.id === editIdFromUrl)
     : null;
   const {
     entity: editing,

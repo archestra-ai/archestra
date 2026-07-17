@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
@@ -101,18 +101,25 @@ export default function GithubAppsSettingsPage() {
 
   const isEditing = editingConfig !== null;
 
+  // Cancel any pending `?edit=<id>` deep link before opening create, or the
+  // by-id fetch could land and flip the create dialog into edit mode.
+  const handleCreateOpen = useCallback(() => {
+    closeEditDialog();
+    setIsCreateDialogOpen(true);
+  }, [closeEditDialog]);
+
   useEffect(() => {
     setActionButton(
       <PermissionButton
         permissions={{ githubAppConfig: ["create"] }}
-        onClick={() => setIsCreateDialogOpen(true)}
+        onClick={handleCreateOpen}
       >
         <Plus className="h-4 w-4" />
         Add GitHub App
       </PermissionButton>,
     );
     return () => setActionButton(null);
-  }, [setActionButton]);
+  }, [setActionButton, handleCreateOpen]);
 
   useEffect(() => {
     if (isCreateDialogOpen) {

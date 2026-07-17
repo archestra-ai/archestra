@@ -203,7 +203,7 @@ export default function LimitsPage() {
   const { data: agents = [] } = useProfiles({
     filters: { agentTypes: ["agent"] },
   });
-  const { data: llmProxies = [] } = useProfiles({
+  const { data: llmProxies = [], isPending: llmProxiesPending } = useProfiles({
     filters: { agentTypes: ["llm_proxy"] },
   });
   const { data: environmentsData } = useEnvironments();
@@ -312,9 +312,15 @@ export default function LimitsPage() {
     if (seededEditIdRef.current === editingLimit.id) {
       return;
     }
+    // Classifying an agent-typed limit as agent vs llm_proxy needs llmProxies.
+    // Seeding (and locking the ref) before they load would misclassify an
+    // llm_proxy limit as "agent" and never reseed once they arrive.
+    if (editingLimit.entityType === "agent" && llmProxiesPending) {
+      return;
+    }
     seededEditIdRef.current = editingLimit.id;
     setFormState(buildEditFormState(editingLimit));
-  }, [editingLimit, buildEditFormState]);
+  }, [editingLimit, buildEditFormState, llmProxiesPending]);
 
   const getEntityLabel = useCallback(
     (limit: LimitData) => {

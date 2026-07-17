@@ -116,11 +116,18 @@ export function RolesList() {
     }
   }, [selectedRole]);
 
+  // Cancel any pending `?edit=<id>` deep link before opening create, or the
+  // by-id fetch could land and overwrite the shared create form state.
+  const handleCreateOpen = useCallback(() => {
+    closeEditDialog();
+    setCreateDialogOpen(true);
+  }, [closeEditDialog]);
+
   useEffect(() => {
     setActionButton(
       <PermissionButton
         permissions={{ ac: ["create"] }}
-        onClick={() => setCreateDialogOpen(true)}
+        onClick={handleCreateOpen}
       >
         <Plus className="h-4 w-4" />
         Create Custom Role
@@ -128,7 +135,7 @@ export function RolesList() {
     );
 
     return () => setActionButton(null);
-  }, [setActionButton]);
+  }, [setActionButton, handleCreateOpen]);
 
   const handleCreateRole = useCallback(() => {
     if (!roleName.trim()) {
@@ -223,21 +230,27 @@ export function RolesList() {
     }
   }, [roleToDelete, deleteMutation]);
 
-  const openDuplicateDialog = useCallback((role: Role) => {
-    // Role names must be lowercase letters, numbers, and underscores only
-    // (validated by better-auth at create time). Make sure the suggested
-    // copy name follows the same rule.
-    const sanitized = role.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-    setRoleName(`${sanitized}_copy`);
-    setRoleDescription(
-      role.description ??
-        (role.predefined
-          ? (roleDescriptions[role.name as PredefinedRoleName] ?? "")
-          : ""),
-    );
-    setPermission(role.permission);
-    setCreateDialogOpen(true);
-  }, []);
+  const openDuplicateDialog = useCallback(
+    (role: Role) => {
+      // Cancel a pending deep-linked edit so its by-id fetch can't overwrite
+      // the duplicate form state once it resolves.
+      closeEditDialog();
+      // Role names must be lowercase letters, numbers, and underscores only
+      // (validated by better-auth at create time). Make sure the suggested
+      // copy name follows the same rule.
+      const sanitized = role.name.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      setRoleName(`${sanitized}_copy`);
+      setRoleDescription(
+        role.description ??
+          (role.predefined
+            ? (roleDescriptions[role.name as PredefinedRoleName] ?? "")
+            : ""),
+      );
+      setPermission(role.permission);
+      setCreateDialogOpen(true);
+    },
+    [closeEditDialog],
+  );
 
   // Sort: predefined first, then custom
   const allRoles = [...(rolesResponse?.data ?? [])].sort((a, b) => {

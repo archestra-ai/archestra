@@ -85,10 +85,13 @@ export function ConnectorMembersTable({
   );
 
   const memberIdFromUrl = useSearchParams().get("member");
-  const memberFromUrl = useMemo(
-    () => members.find((member) => member.id === memberIdFromUrl) ?? null,
-    [members, memberIdFromUrl],
-  );
+  const memberFromUrl = useMemo(() => {
+    const found = members.find((member) => member.id === memberIdFromUrl);
+    // Email-matched members can't be reassigned — the row action is disabled
+    // for them, so a deep link must not open the editor for one either.
+    if (!found || (found.user && found.resolvedVia !== "override")) return null;
+    return found;
+  }, [members, memberIdFromUrl]);
   const {
     entity: editing,
     open: openAssignDialog,

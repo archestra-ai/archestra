@@ -59,7 +59,8 @@ export function AppSettingsForm({
   const updateApp = useUpdateApp();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
-  const { data: assignedTools } = useAppTools(app.id);
+  const appToolsQuery = useAppTools(app.id);
+  const assignedTools = appToolsQuery.data;
 
   const form = useForm<FormValues>({
     defaultValues: { name: app.name, description: app.description ?? "" },
@@ -73,13 +74,16 @@ export function AppSettingsForm({
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [toolsSeeded, setToolsSeeded] = useState(false);
 
-  // Seed the staged tool selection once the assignments land.
+  // Seed the staged tool selection once, when the assignments first land — a
+  // later background refetch must not overwrite the user's staged edits.
   useEffect(() => {
-    if (assignedTools) {
+    if (!toolsSeeded && assignedTools) {
       setSelectedToolIds(new Set(assignedTools.map((t) => t.id)));
+      setToolsSeeded(true);
     }
-  }, [assignedTools]);
+  }, [assignedTools, toolsSeeded]);
 
   const canShareTeams = isAppAdmin || isAppTeamAdmin;
   const hasNoTeams = (teams ?? []).length === 0;
@@ -116,9 +120,11 @@ export function AppSettingsForm({
   ];
 
   const teamSelectionMissing = scope === "team" && teamIds.length === 0;
-  // Tool assignments must land before saving (an unseeded selection would clear
-  // them), so this disables the button — but it is not a "Saving…" state.
-  const toolsLoading = !assignedTools;
+  // Save waits only while the assignments query is in flight. If it errors,
+  // Save re-enables: identity/visibility still save, and the tool diff is
+  // skipped below while the selection is unseeded (clearing it by accident is
+  // the thing this guards against).
+  const toolsLoading = appToolsQuery.isPending;
   // Only the mutation drives the button's loading label; data-loading does not.
   const saving =
     updateApp.isPending || assignTool.isPending || unassignTool.isPending;
@@ -148,9 +154,9 @@ export function AppSettingsForm({
     const result = await updateApp.mutateAsync({ appId: app.id, body });
     if (!result) return;
 
-    if (canUpdate) {
+    if (canUpdate && toolsSeeded) {
       const current = new Set((assignedTools ?? []).map((t) => t.id));
-      await Promise.all([
+      const results = await Promise.all([
         ...[...selectedToolIds]
           .filter((id) => !current.has(id))
           .map((id) =>
@@ -164,6 +170,9 @@ export function AppSettingsForm({
           .filter((id) => !selectedToolIds.has(id))
           .map((id) => unassignTool.mutateAsync({ appId: app.id, toolId: id })),
       ]);
+      // A failed tool change already toasted; stay open so the staged
+      // selection survives and Save can retry the remaining diff.
+      if (results.some((r) => r === null)) return;
     }
     onBack();
   });
@@ -181,16 +190,41 @@ export function AppSettingsForm({
               <Label htmlFor="app-settings-name">Name</Label>
               <Input
                 id="app-settings-name"
-                {...form.register("name", { required: true, maxLength: 100 })}
+                aria-invalid={!!form.formState.errors.name}
+                {...form.register("name", {
+                  required: "Name is required.",
+                  maxLength: {
+                    value: 100,
+                    message: "Name must be 100 characters or fewer.",
+                  },
+                  validate: (value) =>
+                    value.trim().length > 0 || "Name is required.",
+                })}
               />
+              {form.formState.errors.name?.message ? (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.name.message}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="app-settings-description">Description</Label>
               <Textarea
                 id="app-settings-description"
-                {...form.register("description", { maxLength: 500 })}
+                aria-invalid={!!form.formState.errors.description}
+                {...form.register("description", {
+                  maxLength: {
+                    value: 500,
+                    message: "Description must be 500 characters or fewer.",
+                  },
+                })}
               />
+              {form.formState.errors.description?.message ? (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.description.message}
+                </p>
+              ) : null}
             </div>
           </>
         )}

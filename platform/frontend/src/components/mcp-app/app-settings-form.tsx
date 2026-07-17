@@ -5,7 +5,7 @@ import type {
   ResourceVisibilityScope,
 } from "@archestra/shared";
 import { Globe, User, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
 import { EnvironmentSelector } from "@/components/environment-selector";
@@ -142,8 +142,23 @@ export function AppSettingsForm({
     });
   }, [saving, toolsLoading, teamSelectionMissing, onStatusChange]);
 
+  // Serializes the handler itself: the state-based `saving` guard lags a
+  // render, so a rapid resubmit could reread a stale tool-diff snapshot and
+  // resend already-applied mutations.
+  const submitInFlight = useRef(false);
+
   const onSubmit = form.handleSubmit(async (values) => {
+    if (submitInFlight.current) return;
     if (saving || toolsLoading || teamSelectionMissing) return;
+    submitInFlight.current = true;
+    try {
+      await submitSettings(values);
+    } finally {
+      submitInFlight.current = false;
+    }
+  });
+
+  async function submitSettings(values: FormValues) {
     // Visibility is editable on its own permissions; identity + environment only
     // when the caller can update the app, so omit those fields otherwise (mirrors
     // the field-limited bodies the old publish popover / rename dialog sent).
@@ -201,7 +216,7 @@ export function AppSettingsForm({
       if (results.some((r) => !r.ok)) return;
     }
     onBack();
-  });
+  }
 
   return (
     <form

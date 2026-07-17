@@ -40,13 +40,28 @@ vi.mock("@/app/apps/_parts/app-tools-editor", () => ({
     selectedToolIds: Set<string>;
     onSelectionChange: (ids: Set<string>) => void;
   }) => (
-    <button
-      type="button"
-      data-testid="stage-tool-t2"
-      onClick={() => onSelectionChange(new Set([...selectedToolIds, "tool-2"]))}
-    >
-      stage tool-2
-    </button>
+    <>
+      <button
+        type="button"
+        data-testid="stage-tool-t2"
+        onClick={() =>
+          onSelectionChange(new Set([...selectedToolIds, "tool-2"]))
+        }
+      >
+        stage tool-2
+      </button>
+      <button
+        type="button"
+        data-testid="unstage-tool-t1"
+        onClick={() =>
+          onSelectionChange(
+            new Set([...selectedToolIds].filter((id) => id !== "tool-1")),
+          )
+        }
+      >
+        unstage tool-1
+      </button>
+    </>
   ),
 }));
 vi.mock("@/components/environment-selector", () => ({
@@ -228,16 +243,21 @@ describe("AppSettingsForm save", () => {
     expect(unassignMutateAsync).not.toHaveBeenCalled();
   });
 
-  test("retrying after a failed tool change re-sends the remaining diff", async () => {
+  test("retrying after a partial failure re-sends only the failed change", async () => {
+    // First save carries two changes: the unassign of tool-1 succeeds, the
+    // assign of tool-2 fails.
     assignMutateAsync.mockResolvedValueOnce(null);
     const { container, onBack } = renderForm();
 
     fireEvent.click(screen.getByTestId("stage-tool-t2"));
+    fireEvent.click(screen.getByTestId("unstage-tool-t1"));
     submitForm(container);
     await waitFor(() => expect(assignMutateAsync).toHaveBeenCalledTimes(1));
+    expect(unassignMutateAsync).toHaveBeenCalledTimes(1);
     expect(onBack).not.toHaveBeenCalled();
 
-    // Retry: the failed assign is still in the diff and now succeeds.
+    // Retry: only the failed assign is left in the diff — the applied
+    // unassign was folded into the snapshot and must not be re-sent.
     submitForm(container);
     await waitFor(() => expect(onBack).toHaveBeenCalled());
     expect(assignMutateAsync).toHaveBeenCalledTimes(2);
@@ -246,6 +266,7 @@ describe("AppSettingsForm save", () => {
       toolId: "tool-2",
       body: { credentialResolutionMode: "dynamic" },
     });
+    expect(unassignMutateAsync).toHaveBeenCalledTimes(1);
   });
 
   test("an empty name blocks submit and shows a validation message", async () => {

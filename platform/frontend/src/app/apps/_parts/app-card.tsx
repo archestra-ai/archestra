@@ -15,7 +15,6 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
@@ -48,9 +47,17 @@ type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 type ExternalApp = Extract<AppListItem, { source: "external" }>;
 
-export function AppCard({ app }: { app: AppListItem }) {
+export function AppCard({
+  app,
+  onOpenSettings,
+}: {
+  app: AppListItem;
+  // The settings dialog (and its URL param) lives at the list level, so the
+  // card only reports which app to open it for.
+  onOpenSettings?: (app: OwnedApp) => void;
+}) {
   return app.source === "owned" ? (
-    <OwnedAppCard app={app} />
+    <OwnedAppCard app={app} onOpenSettings={onOpenSettings} />
   ) : (
     <ExternalAppCard app={app} />
   );
@@ -166,7 +173,13 @@ function AppTypeIcon({
 // Clicking the card opens the app in a new chat; the overlay button covers the
 // whole card. The backend seeds a conversation with the app already rendered and
 // returns its id, so we navigate straight to it (no model turn).
-function OwnedAppCard({ app }: { app: OwnedApp }) {
+function OwnedAppCard({
+  app,
+  onOpenSettings,
+}: {
+  app: OwnedApp;
+  onOpenSettings?: (app: OwnedApp) => void;
+}) {
   const router = useRouter();
   const openApp = useOpenAppInChat();
   const { data: canDelete } = useHasPermissions({ app: ["delete"] });
@@ -183,7 +196,6 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
   // the card unmounts mid-navigation, so it never resets; only a failure does.
   const [isOpening, setIsOpening] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const handleOpen = async () => {
     setIsOpening(true);
@@ -240,7 +252,7 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
               pinned={!!app.pinnedAt}
               target={{ source: "owned", appId: app.id }}
             />
-            <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+            <DropdownMenuItem onSelect={() => onOpenSettings?.(app)}>
               <Settings className="h-4 w-4" />
               Settings
             </DropdownMenuItem>
@@ -276,12 +288,6 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
         app={{ id: app.id, name: app.name }}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-      />
-
-      <AppSettingsDialog
-        appId={app.id}
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
       />
     </>
   );

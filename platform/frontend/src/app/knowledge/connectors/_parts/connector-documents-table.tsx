@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useConnectorUserGroups } from "@/lib/knowledge/connector.query";
 import {
   type KnowledgeBaseDocumentListItem,
@@ -68,8 +69,19 @@ export function ConnectorDocumentsTable({
     [userGroups?.groups],
   );
 
-  const [selectedPreviewDoc, setSelectedPreviewDoc] =
-    useState<KnowledgeBaseDocumentListItem | null>(null);
+  const documentIdFromUrl = searchParams.get("document");
+  const { data: documentFromUrl } = useConnectorDocument({
+    path: { id: connectorId, docId: documentIdFromUrl ?? "" },
+    enabled: documentIdFromUrl !== null,
+  });
+  const {
+    entity: selectedPreviewDoc,
+    open: openPreviewDialog,
+    close: closePreviewDialog,
+  } = useDialogUrlParam<KnowledgeBaseDocumentListItem>({
+    paramName: "document",
+    entityFromUrl: documentFromUrl ?? null,
+  });
   const [deletingDoc, setDeletingDoc] =
     useState<KnowledgeBaseDocumentListItem | null>(null);
 
@@ -118,7 +130,7 @@ export function ConnectorDocumentsTable({
               className="truncate text-sm font-medium hover:underline cursor-pointer border-none bg-transparent p-0 text-left outline-none"
               onClick={(event) => {
                 event.stopPropagation();
-                setSelectedPreviewDoc(row.original);
+                openPreviewDialog(row.original);
               }}
               title={row.original.title}
             >
@@ -184,7 +196,7 @@ export function ConnectorDocumentsTable({
             {
               icon: <Eye className="h-4 w-4" />,
               label: "Preview",
-              onClick: () => setSelectedPreviewDoc(row.original),
+              onClick: () => openPreviewDialog(row.original),
             },
             {
               icon: <Trash2 className="h-4 w-4" />,
@@ -197,7 +209,7 @@ export function ConnectorDocumentsTable({
         },
       },
     ],
-    [],
+    [openPreviewDialog],
   );
 
   return (
@@ -276,7 +288,7 @@ export function ConnectorDocumentsTable({
       <StandardDialog
         open={selectedPreviewDoc !== null}
         onOpenChange={(open) => {
-          if (!open) setSelectedPreviewDoc(null);
+          if (!open) closePreviewDialog();
         }}
         title="Document Preview"
         size="medium"

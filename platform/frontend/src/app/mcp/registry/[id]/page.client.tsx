@@ -19,8 +19,8 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,6 +154,7 @@ export function McpCatalogItemPage({ id }: { id: string }) {
 
 function CatalogItemDetails({ item }: { item: CatalogItem }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const variant =
@@ -269,6 +270,62 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   );
   const [logsServerId, setLogsServerId] = useState<string | null>(serverParam);
 
+  // Diagnostic deep links (?tab=logs|inspector|shell|yaml) resolve only after
+  // the install list loads: the useState initializer above runs while tabIds
+  // is still empty, so it falls back to Overview. Adopt the pending tabParam
+  // once its tab appears — once only, so a subsequent user click wins.
+  const tabParamAdopted = useRef(false);
+  // `tabIds` is a fresh array every render, so it can't be a hook dependency.
+  // Derive a stable boolean here instead: whether the pending ?tab= now maps to
+  // a real tab. It flips false -> true once the install list loads, which is the
+  // exact moment the effect should adopt it.
+  const tabParamMatchesTab = tabParam
+    ? tabIds.includes(tabParam as DetailTab)
+    : false;
+  useEffect(() => {
+    if (tabParamAdopted.current) return;
+    if (tabParam && tabParamMatchesTab) {
+      tabParamAdopted.current = true;
+      setActiveTab(tabParam as DetailTab);
+    }
+  }, [tabParam, tabParamMatchesTab]);
+
+  // Write the selection back to the URL so the current tab (and targeted
+  // install) stays shareable. Overview is the default, so it carries no param.
+  const syncTabParams = ({
+    tab,
+    server,
+  }: {
+    tab: DetailTab;
+    server?: string;
+  }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "overview") {
+      params.delete("tab");
+    } else {
+      params.set("tab", tab);
+    }
+    // `server` only targets the logs-family view; carry an explicit pick when
+    // given, otherwise drop it when leaving those tabs so a stale ?server=
+    // doesn't linger on Overview/Credentials/YAML.
+    const isLogsFamilyTab =
+      tab === "logs" || tab === "inspector" || tab === "shell";
+    if (server) {
+      params.set("server", server);
+    } else if (!isLogsFamilyTab) {
+      params.delete("server");
+    }
+    const queryString = params.toString();
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
+      scroll: false,
+    });
+  };
+
+  const selectTab = (tab: DetailTab) => {
+    setActiveTab(tab);
+    syncTabParams({ tab });
+  };
+
   const effectiveTab: DetailTab = tabIds.includes(activeTab)
     ? activeTab
     : "overview";
@@ -281,6 +338,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   const openPodLogs = (serverId: string) => {
     setLogsServerId(serverId);
     setActiveTab("logs");
+    syncTabParams({ tab: "logs", server: serverId });
   };
 
   // Install inline on this page (no navigation). The dialog lets the user pick
@@ -437,7 +495,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
       {showTabs && (
         <Tabs
           value={effectiveTab}
-          onValueChange={(value) => setActiveTab(value as DetailTab)}
+          onValueChange={(value) => selectTab(value as DetailTab)}
         >
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>

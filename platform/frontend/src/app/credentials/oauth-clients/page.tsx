@@ -33,6 +33,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { useProfiles } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useCreateLlmOauthClient,
   useDeleteLlmOauthClient,
@@ -139,7 +140,6 @@ export default function UnifiedOAuthClientsPage() {
   }, [searchParams, updateQueryParams]);
   const [providerApiKeyFilterOpen, setProviderApiKeyFilterOpen] =
     useState(false);
-  const [editing, setEditing] = useState<UnifiedRow | null>(null);
   const [rotating, setRotating] = useState<UnifiedRow | null>(null);
   const [deleting, setDeleting] = useState<UnifiedRow | null>(null);
   const [createdCredentials, setCreatedCredentials] =
@@ -167,6 +167,21 @@ export default function UnifiedOAuthClientsPage() {
     ],
     [mcpClients, llmClients, providerKeyFilterActive],
   );
+
+  // No by-id endpoint for either client type; the URL id resolves against the
+  // merged rows (the page fetches both lists unpaginated).
+  const editIdFromUrl = searchParams.get("edit");
+  const editingFromUrl = editIdFromUrl
+    ? rows.find((row) => row.id === editIdFromUrl)
+    : null;
+  const {
+    entity: editing,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<UnifiedRow>({
+    paramName: "edit",
+    entityFromUrl: editingFromUrl,
+  });
 
   const columns: ColumnDef<UnifiedRow>[] = useMemo(
     () => [
@@ -231,7 +246,7 @@ export default function UnifiedOAuthClientsPage() {
               {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
-                onClick: () => setEditing(row.original),
+                onClick: () => openEditDialog(row.original),
               },
               {
                 icon: <RefreshCw className="h-4 w-4" />,
@@ -249,7 +264,7 @@ export default function UnifiedOAuthClientsPage() {
         ),
       },
     ],
-    [currentUserId],
+    [currentUserId, openEditDialog],
   );
 
   return (
@@ -351,12 +366,12 @@ export default function UnifiedOAuthClientsPage() {
       <McpEditOAuthClientDialog
         oauthClient={editing?.kind === "mcp" ? editing : null}
         onOpenChange={(open) => {
-          if (!open) setEditing(null);
+          if (!open) closeEditDialog();
         }}
         gateways={gateways}
         onSubmit={async (id, values) => {
           const result = await mcpUpdate.mutateAsync({ id, body: values });
-          if (result) setEditing(null);
+          if (result) closeEditDialog();
         }}
         isSubmitting={mcpUpdate.isPending}
       />
@@ -364,13 +379,13 @@ export default function UnifiedOAuthClientsPage() {
       <LlmEditOAuthClientDialog
         oauthClient={editing?.kind === "llm" ? editing : null}
         onOpenChange={(open) => {
-          if (!open) setEditing(null);
+          if (!open) closeEditDialog();
         }}
         llmProxies={llmProxies}
         providerApiKeys={providerApiKeys}
         onSubmit={async (id, values) => {
           const result = await llmUpdate.mutateAsync({ id, body: values });
-          if (result) setEditing(null);
+          if (result) closeEditDialog();
         }}
         isSubmitting={llmUpdate.isPending}
       />

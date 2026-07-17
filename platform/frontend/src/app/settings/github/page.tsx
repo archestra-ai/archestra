@@ -3,6 +3,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -30,9 +31,11 @@ import {
   type GithubAppConfig,
   useCreateGithubAppConfig,
   useDeleteGithubAppConfig,
+  useGithubAppConfig,
   useGithubAppConfigs,
   useUpdateGithubAppConfig,
 } from "@/lib/github-app-config.query";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { useSetSettingsAction } from "../layout";
 
@@ -72,25 +75,37 @@ export default function GithubAppsSettingsPage() {
   const updateConfig = useUpdateGithubAppConfig();
   const deleteConfig = useDeleteGithubAppConfig();
 
-  // null = closed, an object = editing that row, "new" = creating
-  const [dialogState, setDialogState] = useState<
-    GithubAppConfig | "new" | null
-  >(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [configToDelete, setConfigToDelete] = useState<GithubAppConfig | null>(
     null,
   );
+
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+  const { data: editingConfigFromUrl } = useGithubAppConfig(
+    editId ?? undefined,
+  );
+
+  const {
+    entity: editingConfig,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<GithubAppConfig>({
+    paramName: "edit",
+    entityFromUrl: editingConfigFromUrl ?? null,
+  });
 
   const form = useForm<GithubAppConfigFormValues>({
     defaultValues: emptyFormValues(),
   });
 
-  const isEditing = dialogState !== null && dialogState !== "new";
+  const isEditing = editingConfig !== null;
 
   useEffect(() => {
     setActionButton(
       <PermissionButton
         permissions={{ githubAppConfig: ["create"] }}
-        onClick={() => setDialogState("new")}
+        onClick={() => setIsCreateDialogOpen(true)}
       >
         <Plus className="h-4 w-4" />
         Add GitHub App
@@ -100,18 +115,18 @@ export default function GithubAppsSettingsPage() {
   }, [setActionButton]);
 
   useEffect(() => {
-    if (dialogState === "new") {
+    if (isCreateDialogOpen) {
       form.reset(emptyFormValues());
-    } else if (dialogState) {
+    } else if (editingConfig) {
       form.reset({
-        name: dialogState.name,
-        githubUrl: dialogState.githubUrl,
-        appId: dialogState.appId,
-        installationId: dialogState.installationId,
+        name: editingConfig.name,
+        githubUrl: editingConfig.githubUrl,
+        appId: editingConfig.appId,
+        installationId: editingConfig.installationId,
         privateKey: "",
       });
     }
-  }, [dialogState, form]);
+  }, [isCreateDialogOpen, editingConfig, form]);
 
   const columns: ColumnDef<GithubAppConfig>[] = useMemo(() => {
     const baseColumns: ColumnDef<GithubAppConfig>[] = [
@@ -155,7 +170,7 @@ export default function GithubAppsSettingsPage() {
                     {
                       icon: <Pencil className="h-4 w-4" />,
                       label: "Edit configuration",
-                      onClick: () => setDialogState(row.original),
+                      onClick: () => openEditDialog(row.original),
                     },
                   ]
                 : []),
@@ -174,13 +189,21 @@ export default function GithubAppsSettingsPage() {
         ),
       },
     ];
-  }, [canUpdate, canDelete]);
+  }, [canUpdate, canDelete, openEditDialog]);
+
+  const closeDialog = () => {
+    if (editingConfig) {
+      closeEditDialog();
+    } else {
+      setIsCreateDialogOpen(false);
+    }
+  };
 
   const handleSubmit = form.handleSubmit(async (values) => {
-    if (isEditing) {
+    if (editingConfig) {
       // an empty private key leaves the stored one untouched
       const result = await updateConfig.mutateAsync({
-        id: dialogState.id,
+        id: editingConfig.id,
         data: {
           name: values.name,
           githubUrl: values.githubUrl,
@@ -189,7 +212,7 @@ export default function GithubAppsSettingsPage() {
           ...(values.privateKey.trim() && { privateKey: values.privateKey }),
         },
       });
-      if (result) setDialogState(null);
+      if (result) closeEditDialog();
       return;
     }
 
@@ -200,7 +223,7 @@ export default function GithubAppsSettingsPage() {
       installationId: values.installationId,
       privateKey: values.privateKey,
     });
-    if (result) setDialogState(null);
+    if (result) setIsCreateDialogOpen(false);
   });
 
   const handleDelete = async () => {
@@ -248,9 +271,9 @@ export default function GithubAppsSettingsPage() {
       )}
 
       <FormDialog
-        open={dialogState !== null}
+        open={isCreateDialogOpen || isEditing}
         onOpenChange={(open) => {
-          if (!open) setDialogState(null);
+          if (!open) closeDialog();
         }}
         title={isEditing ? "Edit GitHub App" : "Add GitHub App"}
         size="medium"
@@ -349,11 +372,7 @@ export default function GithubAppsSettingsPage() {
               />
             </div>
             <DialogStickyFooter className="mt-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogState(null)}
-              >
+              <Button type="button" variant="outline" onClick={closeDialog}>
                 Cancel
               </Button>
               <Button

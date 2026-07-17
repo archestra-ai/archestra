@@ -1624,34 +1624,15 @@ describe("parseSampleRate", () => {
 });
 
 describe("parseCodeRuntimeDaggerRunnerHost", () => {
-  test("should return undefined when runtime is disabled and host is unset", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: false, envValue: undefined }),
-    ).toBeUndefined();
-  });
-
-  test("should not validate host while runtime is disabled", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: false,
-        envValue: "kube-pod://dagger-engine?namespace=dagger",
-      }),
-    ).toBe("kube-pod://dagger-engine?namespace=dagger");
-  });
-
-  test("should return undefined when runtime is enabled but host is unset", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: true, envValue: undefined }),
-    ).toBeUndefined();
+  test("should return undefined when host is unset", () => {
+    expect(parseCodeRuntimeDaggerRunnerHost(undefined)).toBeUndefined();
   });
 
   test("should trim and return kube-pod runner host", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue:
-          " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
-      }),
+      parseCodeRuntimeDaggerRunnerHost(
+        " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
+      ),
     ).toBe(
       "kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine",
     );
@@ -1659,19 +1640,15 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
 
   test("should trim and return TCP runner host", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
-      }),
+      parseCodeRuntimeDaggerRunnerHost(
+        " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
+      ),
     ).toBe("tcp://dagger-runtime.dagger.svc.cluster.local:1234");
   });
 
   test("should return undefined for unsupported runner hosts", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: "unix:///run/dagger/engine.sock",
-      }),
+      parseCodeRuntimeDaggerRunnerHost("unix:///run/dagger/engine.sock"),
     ).toBeUndefined();
   });
 });

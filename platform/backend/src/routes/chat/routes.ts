@@ -58,6 +58,7 @@ import {
   createSubagentToolStreamBridge,
 } from "@/clients/subagent-tool-stream";
 import {
+  recordUnavailableToolCallStep,
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
@@ -1145,10 +1146,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // discarded retry attempts (empty/abortive) that the probe
                   // drains before a result is committed, so their usage never
                   // reaches the client.
-                  onStepFinish: ({ usage, finishReason }) => {
+                  onStepFinish: (step) => {
+                    const { usage, finishReason } = step;
                     if (!hasCommittedResult) {
                       return;
                     }
+                    // Feeds the repeat ceiling in stopWhen the one call shape it
+                    // cannot otherwise see: a tool outside the tool list never
+                    // reaches an execute wrapper, so nothing fingerprints it.
+                    recordUnavailableToolCallStep(repeatTracker, step);
                     // Fires for the truncated step before the tracker's flush,
                     // so this holds the finishReason the tracker keys off.
                     lastFinishReason = finishReason;

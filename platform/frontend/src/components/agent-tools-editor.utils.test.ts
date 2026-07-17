@@ -11,6 +11,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   computeMcpEnvConflicts,
+  computeSharedPersonalPins,
   getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
   isCatalogInEnvironment,
@@ -559,5 +560,131 @@ describe("computeMcpEnvConflicts", () => {
   it("skips unknown catalog ids", () => {
     const conflicts = computeMcpEnvConflicts(catalogs, ["ghost"], "prod");
     expect(conflicts).toEqual([]);
+  });
+});
+
+describe("computeSharedPersonalPins", () => {
+  const personal = {
+    id: "srv-personal",
+    scope: "personal",
+    ownerId: "user-1",
+    ownerEmail: "owner@example.com",
+    catalogName: "GitHub",
+    name: "github-personal",
+  };
+  const team = {
+    id: "srv-team",
+    scope: "team",
+    ownerId: "user-2",
+    ownerEmail: "team-owner@example.com",
+    catalogName: "Jira",
+    name: "jira-team",
+  };
+
+  it("flags a static pin to a resolvable personal connection", () => {
+    const pins = computeSharedPersonalPins(
+      [
+        {
+          catalogId: "cat-a",
+          pinnedServerId: "srv-personal",
+          resolvableServers: [personal],
+        },
+      ],
+      "user-2",
+    );
+    expect(pins).toEqual([
+      {
+        catalogId: "cat-a",
+        mcpName: "GitHub",
+        ownerEmail: "owner@example.com",
+        isCurrentUser: false,
+      },
+    ]);
+  });
+
+  it("marks the current user's own connection", () => {
+    const pins = computeSharedPersonalPins(
+      [
+        {
+          catalogId: "cat-a",
+          pinnedServerId: "srv-personal",
+          resolvableServers: [personal],
+        },
+      ],
+      "user-1",
+    );
+    expect(pins[0]?.isCurrentUser).toBe(true);
+  });
+
+  it("ignores a pin whose server is no longer resolvable (already reset / out of group)", () => {
+    const pins = computeSharedPersonalPins(
+      [
+        {
+          catalogId: "cat-a",
+          pinnedServerId: "srv-personal",
+          resolvableServers: [team],
+        },
+      ],
+      "user-1",
+    );
+    expect(pins).toEqual([]);
+  });
+
+  it("ignores team- and org-scoped pins (shared by design)", () => {
+    const pins = computeSharedPersonalPins(
+      [
+        {
+          catalogId: "cat-a",
+          pinnedServerId: "srv-team",
+          resolvableServers: [team],
+        },
+      ],
+      "user-1",
+    );
+    expect(pins).toEqual([]);
+  });
+
+  it("ignores catalogs that resolve at call time (no pin)", () => {
+    const pins = computeSharedPersonalPins(
+      [
+        {
+          catalogId: "cat-a",
+          pinnedServerId: null,
+          resolvableServers: [personal],
+        },
+      ],
+      "user-1",
+    );
+    expect(pins).toEqual([]);
+  });
+
+  it("falls back to the raw name and a placeholder owner", () => {
+    const pins = computeSharedPersonalPins(
+      [
+        {
+          catalogId: "cat-a",
+          pinnedServerId: "srv-x",
+          resolvableServers: [
+            {
+              id: "srv-x",
+              scope: "personal",
+              ownerId: null,
+              ownerEmail: null,
+              catalogName: null,
+              name: "raw-name",
+            },
+          ],
+        },
+      ],
+      "user-1",
+    );
+    expect(pins).toEqual([
+      {
+        catalogId: "cat-a",
+        mcpName: "raw-name",
+        ownerEmail: "Deleted user",
+        isCurrentUser: false,
+      },
+    ]);
   });
 });

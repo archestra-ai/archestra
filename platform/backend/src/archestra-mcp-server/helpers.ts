@@ -197,6 +197,22 @@ export function deduplicateLabels(
   return Array.from(new Map(rawLabels.map((l) => [l.key, l])).values());
 }
 
+/**
+ * Decode bytes as text, or null when they are not safe to treat as text. The
+ * mime label is never trusted (a binary payload can be saved as e.g.
+ * text/plain), so readability is decided by the bytes: a NUL byte or any
+ * invalid UTF-8 sequence means "binary". NUL is rejected even though it is
+ * valid UTF-8 — Postgres cannot store it in a text column.
+ */
+export function decodeUtf8Text(data: Buffer): string | null {
+  if (data.includes(0)) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    return null;
+  }
+}
+
 export function successResult(text: string): CallToolResult {
   return {
     content: [{ type: "text" as const, text }],

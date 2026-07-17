@@ -45,14 +45,14 @@ type NativeSandboxErrorCode =
   | "ARCHESTRA_INVALID_INPUT"
   | "ARCHESTRA_SANDBOX_HISTORY_LIMIT";
 
-interface LimitOverrides {
-  outputBytesLimit?: number;
-  fileSizeLimitBytes?: number;
-  cpuSeconds?: number;
-  memoryBytes?: number;
+interface SandboxLimits {
+  outputBytesLimit: number;
+  fileSizeLimitBytes: number;
+  cpuSeconds: number;
+  memoryBytes: number;
 }
 
-interface RunCommandParams extends LimitOverrides {
+interface RunCommandParams extends SandboxLimits {
   command: string;
   cwd: string;
   timeoutSeconds: number;
@@ -74,7 +74,7 @@ interface RunCommandResult {
   truncated: boolean;
 }
 
-interface ReadArtifactParams extends LimitOverrides {
+interface ReadArtifactParams extends SandboxLimits {
   path: string;
   /**
    * cwd a replayed entry with no stored cwd should default to. mirrors the
@@ -317,16 +317,13 @@ class SandboxRuntimeService {
     }
   }
 
-  private limits(overrides?: LimitOverrides) {
-    const { defaults } = config.daggerRuntime;
-    return {
-      outputBytesLimit:
-        overrides?.outputBytesLimit ?? defaults.outputBytesLimit,
-      fileSizeLimitBytes:
-        overrides?.fileSizeLimitBytes ?? defaults.fileSizeLimitBytes,
-      cpuSeconds: overrides?.cpuSeconds ?? defaults.cpuSeconds,
-      memoryBytes: overrides?.memoryBytes ?? defaults.memoryBytes,
-    };
+  private limits({
+    outputBytesLimit,
+    fileSizeLimitBytes,
+    cpuSeconds,
+    memoryBytes,
+  }: SandboxLimits): SandboxLimits {
+    return { outputBytesLimit, fileSizeLimitBytes, cpuSeconds, memoryBytes };
   }
 
   private async acquire(): Promise<void> {

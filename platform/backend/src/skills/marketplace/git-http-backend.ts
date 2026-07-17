@@ -172,19 +172,15 @@ interface HeaderSplit {
 
 /** Locate the CGI header terminator (CRLFCRLF or LFLF). */
 function findHeaderTerminator(buf: Buffer): HeaderSplit | null {
-  const crlfIdx = indexOfSequence(buf, CRLF_CRLF);
+  const crlfIdx = buf.indexOf(CRLF_CRLF);
   if (crlfIdx !== -1) {
     return { headerEnd: crlfIdx, bodyStart: crlfIdx + CRLF_CRLF.length };
   }
-  const lfIdx = indexOfSequence(buf, LF_LF);
+  const lfIdx = buf.indexOf(LF_LF);
   if (lfIdx !== -1) {
     return { headerEnd: lfIdx, bodyStart: lfIdx + LF_LF.length };
   }
   return null;
-}
-
-function indexOfSequence(haystack: Buffer, needle: Buffer): number {
-  return haystack.indexOf(needle);
 }
 
 const CRLF_CRLF = Buffer.from("\r\n\r\n", "ascii");

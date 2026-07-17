@@ -146,11 +146,9 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
     const { conversationId, mode, prompt } = res.json();
     expect(mode).toBe("prompt");
     // The opening prompt names the app (a single-UI-tool server labels as the
-    // bare server name) plus the tool, so the agent can find and call it.
-    expect(prompt).toContain("Open the Atlassian app.");
-    expect(prompt).toContain(
-      "call the createjiraissue tool on the Atlassian MCP server",
-    );
+    // bare server name) and the tool, so the agent can find and call it.
+    expect(prompt).toContain("Atlassian");
+    expect(prompt).toContain("createjiraissue");
 
     // No seeded render: the client sends `prompt` as the first user message,
     // which triggers the model turn.

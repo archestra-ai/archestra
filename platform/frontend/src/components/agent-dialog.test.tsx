@@ -175,6 +175,10 @@ vi.mock("@/components/system-prompt-editor", () => ({
   SystemPromptEditor: () => null,
 }));
 
+vi.mock("@/components/share-personal-credentials-dialog", () => ({
+  SharePersonalCredentialsDialog: () => null,
+}));
+
 vi.mock("@/components/visibility-selector", () => ({
   VisibilitySelector: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>

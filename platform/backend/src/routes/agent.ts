@@ -519,6 +519,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId: body.environmentId ?? null,
       });
 
+      // A team-scoped agent with no teams is accessible to nobody (not even its
+      // author), so reject it. Applies to admins too — they can otherwise reach
+      // this via the API/UI (issue #6624).
+      assertTeamScopeHasTeams({
+        scope: body.scope ?? "personal",
+        teamCount: body.teams.length,
+      });
+
       // Omit teams if scope is not 'team' — scope takes precedence
       const createData = {
         ...body,
@@ -655,6 +663,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // validated like agent creation (mirrors POST /api/agents).
       const targetScope = body?.scope ?? sourceAgent.scope;
       const requestedTeams = body?.teams ?? [];
+
+      // A team-scoped clone must land on ≥1 team (issue #6624). Effective teams
+      // default to the source's when the caller omits them, matching
+      // AgentModel.cloneAgent. Applies to admins too.
+      assertTeamScopeHasTeams({
+        scope: targetScope,
+        teamCount: (body?.teams ?? sourceAgent.teams).length,
+      });
+
       if (!checker.isAdmin(sourceAgent.agentType)) {
         if (targetScope === "org") {
           throw new ApiError(403, "Only admins can create org-scoped agents");
@@ -1019,6 +1036,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.scope === "personal" && existingAgent.scope !== "personal") {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
+
+      // A team-scoped agent must keep ≥1 team (issue #6624). Evaluate the merged
+      // result — the team-admin path above may have rewritten body.teams — so
+      // this catches switching to team scope with none, or clearing the teams of
+      // an already team-scoped agent. Applies to admins too.
+      assertTeamScopeHasTeams({
+        scope: body.scope ?? existingAgent.scope,
+        teamCount: (body.teams ?? existingAgent.teams).length,
+      });
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -1526,4 +1552,21 @@ async function assertEnvironmentAssignable(params: {
     organizationId,
     canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
   });
+}
+
+/**
+ * A team-scoped agent with zero teams matches no team membership, so it is
+ * inaccessible to everyone including its author (issue #6624). Reject it at the
+ * write paths. Callers pass the resolved effective scope and team count.
+ */
+function assertTeamScopeHasTeams(params: {
+  scope: string;
+  teamCount: number;
+}): void {
+  if (params.scope === "team" && params.teamCount === 0) {
+    throw new ApiError(
+      400,
+      "A team-scoped agent must be assigned at least one team",
+    );
+  }
 }

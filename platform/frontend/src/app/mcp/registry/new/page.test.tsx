@@ -102,4 +102,18 @@ describe("NewMcpCatalogItemPage", () => {
     expect(screen.queryByText("Start from scratch")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mcp-catalog-form")).not.toBeInTheDocument();
   });
+
+  it("fails closed — hides the chooser when the org read resolves without data", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useOrganization>);
+    renderPage();
+
+    expect(screen.queryByText("Start from scratch")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Select from Online Catalog"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("mcp-catalog-form")).toBeInTheDocument();
+  });
 });

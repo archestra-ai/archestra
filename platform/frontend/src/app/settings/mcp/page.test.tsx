@@ -76,4 +76,15 @@ describe("McpSettingsPage", () => {
 
     expect(screen.getByRole("combobox")).toBeDisabled();
   });
+
+  it("shows a loading state instead of the control while the org is pending", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as ReturnType<typeof useOrganization>);
+    renderPage();
+
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Online MCP catalog")).not.toBeInTheDocument();
+  });
 });

@@ -99,4 +99,4 @@ The config sets `unstubGlobals: true` / `unstubEnvs: true`: every `vi.stubGlobal
 ## Performance etiquette
 
 - The suite's budget is module-import cost. Heavy new top-level imports in widely-imported modules cost every worker; test-only helpers belong under `src/test/`.
-- Local full-suite runs cap workers at cores−2 (config) so the machine stays usable; CI runs 4 shards via `vitest run --shard=k/4` behind the `Backend Unit Tests` gate job.
+- Local full-suite runs cap workers at half the cores (config) so the machine stays usable, further bounded by a ~5 GB-per-fork memory cap; CI uses all cores under the same memory cap and runs 4 shards via `vitest run --shard=k/4` behind the `Backend Unit Tests` gate job.

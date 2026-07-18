@@ -39,6 +39,7 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  ToolModel,
 } from "@/models";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -1892,11 +1893,15 @@ describe("scaffold_app tools param", () => {
     expect(created.isError).toBe(false);
     expect(structured(created).tools).toEqual([paperSearchName]);
 
-    const assignments = await AppToolModel.getAssignmentsForApp(
-      structured(created).id as string,
+    const appId = structured(created).id as string;
+    // Complete-set check: exactly one assignment exists on the app.
+    expect(await AppToolModel.getToolsForApp(appId)).toHaveLength(1);
+    const assignments = await ToolModel.getMcpToolsAssignedToApp(
+      [paperSearchName],
+      appId,
     );
     expect(assignments).toHaveLength(1);
-    expect(assignments[0].tool.name).toBe(paperSearchName);
+    expect(assignments[0].toolName).toBe(paperSearchName);
     // dynamic mode: server + credential resolve per viewing user at call time
     expect(assignments[0].credentialResolutionMode).toBe("dynamic");
     expect(assignments[0].mcpServerId).toBeNull();
@@ -1961,10 +1966,10 @@ describe("scaffold_app tools param", () => {
     const created = await scaffold({ name: "Dupes", tools: [paperSearchName] });
     expect(created.isError).toBe(false);
 
-    const assignments = await AppToolModel.getAssignmentsForApp(
+    const assigned = await AppToolModel.getToolsForApp(
       structured(created).id as string,
     );
-    expect(assignments.map((a) => a.tool.id)).toEqual([canonical?.id]);
+    expect(assigned.map((t) => t.id)).toEqual([canonical?.id]);
   });
 
   test("an assigned duplicate wins over a newer installed one, matching search_tools", async ({
@@ -1989,12 +1994,12 @@ describe("scaffold_app tools param", () => {
 
     const created = await scaffold({ name: "Assigned", tools: [dupName] });
     expect(created.isError).toBe(false);
-    const assignments = await AppToolModel.getAssignmentsForApp(
+    const assigned = await AppToolModel.getToolsForApp(
       structured(created).id as string,
     );
     // The assigned (older) row wins: search_tools ranks assigned before
     // discoverable, and the app runtime executes the app-assigned row.
-    expect(assignments.map((a) => a.tool.id)).toEqual([assignedRow.id]);
+    expect(assigned.map((t) => t.id)).toEqual([assignedRow.id]);
   });
 
   test("a tool in a visible catalog with no install is assignable by name (auth is enforced at call time)", async ({
@@ -2014,10 +2019,10 @@ describe("scaffold_app tools param", () => {
 
     const created = await scaffold({ name: "Orphan", tools: [orphanName] });
     expect(created.isError).toBe(false);
-    const assignments = await AppToolModel.getAssignmentsForApp(
+    const assigned = await AppToolModel.getToolsForApp(
       structured(created).id as string,
     );
-    expect(assignments.map((a) => a.tool.id)).toEqual([orphanRow.id]);
+    expect(assigned.map((t) => t.id)).toEqual([orphanRow.id]);
   });
 
   test("an unassigned, installed tool is not assignable when the agent lacks dynamic access", async ({

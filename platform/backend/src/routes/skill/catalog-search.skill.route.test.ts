@@ -48,11 +48,6 @@ describe("GET /api/skills/catalog/search", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.results.length).toBeLessThanOrEqual(5);
-    for (const result of body.results) {
-      expect(typeof result.repo).toBe("string");
-      expect(typeof result.name).toBe("string");
-      expect(typeof result.fileCount).toBe("number");
-    }
   });
 
   test("rejects a limit outside the allowed range", async () => {

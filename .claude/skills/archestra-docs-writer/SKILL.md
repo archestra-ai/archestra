@@ -10,7 +10,7 @@ This skill is the single source of truth for Archestra docs. Write and edit `doc
 ## Process
 
 1. Open the docs page you are editing.
-2. Use the Playwright MCP to navigate the platform (not the docs site) for the feature you are documenting. Walk related screens and primitives so the page reflects what the software actually does.
+2. Use the browser MCP (`claude-in-chrome`) to navigate the platform (not the docs site) for the feature you are documenting. Walk related screens and primitives so the page reflects what the software actually does.
 3. Document only the concepts, dependencies, and use cases. Skip anything the UI already shows on screen.
 
 ## Tone of Voice
@@ -54,7 +54,7 @@ Reference page in this voice: `docs/pages/platform-projects.md`.
 
 ## Screenshots
 
-Every page should open with at least one screenshot; add more where they help. Capture them with the Playwright MCP against the running platform at `localhost:3000` (docs run at `:3001` — never screenshot the docs site). Stage realistic data first: real project/team/file names from the page's use case scenario, forms pre-filled, scroll position checked so no important element is hidden. Save as `docs/assets/automated_screenshots/{page-name}_{shot-name}.webp` (convert PNG via the `sharp` package in `platform/node_modules`). Embed as `![alt](/docs/automated_screenshots/{page-name}_{shot-name}.webp)`.
+Every page should open with at least one screenshot; add more where they help. Capture them with the browser MCP (`claude-in-chrome`) against the running platform at `localhost:3000` (docs run at `:3001` — never screenshot the docs site). Stage realistic data first: real project/team/file names from the page's use case scenario, forms pre-filled, scroll position checked so no important element is hidden. Save as `docs/assets/automated_screenshots/{page-name}_{shot-name}.webp` (convert PNG via the `sharp` package in `platform/node_modules`). Embed as `![alt](/docs/automated_screenshots/{page-name}_{shot-name}.webp)`.
 
 ## Page Frontmatter
 

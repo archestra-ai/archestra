@@ -11,6 +11,7 @@ import {
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import EnvironmentModel from "@/models/environment";
 import { expect, test } from "@/test";
 import { gateAppToolCall } from "./app-tool-runtime-gate";
@@ -276,11 +277,10 @@ test("enforces a block_always policy on the target (runtime gap fix)", async ({
     });
     expect(decision.allowed).toBe(false);
     if (!decision.allowed) {
-      // Attribute the guardrail to Archestra so the app (and whoever reads the
-      // error) knows the gateway blocked the call, not the tool.
-      expect(decision.reason).toContain(
-        "a security guardrail enforced by Archestra, not by the tool itself",
-      );
+      // The reason attributes the block to the gateway brand and names the
+      // blocked tool, so the app knows the tool itself did not fail.
+      expect(decision.reason).toContain(toolName);
+      expect(decision.reason).toContain(archestraMcpBranding.catalogName);
     }
   }
 });

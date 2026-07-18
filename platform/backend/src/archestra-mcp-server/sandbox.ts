@@ -60,7 +60,9 @@ import {
 import type { ArchestraContext } from "./types";
 
 /**
- * Code execution sandbox tools: `run_command`, `upload_file`, `download_file`.
+ * Code execution + file tools for the conversation sandbox: `run_command`,
+ * `upload_file`, `download_file`, `search_files`, `read_file`, `save_file`,
+ * `edit_file`, `delete_file`.
  *
  * Each conversation has an implicit default sandbox, created lazily on first
  * use — there is no create step. Commands, uploads, and activated skills all
@@ -68,10 +70,12 @@ import type { ArchestraContext } from "./types";
  * truth; Dagger materializes it on demand). `target` lets advanced callers run
  * against a fresh isolated sandbox or an explicit one instead of the default.
  *
- * RBAC: every tool is gated by `sandbox:execute` (see `rbac.ts`, enforced in
- * the dispatch path before the handler runs). Skills become runnable here by
- * loading them (`load_skill`), which mounts them into the default
- * sandbox; that path is `skill:read`-gated.
+ * RBAC (see `rbac.ts`, enforced in the dispatch path before the handler runs):
+ * `run_command`, `upload_file`, and `download_file` are gated by
+ * `sandbox:execute`; the file tools (`search_files`, `read_file`, `save_file`,
+ * `edit_file`, `delete_file`) by `file:manage`. Skills become runnable here by
+ * loading them (`load_skill`), which mounts them into the default sandbox; that
+ * path is `skill:read`-gated.
  *
  * Model-facing text in this file follows the skill terminology glossary in
  * `skills/skill-activation.ts` and is pinned by `skill-tool-text.test.ts`.

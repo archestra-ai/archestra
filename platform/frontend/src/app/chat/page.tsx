@@ -50,6 +50,7 @@ import {
   usePlaywrightSetupRequired,
 } from "@/components/chat/playwright-install-dialog";
 import {
+  AppsPanelContent,
   type RightPanelTab,
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
@@ -325,7 +326,7 @@ export function ChatPageContent({
   const cannotCreateDueToNoTeams =
     !isAgentAdmin && (!teams || teams.length === 0);
 
-  const _isMobile = useIsMobile();
+  const isMobile = useIsMobile();
 
   // State for browser panel. Restored per-conversation by the conversation-load
   // effect below (a fresh /chat with no conversation has no saved state).
@@ -2529,6 +2530,7 @@ export function ChatPageContent({
             scheduledRun,
             isArtifactOpen,
             isBrowserVisible: isBrowserPanelVisible,
+            isAppsVisible: isAppsTabOpen,
             showBrowserButton,
             isPlaywrightSetupVisible,
             onClose: closeRightPanel,
@@ -2580,6 +2582,14 @@ export function ChatPageContent({
                           handleInitialNavigateComplete
                         }
                       />
+                    </div>
+                  )}
+                  {/* Gated on isMobile (not just CSS) so the app iframe only
+                      ever mounts once — the desktop panel below unmounts on
+                      mobile the same way. */}
+                  {activeRightTab === "apps" && isMobile && (
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      <AppsPanelContent agentId={browserToolsAgentId} />
                     </div>
                   )}
                 </div>
@@ -2955,24 +2965,28 @@ export function ChatPageContent({
             </div>
           </div>
 
-          {/* Right-side panel - desktop only */}
-          <div className="hidden md:flex h-full min-h-0">
-            <RightSidePanel
-              isOpen={isRightPanelOpen}
-              activeTab={activeRightTab}
-              onClose={closeRightPanel}
-              canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
-              scheduledRun={scheduledRun}
-              artifact={conversation?.artifact}
-              projectId={conversation?.projectId}
-              conversationId={conversationId}
-              agentId={browserToolsAgentId}
-              onCreateConversationWithUrl={handleCreateConversationWithUrl}
-              isCreatingConversation={createConversationMutation.isPending}
-              initialNavigateUrl={pendingBrowserUrl}
-              onInitialNavigateComplete={handleInitialNavigateComplete}
-            />
-          </div>
+          {/* Right-side panel - desktop only. Unmounted (not just CSS-hidden)
+              on mobile so its Apps tab never hosts a second, invisible copy of
+              the app iframe alongside the inline mobile panel above. */}
+          {!isMobile && (
+            <div className="hidden md:flex h-full min-h-0">
+              <RightSidePanel
+                isOpen={isRightPanelOpen}
+                activeTab={activeRightTab}
+                onClose={closeRightPanel}
+                canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
+                scheduledRun={scheduledRun}
+                artifact={conversation?.artifact}
+                projectId={conversation?.projectId}
+                conversationId={conversationId}
+                agentId={browserToolsAgentId}
+                onCreateConversationWithUrl={handleCreateConversationWithUrl}
+                isCreatingConversation={createConversationMutation.isPending}
+                initialNavigateUrl={pendingBrowserUrl}
+                onInitialNavigateComplete={handleInitialNavigateComplete}
+              />
+            </div>
+          )}
         </div>
 
         <CustomServerRequestDialog

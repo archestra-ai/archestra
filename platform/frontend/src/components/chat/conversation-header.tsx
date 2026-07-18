@@ -43,6 +43,7 @@ interface PanelControls {
   scheduledRun: { triggerId: string; runId: string | null } | null;
   isArtifactOpen: boolean;
   isBrowserVisible: boolean;
+  isAppsVisible: boolean;
   showBrowserButton: boolean;
   isPlaywrightSetupVisible: boolean;
   onClose: () => void;
@@ -325,6 +326,18 @@ export function ConversationHeader({
                   {panel.isBrowserVisible ? "Hide Browser" : "Show Browser"}
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (panel.isAppsVisible) {
+                    panel.onClose();
+                  } else {
+                    panel.onOpenTab("apps");
+                  }
+                }}
+              >
+                <AppWindow className="h-4 w-4" />
+                {panel.isAppsVisible ? "Hide Apps" : "Show Apps"}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

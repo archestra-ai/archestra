@@ -155,7 +155,7 @@ describe("resolveEmbeddingConfig", () => {
     expect(result).toBeNull();
   });
 
-  test("returns config with placeholder key when chat API key has no secretId", async ({
+  test("returns config with a null key when chat API key has no secretId", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -180,7 +180,10 @@ describe("resolveEmbeddingConfig", () => {
     expect(result).not.toBeNull();
     expect(result?.model).toBe("text-embedding-3-small");
     expect(result?.dimensions).toBe(1536);
-    expect(result?.apiKey).toBe("unused");
+    // Keyless configs resolve to a null key (a placeholder is synthesized at the
+    // client boundary for SDKs that require one); Bedrock IAM relies on this to
+    // pick IAM auth rather than a bearer placeholder.
+    expect(result?.apiKey).toBeNull();
   });
 
   test("returns null when secret value cannot be resolved", async ({

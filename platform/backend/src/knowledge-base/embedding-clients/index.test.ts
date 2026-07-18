@@ -1,8 +1,10 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { UnsupportedEmbeddingProviderError } from "../errors";
 import {
   AzureEmbeddingError,
+  BedrockEmbeddingError,
   callEmbedding,
   GeminiEmbeddingError,
   getEmbeddingRetryDelayMs,
@@ -70,6 +72,32 @@ describe("callEmbedding dimensions handling", () => {
   });
 });
 
+describe("callEmbedding provider gating", () => {
+  // Providers with no embedding path must be rejected, never sent to the
+  // OpenAI-compatible client where they crash on a non-OpenAI response.
+  test.each([
+    "anthropic",
+    "cohere",
+    "cerebras",
+    "deepseek",
+    "groq",
+    "perplexity",
+    "xai",
+    "minimax",
+    "github-copilot",
+    "microsoft-365-copilot",
+  ] as const)("rejects %s with UnsupportedEmbeddingProviderError", async (provider) => {
+    await expect(
+      callEmbedding({
+        inputs: ["hi"],
+        model: "some-model",
+        apiKey: "k",
+        provider,
+      }),
+    ).rejects.toBeInstanceOf(UnsupportedEmbeddingProviderError);
+  });
+});
+
 describe("isRetryableEmbeddingError", () => {
   test("returns true for retryable provider status codes", () => {
     expect(
@@ -80,6 +108,9 @@ describe("isRetryableEmbeddingError", () => {
     ).toBe(true);
     expect(
       isRetryableEmbeddingError(new OpenAIEmbeddingError(503, "server")),
+    ).toBe(true);
+    expect(
+      isRetryableEmbeddingError(new BedrockEmbeddingError(503, "server")),
     ).toBe(true);
   });
 
@@ -92,6 +123,9 @@ describe("isRetryableEmbeddingError", () => {
     ).toBe(false);
     expect(
       isRetryableEmbeddingError(new OpenAIEmbeddingError(404, "missing")),
+    ).toBe(false);
+    expect(
+      isRetryableEmbeddingError(new BedrockEmbeddingError(400, "bad")),
     ).toBe(false);
   });
 

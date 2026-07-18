@@ -226,6 +226,15 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .optional(),
     response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
   }),
+  // Bedrock (Titan) embeddings are normalized to the OpenAI embedding shape.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["bedrock:embeddings"]),
+    request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
+  }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),
     request: withReadFallback(Gemini.API.GenerateContentRequestSchema),

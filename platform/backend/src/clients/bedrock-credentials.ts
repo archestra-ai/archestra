@@ -1,3 +1,7 @@
+import {
+  type AmazonBedrockProvider,
+  createAmazonBedrock,
+} from "@ai-sdk/amazon-bedrock";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import config from "@/config";
 
@@ -68,4 +72,58 @@ export function getBedrockRegion(baseUrl?: string): string {
   const url = baseUrl || config.llm.bedrock.baseUrl;
   const match = url?.match(/bedrock-runtime\.([a-z0-9-]+)\./);
   return match?.[1] || "us-east-1";
+}
+
+/**
+ * Build an Amazon Bedrock provider from the single `apiKey` string that flows
+ * through the pipeline, applying the one canonical auth-precedence order used by
+ * both chat (LLM proxy) and KB embedding:
+ *   1. No apiKey + IAM auth enabled → dynamic credential provider (IRSA / instance
+ *      profile / default AWS credential chain). A secretless key resolves to no
+ *      apiKey, so IAM must win here — never fall through to bearer with a
+ *      placeholder.
+ *   2. apiKey carries a decoded SigV4 marker → static AWS credentials.
+ *   3. Otherwise → bearer API-key auth.
+ * Keeping this in one place stops the chat and embedding paths from drifting.
+ */
+export function buildBedrockProvider(params: {
+  apiKey?: string | null;
+  baseUrl?: string | null;
+  headers?: Record<string, string>;
+  fetch?: typeof globalThis.fetch;
+}): AmazonBedrockProvider {
+  const { apiKey, baseUrl, headers, fetch } = params;
+  const baseURL = baseUrl ?? config.llm.bedrock.baseUrl ?? undefined;
+  const region = getBedrockRegion(baseURL ?? undefined);
+
+  if (!apiKey && isBedrockIamAuthEnabled()) {
+    return createAmazonBedrock({
+      region,
+      baseURL,
+      credentialProvider: getBedrockCredentialProvider(),
+      headers,
+      fetch,
+    });
+  }
+
+  const sigV4 = decodeBedrockSigV4Marker(apiKey ?? undefined);
+  if (sigV4) {
+    return createAmazonBedrock({
+      region,
+      baseURL,
+      accessKeyId: sigV4.accessKeyId,
+      secretAccessKey: sigV4.secretAccessKey,
+      sessionToken: sigV4.sessionToken,
+      headers,
+      fetch,
+    });
+  }
+
+  return createAmazonBedrock({
+    apiKey: apiKey ?? undefined,
+    region,
+    baseURL,
+    headers,
+    fetch,
+  });
 }

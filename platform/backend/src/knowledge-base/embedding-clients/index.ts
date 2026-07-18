@@ -3,59 +3,59 @@ import type {
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import { isConnectionErrno, isTimeoutErrno } from "@/utils/network-errors";
-import { AzureEmbeddingError, callAzureEmbedding } from "./azure";
-import { callGeminiEmbedding, GeminiEmbeddingError } from "./gemini";
-import { callOpenAIEmbedding, OpenAIEmbeddingError } from "./openai";
+import { UnsupportedEmbeddingProviderError } from "../errors";
+import { AzureEmbeddingError } from "./azure";
+import { BedrockEmbeddingError } from "./bedrock";
+import { GeminiEmbeddingError } from "./gemini";
+import { OpenAIEmbeddingError } from "./openai";
+import { EMBEDDING_ADAPTERS } from "./registry";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
 export type { EmbeddingApiResponse, EmbeddingInput };
 /** @public — re-exported for testability */
-export { AzureEmbeddingError, GeminiEmbeddingError, OpenAIEmbeddingError };
+export {
+  AzureEmbeddingError,
+  BedrockEmbeddingError,
+  GeminiEmbeddingError,
+  OpenAIEmbeddingError,
+};
 
 /**
  * Provider-agnostic embedding call.
- * Dispatches to the correct client based on `provider`.
- * Accepts both text strings and inline image inputs (multimodal).
- * Image inputs are only meaningful for providers/models that support multimodal
- * embedding (e.g. Gemini gemini-embedding-2-preview). OpenAI-compatible providers
- * throw on non-text inputs — images should never reach them in normal operation.
+ * Dispatches to the correct client via the embedding-adapter registry. A provider
+ * with no embedding path is rejected with `UnsupportedEmbeddingProviderError`
+ * rather than sent to the OpenAI-compatible client (spec item 2).
+ * Accepts both text strings and inline image inputs (multimodal). Image inputs are
+ * only meaningful for providers/models that support multimodal embedding (e.g.
+ * Gemini gemini-embedding-2-preview); text-only clients throw on non-text inputs.
  */
 export async function callEmbedding(params: {
   inputs: EmbeddingInput[];
   model: string;
-  apiKey: string;
+  apiKey: string | null;
   baseUrl?: string | null;
   dimensions?: number;
   provider: SupportedProvider;
 }): Promise<EmbeddingApiResponse> {
   const { provider, ...rest } = params;
 
-  if (provider === "gemini") {
-    return callGeminiEmbedding(rest);
+  const adapter = EMBEDDING_ADAPTERS[provider];
+  if (!adapter) {
+    throw new UnsupportedEmbeddingProviderError(provider, params.model);
   }
 
-  if (provider === "azure") {
-    return callAzureEmbedding(rest);
-  }
-
-  if (provider === "ollama") {
-    // Ollama serves embedding models at their fixed native dimension and does
-    // not support the OpenAI `dimensions` truncation parameter; sending it is a
-    // no-op at best and can be rejected, so drop it for Ollama.
-    return callOpenAIEmbedding({ ...rest, dimensions: undefined });
-  }
-
-  return callOpenAIEmbedding(rest);
+  return adapter.call(rest);
 }
 
 /**
  * Returns the observability discriminator for embedding calls.
- * Gemini uses its own endpoint; all other providers use the OpenAI-compatible one.
+ * Falls back to the OpenAI-compatible discriminator for a provider with no
+ * adapter (the call itself will reject, so the value is only a placeholder).
  */
 export function getEmbeddingDiscriminator(
   provider: SupportedProvider,
 ): SupportedProviderDiscriminator {
-  return provider === "gemini" ? "gemini:embeddings" : "openai:embeddings";
+  return EMBEDDING_ADAPTERS[provider]?.discriminator ?? "openai:embeddings";
 }
 
 /**
@@ -64,6 +64,7 @@ export function getEmbeddingDiscriminator(
 export function isRetryableEmbeddingError(error: unknown): boolean {
   if (
     error instanceof AzureEmbeddingError ||
+    error instanceof BedrockEmbeddingError ||
     error instanceof GeminiEmbeddingError ||
     error instanceof OpenAIEmbeddingError
   ) {

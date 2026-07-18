@@ -53386,13 +53386,14 @@
                 "properties": {
                   "name": {
                     "nullable": true,
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 32
                   },
                   "expiresIn": {
                     "nullable": true,
                     "type": "integer",
-                    "exclusiveMinimum": true,
-                    "maximum": 9007199254740991
+                    "minimum": 86400,
+                    "maximum": 31536000
                   }
                 },
                 "additionalProperties": false

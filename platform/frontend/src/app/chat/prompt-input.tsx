@@ -620,6 +620,16 @@ const PromptInputContent = ({
   // When off, the composer behaves as before: Enter is blocked while a
   // response streams and the submit button stops via the form-submit path.
   const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
+  // Context compaction normally locks the composer, but when queueing can
+  // absorb the message (queue on, live conversation, response in flight) the
+  // composer stays usable: Enter enqueues — the session-level drain already
+  // defers to compaction — and the button keeps its Stop role. Without this,
+  // mid-turn auto-compaction silently swallows Enter and drops keyboard focus,
+  // which reads as "queueing stopped working".
+  const canComposeDuringCompaction =
+    isMessageQueueEnabled && !!conversationId && isResponseInFlight;
+  const composerLocked =
+    submitDisabled || (isContextCompacting && !canComposeDuringCompaction);
   // Messages queued while a response was in-flight; sent automatically (in
   // order) by the conversation's chat session once each turn settles.
   const queuedMessages = useConversationMessageQueue(
@@ -841,7 +851,7 @@ const PromptInputContent = ({
               ref={textareaRef}
               className="px-4"
               autoFocus
-              disabled={submitDisabled || isContextCompacting}
+              disabled={composerLocked}
               // With queueing on and a live conversation, Enter during a
               // stream submits and the submit handler queues the message.
               // Otherwise (queueing off, or the new-chat composer while the
@@ -897,7 +907,7 @@ const PromptInputContent = ({
                 <PromptInputSubmit
                   className="!h-8"
                   status={submitStatus}
-                  disabled={submitDisabled || isContextCompacting}
+                  disabled={composerLocked}
                   onClick={(event) => {
                     // While a response is in-flight the button shows Stop; a
                     // click stops the stream instead of submitting the form

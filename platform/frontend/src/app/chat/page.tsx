@@ -1346,7 +1346,9 @@ export function ChatPageContent({
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
   const handleCompactConversation = useCallback(async () => {
-    if (!conversationId || isReadOnlyConversation) {
+    // The compaction guard matters now that the composer stays usable during
+    // compaction when queueing is on — a second /compact must not re-enter.
+    if (!conversationId || isReadOnlyConversation || isContextCompacting) {
       return;
     }
 
@@ -1433,6 +1435,7 @@ export function ChatPageContent({
   }, [
     compactConversationMutation,
     conversationId,
+    isContextCompacting,
     isReadOnlyConversation,
     recordContextCompaction,
     syncPersistedMessageMetadata,

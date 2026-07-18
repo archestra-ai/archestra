@@ -354,9 +354,16 @@ function SidebarCircleToggle({
           className={cn(
             "group/circle-toggle hidden md:flex items-center justify-center",
             "fixed top-1/2 z-30 h-10 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
-            "bg-background border cursor-pointer",
-            "transition-[left,background-color] duration-200 ease-in-out",
-            "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1",
+            "border shadow-sm cursor-pointer text-muted-foreground",
+            // Offset fill while collapsed so the expand affordance stands out;
+            // mixed opaquely so the sidebar border doesn't show through, with a
+            // stronger mix on dark themes where a subtle one vanishes on black.
+            // Blend with the background when the sidebar is already open.
+            isCollapsed
+              ? "bg-[color-mix(in_oklab,var(--muted-foreground)_20%,var(--background))] dark:bg-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--background))] text-foreground"
+              : "bg-background",
+            "transition-[left,background-color,color] duration-200 ease-in-out",
+            "hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1",
             className,
           )}
           {...props}

@@ -32448,6 +32448,7 @@ export type GetInteractionsResponses = {
                     object: 'embedding';
                     embedding: Array<number>;
                     index: number;
+                    truncatedFrom?: number;
                 }>;
                 model: string;
                 usage: {
@@ -32555,6 +32556,7 @@ export type GetInteractionsResponses = {
                     object: 'embedding';
                     embedding: Array<number>;
                     index: number;
+                    truncatedFrom?: number;
                 }>;
                 model: string;
                 usage: {
@@ -32662,6 +32664,7 @@ export type GetInteractionsResponses = {
                     object: 'embedding';
                     embedding: Array<number>;
                     index: number;
+                    truncatedFrom?: number;
                 }>;
                 model: string;
                 usage: {
@@ -36996,6 +36999,7 @@ export type GetInteractionResponses = {
                 object: 'embedding';
                 embedding: Array<number>;
                 index: number;
+                truncatedFrom?: number;
             }>;
             model: string;
             usage: {
@@ -37103,6 +37107,7 @@ export type GetInteractionResponses = {
                 object: 'embedding';
                 embedding: Array<number>;
                 index: number;
+                truncatedFrom?: number;
             }>;
             model: string;
             usage: {
@@ -37210,6 +37215,7 @@ export type GetInteractionResponses = {
                 object: 'embedding';
                 embedding: Array<number>;
                 index: number;
+                truncatedFrom?: number;
             }>;
             model: string;
             usage: {

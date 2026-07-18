@@ -503,6 +503,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const result = await knowledgeSettingsService.validateEmbeddingConfig({
           keyId: effectiveEmbeddingKeyId,
           model: effectiveEmbeddingModel,
+          organizationId,
         });
         if (!result.ok) {
           throw new ApiError(
@@ -524,6 +525,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const result = await knowledgeSettingsService.validateRerankerConfig({
           keyId: effectiveRerankerKeyId,
           model: effectiveRerankerModel,
+          organizationId,
         });
         if (!result.ok) {
           throw new ApiError(
@@ -605,10 +607,44 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body }, reply) => {
+    async ({ body, organizationId }, reply) => {
       const result = await knowledgeSettingsService.validateEmbeddingConfig({
         keyId: body.embeddingChatApiKeyId,
         model: body.embeddingModel,
+        organizationId,
+      });
+      return reply.send({
+        success: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/organization/knowledge-settings/test-reranker",
+    {
+      schema: {
+        operationId: RouteId.TestRerankerConnection,
+        description:
+          "Test the reranker connection with a sample structured-output call",
+        tags: ["Organization"],
+        body: z.object({
+          rerankerChatApiKeyId: z.string().uuid(),
+          rerankerModel: z.string().min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            error: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async ({ body, organizationId }, reply) => {
+      const result = await knowledgeSettingsService.validateRerankerConfig({
+        keyId: body.rerankerChatApiKeyId,
+        model: body.rerankerModel,
+        organizationId,
       });
       return reply.send({
         success: result.ok,

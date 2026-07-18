@@ -33,3 +33,54 @@ export function knowledgeSettingsFieldError(
   }
   return null;
 }
+
+/** The connection-check state shown per configuration section. */
+export type ConnectionStatus = "untested" | "testing" | "connected" | "failed";
+
+export interface SectionStatus {
+  status: ConnectionStatus;
+  error: string | null;
+}
+
+/**
+ * Derive each section's connection status from a save's outcome. Save validates
+ * the embedding first, then the reranker, so an embedding failure means the
+ * reranker was never reached, and a reranker failure means the embedding passed.
+ * A non-field error (e.g. a 500) leaves both untested.
+ */
+export function saveResultStatuses(params: {
+  error: unknown;
+  embeddingConfigured: boolean;
+  rerankerConfigured: boolean;
+}): { embedding: SectionStatus; reranker: SectionStatus } {
+  const { error, embeddingConfigured, rerankerConfigured } = params;
+  const connectedIfConfigured = (configured: boolean): SectionStatus => ({
+    status: configured ? "connected" : "untested",
+    error: null,
+  });
+
+  if (!error) {
+    return {
+      embedding: connectedIfConfigured(embeddingConfigured),
+      reranker: connectedIfConfigured(rerankerConfigured),
+    };
+  }
+
+  const fieldError = knowledgeSettingsFieldError(error);
+  if (fieldError?.field === "embedding") {
+    return {
+      embedding: { status: "failed", error: fieldError.message },
+      reranker: { status: "untested", error: null },
+    };
+  }
+  if (fieldError?.field === "reranker") {
+    return {
+      embedding: connectedIfConfigured(embeddingConfigured),
+      reranker: { status: "failed", error: fieldError.message },
+    };
+  }
+  return {
+    embedding: { status: "untested", error: null },
+    reranker: { status: "untested", error: null },
+  };
+}

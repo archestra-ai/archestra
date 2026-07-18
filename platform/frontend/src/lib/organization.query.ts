@@ -631,7 +631,9 @@ export function useDropEmbeddingConfig() {
 }
 
 /**
- * Test embedding connection by embedding a sample text
+ * Test the embedding connection by embedding a sample text. Returns the result
+ * (never throws) so the caller can drive a per-section status indicator; a
+ * transport error still toasts.
  */
 export function useTestEmbeddingConnection() {
   return useMutation({
@@ -651,15 +653,28 @@ export function useTestEmbeddingConnection() {
 
       return data ?? { success: false, error: "No response" };
     },
-    onSuccess: (result) => {
-      if (!result) return;
-      if (result.success) {
-        toast.success("Connection test successful");
-      } else {
-        toast.error("Connection test failed", {
-          description: result.error,
-        });
+  });
+}
+
+/**
+ * Test the reranker connection with a sample structured-output call. Same
+ * contract as the embedding test — returns the result for a per-section status.
+ */
+export function useTestRerankerConnection() {
+  return useMutation({
+    mutationFn: async (
+      params: NonNullable<archestraApiTypes.TestRerankerConnectionData["body"]>,
+    ) => {
+      const { data, error } = await archestraApiSdk.testRerankerConnection({
+        body: params,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return { success: false, error: "Request failed" };
       }
+
+      return data ?? { success: false, error: "No response" };
     },
   });
 }

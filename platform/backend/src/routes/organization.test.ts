@@ -998,4 +998,55 @@ describe("organization routes", () => {
       );
     });
   });
+
+  describe("POST /api/organization/knowledge-settings/test-reranker", () => {
+    test("returns success and maps the body to the service (scoped to the org)", async () => {
+      const validateSpy = vi
+        .spyOn(knowledgeSettingsService, "validateRerankerConfig")
+        .mockResolvedValue({ ok: true });
+      const keyId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-reranker",
+        payload: {
+          rerankerChatApiKeyId: keyId,
+          rerankerModel: "claude-haiku",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+      expect(validateSpy).toHaveBeenCalledWith({
+        keyId,
+        model: "claude-haiku",
+        organizationId: expect.any(String),
+      });
+    });
+
+    test("returns the failure reason when the reranker validation fails", async () => {
+      vi.spyOn(
+        knowledgeSettingsService,
+        "validateRerankerConfig",
+      ).mockResolvedValue({
+        ok: false,
+        error: "Reranker could not be reached.",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-reranker",
+        payload: {
+          rerankerChatApiKeyId: crypto.randomUUID(),
+          rerankerModel: "claude-haiku",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        success: false,
+        error: "Reranker could not be reached.",
+      });
+    });
+  });
 });

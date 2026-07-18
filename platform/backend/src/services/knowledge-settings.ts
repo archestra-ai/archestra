@@ -23,11 +23,15 @@ class KnowledgeSettingsService {
   async validateEmbeddingConfig(params: {
     keyId: string;
     model: string;
+    organizationId: string;
   }): Promise<KnowledgeConfigValidationResult> {
-    const { keyId, model } = params;
+    const { keyId, model, organizationId } = params;
 
     const chatApiKey = await LlmProviderApiKeyModel.findById(keyId);
-    if (!chatApiKey) {
+    // Scope the key to the caller's org: the id arrives from the request body,
+    // so an unscoped lookup would let a caller probe (and spend) another org's
+    // credential by id.
+    if (!chatApiKey || chatApiKey.organizationId !== organizationId) {
       return { ok: false, error: "The embedding API key could not be found." };
     }
 
@@ -36,7 +40,7 @@ class KnowledgeSettingsService {
       return {
         ok: false,
         error:
-          "The embedding API key could not be resolved. Reconfigure it in Settings → Knowledge.",
+          "The embedding API key could not be resolved. Reconfigure it.",
       };
     }
 
@@ -73,18 +77,23 @@ class KnowledgeSettingsService {
         { err: error },
         "[KnowledgeSettings] Embedding validation failed",
       );
-      return { ok: false, error: knowledgeValidationErrorMessage(error) };
+      return {
+        ok: false,
+        error: `Failed to verify embedding model. Raw error: ${knowledgeValidationErrorMessage(error)}`,
+      };
     }
   }
 
   async validateRerankerConfig(params: {
     keyId: string;
     model: string;
+    organizationId: string;
   }): Promise<KnowledgeConfigValidationResult> {
-    const { keyId, model } = params;
+    const { keyId, model, organizationId } = params;
 
     const chatApiKey = await LlmProviderApiKeyModel.findById(keyId);
-    if (!chatApiKey) {
+    // Scope the key to the caller's org (see validateEmbeddingConfig).
+    if (!chatApiKey || chatApiKey.organizationId !== organizationId) {
       return { ok: false, error: "The reranker API key could not be found." };
     }
 
@@ -93,7 +102,7 @@ class KnowledgeSettingsService {
       return {
         ok: false,
         error:
-          "The reranker API key could not be resolved. Reconfigure it in Settings → Knowledge.",
+          "The reranker API key could not be resolved. Reconfigure it.",
       };
     }
 
@@ -122,7 +131,10 @@ class KnowledgeSettingsService {
         { err: error },
         "[KnowledgeSettings] Reranker validation failed",
       );
-      return { ok: false, error: knowledgeValidationErrorMessage(error) };
+      return {
+        ok: false,
+        error: `Failed to verify reranker model. Raw error: ${knowledgeValidationErrorMessage(error)}`,
+      };
     }
   }
 }

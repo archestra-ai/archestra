@@ -11,7 +11,12 @@ import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { environmentKeys } from "./environment.query";
-import { handleApiError, throwOnApiError } from "./utils";
+import {
+  getApiErrorInternalCode,
+  handleApiError,
+  throwOnApiError,
+  toApiError,
+} from "./utils";
 
 export const appearanceKeys = {
   all: ["appearance"] as const,
@@ -577,8 +582,17 @@ export function useUpdateKnowledgeSettings(
         await archestraApiSdk.updateKnowledgeSettings({ body: data });
 
       if (error) {
-        toast.error(onErrorMessage);
-        return null;
+        // Field-validation failures carry an `internal_code` (which of
+        // embedding/reranker failed) and are shown inline per-field by the page,
+        // so don't also toast them; every other error toasts generically. The
+        // code is preserved on the thrown error for the page to read.
+        const internalCode = getApiErrorInternalCode(error);
+        if (!internalCode) {
+          toast.error(onErrorMessage);
+        }
+        const apiError = toApiError(error) as Error & { internalCode?: string };
+        apiError.internalCode = internalCode;
+        throw apiError;
       }
 
       return updatedOrganization;

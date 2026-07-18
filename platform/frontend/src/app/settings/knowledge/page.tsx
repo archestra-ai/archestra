@@ -2,6 +2,7 @@
 
 import { isProviderApiKeyOptional } from "@archestra/shared";
 import {
+  AlertCircle,
   ArrowUpRight,
   Info,
   Loader2,
@@ -63,6 +64,7 @@ import {
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+import { knowledgeSettingsFieldError } from "./knowledge-validation";
 
 const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
@@ -549,14 +551,29 @@ function KnowledgeSettingsContent() {
     hasSelectableKeys: isInitialLoading ? true : hasApiKeys,
   });
 
-  const handleSave = async () => {
-    await updateKnowledgeSettings.mutateAsync({
+  const handleSave = () => {
+    // Use mutate (not mutateAsync) so a validation failure lands in
+    // updateKnowledgeSettings.error for per-field display without an unhandled
+    // rejection.
+    updateKnowledgeSettings.mutate({
       embeddingModel: embeddingModel ?? undefined,
       embeddingChatApiKeyId: embeddingChatApiKeyId ?? null,
       rerankerChatApiKeyId: rerankerChatApiKeyId ?? null,
       rerankerModel: rerankerModel ?? null,
     });
   };
+
+  // A save-time validation failure, mapped to the field it belongs to.
+  const validationError = knowledgeSettingsFieldError(
+    updateKnowledgeSettings.error,
+  );
+  const fieldErrorAlert = (field: "embedding" | "reranker") =>
+    validationError?.field === field ? (
+      <p className="flex items-start gap-2 text-sm text-destructive sm:pl-28">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>{validationError.message}</span>
+      </p>
+    ) : null;
 
   const handleCancel = () => {
     setEmbeddingModel(serverEmbeddingModel);
@@ -676,6 +693,7 @@ function KnowledgeSettingsContent() {
                         </span>
                       </p>
                     )}
+                  {fieldErrorAlert("embedding")}
                   <DropEmbeddingConfigDialog
                     open={showDropDialog}
                     onOpenChange={setShowDropDialog}
@@ -800,11 +818,19 @@ function KnowledgeSettingsContent() {
                       </Button>
                     </div>
                   )}
+                  {fieldErrorAlert("reranker")}
                 </div>
               )}
             </WithPermissions>
           </CardContent>
         </Card>
+
+        {updateKnowledgeSettings.isPending && (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Validating embedding and reranker configuration…
+          </p>
+        )}
 
         <SettingsSaveBar
           hasChanges={hasChanges}

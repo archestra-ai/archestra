@@ -442,40 +442,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId, body }, reply) => {
       const currentOrg = await OrganizationModel.getById(organizationId);
 
-      // Embedding model is locked once both key and model have been saved
-      const isEmbeddingConfigLocked =
-        !!currentOrg?.embeddingChatApiKeyId && !!currentOrg?.embeddingModel;
-
-      if (body.embeddingModel) {
-        if (
-          isEmbeddingConfigLocked &&
-          body.embeddingModel !== currentOrg.embeddingModel
-        ) {
-          throw new ApiError(
-            400,
-            "Embedding model cannot be changed once configured. Changing models requires re-embedding all documents.",
-          );
-        }
-      }
-
-      if (
-        isEmbeddingConfigLocked &&
-        body.embeddingChatApiKeyId !== undefined &&
-        body.embeddingChatApiKeyId !== currentOrg.embeddingChatApiKeyId
-      ) {
-        throw new ApiError(
-          400,
-          "Embedding API key cannot be changed once configured. Drop the embedding configuration before selecting a different key.",
-        );
-      }
-
-      // Effective (post-save) embedding + reranker pairs. Embedding uses `??`
-      // (its clearing path is the drop-embedding route); reranker distinguishes
-      // "not changing" (undefined) from "clearing" (null) so it can be emptied.
+      // Effective (post-save) embedding + reranker pairs. Distinguish "not
+      // changing" (undefined) from "clearing" (null) so a cleared field is seen
+      // as cleared, not masked back to its current value.
       const effectiveEmbeddingKeyId =
-        body.embeddingChatApiKeyId ?? currentOrg?.embeddingChatApiKeyId ?? null;
+        body.embeddingChatApiKeyId !== undefined
+          ? body.embeddingChatApiKeyId
+          : (currentOrg?.embeddingChatApiKeyId ?? null);
       const effectiveEmbeddingModel =
-        body.embeddingModel ?? currentOrg?.embeddingModel ?? null;
+        body.embeddingModel !== undefined
+          ? body.embeddingModel
+          : (currentOrg?.embeddingModel ?? null);
       const effectiveRerankerKeyId =
         body.rerankerChatApiKeyId !== undefined
           ? body.rerankerChatApiKeyId
@@ -484,6 +461,37 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.rerankerModel !== undefined
           ? body.rerankerModel
           : (currentOrg?.rerankerModel ?? null);
+
+      // Embedding is locked once fully configured: changing OR clearing it (any
+      // difference from the current pair, incl. a null clear) must go through the
+      // drop-embedding route, which also deletes the now-stale vectors and resets
+      // connector checkpoints.
+      const isEmbeddingConfigLocked =
+        !!currentOrg?.embeddingChatApiKeyId && !!currentOrg?.embeddingModel;
+      if (
+        isEmbeddingConfigLocked &&
+        (effectiveEmbeddingKeyId !== currentOrg?.embeddingChatApiKeyId ||
+          effectiveEmbeddingModel !== currentOrg?.embeddingModel)
+      ) {
+        throw new ApiError(
+          400,
+          "Embedding configuration cannot be changed once set. Drop the existing configuration to reconfigure — all documents will need to be re-embedded.",
+          "embedding_validation_failed",
+        );
+      }
+
+      // Embedding is mandatory: a half-configured pair (a key with no model, or a
+      // model with no key) is invalid and blocks save. To clear the embedding
+      // entirely, use the drop-embedding route.
+      if (
+        Boolean(effectiveEmbeddingKeyId) !== Boolean(effectiveEmbeddingModel)
+      ) {
+        throw new ApiError(
+          400,
+          "Both an embedding API key and model are required. To clear the embedding configuration, use Drop.",
+          "embedding_validation_failed",
+        );
+      }
 
       // Validate BOTH configurations by actually exercising them (a real embedding
       // call, a real structured-output reranker call) — not just checking fields

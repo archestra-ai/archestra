@@ -521,7 +521,7 @@ describe("organization routes", () => {
       });
     });
 
-    test("allows clearing embedding model with null", async ({
+    test("rejects clearing the embedding model via PATCH once locked (must use Drop)", async ({
       makeSecret,
     }) => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
@@ -565,6 +565,8 @@ describe("organization routes", () => {
 
       expect(setResponse.statusCode).toBe(200);
 
+      // Clearing the model on a locked config would leave a key with no model and
+      // orphan the ingested vectors — it must go through the drop-embedding route.
       const clearResponse = await app.inject({
         method: "PATCH",
         url: "/api/organization/knowledge-settings",
@@ -573,8 +575,37 @@ describe("organization routes", () => {
         },
       });
 
-      expect(clearResponse.statusCode).toBe(200);
-      expect(clearResponse.json().embeddingModel).toBeNull();
+      expect(clearResponse.statusCode).toBe(400);
+      expect(clearResponse.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("rejects a half-configured embedding (key with no model)", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      // A fresh org: selecting a key but no model must not persist a half-config
+      // (the bug: an "empty" embedding configuration could be saved).
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { embeddingChatApiKeyId: apiKey.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
     });
 
     test("rejects embedding models that are missing configured dimensions", async ({
@@ -739,7 +770,10 @@ describe("organization routes", () => {
 
       expect(changeKeyResponse.statusCode).toBe(400);
       expect(changeKeyResponse.json().error.message).toContain(
-        "Embedding API key cannot be changed once configured",
+        "cannot be changed once set",
+      );
+      expect(changeKeyResponse.json().error.internal_code).toBe(
+        "embedding_validation_failed",
       );
     });
 

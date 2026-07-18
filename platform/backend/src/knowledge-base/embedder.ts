@@ -9,7 +9,7 @@ import {
   getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
 } from "./embedding-clients";
-import { toKnowledgeBaseUserMessage } from "./errors";
+import { normalizeEmbeddingError, toKnowledgeBaseUserMessage } from "./errors";
 import {
   buildEmbeddingInteraction,
   withKbObservability,
@@ -247,7 +247,10 @@ class EmbeddingService {
           embeddingResults.set(batch[j].chunkId, response.data[j].embedding);
         }
       } catch (error) {
-        const message = embeddingFailureMessage(error);
+        const message = embeddingFailureMessage(error, {
+          provider: ctx.provider,
+          model: ctx.model,
+        });
         firstErrorMessage ??= message;
         logger.error(
           {
@@ -274,7 +277,10 @@ class EmbeddingService {
       } catch (error) {
         // Persistence failed (e.g. a pgvector dimension error on write). Fail the
         // affected documents and surface the cause rather than crashing.
-        firstErrorMessage ??= embeddingFailureMessage(error);
+        firstErrorMessage ??= embeddingFailureMessage(error, {
+          provider: ctx.provider,
+          model: ctx.model,
+        });
         logger.error(
           { runId: connectorRunId, error: firstErrorMessage },
           "[Embedder] Failed to persist embeddings",
@@ -378,12 +384,18 @@ export const embeddingService = new EmbeddingService();
 // ===== Internal helpers =====
 
 /**
- * A cause-specific, user-facing message for an embedding failure: the typed KB
- * message when available, otherwise the raw error text.
+ * A cause-specific, user-facing message for an embedding failure. When the
+ * embedding context (provider/model) is known, a raw provider/network error is
+ * first normalized into the typed taxonomy — the same messages the query path
+ * surfaces — so connector runs never expose opaque SDK/SQL text.
  */
-function embeddingFailureMessage(error: unknown): string {
+function embeddingFailureMessage(
+  error: unknown,
+  ctx?: { provider: string; model: string },
+): string {
+  const normalized = ctx ? normalizeEmbeddingError(error, ctx) : error;
   return (
-    toKnowledgeBaseUserMessage(error) ??
+    toKnowledgeBaseUserMessage(normalized) ??
     (error instanceof Error ? error.message : String(error))
   );
 }

@@ -310,12 +310,16 @@ export const queryService = new QueryService();
 
 /**
  * Decide whether an empty search result reflects a dimension mismatch rather than
- * a genuine no-match. Returns the ingested dimensions when they conflict with the
+ * a genuine no-match. Returns the ingested dimensions when NONE match the
  * configured one, or `null` when there is no conflict — either because no
  * documents are ingested (a legitimate empty result) or because documents exist
- * at the configured dimension (also a legitimate no-match). Rejecting whenever the
- * populated set contains any dimension other than the configured one also covers
- * the mixed case (one connector at 1024, another at 1536).
+ * at the configured dimension (also a legitimate no-match).
+ *
+ * This runs only when the search returned nothing, so it catches the whole-corpus
+ * mismatch (everything ingested at another dimension). A mixed corpus where some
+ * connectors match the configured dimension and others don't is NOT fully covered
+ * — those results suppress this check — but that requires connectors ingested at
+ * different dimensions, which the embedding-config lock normally prevents.
  *
  * @public — pure decision helper extracted for unit testing (pgvector column
  * behavior is not exercisable in the PGlite test DB); called within this module.

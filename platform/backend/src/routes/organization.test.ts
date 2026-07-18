@@ -7,6 +7,7 @@ import ModelModel from "@/models/model";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -509,6 +510,17 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/knowledge-settings", () => {
+    beforeEach(() => {
+      // Save-time validation issues a real embedding call; mock the network so
+      // the validation logic runs without a live provider.
+      vi.spyOn(embeddingClients, "callEmbedding").mockResolvedValue({
+        object: "list",
+        data: [{ object: "embedding", embedding: [0.1, 0.2, 0.3], index: 0 }],
+        model: "test",
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      });
+    });
+
     test("allows clearing embedding model with null", async ({
       makeSecret,
     }) => {
@@ -728,6 +740,119 @@ describe("organization routes", () => {
       expect(changeKeyResponse.statusCode).toBe(400);
       expect(changeKeyResponse.json().error.message).toContain(
         "Embedding API key cannot be changed once configured",
+      );
+    });
+
+    test("blocks save when the embedding validation call fails", async ({
+      makeSecret,
+    }) => {
+      vi.spyOn(embeddingClients, "callEmbedding").mockRejectedValue(
+        new Error("provider down"),
+      );
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-embedding-001",
+        provider: "gemini",
+        modelId: "gemini-embedding-001",
+        description: "Gemini Embedding 001",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        embeddingDimensions: 3072,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: model.id, modelId: model.modelId }],
+        "gemini",
+      );
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingChatApiKeyId: apiKey.id,
+          embeddingModel: model.modelId,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("validates the reranker on save and blocks an invalid one", async ({
+      makeSecret,
+    }) => {
+      vi.spyOn(
+        knowledgeSettingsService,
+        "validateRerankerConfig",
+      ).mockResolvedValue({
+        ok: false,
+        error: "Reranker could not be reached.",
+      });
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const rerankerKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Reranker Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          rerankerChatApiKeyId: rerankerKey.id,
+          rerankerModel: "gemini-1.5-flash",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "reranker_validation_failed",
+      );
+      expect(response.json().error.message).toContain(
+        "Reranker could not be reached.",
+      );
+    });
+
+    test("rejects a half-configured reranker (key without model)", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const rerankerKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Reranker Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { rerankerChatApiKeyId: rerankerKey.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "reranker_validation_failed",
       );
     });
   });

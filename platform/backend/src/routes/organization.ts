@@ -1,7 +1,6 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
-  addNomicTaskPrefix,
   isModelSelectionComplete,
   providerRequiresPerUserCredential,
   RouteId,
@@ -15,9 +14,6 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { callEmbedding } from "@/knowledge-base/embedding-clients";
-import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
-import logger from "@/logging";
 import {
   AgentModel,
   InteractionModel,
@@ -28,7 +24,6 @@ import {
   LlmProviderApiKeyModel,
   McpToolCallModel,
   MemberModel,
-  ModelModel,
   OrganizationModel,
   TeamModel,
   ToolModel,
@@ -36,6 +31,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
+import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -473,45 +469,59 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Validate embedding API key exists
-      if (body.embeddingChatApiKeyId) {
-        const chatApiKey = await LlmProviderApiKeyModel.findById(
-          body.embeddingChatApiKeyId,
-        );
-        if (!chatApiKey) {
-          throw new ApiError(404, "Embedding API key not found");
-        }
-      }
-
-      const shouldValidateEmbeddingSelection =
-        body.embeddingChatApiKeyId !== undefined ||
-        body.embeddingModel !== undefined;
+      // Effective (post-save) embedding + reranker pairs. Embedding uses `??`
+      // (its clearing path is the drop-embedding route); reranker distinguishes
+      // "not changing" (undefined) from "clearing" (null) so it can be emptied.
       const effectiveEmbeddingKeyId =
         body.embeddingChatApiKeyId ?? currentOrg?.embeddingChatApiKeyId ?? null;
       const effectiveEmbeddingModel =
         body.embeddingModel ?? currentOrg?.embeddingModel ?? null;
+      const effectiveRerankerKeyId =
+        body.rerankerChatApiKeyId !== undefined
+          ? body.rerankerChatApiKeyId
+          : (currentOrg?.rerankerChatApiKeyId ?? null);
+      const effectiveRerankerModel =
+        body.rerankerModel !== undefined
+          ? body.rerankerModel
+          : (currentOrg?.rerankerModel ?? null);
 
-      if (
-        shouldValidateEmbeddingSelection &&
-        effectiveEmbeddingKeyId &&
-        effectiveEmbeddingModel
-      ) {
-        const resolved = await resolveApiKeyFromChatApiKey(
-          effectiveEmbeddingKeyId,
-        );
-        if (!resolved) {
-          throw new ApiError(400, "Could not resolve embedding API key");
-        }
-
-        const model = await ModelModel.findByProviderAndModelId(
-          resolved.provider,
-          effectiveEmbeddingModel,
-        );
-
-        if (model?.embeddingDimensions === null || !model) {
+      // Validate BOTH configurations by actually exercising them (a real embedding
+      // call, a real structured-output reranker call) — not just checking fields
+      // are filled. Embedding is validated when set; the reranker is optional but
+      // must be valid when set, and a half-configured reranker blocks save. The
+      // failing field is carried in the ApiError's internal_code so the UI can
+      // show it per-field.
+      if (effectiveEmbeddingKeyId && effectiveEmbeddingModel) {
+        const result = await knowledgeSettingsService.validateEmbeddingConfig({
+          keyId: effectiveEmbeddingKeyId,
+          model: effectiveEmbeddingModel,
+        });
+        if (!result.ok) {
           throw new ApiError(
             400,
-            "Embedding model must be marked as an embedding model with configured dimensions in LLM Providers > Models.",
+            result.error ?? "Embedding validation failed.",
+            "embedding_validation_failed",
+          );
+        }
+      }
+
+      if (Boolean(effectiveRerankerKeyId) !== Boolean(effectiveRerankerModel)) {
+        throw new ApiError(
+          400,
+          "Both a reranker API key and model are required, or clear both.",
+          "reranker_validation_failed",
+        );
+      }
+      if (effectiveRerankerKeyId && effectiveRerankerModel) {
+        const result = await knowledgeSettingsService.validateRerankerConfig({
+          keyId: effectiveRerankerKeyId,
+          model: effectiveRerankerModel,
+        });
+        if (!result.ok) {
+          throw new ApiError(
+            400,
+            result.error ?? "Reranker validation failed.",
+            "reranker_validation_failed",
           );
         }
       }
@@ -588,69 +598,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body }, reply) => {
-      // Validate API key exists
-      const chatApiKey = await LlmProviderApiKeyModel.findById(
-        body.embeddingChatApiKeyId,
-      );
-      if (!chatApiKey) {
-        throw new ApiError(404, "API key not found");
-      }
-
-      // Resolve the actual secret
-      const resolved = await resolveApiKeyFromChatApiKey(
-        body.embeddingChatApiKeyId,
-      );
-      if (!resolved) {
-        return reply.send({
-          success: false,
-          error: "Could not resolve API key secret",
-        });
-      }
-
-      const model = await ModelModel.findByProviderAndModelId(
-        resolved.provider,
-        body.embeddingModel,
-      );
-      if (!model?.embeddingDimensions) {
-        return reply.send({
-          success: false,
-          error:
-            "Embedding model must be marked as an embedding model with configured dimensions in LLM Providers > Models.",
-        });
-      }
-
-      try {
-        const response = await callEmbedding({
-          inputs: [
-            addNomicTaskPrefix(
-              body.embeddingModel,
-              "hello world",
-              "search_document",
-            ),
-          ],
-          model: body.embeddingModel,
-          apiKey: resolved.apiKey,
-          baseUrl: resolved.baseUrl,
-          dimensions: model.embeddingDimensions,
-          provider: resolved.provider,
-        });
-
-        if (response.data.length > 0) {
-          return reply.send({ success: true });
-        }
-
-        return reply.send({
-          success: false,
-          error: "No embedding data returned",
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        logger.error(
-          { err },
-          "[testEmbeddingConnection] embedding call failed",
-        );
-        return reply.send({ success: false, error: message });
-      }
+      const result = await knowledgeSettingsService.validateEmbeddingConfig({
+        keyId: body.embeddingChatApiKeyId,
+        model: body.embeddingModel,
+      });
+      return reply.send({
+        success: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
     },
   );
 

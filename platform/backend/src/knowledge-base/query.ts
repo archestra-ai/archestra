@@ -7,6 +7,10 @@ import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
 import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
+  EmbeddingDimensionMismatchError,
+  normalizeEmbeddingError,
+} from "./errors";
+import {
   buildEmbeddingInteraction,
   withKbObservability,
 } from "./kb-interaction";
@@ -98,6 +102,27 @@ class QueryService {
       k: 50,
     });
 
+    // Empty results can mean "no matching documents" (normal) OR that the
+    // documents were ingested at a different embedding dimension than the one now
+    // configured — in which case the search targeted an empty per-dimension column
+    // and silently found nothing. Distinguish them so the latter surfaces as an
+    // actionable error instead of a puzzling empty result.
+    if (merged.length === 0) {
+      const populated =
+        await KbChunkModel.getPopulatedEmbeddingDimensions(connectorIds);
+      const mismatch = findEmbeddingDimensionMismatch(
+        populated,
+        embeddingConfig.dimensions,
+      );
+      if (mismatch) {
+        throw new EmbeddingDimensionMismatchError(
+          embeddingConfig.model,
+          embeddingConfig.dimensions,
+          mismatch,
+        );
+      }
+    }
+
     let topResults = merged.slice(0, overFetchLimit);
 
     const preRerankCount = topResults.length;
@@ -161,37 +186,47 @@ class QueryService {
       "[QueryService] Searching expanded query",
     );
 
-    const embeddingResponse = await withKbObservability({
-      operationName: "embedding",
-      provider: embeddingConfig.provider,
-      model: embeddingConfig.model,
-      source: "knowledge:embedding",
-      type: getEmbeddingDiscriminator(embeddingConfig.provider),
-      callback: () =>
-        callEmbedding({
-          inputs: [
-            addNomicTaskPrefix(
-              embeddingConfig.model,
-              queryText,
-              "search_query",
-            ),
-          ],
-          model: embeddingConfig.model,
-          apiKey: embeddingConfig.apiKey,
-          baseUrl: embeddingConfig.baseUrl,
-          dimensions: embeddingConfig.dimensions,
-          provider: embeddingConfig.provider,
-        }),
-      buildInteraction: (
-        response: Parameters<typeof buildEmbeddingInteraction>[0]["response"],
-      ) =>
-        buildEmbeddingInteraction({
-          model: embeddingConfig.model,
-          input: queryText,
-          dimensions: embeddingConfig.dimensions,
-          response,
-        }),
-    });
+    let embeddingResponse: Awaited<ReturnType<typeof callEmbedding>>;
+    try {
+      embeddingResponse = await withKbObservability({
+        operationName: "embedding",
+        provider: embeddingConfig.provider,
+        model: embeddingConfig.model,
+        source: "knowledge:embedding",
+        type: getEmbeddingDiscriminator(embeddingConfig.provider),
+        callback: () =>
+          callEmbedding({
+            inputs: [
+              addNomicTaskPrefix(
+                embeddingConfig.model,
+                queryText,
+                "search_query",
+              ),
+            ],
+            model: embeddingConfig.model,
+            apiKey: embeddingConfig.apiKey,
+            baseUrl: embeddingConfig.baseUrl,
+            dimensions: embeddingConfig.dimensions,
+            provider: embeddingConfig.provider,
+          }),
+        buildInteraction: (
+          response: Parameters<typeof buildEmbeddingInteraction>[0]["response"],
+        ) =>
+          buildEmbeddingInteraction({
+            model: embeddingConfig.model,
+            input: queryText,
+            dimensions: embeddingConfig.dimensions,
+            response,
+          }),
+      });
+    } catch (error) {
+      // Map the raw provider/network failure into a typed KB error naming the
+      // provider/model, so the query handler can present an actionable message.
+      throw normalizeEmbeddingError(error, {
+        provider: embeddingConfig.provider,
+        model: embeddingConfig.model,
+      });
+    }
 
     if (!embeddingResponse.data[0]?.embedding) {
       logger.warn(
@@ -272,3 +307,24 @@ class QueryService {
 }
 
 export const queryService = new QueryService();
+
+/**
+ * Decide whether an empty search result reflects a dimension mismatch rather than
+ * a genuine no-match. Returns the ingested dimensions when they conflict with the
+ * configured one, or `null` when there is no conflict — either because no
+ * documents are ingested (a legitimate empty result) or because documents exist
+ * at the configured dimension (also a legitimate no-match). Rejecting whenever the
+ * populated set contains any dimension other than the configured one also covers
+ * the mixed case (one connector at 1024, another at 1536).
+ *
+ * @public — pure decision helper extracted for unit testing (pgvector column
+ * behavior is not exercisable in the PGlite test DB); called within this module.
+ */
+export function findEmbeddingDimensionMismatch(
+  populatedDimensions: Set<number>,
+  configuredDimension: number,
+): number[] | null {
+  if (populatedDimensions.size === 0) return null;
+  if (populatedDimensions.has(configuredDimension)) return null;
+  return [...populatedDimensions];
+}

@@ -54,17 +54,22 @@ export async function callOpenAIEmbedding(params: {
         : {}),
     });
 
+    // Guard every field: an endpoint that speaks a non-OpenAI dialect can return
+    // a body without `data`/`usage`. Never dereference blindly (the historical
+    // `response.data.map` crash) — return what is present and let the dispatcher's
+    // central validation raise a typed, actionable error.
+    const data = Array.isArray(response.data) ? response.data : [];
     return {
-      object: response.object,
-      data: response.data.map((item) => ({
+      object: response.object ?? "list",
+      data: data.map((item) => ({
         object: item.object,
         embedding: item.embedding,
         index: item.index,
       })),
-      model: response.model,
+      model: response.model ?? model,
       usage: {
-        prompt_tokens: response.usage.prompt_tokens,
-        total_tokens: response.usage.total_tokens,
+        prompt_tokens: response.usage?.prompt_tokens ?? 0,
+        total_tokens: response.usage?.total_tokens ?? 0,
       },
     };
   } catch (err: unknown) {

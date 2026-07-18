@@ -17,6 +17,10 @@ import db, { schema } from "@/database";
 import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
 import { afterEach, describe, expect, test } from "@/test";
 import {
+  EmbeddingConfigUnresolvableError,
+  RerankerConfigUnresolvableError,
+} from "./errors";
+import {
   getDefaultOrgEmbeddingConfig,
   resolveApiKeyFromChatApiKey,
   resolveEmbeddingConfig,
@@ -186,7 +190,7 @@ describe("resolveEmbeddingConfig", () => {
     expect(result?.apiKey).toBeNull();
   });
 
-  test("returns null when secret value cannot be resolved", async ({
+  test("throws when a configured secret cannot be resolved", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -209,9 +213,10 @@ describe("resolveEmbeddingConfig", () => {
 
     mockGetSecretValue.mockResolvedValueOnce(null);
 
-    const result = await resolveEmbeddingConfig(org.id);
-
-    expect(result).toBeNull();
+    // Configured but unresolvable is a diagnosable fault, not "not configured".
+    await expect(resolveEmbeddingConfig(org.id)).rejects.toBeInstanceOf(
+      EmbeddingConfigUnresolvableError,
+    );
   });
 
   test("returns null for non-existent organization", async () => {
@@ -294,7 +299,7 @@ describe("resolveRerankerConfig", () => {
     expect(result).toBeNull();
   });
 
-  test("returns null when secret resolution fails", async ({
+  test("throws when a configured secret cannot be resolved", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -317,9 +322,11 @@ describe("resolveRerankerConfig", () => {
 
     mockGetSecretValue.mockResolvedValueOnce(null);
 
-    const result = await resolveRerankerConfig(org.id);
-
-    expect(result).toBeNull();
+    // Configured but unresolvable: a typed fault (the query path catches it and
+    // degrades; save blocks on it).
+    await expect(resolveRerankerConfig(org.id)).rejects.toBeInstanceOf(
+      RerankerConfigUnresolvableError,
+    );
   });
 });
 

@@ -8,7 +8,7 @@ import { callGeminiEmbedding } from "./gemini";
 import { callOpenAIEmbedding } from "./openai";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
-export type EmbeddingCall = (params: {
+type EmbeddingCall = (params: {
   inputs: EmbeddingInput[];
   model: string;
   apiKey: string | null;
@@ -16,7 +16,7 @@ export type EmbeddingCall = (params: {
   dimensions?: number;
 }) => Promise<EmbeddingApiResponse>;
 
-export interface EmbeddingAdapter {
+interface EmbeddingAdapter {
   call: EmbeddingCall;
   discriminator: SupportedProviderDiscriminator;
 }

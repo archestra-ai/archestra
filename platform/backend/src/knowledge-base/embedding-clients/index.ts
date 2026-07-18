@@ -3,7 +3,11 @@ import type {
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import { isConnectionErrno, isTimeoutErrno } from "@/utils/network-errors";
-import { UnsupportedEmbeddingProviderError } from "../errors";
+import {
+  KnowledgeBaseError,
+  UnsupportedEmbeddingProviderError,
+  UnusableEmbeddingResponseError,
+} from "../errors";
 import { AzureEmbeddingError } from "./azure";
 import { BedrockEmbeddingError } from "./bedrock";
 import { GeminiEmbeddingError } from "./gemini";
@@ -44,7 +48,57 @@ export async function callEmbedding(params: {
     throw new UnsupportedEmbeddingProviderError(provider, params.model);
   }
 
-  return adapter.call(rest);
+  const response = await adapter.call(rest);
+  validateEmbeddingResponse(response, {
+    provider,
+    model: params.model,
+    expectedCount: params.inputs.length,
+    dimensions: params.dimensions,
+  });
+  return response;
+}
+
+/**
+ * Central, provider-agnostic validation of a normalized embedding response —
+ * runs for every adapter so a malformed response never reaches pgvector as a
+ * crash or a silent bad vector. Throws a typed `UnusableEmbeddingResponseError`
+ * (spec item 3) naming the provider/model.
+ */
+function validateEmbeddingResponse(
+  response: EmbeddingApiResponse,
+  params: {
+    provider: SupportedProvider;
+    model: string;
+    expectedCount: number;
+    dimensions?: number;
+  },
+): void {
+  const { provider, model, expectedCount, dimensions } = params;
+  const fail = (reason: string): never => {
+    throw new UnusableEmbeddingResponseError(provider, model, reason);
+  };
+
+  const data = response?.data;
+  if (!Array.isArray(data)) {
+    fail("the response contained no embeddings array");
+  }
+  if (data.length !== expectedCount) {
+    fail(`expected ${expectedCount} embedding(s) but received ${data.length}`);
+  }
+  for (const item of data) {
+    const embedding = item?.embedding;
+    if (!Array.isArray(embedding) || embedding.length === 0) {
+      fail("an embedding vector was empty or missing");
+    }
+    if (!embedding.every((value) => Number.isFinite(value))) {
+      fail("an embedding vector contained non-numeric values");
+    }
+    if (dimensions !== undefined && embedding.length !== dimensions) {
+      fail(
+        `expected ${dimensions}-dimension vectors but received ${embedding.length}`,
+      );
+    }
+  }
 }
 
 /**
@@ -62,6 +116,11 @@ export function getEmbeddingDiscriminator(
  * Returns true if the error is retryable (rate-limited or server-side failure).
  */
 export function isRetryableEmbeddingError(error: unknown): boolean {
+  // Typed KB failures are deterministic (bad config, unusable response, an
+  // unsupported provider) — retrying can't fix them.
+  if (error instanceof KnowledgeBaseError) {
+    return false;
+  }
   if (
     error instanceof AzureEmbeddingError ||
     error instanceof BedrockEmbeddingError ||

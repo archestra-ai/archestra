@@ -29,6 +29,7 @@ import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
+import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -671,6 +672,15 @@ async function handleQueryKnowledgeSources(params: {
     };
     return structuredSuccessResult(output, JSON.stringify(output));
   } catch (error) {
+    // A diagnosable KB failure (unsupported/unreachable provider, dimension
+    // mismatch, unusable response, unresolvable config) maps to its own
+    // actionable message; only genuinely-unexpected faults fall through to the
+    // generic catch-all.
+    const kbMessage = toKnowledgeBaseUserMessage(error);
+    if (kbMessage) {
+      logger.error({ err: error }, "Error querying knowledge base");
+      return errorResult(kbMessage);
+    }
     return catchError(error, "querying knowledge base");
   }
 }

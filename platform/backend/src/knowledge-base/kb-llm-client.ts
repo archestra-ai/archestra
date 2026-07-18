@@ -14,6 +14,10 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import {
+  EmbeddingConfigUnresolvableError,
+  RerankerConfigUnresolvableError,
+} from "./errors";
 
 export interface EmbeddingConfig {
   /**
@@ -54,11 +58,13 @@ export async function resolveEmbeddingConfig(
 
   const resolved = await resolveApiKeyFromChatApiKey(org.embeddingChatApiKeyId);
   if (!resolved) {
+    // Configured but unresolvable (e.g. a credential that won't decrypt) is a
+    // real, diagnosable fault — distinct from "not configured" (null above).
     logger.warn(
       { organizationId, chatApiKeyId: org.embeddingChatApiKeyId },
       "[KB] Embedding API key configured but secret could not be resolved",
     );
-    return null;
+    throw new EmbeddingConfigUnresolvableError();
   }
 
   const model = await ModelModel.findByProviderAndModelId(
@@ -94,11 +100,14 @@ export async function resolveRerankerConfig(
 
   const resolved = await resolveApiKeyFromChatApiKey(org.rerankerChatApiKeyId);
   if (!resolved) {
+    // Configured but unresolvable. Reranking is optional and degrades at query
+    // time, so the caller catches this and continues unranked — but it is still a
+    // typed, surfaced fault (and blocks save).
     logger.warn(
       { organizationId, chatApiKeyId: org.rerankerChatApiKeyId },
       "[KB] Reranker API key configured but secret could not be resolved",
     );
-    return null;
+    throw new RerankerConfigUnresolvableError();
   }
 
   const modelName = org.rerankerModel;

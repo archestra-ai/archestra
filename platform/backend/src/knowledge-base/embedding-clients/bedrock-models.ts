@@ -18,7 +18,7 @@ import type { SupportedEmbeddingDimension } from "@archestra/shared";
  *     one here is the entire "Cohere fast-follow": it surfaces from the existing
  *     call the moment the client supports it.
  */
-export interface BedrockEmbeddingModel {
+interface BedrockEmbeddingModel {
   /** The foundation-model id (e.g. "amazon.titan-embed-text-v2:0"). */
   modelId: string;
   displayName: string;

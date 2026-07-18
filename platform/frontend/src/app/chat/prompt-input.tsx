@@ -616,25 +616,18 @@ const PromptInputContent = ({
   const submitStatus = status === "error" ? "ready" : status;
   const isResponseInFlight = status === "submitted" || status === "streaming";
 
-  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
-  // When off, the composer behaves as before: Enter is blocked while a
-  // response streams and the submit button stops via the form-submit path.
-  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
   // Context compaction normally locks the composer, but when queueing can
-  // absorb the message (queue on, live conversation, response in flight) the
-  // composer stays usable: Enter enqueues — the session-level drain already
-  // defers to compaction — and the button keeps its Stop role. Without this,
-  // mid-turn auto-compaction silently swallows Enter and drops keyboard focus,
-  // which reads as "queueing stopped working".
-  const canComposeDuringCompaction =
-    isMessageQueueEnabled && !!conversationId && isResponseInFlight;
+  // absorb the message (live conversation, response in flight) the composer
+  // stays usable: Enter enqueues — the session-level drain already defers to
+  // compaction — and the button keeps its Stop role. Without this, mid-turn
+  // auto-compaction silently swallows Enter and drops keyboard focus, which
+  // reads as "queueing stopped working".
+  const canComposeDuringCompaction = !!conversationId && isResponseInFlight;
   const composerLocked =
     submitDisabled || (isContextCompacting && !canComposeDuringCompaction);
   // Messages queued while a response was in-flight; sent automatically (in
   // order) by the conversation's chat session once each turn settles.
-  const queuedMessages = useConversationMessageQueue(
-    isMessageQueueEnabled ? conversationId : undefined,
-  );
+  const queuedMessages = useConversationMessageQueue(conversationId);
 
   // Composer keyboard shortcuts layered on top of the primitive textarea:
   //   • Esc — stop the in-flight response (mirrors the Stop button).
@@ -658,7 +651,6 @@ const PromptInputContent = ({
       if (
         event.key === "ArrowUp" &&
         !isSlashCommandOpen &&
-        isMessageQueueEnabled &&
         conversationId &&
         controller.textInput.value === "" &&
         queuedMessages.length > 0
@@ -720,7 +712,6 @@ const PromptInputContent = ({
     [
       conversationId,
       controller.textInput,
-      isMessageQueueEnabled,
       isResponseInFlight,
       isSlashCommandOpen,
       onStop,
@@ -734,7 +725,7 @@ const PromptInputContent = ({
 
   return (
     <div className="relative">
-      {isMessageQueueEnabled && conversationId && queuedMessages.length > 0 && (
+      {conversationId && queuedMessages.length > 0 && (
         <div
           className="mb-2 flex max-h-40 flex-col gap-1 overflow-y-auto"
           data-testid={E2eTestId.ChatMessageQueue}
@@ -852,14 +843,11 @@ const PromptInputContent = ({
               className="px-4"
               autoFocus
               disabled={composerLocked}
-              // With queueing on and a live conversation, Enter during a
-              // stream submits and the submit handler queues the message.
-              // Otherwise (queueing off, or the new-chat composer while the
-              // conversation is being created) Enter stays blocked.
-              disableEnterSubmit={
-                isResponseInFlight &&
-                (!isMessageQueueEnabled || !conversationId)
-              }
+              // In a live conversation, Enter during a stream submits and the
+              // submit handler queues the message. On the new-chat composer
+              // (no conversation to queue into yet) Enter stays blocked while
+              // the conversation is being created.
+              disableEnterSubmit={isResponseInFlight && !conversationId}
               onKeyDown={handleTextareaKeyDown}
               data-testid={E2eTestId.ChatPromptTextarea}
             />
@@ -912,10 +900,7 @@ const PromptInputContent = ({
                     // While a response is in-flight the button shows Stop; a
                     // click stops the stream instead of submitting the form
                     // (which would queue the typed text — see onStop docs).
-                    // With queueing off, the click falls through to the form
-                    // submit, whose handler stops the stream (pre-queue
-                    // behavior).
-                    if (isMessageQueueEnabled && onStop && isResponseInFlight) {
+                    if (onStop && isResponseInFlight) {
                       event.preventDefault();
                       onStop();
                     }

@@ -74,7 +74,6 @@ import {
   hasSwapToolErrorInPart,
 } from "@/lib/chat/swap-agent.utils";
 import appConfig from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
@@ -1106,14 +1105,7 @@ function ChatSessionHook({
   // as each drained turn finishes. Living here (not in the page) means queues
   // keep draining while the user is viewing another conversation, since
   // ChatSessionHook instances survive conversation switches.
-  //
-  // Queueing is beta (ARCHESTRA_BETA): with the flag off the hook is passed
-  // no conversation, the snapshot stays empty, and the drain never fires —
-  // even for queues persisted while the flag was on.
-  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
-  const queuedMessages = useConversationMessageQueue(
-    isMessageQueueEnabled ? conversationId : undefined,
-  );
+  const queuedMessages = useConversationMessageQueue(conversationId);
   // One-at-a-time guard: taking a message re-fires this effect (the queue
   // snapshot changes) possibly before the SDK's status has left "ready"; the
   // ref blocks a second send until a status transition confirms the turn

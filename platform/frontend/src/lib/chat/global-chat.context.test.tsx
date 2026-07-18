@@ -90,7 +90,8 @@ vi.mock("@/lib/config/config", () => ({
 
 // Bespoke factory (not the canonical __mocks__ one): this file partially
 // mocks @/lib/config/config above, which the canonical mock's importActual
-// chain would break on. Beta off means message-queue draining stays inert.
+// chain would break on. (Message-queue draining stays inert here because no
+// messages are ever enqueued for the test conversations.)
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
 }));

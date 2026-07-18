@@ -16,7 +16,7 @@ export type ChatSubmitAction = "queue" | "stop" | "send";
 export function classifyChatSubmitAction(params: {
   /** AI SDK useChat status snapshot as seen by the page. */
   status: string;
-  /** Message queueing is on (beta) AND a conversation exists to queue into. */
+  /** A conversation exists to queue into (false on the new-chat composer). */
   queueEnabled: boolean;
   /** A direct send fired but the page's `status` hasn't caught up yet. */
   directSendPending: boolean;
@@ -25,8 +25,8 @@ export function classifyChatSubmitAction(params: {
   const isStreaming = status === "submitted" || status === "streaming";
 
   if (isStreaming) {
-    // Submitting mid-turn queues the message with queueing on; without it, the
-    // submit button doubles as Stop.
+    // Submitting mid-turn queues the message when there is a conversation to
+    // queue into; on the new-chat composer the submit doubles as Stop.
     return queueEnabled ? "queue" : "stop";
   }
 

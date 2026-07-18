@@ -45,7 +45,7 @@ describe("normalizeEmbeddingError", () => {
 });
 
 describe("KB error messages are actionable", () => {
-  test("name the provider/model and point to Settings, never the vague phrase", () => {
+  test("state the cause without the vague phrase or a navigation hint", () => {
     const messages = [
       new UnsupportedEmbeddingProviderError("anthropic", "claude").userMessage,
       new UnusableEmbeddingResponseError("openai", "m", "empty").userMessage,
@@ -53,11 +53,24 @@ describe("KB error messages are actionable", () => {
       new EmbeddingConfigUnresolvableError().userMessage,
     ];
     for (const message of messages) {
-      expect(message).toContain("Settings → Knowledge");
+      expect(message).not.toContain("Settings → Knowledge");
       expect(message.toLowerCase()).not.toContain(
         "non supported embedding format",
       );
     }
+  });
+
+  test("provider-unreachable surfaces the provider/model and raw reason only", () => {
+    const message = new EmbeddingProviderUnreachableError(
+      "vllm",
+      "my-model",
+      "timeout",
+    ).userMessage;
+    expect(message).toContain("vllm");
+    expect(message).toContain("my-model");
+    expect(message).toContain("timeout");
+    // The raw reason is enough — no curated "verify … in Settings" boilerplate.
+    expect(message).not.toContain("Settings → Knowledge");
   });
 
   test("dimension mismatch names both dimensions and says re-ingest", () => {

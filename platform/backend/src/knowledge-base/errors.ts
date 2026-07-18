@@ -30,9 +30,7 @@ export class UnsupportedEmbeddingProviderError extends KnowledgeBaseError {
       `Provider "${provider}" does not support embeddings (model "${model}")`,
     );
     this.name = "UnsupportedEmbeddingProviderError";
-    this.userMessage =
-      `The configured embedding provider "${provider}" does not support embeddings, ` +
-      `so knowledge search cannot run. Select a supported embedding model in Settings → Knowledge.`;
+    this.userMessage = `The configured embedding provider "${provider}" (model "${model}") does not support embeddings, so knowledge search cannot run.`;
   }
 }
 
@@ -54,7 +52,7 @@ export class UnusableEmbeddingResponseError extends KnowledgeBaseError {
     this.userMessage =
       `The embedding provider "${provider}" (model "${model}") returned a response the knowledge base ` +
       `could not use (${reason}). This usually means the selected model is not an embedding model or is ` +
-      `misconfigured — fix it in Settings → Knowledge.`;
+      `misconfigured.`;
   }
 }
 
@@ -76,9 +74,7 @@ export class EmbeddingProviderUnreachableError extends KnowledgeBaseError {
   ) {
     super(`Embedding provider ${provider}/${model} unreachable: ${reason}`);
     this.name = "EmbeddingProviderUnreachableError";
-    this.userMessage =
-      `The embedding provider "${provider}" (model "${model}") could not be reached (${reason}). ` +
-      `Verify the model name is correct and the provider is available in Settings → Knowledge.`;
+    this.userMessage = `The embedding provider "${provider}" (model "${model}") could not be reached (${reason}).`;
   }
 }
 
@@ -105,8 +101,8 @@ export class EmbeddingDimensionMismatchError extends KnowledgeBaseError {
         : "that dimension has no backing storage";
     this.userMessage =
       `The configured embedding model "${model}" produces ${configuredDimension}-dimension vectors, but ` +
-      `${ingested}. Knowledge search cannot run until the dimensions match — fix the embedding model in ` +
-      `Settings → Knowledge and re-ingest the documents.`;
+      `${ingested}. Knowledge search cannot run until the dimensions match — fix the embedding model and ` +
+      `re-ingest the documents.`;
   }
 }
 
@@ -117,7 +113,7 @@ export class EmbeddingDimensionMismatchError extends KnowledgeBaseError {
 export class EmbeddingConfigUnresolvableError extends KnowledgeBaseError {
   readonly userMessage =
     "The embedding configuration could not be read — its stored credential may be invalid or could not be " +
-    "decrypted. Reconfigure the embedding model in Settings → Knowledge.";
+    "decrypted. Reconfigure the embedding model.";
 
   constructor() {
     super("Embedding configuration could not be resolved");
@@ -133,7 +129,7 @@ export class EmbeddingConfigUnresolvableError extends KnowledgeBaseError {
 export class RerankerConfigUnresolvableError extends KnowledgeBaseError {
   readonly userMessage =
     "The reranker configuration could not be read — its stored credential may be invalid or could not be " +
-    "decrypted. Reconfigure the reranker in Settings → Knowledge, or clear it.";
+    "decrypted. Reconfigure the reranker, or clear it.";
 
   constructor() {
     super("Reranker configuration could not be resolved");

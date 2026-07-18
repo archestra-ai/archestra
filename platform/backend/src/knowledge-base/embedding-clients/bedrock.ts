@@ -1,6 +1,5 @@
 import { embedMany } from "ai";
 import { buildBedrockProvider } from "@/clients/bedrock-credentials";
-import { findBedrockEmbeddingModel } from "./bedrock-models";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
 export class BedrockEmbeddingError extends Error {
@@ -14,16 +13,13 @@ export class BedrockEmbeddingError extends Error {
 }
 
 /**
- * Embed text using AWS Bedrock's Amazon Titan Text Embeddings, reusing the same
- * credential resolution (IAM/IRSA, static SigV4, or bearer key) as Bedrock chat
- * via `buildBedrockProvider`. Titan is text-only.
+ * Embed text using AWS Bedrock, reusing the same credential resolution (IAM/IRSA,
+ * static SigV4, or bearer key) as Bedrock chat via `buildBedrockProvider`.
  *
- * Only Titan v1/v2 are accepted. Cohere-on-Bedrock is a fast-follow (it needs an
- * input-type/purpose parameter and a different batch limit). The hard allowlist
- * also stops a Bedrock model that an admin mislabeled as embedding-capable (a
- * chat model, a Cohere model) from reaching a client that can't correctly drive
- * it — it fails fast with an actionable message instead of a confusing runtime
- * error.
+ * Like every other embedding client, this attempts the embed and surfaces the
+ * provider's own error — it does not pre-screen the model. Titan v2 accepts an
+ * on-request output dimension (256/512/1024); Titan v1 is fixed and rejects the
+ * parameter, so a dimension is only forwarded when it is one Titan v2 accepts.
  */
 export async function callBedrockEmbedding(params: {
   inputs: EmbeddingInput[];
@@ -34,32 +30,21 @@ export async function callBedrockEmbedding(params: {
 }): Promise<EmbeddingApiResponse> {
   const { inputs, model, apiKey, baseUrl, dimensions } = params;
 
-  const embeddingModel = findBedrockEmbeddingModel(model);
-  if (!embeddingModel) {
-    throw new BedrockEmbeddingError(
-      400,
-      `Bedrock embedding model "${model}" is not supported. Configure Amazon Titan Text Embeddings ` +
-        `in Settings → Knowledge.`,
-    );
-  }
-
   const texts = inputs.map((input) => {
     if (typeof input === "string") return input;
     throw new BedrockEmbeddingError(
       400,
-      "Amazon Titan embeddings do not support image inputs. Configure a multimodal embedding model to embed images.",
+      "Selected model doesn't support embedding image inputs. Use a multimodal embedding model to embed images.",
     );
   });
 
   const provider = buildBedrockProvider({ apiKey, baseUrl });
 
-  // Titan v2 accepts an on-request output dimension (256/512/1024); Titan v1 is
-  // fixed and rejects the parameter. Only forward a dimension the model both
-  // supports and the SDK accepts.
+  // Titan v2 accepts an on-request output dimension (256/512/1024); Titan v1 (and
+  // any model with a fixed dimension) rejects the parameter. Forward the dimension
+  // only when it is one Titan v2 accepts; otherwise let the model use its default.
   const providerOptions =
-    embeddingModel.supportsDimensionsParam &&
-    dimensions !== undefined &&
-    BEDROCK_ON_REQUEST_DIMENSIONS.has(dimensions)
+    dimensions !== undefined && BEDROCK_ON_REQUEST_DIMENSIONS.has(dimensions)
       ? { bedrock: { dimensions } }
       : undefined;
 
@@ -97,7 +82,14 @@ export async function callBedrockEmbedding(params: {
       (err as { statusCode?: number; status?: number }).statusCode ??
       (err as { statusCode?: number; status?: number }).status ??
       500;
-    const message = err instanceof Error ? err.message : String(err);
+    // The AI SDK formats every Bedrock error as `${error.type}: ${error.message}`;
+    // Bedrock validation errors carry no `type`, so the message arrives prefixed
+    // with a literal "undefined: ". Drop that artifact so the raw provider message
+    // reads cleanly.
+    const message = (err instanceof Error ? err.message : String(err)).replace(
+      /^undefined:\s*/,
+      "",
+    );
     throw new BedrockEmbeddingError(status, message);
   }
 }

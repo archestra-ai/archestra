@@ -13,7 +13,7 @@ describe("callBedrockEmbedding", () => {
     authorization: string | null;
   }> = [];
 
-  useMswServer(
+  const server = useMswServer(
     http.post(
       `${BEDROCK_HOST}/model/:modelId/invoke`,
       async ({ params, request }) => {
@@ -30,17 +30,40 @@ describe("callBedrockEmbedding", () => {
     ),
   );
 
-  test("rejects a non-Titan Bedrock model without calling the API", async () => {
+  test("attempts the embed for any model — no client-side allowlist", async () => {
     captured.length = 0;
-    await expect(
-      callBedrockEmbedding({
-        inputs: ["hello"],
-        model: "amazon.nova-lite-v1:0",
-        apiKey: "test-key",
-        baseUrl: BEDROCK_HOST,
-      }),
-    ).rejects.toBeInstanceOf(BedrockEmbeddingError);
-    expect(captured).toHaveLength(0);
+    // A non-Titan model is no longer pre-screened; the client calls Bedrock and
+    // lets the provider decide support, exactly like every other embedding client.
+    await callBedrockEmbedding({
+      inputs: ["hello"],
+      model: "amazon.nova-lite-v1:0",
+      apiKey: "test-key",
+      baseUrl: BEDROCK_HOST,
+    });
+    expect(captured).toHaveLength(1);
+    expect(captured[0].modelId).toBe("amazon.nova-lite-v1:0");
+  });
+
+  test("surfaces the provider error without the AI SDK's 'undefined: ' prefix", async () => {
+    server.use(
+      http.post(`${BEDROCK_HOST}/model/:modelId/invoke`, () =>
+        HttpResponse.json(
+          { message: "Malformed input request: extraneous key [inputText]." },
+          { status: 400 },
+        ),
+      ),
+    );
+    const error = await callBedrockEmbedding({
+      inputs: ["hello"],
+      model: "amazon.titan-embed-text-v2:0",
+      apiKey: "test-key",
+      baseUrl: BEDROCK_HOST,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BedrockEmbeddingError);
+    expect((error as BedrockEmbeddingError).message).not.toMatch(/^undefined:/);
+    expect((error as BedrockEmbeddingError).message).toContain(
+      "Malformed input request",
+    );
   });
 
   test("sends the dimensions parameter for Titan v2", async () => {

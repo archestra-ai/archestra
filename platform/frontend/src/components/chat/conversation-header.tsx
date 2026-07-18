@@ -119,6 +119,10 @@ export function ConversationHeader({
   // on mousedown, where resolvedTab is still pre-click. Opens (different tab,
   // or any tab while collapsed — value is "" then, so every click is a change)
   // flow through onValueChange. Left button only (mirrors Radix's guard).
+  // The Tabs root must stay activationMode="manual": in automatic mode, a
+  // click that also MOVES focus onto the trigger (previous focus was e.g. the
+  // composer) fires a focus-activation after this close has re-rendered the
+  // value to "", instantly reopening the tab — close then needed two clicks.
   const handleTabMouseDown = (tab: RightPanelTab) => (e: React.MouseEvent) => {
     if (e.button !== 0 || e.ctrlKey) return;
     if (panel.isOpen && resolvedTab === tab) panel.onClose();
@@ -233,6 +237,7 @@ export function ConversationHeader({
         <div className="hidden md:flex items-center flex-shrink-0">
           <Tabs
             value={panel.isOpen ? resolvedTab : ""}
+            activationMode="manual"
             onValueChange={(value) => {
               // Fires on any tab click while collapsed (value is "") and on a
               // different-tab click while open. It never fires for the

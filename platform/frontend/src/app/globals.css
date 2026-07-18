@@ -115,9 +115,17 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* The app shell is viewport-locked; without this, mobile browsers
+     rubber-band the whole document when an inner scroller hits its edge.
+     Set on both html and body — iOS Safari only honors it reliably when the
+     root carries it too. */
+  html {
+    overscroll-behavior-y: none;
+  }
   body {
     @apply bg-background text-foreground;
     letter-spacing: var(--tracking-normal);
+    overscroll-behavior-y: none;
   }
   /* Fix Shiki syntax highlighting in dark mode - apply dark theme colors from CSS variables */
   .dark [data-streamdown="code-block-body"] span[style*="--shiki-dark"] {
@@ -228,6 +236,18 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
 }
 [data-testid="emoji-picker-list-header"] {
   color: var(--muted-foreground) !important;
+}
+
+/* Viewport-locked app shell height. Tracks the *visual* viewport published by
+   VisualViewportHeight so the shell shrinks when the mobile on-screen keyboard
+   opens (iOS never resizes the layout viewport for it and instead pans the
+   whole page); falls back to the dynamic viewport before the script runs.
+   Use these instead of h-screen/min-h-svh for full-height app chrome. */
+@utility h-app-viewport {
+  height: var(--visual-viewport-height, 100dvh);
+}
+@utility min-h-app-viewport {
+  min-height: var(--visual-viewport-height, 100svh);
 }
 
 /* Thin scrollbar for sidebar scroll regions */

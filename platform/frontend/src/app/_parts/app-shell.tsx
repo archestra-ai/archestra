@@ -95,7 +95,7 @@ export function AppShell({ children }: AppShellProps) {
   // Auth pages: render without sidebar, centered content with version at bottom
   if (isAuthPage) {
     return (
-      <main className="h-screen w-full flex flex-col bg-background">
+      <main className="h-app-viewport w-full flex flex-col bg-background">
         <MaintenanceModeOverlay />
         <EnvSiteNotificationBar />
         <div className="flex-1 flex flex-col">{children}</div>
@@ -116,7 +116,7 @@ export function AppShell({ children }: AppShellProps) {
         // Wait for the permission check before rendering the sidebar to avoid a
         // flash. Don't render Version here — the full-width layout centers
         // differently than the sidebar layout, so the footer would visibly jump.
-        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+        <main className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative">
           <MaintenanceModeOverlay />
           <div className="flex-1 min-w-0 flex flex-col">
             <div className="flex-1 flex flex-col">{children}</div>
@@ -133,7 +133,7 @@ export function AppShell({ children }: AppShellProps) {
             <main
               id={MAIN_CONTENT_ID}
               tabIndex={-1}
-              className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto focus:outline-none"
+              className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto focus:outline-none"
             >
               <ConnectivityBar />
               <EnvSiteNotificationBar />

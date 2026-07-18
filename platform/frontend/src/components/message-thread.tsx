@@ -163,7 +163,7 @@ const MessageThread = ({
   return (
     <div
       className={cn(
-        "mx-auto relative size-full h-[calc(100vh-3rem)]",
+        "mx-auto relative size-full h-[calc(100dvh-3rem)]",
         containerClassName,
       )}
     >

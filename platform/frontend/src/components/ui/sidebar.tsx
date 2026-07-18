@@ -147,7 +147,7 @@ function SidebarProvider({
             } as React.CSSProperties
           }
           className={cn(
-            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
+            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-app-viewport w-full",
             className,
           )}
           {...props}
@@ -270,36 +270,39 @@ function SidebarTrigger({
   /** Small red onboarding nudge dot (unseen nav items behind this toggle). */
   showDot?: boolean;
 }) {
-  const { toggleSidebar, state } = useSidebar();
+  const { toggleSidebar, state, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
   const isMac =
     typeof navigator !== "undefined" &&
     navigator.userAgent.toLowerCase().includes("mac");
   const modLabel = isMac ? "⌘" : "Ctrl";
 
+  const button = (
+    <Button
+      data-sidebar="trigger"
+      data-slot="sidebar-trigger"
+      variant="ghost"
+      size="icon"
+      className={cn("relative size-7", className)}
+      onClick={(event) => {
+        onClick?.(event);
+        toggleSidebar();
+      }}
+      {...props}
+    >
+      <PanelLeftIcon />
+      <OnboardingDot visible={showDot} className="absolute right-0.5 top-0.5" />
+      <span className="sr-only">Toggle Sidebar</span>
+    </Button>
+  );
+
+  // No keyboard-shortcut tooltip on mobile: there's no ⌘+B on a phone, and a
+  // tap-triggered tooltip has no hover-out, so it would just stick open.
+  if (isMobile) return button;
+
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          data-sidebar="trigger"
-          data-slot="sidebar-trigger"
-          variant="ghost"
-          size="icon"
-          className={cn("relative size-7", className)}
-          onClick={(event) => {
-            onClick?.(event);
-            toggleSidebar();
-          }}
-          {...props}
-        >
-          <PanelLeftIcon />
-          <OnboardingDot
-            visible={showDot}
-            className="absolute right-0.5 top-0.5"
-          />
-          <span className="sr-only">Toggle Sidebar</span>
-        </Button>
-      </TooltipTrigger>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent side="right">
         {isCollapsed ? (
           <span className="flex items-center gap-1.5">

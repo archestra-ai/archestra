@@ -39,8 +39,7 @@ class KnowledgeSettingsService {
     if (!resolved) {
       return {
         ok: false,
-        error:
-          "The embedding API key could not be resolved. Reconfigure it.",
+        error: "The embedding API key could not be resolved. Reconfigure it.",
       };
     }
 
@@ -101,8 +100,7 @@ class KnowledgeSettingsService {
     if (!resolved) {
       return {
         ok: false,
-        error:
-          "The reranker API key could not be resolved. Reconfigure it.",
+        error: "The reranker API key could not be resolved. Reconfigure it.",
       };
     }
 

@@ -4,7 +4,7 @@ import {
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import { SkillModel, SkillTeamModel } from "@/models";
+import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
 import { escapeXmlAttr, neutralizeFrameTags } from "./skill-activation";
 import { isSkillSandboxAvailableForAgent } from "./skill-sandbox-availability";
 
@@ -36,9 +36,18 @@ export async function buildSkillCatalogPrompt(params: {
         userId,
       });
 
+  // Skills are environment-scoped like tools and connectors: the catalog only
+  // shows skills in the agent's environment (null = Default; built-ins exempt).
+  // Skill-admin visibility widens the scope filter, never the environment one.
+  const environmentId =
+    agentId !== undefined
+      ? await AgentModel.findEnvironmentId(agentId)
+      : undefined;
+
   const skills = await SkillModel.findByOrganization({
     organizationId,
     accessibleSkillIds,
+    environmentId,
   });
   if (skills.length === 0) {
     return null;

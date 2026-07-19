@@ -12,6 +12,7 @@ import {
 } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
+  AgentModel,
   SkillModel,
   SkillTeamModel,
   SkillVersionModel,
@@ -31,6 +32,7 @@ import {
 } from "@/skills/skill-activation";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import {
   isSkillNameConflict,
@@ -260,7 +262,7 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an organization context.");
       }
 
-      const skill = await findAccessibleSkill(ctx, args.name);
+      const skill = await findAccessibleSkill(ctx, args.name, context.agent.id);
       if (!skill) {
         return unknownSkillError(args.name);
       }
@@ -354,11 +356,16 @@ const registry = defineArchestraTools([
       // team or the org stays a deliberate action in the Skills UI. A personal
       // skill owned by its author needs no further scope authorization beyond
       // the skill:create permission already enforced on this tool.
+      //
+      // The skill inherits the calling agent's environment so the authoring
+      // agent can see (and load) what it just created — skills are only
+      // visible within their environment.
       const skill = await SkillModel.createWithFiles({
         skill: {
           ...toSkillInsertFields(parsed),
           organizationId: ctx.organizationId,
           authorId: ctx.userId,
+          environmentId: await AgentModel.findEnvironmentId(context.agent.id),
           sourceType: "manual",
           scope: "personal",
         },
@@ -392,7 +399,7 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const skill = await findAccessibleSkill(ctx, args.name);
+      const skill = await findAccessibleSkill(ctx, args.name, context.agent.id);
       if (!skill) {
         return unknownSkillError(args.name);
       }
@@ -451,7 +458,7 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const skill = await findAccessibleSkill(ctx, args.name);
+      const skill = await findAccessibleSkill(ctx, args.name, context.agent.id);
       if (!skill) {
         return unknownSkillError(args.name);
       }
@@ -720,9 +727,24 @@ async function canRunSkillSandbox(
  * `personal` skill shadows a `team` one, which shadows `org`. Returns null when
  * none are accessible, so callers surface a generic "no skill named …" without
  * leaking an inaccessible skill's existence.
+ *
+ * Skills are environment-scoped: when `agentId` is provided, only skills
+ * visible from that agent's environment resolve (strict match, null = Default,
+ * built-in skills exempt) — a cross-environment skill is indistinguishable
+ * from a nonexistent one.
  */
-async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
-  const candidates = await SkillModel.findAllByName(ctx.organizationId, name);
+async function findAccessibleSkill(
+  ctx: SkillReadContext,
+  name: string,
+  agentId?: string,
+) {
+  let candidates = await SkillModel.findAllByName(ctx.organizationId, name);
+  if (agentId !== undefined) {
+    const environmentId = await AgentModel.findEnvironmentId(agentId);
+    candidates = candidates.filter((skill) =>
+      skillVisibleInEnvironment(skill, environmentId),
+    );
+  }
   if (candidates.length === 0) return null;
 
   const isSkillAdmin =

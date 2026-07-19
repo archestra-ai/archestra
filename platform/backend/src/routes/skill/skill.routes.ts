@@ -416,6 +416,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 ...toSkillInsertFields(draft),
                 organizationId,
                 authorId: user.id,
+                // skills are environment-scoped; inherit the source agent's
+                // environment so the converted skill stays visible where the
+                // agent lived.
+                environmentId: agent.environmentId ?? null,
                 sourceType: "manual",
                 scope: draft.scope,
               },

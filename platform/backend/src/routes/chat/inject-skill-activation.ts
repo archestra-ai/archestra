@@ -1,7 +1,13 @@
 import { type ChatMessage, ChatMessageMetadataSchema } from "@archestra/shared";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
-import { SkillModel, SkillTeamModel, SkillVersionModel } from "@/models";
+import {
+  AgentModel,
+  SkillModel,
+  SkillTeamModel,
+  SkillVersionModel,
+} from "@/models";
+import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
   buildSkillActivationPromptContext,
   formatSkillActivation,
@@ -83,6 +89,20 @@ export async function injectSkillActivation({
       "[Skills] User lacks access to slash-command skill; sending message unchanged",
     );
     return messages;
+  }
+
+  // Skills are environment-scoped like tools and connectors: a slash command
+  // must not activate a skill from another environment (strict match, null =
+  // Default; built-in skills exempt).
+  if (agentId !== undefined) {
+    const environmentId = await AgentModel.findEnvironmentId(agentId);
+    if (!skillVisibleInEnvironment(skill, environmentId)) {
+      logger.warn(
+        { organizationId, agentId, skillId: skill.id },
+        "[Skills] Slash-command skill is outside the agent's environment; sending message unchanged",
+      );
+      return messages;
+    }
   }
 
   const canRunSandbox = await isSkillSandboxAvailableForAgent({

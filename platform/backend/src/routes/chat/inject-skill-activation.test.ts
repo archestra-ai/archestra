@@ -1,5 +1,5 @@
 import type { ChatMessage } from "@archestra/shared";
-import { SkillModel } from "@/models";
+import { EnvironmentModel, SkillModel } from "@/models";
 import { expect, test } from "@/test";
 import { injectSkillActivation } from "./inject-skill-activation";
 
@@ -174,6 +174,46 @@ test("returns the messages unchanged when no skill metadata is present", async (
     organizationId: org.id,
     userId: user.id,
     agentId: undefined,
+    conversationId: undefined,
+  });
+
+  expect(result).toBe(messages);
+});
+
+test("leaves the message unchanged when the skill is outside the agent's environment", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id);
+  const agent = await makeAgent({ name: "Default Env Agent", organizationId: org.id });
+
+  const otherEnv = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "Other Environment",
+  });
+  const skill = await seedSkill(org.id, "Research");
+  await SkillModel.updateWithFiles({
+    id: skill.id,
+    skill: { environmentId: otherEnv.id },
+  });
+
+  const messages: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [{ type: "text", text: "summarize this paper" }],
+      metadata: { skill: { id: skill.id, name: skill.name } },
+    },
+  ];
+
+  const result = await injectSkillActivation({
+    messages,
+    organizationId: org.id,
+    userId: user.id,
+    agentId: agent.id,
     conversationId: undefined,
   });
 

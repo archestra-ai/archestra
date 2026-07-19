@@ -41,7 +41,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
-import { AgentHooksEditor } from "@/components/agent-hooks-editor";
+import {
+  AgentHooksEditor,
+  type AgentHooksEditorRef,
+} from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -707,6 +710,7 @@ export function AgentDialog({
   });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
+  const agentHooksEditorRef = useRef<AgentHooksEditorRef>(null);
   const agentToolExclusionsEditorRef =
     useRef<AgentToolExclusionsEditorRef>(null);
   // Snapshot of the form's pristine values, captured whenever the dialog
@@ -1256,6 +1260,10 @@ export function AgentDialog({
             });
             // Auto-mode exclusions configured before the agent existed.
             await agentToolExclusionsEditorRef.current?.saveChanges({
+              agentId: savedAgentId,
+            });
+            // Hooks staged before the agent existed.
+            await agentHooksEditorRef.current?.saveChanges({
               agentId: savedAgentId,
             });
           } catch (error) {
@@ -2331,12 +2339,16 @@ export function AgentDialog({
                   </div>
                 )}
 
-                {/* Hooks (internal agents only, existing agents only; shown when
-                  the agent runtime is available, since hooks run in its sandbox) */}
-                {agentHooksEnabled &&
-                  isInternalAgent &&
-                  !isBuiltIn &&
-                  agent?.id && <AgentHooksEditor agentId={agent.id} />}
+                {/* Hooks (internal agents only; shown when the agent runtime is
+                  available, since hooks run in its sandbox). In create mode the
+                  editor stages hooks locally and persists them via the ref once
+                  the agent exists. */}
+                {agentHooksEnabled && isInternalAgent && !isBuiltIn && (
+                  <AgentHooksEditor
+                    ref={agentHooksEditorRef}
+                    agentId={agent?.id}
+                  />
+                )}
 
                 {/* Section 4: Access & LLM */}
                 {(!isBuiltIn || isInternalAgent) && (

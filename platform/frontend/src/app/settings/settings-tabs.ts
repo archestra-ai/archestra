@@ -20,6 +20,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),
+    ...(permissionMap?.["/settings/mcp"]
+      ? [{ label: "MCP", href: "/settings/mcp" }]
+      : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]
       : []),

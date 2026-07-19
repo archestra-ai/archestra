@@ -3,7 +3,9 @@ name = "archestra-mcp-server-python-deps"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "mcp[cli]>=1.2.0",
+  # mcp <= 1.27.1: CVE-2026-52869 (auth bypass), CVE-2026-52870 (missing authorization)
+  # mcp < 1.28.1: CVE-2026-59950 (missing WebSocket origin validation)
+  "mcp[cli]>=1.28.1",
   "httpx",
   "fastapi",
   # starlette <= 1.0.0: CVE-2026-48710 (BadHost host-header path confusion)

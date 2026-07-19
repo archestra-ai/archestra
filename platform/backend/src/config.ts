@@ -603,6 +603,34 @@ export const parseAnthropicWifConfig = (env: {
   };
 };
 
+/**
+ * Parse an optional dedicated-port env var (e.g. ARCHESTRA_PUBLIC_ENDPOINTS_PORT).
+ * Unset/empty means the feature is disabled (returns undefined); an invalid
+ * value also disables it (with a warning) rather than falling back to a
+ * default, since accidentally listening on a wrong port would silently
+ * expose endpoints somewhere unintended.
+ * @public — exported for testability
+ */
+export const parseOptionalPort = (params: {
+  envVarName: string;
+  envValue: string | undefined;
+}): number | undefined => {
+  const value = params.envValue?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < MIN_TCP_PORT || parsed > MAX_TCP_PORT) {
+    logger.warn(
+      `Invalid ${params.envVarName} value "${value}", the dedicated listener will not be started`,
+    );
+    return undefined;
+  }
+
+  return parsed;
+};
+
 /** @public — exported for testability */
 export const parseMetricsPort = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
@@ -1004,15 +1032,10 @@ const mcpServerBaseImage =
  *
  * @public — exported for testability
  */
-export const parseCodeRuntimeDaggerRunnerHost = ({
-  enabled,
-  envValue,
-}: {
-  enabled: boolean;
-  envValue: string | undefined;
-}): string | undefined => {
+export const parseCodeRuntimeDaggerRunnerHost = (
+  envValue: string | undefined,
+): string | undefined => {
   const runnerHost = envValue?.trim();
-  if (!enabled) return runnerHost || undefined;
 
   // No host configured is the normal "this deployment runs no code sandbox"
   // case, not a misconfiguration — stay silent and leave the sandbox off.
@@ -1058,10 +1081,9 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 // configured and stays off otherwise — presence of the host is the switch. it
 // is independent of the skills *read* feature — skills can be listed/activated/
 // read with the sandbox off.
-const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: true,
-  envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
-});
+const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost(
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+);
 const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
 
 // the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
@@ -1112,6 +1134,17 @@ const config = {
       DEFAULT_BODY_LIMIT,
     ),
     trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
+    /**
+     * When set, a dedicated Fastify listener additionally serves the
+     * publicly-exposable endpoints (currently the MS Teams incoming webhook)
+     * on this port. Same handlers as the main API port — just an alias, so a
+     * firewall can expose only these endpoints publicly without exposing the
+     * whole API. The main API port keeps serving them either way.
+     */
+    publicEndpointsPort: parseOptionalPort({
+      envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+      envValue: process.env.ARCHESTRA_PUBLIC_ENDPOINTS_PORT,
+    }),
   },
   websocket: {
     path: "/ws",
@@ -1583,7 +1616,8 @@ const config = {
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
    * runs commands, holds uploaded files, and materializes activated skills.
-   * gated by `ARCHESTRA_CODE_RUNTIME_ENABLED` + a Dagger runner host.
+   * runs when a Dagger runner host is configured
+   * (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`), off otherwise.
    */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
@@ -1639,24 +1673,6 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
-    defaults: {
-      outputBytesLimit: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_OUTPUT_BYTES_LIMIT,
-        256 * 1024,
-      ),
-      fileSizeLimitBytes: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_FILE_SIZE_LIMIT_BYTES,
-        16 * 1024 * 1024,
-      ),
-      cpuSeconds: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_CPU_SECONDS,
-        30,
-      ),
-      memoryBytes: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_MEMORY_BYTES,
-        1024 * 1024 * 1024,
-      ),
-    },
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the

@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
-import { SkillModel, SkillTeamModel } from "@/models";
+import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import skillRoutes from "./skill.routes";
@@ -23,6 +23,40 @@ describe("POST /api/skills", () => {
     expect(body.sourceType).toBe("manual");
     expect(body.authorId).toBe(ctx.user.id);
     expect(body.files).toEqual([]);
+  });
+
+  test("persists an explicit environment assignment", async () => {
+    const env = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Staging",
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: MANIFEST, environmentId: env.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(env.id);
+  });
+
+  test("rejects an environment from another organization", async ({
+    makeOrganization,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const foreignEnv = await EnvironmentModel.create({
+      organizationId: otherOrg.id,
+      name: "Foreign",
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: MANIFEST, environmentId: foreignEnv.id },
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 
   test("stores resource files with derived kinds", async () => {

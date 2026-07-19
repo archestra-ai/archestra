@@ -249,28 +249,21 @@ function McpToolCallsTable({
     },
     {
       id: "agent",
-      accessorFn: (row) => {
-        const agent = agents?.find((a) => a.id === row.agentId);
-        return (
-          agent?.name ??
-          (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
-        );
-      },
+      accessorFn: (row) => getGatewayDisplayName(row, agents),
       header: "MCP Gateway",
-      cell: ({ row }) => {
-        const agent = agents?.find((a) => a.id === row.original.agentId);
-        return (
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1.5">
           <TruncatedText
-            message={
-              agent?.name ??
-              (row.original.agentId === null
-                ? "Deleted MCP Gateway"
-                : "Unknown")
-            }
+            message={getGatewayDisplayName(row.original, agents)}
             maxLength={30}
           />
-        );
-      },
+          {row.original.ownerType === "app" && (
+            <Badge variant="outline" className="text-xs whitespace-nowrap">
+              App
+            </Badge>
+          )}
+        </div>
+      ),
     },
     {
       id: "user",
@@ -494,5 +487,20 @@ function McpToolCallsTable({
         }}
       />
     </div>
+  );
+}
+
+function getGatewayDisplayName(
+  row: Pick<McpToolCallData, "ownerType" | "agentId" | "appName">,
+  agents: archestraApiTypes.GetAllAgentsResponses["200"] | undefined,
+) {
+  // App-owned calls have no agent by design — attribute them to the app
+  // instead of falling through to the deleted-gateway label.
+  if (row.ownerType === "app") {
+    return row.appName ?? "Deleted App";
+  }
+  const agent = agents?.find((a) => a.id === row.agentId);
+  return (
+    agent?.name ?? (row.agentId === null ? "Deleted MCP Gateway" : "Unknown")
   );
 }

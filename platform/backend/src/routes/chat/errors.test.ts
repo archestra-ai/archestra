@@ -1656,6 +1656,19 @@ describe("mapProviderError - Fallback behavior", () => {
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 
+  it("should map a mid-stream provider overload to a retryable server error", () => {
+    const error = {
+      message: "The provider is overloaded",
+      type: "api_error",
+      internal_code: ArchestraInternalErrorCode.ProviderOverloaded,
+    };
+    const result = mapProviderError(error, "anthropic");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(result.isRetryable).toBe(true);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
   it("should map a pre-stream upstream empty response 503 to a retryable empty-response card", () => {
     // The other delivery shape: detection before headers commit arrives as an
     // HTTP 503 whose body carries the normalized internal code.

@@ -308,29 +308,6 @@ export function applyFeedbackToMessages(params: {
   });
 }
 
-/** Replace the text of one text part of one message, immutably. */
-export function applyTextEditToMessages(params: {
-  messages: UIMessage[];
-  messageId: string;
-  partIndex: number;
-  text: string;
-}): UIMessage[] {
-  return params.messages.map((message) => {
-    if (message.id !== params.messageId) {
-      return message;
-    }
-
-    return {
-      ...message,
-      parts: message.parts.map((part, index) =>
-        index === params.partIndex && part.type === "text"
-          ? { ...part, text: params.text }
-          : part,
-      ),
-    };
-  });
-}
-
 function messagesHaveSameRenderableContent(params: {
   liveMessage: UIMessage;
   persistedMessage: UIMessage;

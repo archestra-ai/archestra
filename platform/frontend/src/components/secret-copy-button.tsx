@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -60,7 +61,7 @@ export function SecretCopyButton({
   const handleCopyPlaceholder = async () => {
     if (disabled) return;
     try {
-      await navigator.clipboard.writeText(placeholderText);
+      await copyToClipboard(placeholderText);
       flashCopied();
       toast.success("Copied with placeholder token");
     } catch {
@@ -77,7 +78,7 @@ export function SecretCopyButton({
       // The fetch failed and already surfaced an error; don't copy the mask
       // under a success toast.
       if (text === null) return;
-      await navigator.clipboard.writeText(text);
+      await copyToClipboard(text);
       flashCopied();
       toast.success("Copied with real token");
     } catch {

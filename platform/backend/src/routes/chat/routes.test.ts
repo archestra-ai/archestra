@@ -56,7 +56,6 @@ function messageText(
     .join("");
 }
 
-import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { createLLMModel } from "@/clients/llm-client";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import ConversationModel from "@/models/conversation";
@@ -70,7 +69,6 @@ import {
   buildTitlePrompt,
   extractFirstMessages,
   generateConversationTitle,
-  getChatStopToolNames,
   resolveTitleUserInput,
 } from "./routes";
 
@@ -703,8 +701,8 @@ describe("getMessagesNotYetPersisted", () => {
             role: "assistant",
             parts: [
               {
-                type: "tool-archestra__swap_agent",
-                toolCallId: "swap-1",
+                type: "tool-archestra__list_agents",
+                toolCallId: "call-1",
                 state: "output-available",
                 output: { success: true },
               },
@@ -714,12 +712,12 @@ describe("getMessagesNotYetPersisted", () => {
       ],
       uiMessages: [
         {
-          id: "swap-poke-1",
+          id: "follow-up-1",
           role: "user",
           parts: [
             {
               type: "text",
-              text: "(Switched to Drawing agent. Please continue the conversation.)",
+              text: "Please continue the conversation.",
             },
           ],
         },
@@ -733,7 +731,7 @@ describe("getMessagesNotYetPersisted", () => {
 
     expect(newMessages).toHaveLength(2);
     expect(newMessages.map((message) => message.id)).toEqual([
-      "swap-poke-1",
+      "follow-up-1",
       "assistant-2",
     ]);
   });
@@ -1401,22 +1399,10 @@ describe("buildTitlePrompt", () => {
 });
 
 describe("buildChatStopConditions", () => {
-  it("uses the branded built-in swap tool names", () => {
-    archestraMcpBranding.syncFromOrganization({
-      appName: "Acme Control Plane",
-      iconLogo: null,
-    });
-
+  it("bounds every run by step count and the repeat ceiling", () => {
     const stopConditions = buildChatStopConditions(new ToolCallRepeatTracker());
-    const toolNames = getChatStopToolNames();
 
-    expect(stopConditions).toHaveLength(4);
-    expect(toolNames.swapAgentToolName).toBe("acme_control_plane__swap_agent");
-    expect(toolNames.swapToDefaultAgentToolName).toBe(
-      "acme_control_plane__swap_to_default_agent",
-    );
-
-    archestraMcpBranding.syncFromOrganization(null);
+    expect(stopConditions).toHaveLength(2);
   });
 });
 

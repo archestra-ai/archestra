@@ -80,8 +80,6 @@ export interface ChatPromptInputToolsProps {
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
-  /** Fallback display name when the selected agent is not yet present in the cached agent list */
-  selectorAgentName?: string;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
@@ -139,7 +137,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   inputModalities,
   agentLlmApiKeyId,
   selectorAgentId,
-  selectorAgentName,
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
@@ -412,7 +409,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             onAgentChange && (
               <InitialAgentSelector
                 currentAgentId={selectorAgentId}
-                currentAgentName={selectorAgentName}
                 onAgentChange={onAgentChange}
               />
             )}

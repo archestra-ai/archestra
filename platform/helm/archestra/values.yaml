@@ -584,6 +584,15 @@ archestra:
     # If not set, inherits from archestra.tolerations
     tolerations: []
 
+  # Optional dedicated listener that aliases the publicly-exposable endpoints
+  # — currently the MS Teams incoming webhook (/api/webhooks/chatops/ms-teams)
+  # — on their own port, so a firewall / load balancer can expose only these
+  # endpoints without exposing the whole API.
+  # The main backend port (9000) keeps serving them either way.
+  # Setting the port injects ARCHESTRA_PUBLIC_ENDPOINTS_PORT into the backend
+  # container and adds a named container port + Service port.
+  publicEndpointsPort: null
+
   # Service configuration
   service:
     # Service type - ClusterIP, NodePort, or LoadBalancer
@@ -596,6 +605,8 @@ archestra:
       backend: null
       metrics: null
       frontend: null
+      # Only used when archestra.publicEndpointsPort is set
+      publicEndpoints: null
 
   # Ingress configuration
   ingress:

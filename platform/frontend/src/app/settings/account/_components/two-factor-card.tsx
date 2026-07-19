@@ -27,6 +27,7 @@ import {
   useDisableTwoFactorMutation,
   useEnableTwoFactorMutation,
 } from "@/lib/auth/two-factor.query";
+import { copyToClipboard } from "@/lib/clipboard";
 
 const PasswordFormSchema = z.object({
   password: z.string().min(1, "Password is required"),
@@ -197,7 +198,7 @@ function BackupCodesDialog({
 }) {
   async function copyBackupCodes() {
     if (!result) return;
-    await navigator.clipboard.writeText(result.backupCodes.join("\n"));
+    await copyToClipboard(result.backupCodes.join("\n"));
     toast.success("Backup codes copied to clipboard");
   }
 

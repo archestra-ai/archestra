@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { copyToClipboard } from "@/lib/clipboard";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 export interface ManagedPlatformToken {
@@ -62,7 +63,7 @@ export function PlatformTokenManagerDialog({
   const handleCopy = async () => {
     if (!displayedValue) return;
 
-    await navigator.clipboard.writeText(displayedValue);
+    await copyToClipboard(displayedValue);
     setCopied(true);
     toast.success("Token copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
@@ -77,7 +78,7 @@ export function PlatformTokenManagerDialog({
     const value = await rotateToken();
     if (!value) return;
 
-    await navigator.clipboard.writeText(value);
+    await copyToClipboard(value);
     toast.success("Token rotated and copied to clipboard");
     setDisplayedValue(value);
     setShowValue(true);

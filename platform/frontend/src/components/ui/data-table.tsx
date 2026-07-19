@@ -191,6 +191,21 @@ export function DataTable<TData, TValue>({
     },
   });
 
+  // With autoResetPageIndex disabled, a shrinking row count (e.g. a filter
+  // applied while on a later page) strands the table on a nonexistent page.
+  // Clamp to the last valid page; setPageIndex routes through
+  // onPaginationChange, covering both controlled and internal pagination.
+  const pageCount = table.getPageCount();
+  const pageIndex = table.getState().pagination.pageIndex;
+  React.useEffect(() => {
+    // pageCount is -1 when manual pagination has no known page count
+    if (isLoading || pageCount < 0) return;
+    const maxPageIndex = Math.max(pageCount - 1, 0);
+    if (pageIndex > maxPageIndex) {
+      table.setPageIndex(maxPageIndex);
+    }
+  }, [isLoading, pageCount, pageIndex, table]);
+
   return (
     <div className="w-full space-y-4">
       <div className="overflow-x-auto rounded-md border">

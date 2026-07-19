@@ -3,12 +3,11 @@
 import { Users } from "lucide-react";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { useAppName } from "@/lib/hooks/use-app-name";
 
 export interface PersonalCredentialPin {
   mcpName: string;
   ownerEmail: string;
-  /** The pinned connection belongs to the person doing the pinning. */
+  /** The chosen connection belongs to the person making the change. */
   isCurrentUser: boolean;
 }
 
@@ -18,12 +17,17 @@ interface StaticCredentialConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   /**
-   * "agent" (default): pinning a connection to one agent's tools. "server": the
-   * server's default credential, which applies to every agent that resolves it
-   * at call time.
+   * "agent" (default): a connection chosen for one agent's tools. "server": the
+   * server's default connection, used by every agent that resolves it at call
+   * time.
    */
   context?: "agent" | "server";
 }
+
+const asWho = (pin: PersonalCredentialPin) =>
+  pin.isCurrentUser ? "you" : pin.ownerEmail;
+const possessiveWho = (pin: PersonalCredentialPin) =>
+  pin.isCurrentUser ? "your" : `${pin.ownerEmail}'s`;
 
 export function StaticCredentialConfirmDialog({
   open,
@@ -32,18 +36,7 @@ export function StaticCredentialConfirmDialog({
   onCancel,
   context = "agent",
 }: StaticCredentialConfirmDialogProps) {
-  const appName = useAppName();
   const single = pins.length === 1 ? pins[0] : null;
-
-  const confirmLabel = single
-    ? context === "server"
-      ? single.isCurrentUser
-        ? "Use your account"
-        : `Use ${single.ownerEmail}'s account`
-      : single.isCurrentUser
-        ? "Pin to your connection"
-        : `Pin to ${single.ownerEmail}'s connection`
-    : "Pin anyway";
 
   // A plain (non-form) dialog: this renders inside a modal's own form, and a
   // nested submit would bubble through the React portal to that form and
@@ -58,7 +51,11 @@ export function StaticCredentialConfirmDialog({
       title={
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5" />
-          <span>Pin every user to a personal account?</span>
+          <span>
+            {single
+              ? "Use this connection for everyone?"
+              : "Use these connections for everyone?"}
+          </span>
         </div>
       }
       size="small"
@@ -81,7 +78,7 @@ export function StaticCredentialConfirmDialog({
               onConfirm();
             }}
           >
-            {confirmLabel}
+            {single ? "Use this connection" : "Use these connections"}
           </Button>
         </>
       }
@@ -89,72 +86,38 @@ export function StaticCredentialConfirmDialog({
       {single ? (
         <p className="text-sm text-muted-foreground">
           {context === "server" ? (
-            single.isCurrentUser ? (
-              <>
-                Set as the default, every agent that resolves{" "}
-                <span className="text-foreground font-medium">
-                  {single.mcpName}
-                </span>{" "}
-                at call time connects as{" "}
-                <span className="text-foreground font-medium">you</span> — every
-                caller's request comes from you, with your access, against your
-                rate limits, and under your name.
-              </>
-            ) : (
-              <>
-                Set as the default, every agent that resolves{" "}
-                <span className="text-foreground font-medium">
-                  {single.mcpName}
-                </span>{" "}
-                at call time connects as{" "}
-                <span className="text-foreground font-medium">
-                  {single.ownerEmail}
-                </span>{" "}
-                — every caller's request comes from {single.ownerEmail}, with
-                their access, against their rate limits, and under their name.
-              </>
-            )
-          ) : single.isCurrentUser ? (
             <>
-              Everyone who uses this agent will call{" "}
+              Every agent that resolves{" "}
               <span className="text-foreground font-medium">
                 {single.mcpName}
               </span>{" "}
-              through <span className="text-foreground font-medium">your</span>{" "}
-              connection. To{" "}
+              at call time will connect as{" "}
               <span className="text-foreground font-medium">
-                {single.mcpName}
+                {asWho(single)}
               </span>
-              , every request comes from you — with your access, against your
-              rate limits, and under your name.
+              , no matter who is calling — using {possessiveWho(single)} access
+              and rate limits.
             </>
           ) : (
             <>
-              Everyone who uses this agent will call{" "}
+              Every user of this agent will connect to{" "}
               <span className="text-foreground font-medium">
                 {single.mcpName}
               </span>{" "}
-              through{" "}
+              as{" "}
               <span className="text-foreground font-medium">
-                {single.ownerEmail}
+                {asWho(single)}
               </span>
-              's connection. To{" "}
-              <span className="text-foreground font-medium">
-                {single.mcpName}
-              </span>
-              , every request comes from {single.ownerEmail} — with their
-              access, against their rate limits, and under their name.
+              , no matter who is calling — using {possessiveWho(single)} access
+              and rate limits.
             </>
-          )}{" "}
-          {appName}'s own tool-call log still records who actually ran each
-          call.
+          )}
         </p>
       ) : (
         <div className="space-y-3 text-sm text-muted-foreground">
           <p>
-            Sharing this agent pins its tools to personal connections. Everyone
-            who uses it will call each server as that one owner — with their
-            access, rate limits, and name:
+            Every user of this agent will connect to these servers as the person
+            shown, no matter who is calling:
           </p>
           <ul className="list-disc space-y-1 pl-5">
             {pins.map((pin) => (
@@ -162,14 +125,10 @@ export function StaticCredentialConfirmDialog({
                 <span className="text-foreground font-medium">
                   {pin.mcpName}
                 </span>{" "}
-                as {pin.isCurrentUser ? "you" : pin.ownerEmail}
+                as {asWho(pin)}
               </li>
             ))}
           </ul>
-          <p>
-            {appName}'s own tool-call log still records who actually ran each
-            call.
-          </p>
         </div>
       )}
     </StandardDialog>

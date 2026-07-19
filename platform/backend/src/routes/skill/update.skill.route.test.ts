@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
-import { SkillTeamModel } from "@/models";
+import { EnvironmentModel, SkillTeamModel } from "@/models";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import skillRoutes from "./skill.routes";
 import {
@@ -10,6 +10,38 @@ import {
 
 describe("PUT /api/skills/:id", () => {
   const ctx = useRouteTestApp(skillRoutes);
+
+  test("moves a skill to another environment", async () => {
+    const skill = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST },
+      })
+    ).json();
+    const env = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Staging",
+    });
+
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: { content: MANIFEST, environmentId: env.id },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(env.id);
+
+    // ...and back to the Default environment with an explicit null.
+    const back = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: { content: MANIFEST, environmentId: null },
+    });
+    expect(back.statusCode).toBe(200);
+    expect(back.json().environmentId).toBeNull();
+  });
 
   test("updates the manifest and replaces resource files", async () => {
     const created = (

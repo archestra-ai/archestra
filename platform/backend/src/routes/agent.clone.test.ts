@@ -363,6 +363,55 @@ describe("clone agent route", () => {
     expect(response.statusCode).toBe(403);
   });
 
+  test("rejects a clone override to team scope with no teams", async ({
+    makeInternalAgent,
+  }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Org Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: { scope: "team", teams: [] },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("clones with a team override to team scope", async ({
+    makeInternalAgent,
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Org Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: { scope: "team", teams: [team.id] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+    expect(cloned.scope).toBe("team");
+    expect(cloned.teams.map((t) => t.id)).toEqual([team.id]);
+  });
+
   test("clones agent with empty associations", async ({
     makeInternalAgent,
   }) => {

@@ -18,6 +18,3 @@ export type AppRenderDiagnosticEntry = z.infer<
 /** Per-app entry cap and per-message truncation, shared store/read side. */
 export const APP_RENDER_DIAGNOSTICS_MAX_ENTRIES = 20;
 export const APP_RENDER_DIAGNOSTIC_MESSAGE_MAX_LENGTH = 500;
-
-/** What `get_app_diagnostics` reports for the calling user's latest render. */
-export type AppRenderStatus = "no_render_observed" | "clean" | "errors";

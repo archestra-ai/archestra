@@ -35,6 +35,9 @@ export const SelectMcpToolCallSchema = createSelectSchema(
   },
 ).extend({
   userName: z.string().nullable(),
+  // Name of the owning app for app-owned calls; null for agent-owned calls
+  // or when the app was deleted.
+  appName: z.string().nullable(),
 });
 
 /**

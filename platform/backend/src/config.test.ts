@@ -33,6 +33,7 @@ import config, {
   parseFileStorageS3Config,
   parseLogFormat,
   parseMetricsPort,
+  parseOptionalPort,
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
   parseSampleRate,
@@ -1051,6 +1052,76 @@ describe("parseMetricsPort", () => {
   });
 });
 
+describe("parseOptionalPort", () => {
+  test("returns undefined (disabled) when no value provided", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("returns undefined when empty or whitespace-only string provided", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "",
+      }),
+    ).toBeUndefined();
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "   ",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("parses valid port value", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "9010",
+      }),
+    ).toBe(9010);
+  });
+
+  test("accepts boundary ports and trims whitespace", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "1",
+      }),
+    ).toBe(1);
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "65535",
+      }),
+    ).toBe(65535);
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "  9010  ",
+      }),
+    ).toBe(9010);
+  });
+
+  test("returns undefined and warns for invalid values", () => {
+    for (const envValue of ["abc", "0", "65536", "-1"]) {
+      expect(
+        parseOptionalPort({
+          envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+          envValue,
+        }),
+      ).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        `Invalid ARCHESTRA_PUBLIC_ENDPOINTS_PORT value "${envValue}", the dedicated listener will not be started`,
+      );
+    }
+  });
+});
+
 describe("parseActiveChatRunPollIntervalMs", () => {
   test("returns default when value is missing", () => {
     expect(
@@ -1624,34 +1695,15 @@ describe("parseSampleRate", () => {
 });
 
 describe("parseCodeRuntimeDaggerRunnerHost", () => {
-  test("should return undefined when runtime is disabled and host is unset", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: false, envValue: undefined }),
-    ).toBeUndefined();
-  });
-
-  test("should not validate host while runtime is disabled", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: false,
-        envValue: "kube-pod://dagger-engine?namespace=dagger",
-      }),
-    ).toBe("kube-pod://dagger-engine?namespace=dagger");
-  });
-
-  test("should return undefined when runtime is enabled but host is unset", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: true, envValue: undefined }),
-    ).toBeUndefined();
+  test("should return undefined when host is unset", () => {
+    expect(parseCodeRuntimeDaggerRunnerHost(undefined)).toBeUndefined();
   });
 
   test("should trim and return kube-pod runner host", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue:
-          " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
-      }),
+      parseCodeRuntimeDaggerRunnerHost(
+        " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
+      ),
     ).toBe(
       "kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine",
     );
@@ -1659,19 +1711,15 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
 
   test("should trim and return TCP runner host", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
-      }),
+      parseCodeRuntimeDaggerRunnerHost(
+        " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
+      ),
     ).toBe("tcp://dagger-runtime.dagger.svc.cluster.local:1234");
   });
 
   test("should return undefined for unsupported runner hosts", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: "unix:///run/dagger/engine.sock",
-      }),
+      parseCodeRuntimeDaggerRunnerHost("unix:///run/dagger/engine.sock"),
     ).toBeUndefined();
   });
 });

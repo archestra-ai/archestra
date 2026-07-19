@@ -142,16 +142,20 @@ Schema DDL must run before the data migration so column references resolve.
 cd platform/backend && pnpm exec drizzle-kit check
 ```
 
-Must print **"Everything's fine"**. Then run the same journal ordering check
-that CI runs:
+Must print **"Everything's fine"**. Then run the same checks CI runs — journal
+ordering plus the Drizzle migration linter over migrations changed relative to
+`origin/main`:
 
 ```
 cd platform/backend && pnpm check:migrations
 ```
 
-This must print **"Drizzle migration journal ordering is valid."** If it
-fails, your regenerated migration was not appended after main's latest
-migration, or its journal timestamp was copied/edited incorrectly.
+The journal check must print **"Drizzle migration journal ordering is valid."**
+If it fails, your regenerated migration was not appended after main's latest
+migration, or its journal timestamp was copied/edited incorrectly. The linter
+fails separately, with `ERROR <code>` lines pointing at the migration file —
+that is a lint problem in the regenerated/edited SQL (often the re-appended
+data-migration tail), not a journal problem.
 
 If `drizzle-kit check` reports drift, compare
 `/tmp/<COLLIDING>_<your_name>.original.sql` against the regenerated SQL and

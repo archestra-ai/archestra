@@ -21,7 +21,6 @@ import {
   generateId,
   generateObject,
   generateText,
-  hasToolCall,
   InvalidToolInputError,
   jsonSchema,
   type ModelMessage,
@@ -35,7 +34,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
@@ -58,6 +56,7 @@ import {
   createSubagentToolStreamBridge,
 } from "@/clients/subagent-tool-stream";
 import {
+  recordUnavailableToolCallStep,
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
@@ -99,6 +98,10 @@ import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
+import {
+  type OpenedApp,
+  resolveOpenedApp,
+} from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -164,6 +167,7 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
+import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
   detectSandboxCommand,
   runSandboxCommandTurn,
@@ -623,6 +627,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 })
             : Promise.resolve(undefined);
 
+        // When an app is open in the chat, the client reports it on the turn's
+        // last user message; we restate that app in the system prompt so the
+        // model keeps treating the conversation as being about it. The client
+        // hint is untrusted — `resolveOpenedApp` re-runs the caller's access
+        // check, so a forged id only surfaces an app they could already see.
+        // Same posture as the project instructions above: concurrent, and
+        // best-effort — a resolve failure (or an app since deleted or made
+        // inaccessible) drops the injection rather than breaking the chat.
+        const openedAppRef = readOpenedAppRef(messages as ChatMessage[]);
+        const openedAppPromise: Promise<OpenedApp | undefined> = openedAppRef
+          ? resolveOpenedApp({
+              openedApp: openedAppRef,
+              userId: user.id,
+              organizationId,
+            }).catch((error) => {
+              logger.warn(
+                { error, conversationId },
+                "Failed to load the chat's open app, proceeding without its context",
+              );
+              return undefined;
+            })
+          : Promise.resolve(undefined);
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -635,20 +662,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          projectInstructionsPromise.then((projectInstructions) =>
-            buildChatContext({
-              conversationId,
-              agentId,
-              agent,
-              user: { id: user.id, email: user.email, name: user.name },
-              organizationId,
-              hookSessionContext,
-              projectInstructions,
-              hookRunCollector,
-              elicitation: chatMcpElicitation,
-              subagentToolStream,
-              abortSignal: chatAbortController.signal,
-            }),
+          Promise.all([projectInstructionsPromise, openedAppPromise]).then(
+            ([projectInstructions, openedApp]) =>
+              buildChatContext({
+                conversationId,
+                agentId,
+                agent,
+                user: { id: user.id, email: user.email, name: user.name },
+                organizationId,
+                hookSessionContext,
+                projectInstructions,
+                openedApp,
+                hookRunCollector,
+                elicitation: chatMcpElicitation,
+                subagentToolStream,
+                abortSignal: chatAbortController.signal,
+              }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),
@@ -1115,10 +1144,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // discarded retry attempts (empty/abortive) that the probe
                   // drains before a result is committed, so their usage never
                   // reaches the client.
-                  onStepFinish: ({ usage, finishReason }) => {
+                  onStepFinish: (step) => {
+                    const { usage, finishReason } = step;
                     if (!hasCommittedResult) {
                       return;
                     }
+                    // Feeds the repeat ceiling in stopWhen the one call shape it
+                    // cannot otherwise see: a tool outside the tool list never
+                    // reaches an execute wrapper, so nothing fingerprints it.
+                    recordUnavailableToolCallStep(repeatTracker, step);
                     // Fires for the truncated step before the tracker's flush,
                     // so this holds the finishReason the tracker keys off.
                     lastFinishReason = finishReason;
@@ -3200,19 +3234,8 @@ export function resolveTitleUserInput(
 export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
   return [
     stepCountIs(MAX_AGENT_STEPS),
-    hasToolCall(getChatStopToolNames().swapAgentToolName),
-    hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
     repeatCeilingStopCondition(repeatTracker),
   ];
-}
-
-export function getChatStopToolNames() {
-  return {
-    swapAgentToolName: archestraMcpBranding.getToolName("swap_agent"),
-    swapToDefaultAgentToolName: archestraMcpBranding.getToolName(
-      "swap_to_default_agent",
-    ),
-  };
 }
 
 /**
@@ -3551,8 +3574,8 @@ function getMessagesNotYetPersisted(params: {
 
     // Persisted messages are re-keyed to DB UUIDs when conversations reload, but
     // in-flight useChat requests can still carry the original temporary content
-    // ids. Track both forms so follow-up turns after swap_agent do not get
-    // dropped just because the incoming thread is shorter than the DB thread.
+    // ids. Track both forms so follow-up turns do not get dropped just because
+    // the incoming thread is shorter than the DB thread.
     const contentId = getMessageContentId(message.content);
 
     if (contentId && contentId.length > 0) {

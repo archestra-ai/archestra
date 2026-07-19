@@ -2999,6 +2999,7 @@ class ToolModel {
         name: string;
         description: string | null;
         systemPrompt: string | null;
+        environmentId: string | null;
       };
     }>
   > {
@@ -3010,6 +3011,7 @@ class ToolModel {
           name: schema.agentsTable.name,
           description: schema.agentsTable.description,
           systemPrompt: schema.agentsTable.systemPrompt,
+          environmentId: schema.agentsTable.environmentId,
         },
       })
       .from(schema.agentToolsTable)

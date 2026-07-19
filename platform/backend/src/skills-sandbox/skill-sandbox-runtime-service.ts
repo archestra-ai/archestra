@@ -17,6 +17,7 @@ import {
   sandboxRuntimeService,
 } from "@/sandbox-runtime/sandbox-runtime-service";
 import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
+import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
@@ -49,9 +50,6 @@ const CONSUMER_ID = "skill-sandbox";
 // can produce (which is bounded to 0..255).
 const SYNTHETIC_ENGINE_FAILURE_EXIT_CODE = -1;
 const REQUIREMENTS_FILE = "requirements.txt";
-// reserved at the skill root: the mount synthesizes this from the pinned
-// version body, so a resource file may not occupy it or any subpath of it.
-const SKILL_MANIFEST_FILE = "SKILL.md";
 // covers the cold first install for a typical skill (pillow + a few siblings);
 // subsequent calls hit Dagger's layer cache and finish in ms.
 const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
@@ -679,7 +677,7 @@ class SkillSandboxRuntimeService {
                 files: [
                   {
                     skillName: entry.mount.skillName,
-                    path: SKILL_MANIFEST_FILE,
+                    path: SKILL_MANIFEST_FILENAME,
                     encoding: "utf8" as const,
                     content: entry.content,
                   },
@@ -950,7 +948,7 @@ function validateSkillMountFilePath(skillName: string, path: string): void {
     path.startsWith("/") ||
     segments.length === 0 ||
     segments.some((s) => s === "..") ||
-    segments[0] === SKILL_MANIFEST_FILE
+    segments[0] === SKILL_MANIFEST_FILENAME
   ) {
     throw new SkillInvalidFilePathError(skillName, path);
   }

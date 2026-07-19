@@ -19,6 +19,7 @@ export function makeOrganization(
     theme: "modern-minimal",
     customFont: "inter",
     convertToolResultsToToon: false,
+    onlineMcpCatalogEnabled: true,
     skillToolsEnabled: false,
     compressionScope: "organization",
     defaultDiscoveredToolInvocationPolicy: "allow_when_context_is_untrusted",

@@ -36,6 +36,7 @@ import {
 } from "@/lib/chat/conversation-files";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   useProject,
   useUploadProjectFiles,
@@ -445,7 +446,7 @@ function ArtifactRowActions({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(content);
+      await copyToClipboard(content);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {

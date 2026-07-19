@@ -1,5 +1,6 @@
 "use client";
 
+import { API_KEY_MAX_NAME_LENGTH } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -34,7 +35,11 @@ import {
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
 import { useSetSettingsAction } from "../layout";
-import { shouldSkipCreateApiKeySubmit } from "./page.utils";
+import {
+  getApiKeyExpirationError,
+  isApiKeyExpirationDateDisabled,
+  shouldSkipCreateApiKeySubmit,
+} from "./page.utils";
 
 type CreateApiKeyFormValues = {
   name: string;
@@ -177,6 +182,15 @@ export default function ApiKeysSettingsPage() {
       return;
     }
 
+    const expirationError = getApiKeyExpirationError(values.expiresAt);
+    if (expirationError) {
+      form.setError("expiresAt", {
+        type: "validate",
+        message: expirationError,
+      });
+      return;
+    }
+
     hasSubmittedCreateDialogRef.current = true;
     const expiresIn = values.expiresAt
       ? Math.max(
@@ -292,19 +306,41 @@ export default function ApiKeysSettingsPage() {
                   <Input
                     id="name"
                     placeholder="CI token"
-                    {...form.register("name")}
+                    aria-invalid={!!form.formState.errors.name}
+                    {...form.register("name", {
+                      maxLength: {
+                        value: API_KEY_MAX_NAME_LENGTH,
+                        message: `Name must be at most ${API_KEY_MAX_NAME_LENGTH} characters.`,
+                      },
+                    })}
                   />
+                  {form.formState.errors.name?.message && (
+                    <p className="text-xs text-destructive">
+                      {form.formState.errors.name.message}
+                    </p>
+                  )}
                 </div>
-                <ExpirationDateTimeField
-                  value={form.watch("expiresAt")}
-                  onChange={(value) => form.setValue("expiresAt", value)}
-                  noExpirationText="Key will never expire"
-                  formatExpiration={(value) =>
-                    value
-                      ? formatDate({ date: new Date(value).toISOString() })
-                      : ""
-                  }
-                />
+                <div className="space-y-2">
+                  <ExpirationDateTimeField
+                    value={form.watch("expiresAt")}
+                    onChange={(value) => {
+                      form.clearErrors("expiresAt");
+                      form.setValue("expiresAt", value);
+                    }}
+                    disabledDate={isApiKeyExpirationDateDisabled}
+                    noExpirationText="Key will never expire"
+                    formatExpiration={(value) =>
+                      value
+                        ? formatDate({ date: new Date(value).toISOString() })
+                        : ""
+                    }
+                  />
+                  {form.formState.errors.expiresAt?.message && (
+                    <p className="text-xs text-destructive">
+                      {form.formState.errors.expiresAt.message}
+                    </p>
+                  )}
+                </div>
               </>
             )}
           </div>

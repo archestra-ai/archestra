@@ -5,7 +5,12 @@ import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { AgentTeamModel, ToolModel } from "@/models";
+import {
+  AgentExcludedSubagentModel,
+  AgentModel,
+  AgentTeamModel,
+  ToolModel,
+} from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -14,12 +19,27 @@ export const delegationToolArgsSchema = z.object({
   message: z.string().trim().min(1, "message is required."),
 });
 
+// The canonical delegation input schema, reused for Auto-mode synthesized
+// delegation tools so they are indistinguishable from explicit ones.
+const DELEGATION_INPUT_JSON_SCHEMA = z.toJSONSchema(delegationToolArgsSchema, {
+  io: "input",
+}) as Tool["inputSchema"];
+
 // === Exports ===
 
 /**
- * Get agent delegation tools for an agent from the database
- * Each configured delegation becomes a separate tool (e.g., delegate_to_research_bot)
- * Note: Agent tools are separate from Archestra tools - they enable agent-to-agent delegation
+ * Get agent delegation tools for an agent. Each eligible target agent becomes a
+ * separate tool (e.g. `agent__research_bot`). Two modes, mirroring the Auto/
+ * Custom tool pattern:
+ *
+ * - **Auto** (`agents.access_all_subagents`, real user only): every internal
+ *   agent the calling user can access (minus per-agent exclusions), resolved
+ *   dynamically — explicit delegation rows are irrelevant, exactly like Auto
+ *   tool mode ignores assignments.
+ * - **Custom** (default, and every non-user/system flow): only the explicitly-
+ *   configured delegation targets, filtered by the caller's agent access.
+ *
+ * Note: Agent delegation tools are separate from Archestra tools.
  */
 export async function getAgentTools(context: {
   agentId: string;
@@ -30,9 +50,30 @@ export async function getAgentTools(context: {
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck } = context;
 
-  // Get all delegation tools assigned to this agent
-  const allToolsWithDetails =
-    await ToolModel.getDelegationToolsByAgent(agentId);
+  // Delegation never crosses environment boundaries (null is the Default
+  // environment), mirroring tool isolation: in both modes only same-environment
+  // targets are advertised.
+  const environmentId = await AgentModel.findEnvironmentId(agentId);
+
+  // Auto mode only expands for a real authenticated user; system/token flows
+  // (chatops, scheduled triggers, A2A) fall back to explicit delegations. This
+  // fail-closed gate mirrors the Auto-tool `dynamicAccessContext` gate.
+  const isRealUser = Boolean(userId) && userId !== "system";
+  if (isRealUser && (await AgentModel.getAccessAllSubagents(agentId))) {
+    return buildAutoDelegationTools({
+      agentId,
+      organizationId,
+      // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
+      userId: userId!,
+      environmentId,
+    });
+  }
+
+  // Custom mode: only explicitly-configured delegation targets, restricted to
+  // the calling agent's environment.
+  const allToolsWithDetails = (
+    await ToolModel.getDelegationToolsByAgent(agentId)
+  ).filter((t) => t.targetAgent.environmentId === environmentId);
 
   // Filter by user access if user ID is provided (skip for A2A/ChatOps flows)
   let accessibleTools = allToolsWithDetails;
@@ -64,20 +105,13 @@ export async function getAgentTools(context: {
   );
 
   // Convert DB tools to MCP Tool format
-  return accessibleTools.map((t) => {
-    const description = t.targetAgent.description
-      ? `Delegate task to agent: ${t.targetAgent.name}. ${t.targetAgent.description.substring(0, 400)}`
-      : `Delegate task to agent: ${t.targetAgent.name}`;
-
-    return {
+  return accessibleTools.map((t) =>
+    buildDelegationToolDescriptor({
       name: t.tool.name,
-      title: t.targetAgent.name,
-      description,
+      targetAgent: t.targetAgent,
       inputSchema: t.tool.parameters as Tool["inputSchema"],
-      annotations: {},
-      _meta: { targetAgentId: t.targetAgent.id },
-    };
-  });
+    }),
+  );
 }
 
 export async function handleDelegation(
@@ -104,36 +138,39 @@ export async function handleDelegation(
   // Extract target agent slug from tool name
   const targetAgentSlug = toolName.replace(AGENT_TOOL_PREFIX, "");
 
-  // Get all delegation targets configured for this agent
-  const delegations = await ToolModel.getDelegationToolsByAgent(agentId);
-
-  // Find matching delegation by slug
-  const delegation = delegations.find(
-    (d) => slugify(d.targetAgent.name) === targetAgentSlug,
-  );
-
-  if (!delegation) {
-    return errorResult(
-      `No delegation is configured for "${toolName}". Use an exact agent delegation tool name (${AGENT_TOOL_PREFIX}*) from your tools list. Do not guess delegation names.`,
-    );
-  }
-
-  // Check user access when a real caller is available. The caller user can be
-  // present even when the selected gateway token is team/org scoped.
+  // The caller user can be present even when the selected gateway token is
+  // team/org scoped.
   const userId = context.userId ?? tokenAuth?.userId;
-  if (userId && userId !== "system" && organizationId) {
-    const isAgentAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "agent",
-      "admin",
-    );
+  const isRealUser = Boolean(userId) && userId !== "system";
 
-    const userAccessibleAgentIds =
-      await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
-    if (!userAccessibleAgentIds.includes(delegation.targetAgent.id)) {
-      return errorResult("You don't have access to this agent.");
-    }
+  // Same environment restriction as the advertised surface: delegation never
+  // crosses environment boundaries.
+  const environmentId = await AgentModel.findEnvironmentId(agentId);
+
+  // Resolve the delegation target, mirroring getAgentTools: Auto mode resolves
+  // dynamically against the caller-accessible set (minus exclusions); Custom
+  // mode resolves against explicit delegation rows. Keeping resolution symmetric
+  // with the advertised surface means a caller can only dispatch what it saw.
+  const target =
+    isRealUser && (await AgentModel.getAccessAllSubagents(agentId))
+      ? await resolveAutoDelegationTarget({
+          agentId,
+          organizationId,
+          // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
+          userId: userId!,
+          environmentId,
+          targetAgentSlug,
+        })
+      : await resolveExplicitDelegationTarget({
+          agentId,
+          organizationId,
+          userId,
+          environmentId,
+          targetAgentSlug,
+        });
+
+  if ("error" in target) {
+    return target.error;
   }
 
   // The caller's ancestor path, which the executor checks for cycles. A root
@@ -149,8 +186,8 @@ export async function handleDelegation(
     logger.info(
       {
         agentId,
-        targetAgentId: delegation.targetAgent.id,
-        targetAgentName: delegation.targetAgent.name,
+        targetAgentId: target.id,
+        targetAgentName: target.name,
         organizationId,
         userId: userId || "system",
         sessionId,
@@ -159,7 +196,7 @@ export async function handleDelegation(
     );
 
     const result = await executeA2AMessage({
-      agentId: delegation.targetAgent.id,
+      agentId: target.id,
       message,
       organizationId,
       userId: userId || "system",
@@ -190,7 +227,7 @@ export async function handleDelegation(
   } catch (error) {
     if (isAbortLikeError(error)) {
       logger.info(
-        { agentId, targetAgentId: delegation.targetAgent.id },
+        { agentId, targetAgentId: target.id },
         "Agent delegation was aborted",
       );
       throw error;
@@ -199,7 +236,7 @@ export async function handleDelegation(
       logger.info(
         {
           agentId,
-          targetAgentId: delegation.targetAgent.id,
+          targetAgentId: target.id,
           parentDelegationChain,
         },
         "Agent delegation refused to avoid a delegation loop",
@@ -207,7 +244,7 @@ export async function handleDelegation(
       return errorResult(error.message);
     }
     logger.error(
-      { error, agentId, targetAgentId: delegation.targetAgent.id },
+      { error, agentId, targetAgentId: target.id },
       "Agent delegation tool execution failed",
     );
     // Re-throw ProviderError so it propagates to the parent stream's onError
@@ -219,4 +256,192 @@ export async function handleDelegation(
       error instanceof Error ? error.message : "Unknown error",
     );
   }
+}
+
+// === Internal ===
+
+type ResolvedTarget = { id: string; name: string } | { error: CallToolResult };
+
+/**
+ * Build the Auto-mode delegation surface: every accessible internal agent minus
+ * per-agent exclusions, deduped by slug (first wins, matching dispatch's
+ * `.find()` semantics so the surface and dispatch never disagree).
+ */
+async function buildAutoDelegationTools(params: {
+  agentId: string;
+  organizationId: string;
+  userId: string;
+  environmentId: string | null;
+}): Promise<Tool[]> {
+  const { agentId, organizationId, userId, environmentId } = params;
+
+  const isAgentAdmin = await userHasPermission(
+    userId,
+    organizationId,
+    "agent",
+    "admin",
+  );
+
+  const [targets, excludedIds] = await Promise.all([
+    AgentModel.findAccessibleDelegationTargets({
+      userId,
+      isAdmin: isAgentAdmin,
+      excludeAgentId: agentId,
+      environmentId,
+    }),
+    AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agentId),
+  ]);
+
+  const excluded = new Set(excludedIds);
+  const seenNames = new Set<string>();
+  const tools: Tool[] = [];
+
+  for (const targetAgent of targets) {
+    if (excluded.has(targetAgent.id)) {
+      continue;
+    }
+    const name = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
+    // Two agents can slugify to the same tool name; keep the first (targets are
+    // name-ordered) so the advertised name resolves deterministically.
+    if (seenNames.has(name)) {
+      continue;
+    }
+    seenNames.add(name);
+    tools.push(
+      buildDelegationToolDescriptor({
+        name,
+        targetAgent,
+        inputSchema: DELEGATION_INPUT_JSON_SCHEMA,
+      }),
+    );
+  }
+
+  logger.debug(
+    {
+      agentId,
+      organizationId,
+      userId,
+      accessibleTargetCount: targets.length,
+      excludedCount: excluded.size,
+      exposedToolCount: tools.length,
+    },
+    "Built Auto-mode agent delegation tools",
+  );
+
+  return tools;
+}
+
+/**
+ * Auto-mode dispatch resolution: find the caller-accessible, non-excluded target
+ * whose slug matches, using the same name-ordering/first-match rule as the
+ * surface builder.
+ */
+async function resolveAutoDelegationTarget(params: {
+  agentId: string;
+  organizationId: string;
+  userId: string;
+  environmentId: string | null;
+  targetAgentSlug: string;
+}): Promise<ResolvedTarget> {
+  const { agentId, organizationId, userId, environmentId, targetAgentSlug } =
+    params;
+
+  const isAgentAdmin = await userHasPermission(
+    userId,
+    organizationId,
+    "agent",
+    "admin",
+  );
+
+  const [targets, excludedIds] = await Promise.all([
+    AgentModel.findAccessibleDelegationTargets({
+      userId,
+      isAdmin: isAgentAdmin,
+      excludeAgentId: agentId,
+      environmentId,
+    }),
+    AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agentId),
+  ]);
+
+  const excluded = new Set(excludedIds);
+  const match = targets.find(
+    (t) => !excluded.has(t.id) && slugify(t.name) === targetAgentSlug,
+  );
+
+  if (!match) {
+    return { error: noDelegationConfiguredError(targetAgentSlug) };
+  }
+
+  return { id: match.id, name: match.name };
+}
+
+/**
+ * Custom-mode dispatch resolution: match an explicitly-configured delegation
+ * row by slug and enforce the caller's agent access.
+ */
+async function resolveExplicitDelegationTarget(params: {
+  agentId: string;
+  organizationId: string;
+  userId: string | undefined;
+  environmentId: string | null;
+  targetAgentSlug: string;
+}): Promise<ResolvedTarget> {
+  const { agentId, organizationId, userId, environmentId, targetAgentSlug } =
+    params;
+
+  const delegations = await ToolModel.getDelegationToolsByAgent(agentId);
+  const delegation = delegations.find(
+    (d) =>
+      d.targetAgent.environmentId === environmentId &&
+      slugify(d.targetAgent.name) === targetAgentSlug,
+  );
+
+  if (!delegation) {
+    return { error: noDelegationConfiguredError(targetAgentSlug) };
+  }
+
+  // Check user access when a real caller is available. The caller user can be
+  // present even when the selected gateway token is team/org scoped.
+  if (userId && userId !== "system") {
+    const isAgentAdmin = await userHasPermission(
+      userId,
+      organizationId,
+      "agent",
+      "admin",
+    );
+
+    const userAccessibleAgentIds =
+      await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
+    if (!userAccessibleAgentIds.includes(delegation.targetAgent.id)) {
+      return { error: errorResult("You don't have access to this agent.") };
+    }
+  }
+
+  return { id: delegation.targetAgent.id, name: delegation.targetAgent.name };
+}
+
+function noDelegationConfiguredError(targetAgentSlug: string): CallToolResult {
+  return errorResult(
+    `No delegation is configured for "${AGENT_TOOL_PREFIX}${targetAgentSlug}". Use an exact agent delegation tool name (${AGENT_TOOL_PREFIX}*) from your tools list. Do not guess delegation names.`,
+  );
+}
+
+function buildDelegationToolDescriptor(params: {
+  name: string;
+  targetAgent: { id: string; name: string; description?: string | null };
+  inputSchema: Tool["inputSchema"];
+}): Tool {
+  const { name, targetAgent, inputSchema } = params;
+  const description = targetAgent.description
+    ? `Delegate task to agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
+    : `Delegate task to agent: ${targetAgent.name}`;
+
+  return {
+    name,
+    title: targetAgent.name,
+    description,
+    inputSchema,
+    annotations: {},
+    _meta: { targetAgentId: targetAgent.id },
+  };
 }

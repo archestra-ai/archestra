@@ -3,6 +3,7 @@ import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
+  SKILL_TOOL_PREFIX,
   slugify,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
@@ -28,6 +29,7 @@ import {
 import {
   AgentExcludedSubagentModel,
   AgentModel,
+  SkillModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
@@ -266,6 +268,93 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames).not.toContain(
       `${AGENT_TOOL_PREFIX}${slugify(caller.name)}`,
     );
+  });
+
+  test("skill delegation: tools/list advertises skill__ tools and tools/call routes them to the skill-delegation dispatch", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const caller = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      name: "Gateway Skill Caller",
+    });
+    const target = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      scope: "org",
+      name: "Gateway Skill Target",
+    });
+
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: "gateway-delegated-skill",
+        description: "Runs in a subagent.",
+        content: "Do the thing.",
+        agentName: target.name,
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    // A skill designating a nonexistent agent: never advertised, and its
+    // dispatch fails inside the skill-delegation resolver.
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: "gateway-orphan-skill",
+        description: "Designates a missing agent.",
+        content: "Do the thing.",
+        agentName: "Ghost Bot",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+
+    const token = await UserTokenModel.create(user.id, org.id);
+
+    const listResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${caller.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 1 },
+    });
+    expect(listResponse.statusCode).toBe(200);
+    const toolNames = listResponse
+      .json()
+      .result.tools.map((tool: { name: string }) => tool.name);
+    expect(toolNames).toContain(`${SKILL_TOOL_PREFIX}gateway_delegated_skill`);
+    expect(toolNames).not.toContain(`${SKILL_TOOL_PREFIX}gateway_orphan_skill`);
+
+    // tools/call on a skill__ name must route into the skill-delegation
+    // dispatch (executeArchestraTool), not the third-party tool gate — the
+    // orphan skill's resolver error proves the routing without running an
+    // actual subagent. The old bug surfaced here as a "not enabled for this
+    // conversation" refusal from the invocation-policy enabled-tools filter.
+    const callResponse = await callMcpTool({
+      app,
+      agentId: caller.id,
+      token: token.value,
+      name: `${SKILL_TOOL_PREFIX}gateway_orphan_skill`,
+      arguments: { message: "run it" },
+    });
+    expect(callResponse.statusCode).toBe(200);
+    const result = callResponse.json().result;
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(
+      'designates the agent "Ghost Bot"',
+    );
+    expect(result.content[0].text).not.toContain("not enabled");
   });
 
   test("derives a human 'Open <app>' title for an app launch tool, leaving its slug name and other tools' titles untouched", async ({

@@ -368,22 +368,9 @@ export function SkillEditorDialog({
       size="large"
       bodyClassName="flex flex-col overflow-hidden"
       footer={
-        <>
-          {/* Existing skills only (edit/preview with an id) — a skill being
-              created has no id to start a chat with yet. */}
-          {skillId !== null && (
-            <PermissionButton
-              permissions={{ chat: ["read", "create"] }}
-              variant="outline"
-              asChild
-            >
-              <Link href={`/chat/new?skill_id=${skillId}`}>
-                <MessageSquare className="h-4 w-4" />
-                Chat
-              </Link>
-            </PermissionButton>
-          )}
-          {isPreview ? (
+        isPreview ? (
+          <>
+            <ChatWithSkillButton skillId={skillId} />
             <Button
               type="button"
               variant="outline"
@@ -391,21 +378,22 @@ export function SkillEditorDialog({
             >
               Close
             </Button>
-          ) : (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="button" disabled={!canSave} onClick={handleSave}>
-                {isSaving ? "Saving..." : "Save skill"}
-              </Button>
-            </>
-          )}
-        </>
+          </>
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <ChatWithSkillButton skillId={skillId} />
+            <Button type="button" disabled={!canSave} onClick={handleSave}>
+              {isSaving ? "Saving..." : "Save skill"}
+            </Button>
+          </>
+        )
       }
     >
       {(isPreview && isPreviewLoading) || (isEdit && isLoading) ? (
@@ -933,6 +921,24 @@ function NewFolderRow({
         <X className="h-3.5 w-3.5" />
       </Button>
     </div>
+  );
+}
+
+/** Existing skills only (edit/preview with an id) — a skill being created has
+ * no id to start a chat with yet. */
+function ChatWithSkillButton({ skillId }: { skillId: string | null }) {
+  if (skillId === null) return null;
+  return (
+    <PermissionButton
+      permissions={{ chat: ["read", "create"] }}
+      variant="outline"
+      asChild
+    >
+      <Link href={`/chat/new?skill_id=${skillId}`}>
+        <MessageSquare className="h-4 w-4" />
+        Chat
+      </Link>
+    </PermissionButton>
   );
 }
 

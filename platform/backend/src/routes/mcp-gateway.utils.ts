@@ -5,6 +5,7 @@ import {
   hasArchestraTokenPrefix,
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
+  isSkillTool,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   MCP_GATEWAY_OAUTH_SCOPE,
@@ -540,9 +541,11 @@ export async function createAgentServer(
       }
 
       try {
-        // Check if this is an Archestra tool or agent delegation tool
+        // Check if this is an Archestra tool or a delegation tool (agent or
+        // skill delegation — both dispatch through executeArchestraTool)
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
+        const isSkillDelegationTool = isSkillTool(name);
         const contextIsTrusted = !agent.considerContextUntrusted;
 
         // tools/list advertises an all-tools agent's dynamically-accessible
@@ -564,6 +567,7 @@ export async function createAgentServer(
         const assignedToolNames =
           !isArchestraTool &&
           !isAgentDelegationTool &&
+          !isSkillDelegationTool &&
           agent.accessAllTools &&
           tokenAuth?.userId &&
           tokenAuth.organizationId
@@ -659,17 +663,19 @@ export async function createAgentServer(
           return blockedResult;
         }
 
-        if (isArchestraTool || isAgentDelegationTool) {
+        if (isArchestraTool || isAgentDelegationTool || isSkillDelegationTool) {
           logger.info(
             {
               agentId,
               toolName: name,
               toolType: isAgentDelegationTool
                 ? "agent-delegation"
-                : "archestra",
+                : isSkillDelegationTool
+                  ? "skill-delegation"
+                  : "archestra",
             },
-            isAgentDelegationTool
-              ? "Agent delegation tool call received"
+            isAgentDelegationTool || isSkillDelegationTool
+              ? "Delegation tool call received"
               : "Archestra MCP tool call received",
           );
 

@@ -36,8 +36,8 @@ import {
   executeArchestraTool,
   filterToolNamesByPermission,
   getAgentTools,
-  getSkillDelegationTools,
   getArchestraMcpTools,
+  getSkillDelegationTools,
 } from "@/archestra-mcp-server";
 import {
   getUnassignedDiscoverableTools,

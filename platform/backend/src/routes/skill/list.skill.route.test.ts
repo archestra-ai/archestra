@@ -42,9 +42,9 @@ describe("GET /api/skills", () => {
       url: `/api/skills?forAgentId=${envAgent.id}`,
     });
     expect(staging.statusCode).toBe(200);
-    expect(
-      staging.json().data.map((s: { name: string }) => s.name),
-    ).toEqual(["staging-skill"]);
+    expect(staging.json().data.map((s: { name: string }) => s.name)).toEqual([
+      "staging-skill",
+    ]);
 
     const dflt = await ctx.app.inject({
       method: "GET",

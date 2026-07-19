@@ -1,4 +1,5 @@
 import {
+  SKILL_TOOL_PREFIX,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
@@ -54,13 +55,25 @@ export async function buildSkillCatalogPrompt(params: {
   }
 
   const catalog = skills
-    .map(
-      (skill) =>
-        `<skill name="${escapeXmlAttr(skill.name)}">${neutralizeFrameTags(
-          skill.description,
-        )}</skill>`,
-    )
+    .map((skill) => {
+      // an agent-designated skill runs in that subagent via its skill__<slug>
+      // tool; the agent attribute steers the model away from load_skill.
+      const agentAttr =
+        skill.agentName !== null
+          ? ` agent="${escapeXmlAttr(skill.agentName)}"`
+          : "";
+      return `<skill name="${escapeXmlAttr(skill.name)}"${agentAttr}>${neutralizeFrameTags(
+        skill.description,
+      )}</skill>`;
+    })
     .join("\n");
+
+  const hasAgentDesignatedSkills = skills.some(
+    (skill) => skill.agentName !== null,
+  );
+  const agentDesignatedNote = hasAgentDesignatedSkills
+    ? ` A skill with an agent attribute runs in that subagent — call its ${SKILL_TOOL_PREFIX}<name> tool with your task as \`message\` instead of loading it.`
+    : "";
 
   // only advertise the sandbox path when it would actually work: the feature is
   // enabled, the caller has sandbox:execute, and the sandbox tools are assigned
@@ -83,5 +96,5 @@ export async function buildSkillCatalogPrompt(params: {
       "/skills listing does not mean the skill is unavailable."
     : `Call ${loadSkill} with one of these names to load its instructions.`;
 
-  return `<available_skills>\n${catalog}\n</available_skills>\n${instructions}`;
+  return `<available_skills>\n${catalog}\n</available_skills>\n${instructions}${agentDesignatedNote}`;
 }

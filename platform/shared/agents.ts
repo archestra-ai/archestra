@@ -24,6 +24,21 @@ export function isAgentTool(toolName: string): boolean {
   return toolName.startsWith(AGENT_TOOL_PREFIX);
 }
 
+/**
+ * Prefix for skill delegation tools.
+ * Format: skill__<slugified_skill_name>
+ * One is synthesized per accessible skill whose SKILL.md declares an `agent`;
+ * calling it runs the skill (instructions + task) in that agent.
+ */
+export const SKILL_TOOL_PREFIX = `skill${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+
+/**
+ * Check if a tool name is a skill delegation tool (skill__<name>).
+ */
+export function isSkillTool(toolName: string): boolean {
+  return toolName.startsWith(SKILL_TOOL_PREFIX);
+}
+
 export const SWAP_AGENT_POKE_TEXT =
   "(Agent was swapped. Please continue the conversation.)";
 export const SWAP_AGENT_POKE_PREFIX = "(Switched to ";

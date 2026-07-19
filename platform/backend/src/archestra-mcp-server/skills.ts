@@ -1,4 +1,6 @@
 import {
+  SKILL_TOOL_PREFIX,
+  slugify,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_EDIT_SKILL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -18,6 +20,7 @@ import {
   SkillVersionModel,
   TeamModel,
 } from "@/models";
+import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
   MAX_FILES_PER_SKILL,
   MAX_SKILL_FILE_BYTES,
@@ -32,7 +35,6 @@ import {
 } from "@/skills/skill-activation";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
-import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import {
   isSkillNameConflict,
@@ -326,7 +328,7 @@ const registry = defineArchestraTools([
                 organizationId: ctx.organizationId,
               })
             : null,
-        }),
+        }) + agentDesignationNote(skill),
       );
     },
   }),
@@ -822,6 +824,22 @@ async function checkSkillModifyPermission(
     if (error instanceof ApiError) return error.message;
     throw error;
   }
+}
+
+/**
+ * Note appended to a loaded agent-designated skill: reading its instructions
+ * is for inspection/editing; running it should go through its subagent tool.
+ */
+function agentDesignationNote(
+  skill: Pick<Skill, "name" | "agentName">,
+): string {
+  if (skill.agentName === null) return "";
+  return (
+    `\nThis skill designates the agent "${neutralizeFrameTags(skill.agentName)}": it runs in that ` +
+    `subagent via the ${SKILL_TOOL_PREFIX}${slugify(skill.name)} tool (pass ` +
+    "the task as `message`) — prefer that over following these instructions " +
+    "yourself."
+  );
 }
 
 /** Parse a SKILL.md manifest, returning the parse error instead of throwing. */

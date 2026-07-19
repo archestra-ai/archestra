@@ -36,6 +36,7 @@ import {
   executeArchestraTool,
   filterToolNamesByPermission,
   getAgentTools,
+  getSkillDelegationTools,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import {
@@ -286,17 +287,26 @@ export async function createAgentServer(
     // no agent_tools rows at all, and exclusions/user access apply in both
     // modes. Drop the raw delegation rows and splice in the resolved surface so
     // the gateway advertises the same delegation set the dispatch path accepts.
-    const delegationTools = await getAgentTools({
-      agentId,
-      organizationId: agent.organizationId,
-      userId: tokenAuth?.userId,
-    });
+    const [delegationTools, skillDelegationTools] = await Promise.all([
+      getAgentTools({
+        agentId,
+        organizationId: agent.organizationId,
+        userId: tokenAuth?.userId,
+      }),
+      // Agent-designated skills surface as skill__<slug> delegation tools,
+      // resolved per calling user with the same env/access symmetry.
+      getSkillDelegationTools({
+        agentId,
+        organizationId: agent.organizationId,
+        userId: tokenAuth?.userId,
+      }),
+    ]);
     const candidateTools = dedupeToolsByName(
       [
         ...mcpTools.filter((tool) => !tool.delegateToAgentId),
         ...dynamicUiTools,
         ...implicitMetaTools,
-        ...delegationTools.map((tool) => ({
+        ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema,

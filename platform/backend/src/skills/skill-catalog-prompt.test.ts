@@ -184,3 +184,41 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
     expect(otherCatalog).not.toContain("default-env-skill");
   });
 });
+
+describe("buildSkillCatalogPrompt agent-designated skills", () => {
+  test("annotates agent-designated skills and steers to the skill__ tool", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({ name: "Skill Agent" });
+    const organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId,
+        name: "deep-research",
+        description: "Multi-step research.",
+        content: "Research thoroughly.",
+        agentName: "Research Bot",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+
+    const prompt = await buildSkillCatalogPrompt({
+      organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+    expect(prompt).toContain(
+      '<skill name="deep-research" agent="Research Bot">',
+    );
+    expect(prompt).toContain("runs in that subagent");
+    expect(prompt).toContain("skill__<name> tool");
+  });
+});

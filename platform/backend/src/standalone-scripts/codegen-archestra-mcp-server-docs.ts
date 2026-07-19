@@ -67,6 +67,10 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   get_agent: ToolGroup.Agents,
   list_agents: ToolGroup.Agents,
   edit_agent: ToolGroup.Agents,
+  list_hooks: ToolGroup.Agents,
+  create_hook: ToolGroup.Agents,
+  update_hook: ToolGroup.Agents,
+  delete_hook: ToolGroup.Agents,
 
   create_llm_proxy: ToolGroup.LLMProxies,
   get_llm_proxy: ToolGroup.LLMProxies,

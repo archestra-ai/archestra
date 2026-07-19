@@ -22,6 +22,10 @@ export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";
 export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
 export const TOOL_LIST_AGENTS_SHORT_NAME = "list_agents";
 export const TOOL_EDIT_AGENT_SHORT_NAME = "edit_agent";
+export const TOOL_LIST_HOOKS_SHORT_NAME = "list_hooks";
+export const TOOL_CREATE_HOOK_SHORT_NAME = "create_hook";
+export const TOOL_UPDATE_HOOK_SHORT_NAME = "update_hook";
+export const TOOL_DELETE_HOOK_SHORT_NAME = "delete_hook";
 export const TOOL_CREATE_LLM_PROXY_SHORT_NAME = "create_llm_proxy";
 export const TOOL_GET_LLM_PROXY_SHORT_NAME = "get_llm_proxy";
 export const TOOL_EDIT_LLM_PROXY_SHORT_NAME = "edit_llm_proxy";
@@ -166,6 +170,10 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
+  TOOL_LIST_HOOKS_SHORT_NAME,
+  TOOL_CREATE_HOOK_SHORT_NAME,
+  TOOL_UPDATE_HOOK_SHORT_NAME,
+  TOOL_DELETE_HOOK_SHORT_NAME,
   TOOL_CREATE_LLM_PROXY_SHORT_NAME,
   TOOL_GET_LLM_PROXY_SHORT_NAME,
   TOOL_EDIT_LLM_PROXY_SHORT_NAME,

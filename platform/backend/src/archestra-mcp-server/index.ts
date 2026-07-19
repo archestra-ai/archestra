@@ -40,6 +40,7 @@ import {
   formatZodErrorWithSchema,
   structuredToolErrorResult,
 } from "./helpers";
+import { toolEntries as hookToolEntries, tools as hookTools } from "./hooks";
 import {
   toolEntries as identityToolEntries,
   tools as identityTools,
@@ -119,6 +120,7 @@ const toolEntries: Partial<
 > = {
   ...identityToolEntries,
   ...agentToolEntries,
+  ...hookToolEntries,
   ...llmProxyToolEntries,
   ...mcpGatewayToolEntries,
   ...mcpServerToolEntries,
@@ -156,6 +158,9 @@ export function getArchestraMcpTools() {
     ...runToolTools,
     ...skillTools,
     ...(config.skillsSandbox.enabled ? sandboxTools : []),
+    // Lifecycle hooks execute in the conversation sandbox; hide their
+    // management tools when the runtime (and thus hooks) is unavailable.
+    ...(config.hooks.enabled ? hookTools : []),
     ...appTools,
     ...appDataTools,
     ...appLlmTools,

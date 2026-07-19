@@ -28,6 +28,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   type CreateConnectionSetupBody,
   type CreateConnectionSetupResult,
@@ -817,7 +818,7 @@ function CommandLine({
   const [copied, setCopied] = useState(false);
   const onCopy = useCallback(async () => {
     if (!command) return;
-    await navigator.clipboard.writeText(command);
+    await copyToClipboard(command);
     setCopied(true);
     toast.success("Copied to clipboard");
     setTimeout(() => setCopied(false), 1600);

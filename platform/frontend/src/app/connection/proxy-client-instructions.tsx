@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   useCreateConnectionPassthroughKey,
   useCreateConnectionVirtualKey,
@@ -920,7 +921,7 @@ function FieldRow({
 function FieldCopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   const onCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(value);
+    await copyToClipboard(value);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
   }, [value]);

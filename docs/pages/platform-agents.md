@@ -76,9 +76,15 @@ See [Knowledge Bases](/docs/platform-knowledge) for how retrieval works and how 
 
 ## Environments
 
-An agent can be assigned to an [environment](/docs/platform-environments). This does two things: its [code sandbox](/docs/platform-code-sandbox) runs under that environment's egress network policy (the same machinery that governs self-hosted MCP server pods), and the tools, knowledge, and subagents it can use are scoped to that environment — the agent only sees tools, knowledge connectors, and delegation targets in the same environment (built-in servers excepted). With no environment assigned, the agent uses the Default environment.
+An agent can be assigned to an [environment](/docs/platform-environments). This does two things: its [code sandbox](/docs/platform-code-sandbox) runs under that environment's egress network policy (the same machinery that governs self-hosted MCP server pods), and the tools, knowledge, skills, and subagents it can use are scoped to that environment — the agent only sees tools, knowledge connectors, skills, and delegation targets in the same environment (built-in servers and built-in skills excepted). With no environment assigned, the agent uses the Default environment.
 
 See [Environments](/docs/platform-environments) for the isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) for how policies are configured.
+
+## Skills
+
+An agent consumes [Agent Skills](/docs/platform-agent-skills) through two built-in tools: `list_skills` returns the catalog, `load_skill` pulls one skill's instructions into context. Users can also invoke a skill directly with a `/skill-name` slash command in chat. Either way, the agent only sees skills in its [environment](#environments) that the calling user can access.
+
+A skill that names an `agent` in its frontmatter runs in that subagent instead — the agent calls the skill's `skill__<name>` tool and receives the result. See [Running a Skill in a Subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent).
 
 ## Delegation
 

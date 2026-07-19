@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-06
+lastUpdated: 2026-07-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -104,6 +104,28 @@ Every skill carries a visibility **scope**, set in the skill editor or the GitHu
 `skill:read` governs *using* a skill — listing it, loading it, or invoking its slash command in chat. A user only ever sees skills inside their scope (org-wide skills, their own personal skills, and skills in their teams); `list_skills`, `load_skill`, and the `/skill-name` slash commands are all filtered the same way. `skill:admin` bypasses scope and sees every skill.
 
 Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skill requires `skill:team-admin` and membership in the teams it is assigned to. By default the predefined roles grant: **admin** — full control; **editor** — create/update/delete plus team sharing; **member** — create and manage their own personal skills, and read everything in scope.
+
+## Environments
+
+A skill belongs to an [environment](./platform-environments). Unassigned skills use the Default environment. An agent only sees skills in its own environment — `list_skills`, `load_skill`, and slash commands are all filtered the same way. Built-in skills are the exception: they are visible in every environment, like built-in tools.
+
+Set the environment in the skill editor. A skill authored from chat inherits the authoring agent's environment. Converting an agent to a skill carries the agent's environment over.
+
+## Running a Skill in a Subagent
+
+A skill can name an agent in its frontmatter:
+
+```markdown
+---
+name: deep-research
+description: Multi-step research with citations.
+agent: Research Bot
+---
+```
+
+Such a skill runs *in that agent* instead of loading its instructions into the calling agent's context. The skill surfaces as a `skill__deep_research` tool; calling it sends the skill's instructions plus the task to Research Bot, which executes with its own tools and returns the result. A slash command on the skill does the same — the model is told to call the tool rather than receiving the instructions.
+
+This keeps the parent conversation's context clean and pairs a skill with the agent whose tools it needs. The designated agent must be in the same environment as the calling agent, and the calling user must have access to it — the same rules as [delegation](./platform-agents#delegation). Skill delegation needs a signed-in user; automated runs (a scheduled trigger, for example) cannot use it.
 
 ## Compatibility
 

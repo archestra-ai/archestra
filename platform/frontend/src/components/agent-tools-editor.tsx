@@ -1210,7 +1210,6 @@ function McpServerPill({
             catalogId={catalogItem.id}
             assignmentScope={assignmentScope}
             assignmentTeamIds={assignmentTeamIds}
-            agentScope={assignmentScope}
             value={selectedCredential}
             onValueChange={setSelectedCredential}
             shouldSetDefaultValue={false}

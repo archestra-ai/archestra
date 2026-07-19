@@ -3,6 +3,7 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface TerminalBlockProps {
   /** Raw code to render and copy. */
@@ -13,7 +14,7 @@ export function TerminalBlock({ code }: TerminalBlockProps) {
   const [copied, setCopied] = useState(false);
 
   const onCopy = async () => {
-    await navigator.clipboard.writeText(code);
+    await copyToClipboard(code);
     setCopied(true);
     toast.success("Copied to clipboard");
     setTimeout(() => setCopied(false), 1600);

@@ -52429,6 +52429,7 @@ export type GetMcpToolCallsResponses = {
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
             createdAt: string;
             userName: string | null;
+            appName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -52543,6 +52544,7 @@ export type GetMcpToolCallResponses = {
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
         createdAt: string;
         userName: string | null;
+        appName: string | null;
     };
 };
 

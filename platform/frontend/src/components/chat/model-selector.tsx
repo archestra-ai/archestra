@@ -53,6 +53,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   type LlmModel,
   type ModelCapabilities,
@@ -328,7 +329,7 @@ function CopyModelIdButton({ modelId }: { modelId: string }) {
       e.stopPropagation();
       e.preventDefault();
       try {
-        await navigator.clipboard.writeText(modelId);
+        await copyToClipboard(modelId);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch {

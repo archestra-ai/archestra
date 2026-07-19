@@ -201490,6 +201490,10 @@
                           "userName": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "appName": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -201504,7 +201508,8 @@
                           "userId",
                           "authMethod",
                           "createdAt",
-                          "userName"
+                          "userName",
+                          "appName"
                         ],
                         "additionalProperties": false
                       }
@@ -201901,6 +201906,10 @@
                     "userName": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "appName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -201915,7 +201924,8 @@
                     "userId",
                     "authMethod",
                     "createdAt",
-                    "userName"
+                    "userName",
+                    "appName"
                   ],
                   "additionalProperties": false
                 }

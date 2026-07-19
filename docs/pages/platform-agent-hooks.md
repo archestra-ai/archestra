@@ -10,8 +10,6 @@ lastUpdated: 2026-07-19
 
 Hooks are small Python or shell scripts that run when a lifecycle event fires in a chat. They run in the conversation's [code sandbox](./platform-code-sandbox). Use them to inject context at the start of a session, or to inspect every tool call before and after it runs.
 
-![The Hooks section of the agent dialog: a Pre tool use hook with the inline editor open, showing the event and language pickers and the Available context reference](/docs/automated_screenshots/platform-agent-hooks_editor.webp)
-
 > **Beta feature** — hooks need the code sandbox. The Hooks section appears in the agent dialog only when the sandbox runtime is configured.
 
 ## Adding a Hook

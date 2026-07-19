@@ -249851,6 +249851,17 @@
             "in": "query",
             "name": "sourceRepo",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "forAgentId",
+            "required": false,
+            "description": "Restrict results to skills visible from this agent's environment (strict match, built-in skills exempt)."
           }
         ],
         "responses": {
@@ -249886,6 +249897,12 @@
                               "org"
                             ]
                           },
+                          "environmentId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "name": {
                             "type": "string"
                           },
@@ -249909,6 +249926,10 @@
                             "type": "string"
                           },
                           "allowedTools": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "agentName": {
                             "nullable": true,
                             "type": "string"
                           },
@@ -249977,6 +249998,7 @@
                           "organizationId",
                           "authorId",
                           "scope",
+                          "environmentId",
                           "name",
                           "description",
                           "content",
@@ -249984,6 +250006,7 @@
                           "license",
                           "compatibility",
                           "allowedTools",
+                          "agentName",
                           "templated",
                           "metadata",
                           "sourceType",
@@ -250301,7 +250324,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 10485760,
-                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use."
+                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
                   },
                   "files": {
                     "maxItems": 500,
@@ -250347,6 +250370,13 @@
                       "type": "string"
                     }
                   },
+                  "environmentId": {
+                    "description": "Environment the skill belongs to; null (or omitted on create) is the Default environment. Agents only see skills in their own environment.",
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "allowedTools": {
                     "description": "Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.",
                     "type": "array",
@@ -250390,6 +250420,12 @@
                         "org"
                       ]
                     },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -250413,6 +250449,10 @@
                       "type": "string"
                     },
                     "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentName": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -250527,6 +250567,7 @@
                     "organizationId",
                     "authorId",
                     "scope",
+                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -250534,6 +250575,7 @@
                     "license",
                     "compatibility",
                     "allowedTools",
+                    "agentName",
                     "templated",
                     "metadata",
                     "sourceType",
@@ -250856,6 +250898,12 @@
                             "org"
                           ]
                         },
+                        "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "name": {
                           "type": "string"
                         },
@@ -250879,6 +250927,10 @@
                           "type": "string"
                         },
                         "allowedTools": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "agentName": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -250993,6 +251045,7 @@
                         "organizationId",
                         "authorId",
                         "scope",
+                        "environmentId",
                         "name",
                         "description",
                         "content",
@@ -251000,6 +251053,7 @@
                         "license",
                         "compatibility",
                         "allowedTools",
+                        "agentName",
                         "templated",
                         "metadata",
                         "sourceType",
@@ -251635,6 +251689,12 @@
                         "org"
                       ]
                     },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -251658,6 +251718,10 @@
                       "type": "string"
                     },
                     "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentName": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -251772,6 +251836,7 @@
                     "organizationId",
                     "authorId",
                     "scope",
+                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -251779,6 +251844,7 @@
                     "license",
                     "compatibility",
                     "allowedTools",
+                    "agentName",
                     "templated",
                     "metadata",
                     "sourceType",
@@ -252047,7 +252113,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 10485760,
-                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use."
+                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
                   },
                   "files": {
                     "maxItems": 500,
@@ -252092,6 +252158,13 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "environmentId": {
+                    "description": "Environment the skill belongs to; null (or omitted on create) is the Default environment. Agents only see skills in their own environment.",
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "allowedTools": {
                     "description": "Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.",
@@ -252146,6 +252219,12 @@
                         "org"
                       ]
                     },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -252169,6 +252248,10 @@
                       "type": "string"
                     },
                     "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentName": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -252283,6 +252366,7 @@
                     "organizationId",
                     "authorId",
                     "scope",
+                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -252290,6 +252374,7 @@
                     "license",
                     "compatibility",
                     "allowedTools",
+                    "agentName",
                     "templated",
                     "metadata",
                     "sourceType",
@@ -253126,6 +253211,12 @@
                         "org"
                       ]
                     },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -253149,6 +253240,10 @@
                       "type": "string"
                     },
                     "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentName": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -253263,6 +253358,7 @@
                     "organizationId",
                     "authorId",
                     "scope",
+                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -253270,6 +253366,7 @@
                     "license",
                     "compatibility",
                     "allowedTools",
+                    "agentName",
                     "templated",
                     "metadata",
                     "sourceType",
@@ -254530,6 +254627,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "agentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "templated": {
                       "type": "boolean"
                     },
@@ -254596,6 +254697,7 @@
                     "license",
                     "compatibility",
                     "allowedTools",
+                    "agentName",
                     "templated",
                     "metadata",
                     "files",
@@ -254937,6 +255039,12 @@
                               "org"
                             ]
                           },
+                          "environmentId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "name": {
                             "type": "string"
                           },
@@ -254960,6 +255068,10 @@
                             "type": "string"
                           },
                           "allowedTools": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "agentName": {
                             "nullable": true,
                             "type": "string"
                           },
@@ -255002,6 +255114,7 @@
                           "organizationId",
                           "authorId",
                           "scope",
+                          "environmentId",
                           "name",
                           "description",
                           "content",
@@ -255009,6 +255122,7 @@
                           "license",
                           "compatibility",
                           "allowedTools",
+                          "agentName",
                           "templated",
                           "metadata",
                           "sourceType",

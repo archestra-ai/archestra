@@ -502,10 +502,13 @@ export function ChatPageContent({
   // Same query the composer's slash-command table is built from (identical
   // input → shared TanStack cache entry). The prefill token must come from
   // that table, not be re-derived from the skill name, so slug collisions
-  // resolve to the right skill.
+  // resolve to the right skill. Deep links land on a new chat, where the
+  // composer's agent is the initial agent — so the same environment filter
+  // (forAgentId) applies here; a cross-environment skill resolves
+  // "unavailable" rather than prefilling a token the composer can't parse.
   const urlSkillCommandsQuery = useSkillsPaginated(
-    { limit: 100 },
-    { enabled: urlSkillWanted && skillToolsEnabled },
+    { limit: 100, forAgentId: initialAgentId ?? undefined },
+    { enabled: urlSkillWanted && skillToolsEnabled && !!initialAgentId },
   );
   useEffect(() => {
     if (urlSkillProcessedRef.current || !urlSkillId) return;

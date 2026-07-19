@@ -80,10 +80,16 @@ export function isScriptClient(
  * so the review step can name (and let the user deselect) exactly what the
  * command installs.
  */
-function useConnectSkills(): { eligible: boolean; skills: ConnectSkill[] } {
+function useConnectSkills(llmProxyId: string | null): {
+  eligible: boolean;
+  skills: ConnectSkill[];
+} {
   const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
+  // Skills are environment-scoped: with a proxy selected, only skills in that
+  // proxy's environment are connectable.
   const { data: skills } = useAllSkills({
     enabled: canAdminSkills === true,
+    forAgentId: llmProxyId,
   });
   return {
     eligible: canAdminSkills === true && (skills ?? []).length > 0,
@@ -135,7 +141,8 @@ export function ConnectCommandPanel({
   baseUrlMetadata,
   onBaseUrlChange,
 }: ConnectCommandPanelProps) {
-  const { eligible: skillsEligible, skills: allSkills } = useConnectSkills();
+  const { eligible: skillsEligible, skills: allSkills } =
+    useConnectSkills(llmProxyId);
   // Skill selection: `null` means "all skills" (the default, and it keeps
   // including skills created later). Once the user touches any checkbox it
   // becomes an explicit snapshot of chosen ids — so an opt-out (empty set)
@@ -528,6 +535,11 @@ export function ConnectCommandPanel({
         />
         Install shared skills
       </label>
+      {llmProxyId !== null && (
+        <p className="pl-6 text-xs text-muted-foreground">
+          Only skills in the selected LLM proxy's environment are listed.
+        </p>
+      )}
       <ul className="grid max-h-56 gap-1.5 overflow-y-auto pl-6">
         {allSkills.map((skill) => (
           <li key={skill.id}>

@@ -249,9 +249,11 @@ const PromptInputContent = ({
   // Skills exposed as slash commands whenever the org's skill tools are on —
   // the same flag that gates the backend's activation injection.
   const skillSlashCommandsEnabled = orgData?.skillToolsEnabled ?? false;
+  // Scoped to the conversation agent's environment: a slash command must not
+  // offer a skill the backend's activation gate would refuse.
   const { data: skillsData } = useSkillsPaginated(
-    { limit: 100 },
-    { enabled: skillSlashCommandsEnabled },
+    { limit: 100, forAgentId: agentId },
+    { enabled: skillSlashCommandsEnabled && !!agentId },
   );
   const skillCommands = useMemo<SkillCommand[]>(() => {
     if (!skillSlashCommandsEnabled || !skillsData?.data) {

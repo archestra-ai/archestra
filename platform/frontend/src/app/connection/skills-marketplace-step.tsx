@@ -513,23 +513,33 @@ export interface ConnectSkill {
  * step's per-skill picker. Soft-fails to an empty list (with the API-error
  * toast) so a skills outage degrades to "no skills ride along" instead of
  * blocking command generation.
+ *
+ * `forAgentId` narrows the set to skills visible from that agent's
+ * environment — the connect command passes the selected LLM proxy so only
+ * skills the connection can actually reach are offered.
  */
-export function useAllSkills(params?: { enabled?: boolean }) {
+export function useAllSkills(params?: {
+  enabled?: boolean;
+  forAgentId?: string | null;
+}) {
+  const forAgentId = params?.forAgentId ?? null;
   return useQuery({
-    queryKey: ["skills", "connect-all"],
-    queryFn: fetchAllSkills,
+    queryKey: ["skills", "connect-all", forAgentId],
+    queryFn: () => fetchAllSkills(forAgentId),
     enabled: params?.enabled,
   });
 }
 
 /** Fetch every skill page by page; on error, toast and return what we have. */
-async function fetchAllSkills(): Promise<ConnectSkill[]> {
+async function fetchAllSkills(
+  forAgentId: string | null = null,
+): Promise<ConnectSkill[]> {
   const skills: ConnectSkill[] = [];
   const limit = 100;
   let offset = 0;
   while (true) {
     const { data, error } = await archestraApiSdk.getSkills({
-      query: { limit, offset },
+      query: { limit, offset, forAgentId: forAgentId ?? undefined },
     });
     if (error) {
       handleApiError(error);

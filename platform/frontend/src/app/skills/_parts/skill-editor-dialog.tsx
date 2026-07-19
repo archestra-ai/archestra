@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export interface SkillPreview {
   license: string | null;
   compatibility: string | null;
   allowedTools: string | null;
+  agentName: string | null;
   templated: boolean;
   metadata: Record<string, string>;
   files: (ResourceFile & { kind?: "reference" | "script" | "asset" })[];
@@ -127,6 +129,8 @@ export function SkillEditorDialog({
   const [files, setFiles] = useState<ResourceFile[]>([]);
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  // null = the Default environment; agents only see same-environment skills.
+  const [environmentId, setEnvironmentId] = useState<string | null>(null);
   // null = the SKILL.md manifest is open; otherwise an index into `files`.
   const [openFileIndex, setOpenFileIndex] = useState<number | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
@@ -179,11 +183,13 @@ export function SkillEditorDialog({
       );
       setScope(skill.scope);
       setTeamIds(skill.teams.map((team) => team.id));
+      setEnvironmentId(skill.environmentId ?? null);
     } else if (!isEdit) {
       setManifest(BLANK_TEMPLATE);
       setFiles([]);
       setScope("personal");
       setTeamIds([]);
+      setEnvironmentId(null);
     }
     setOpenFileIndex(null);
     setAddingIn(null);
@@ -211,6 +217,7 @@ export function SkillEditorDialog({
       files,
       scope,
       teamIds: scope === "team" ? teamIds : [],
+      environmentId,
     };
     const result = isEdit
       ? await updateSkill.mutateAsync({ id: skillId, body })
@@ -621,12 +628,20 @@ export function SkillEditorDialog({
           </div>
 
           {!isPreview && (
-            <SkillScopeSelector
-              scope={scope}
-              onScopeChange={setScope}
-              teamIds={teamIds}
-              onTeamIdsChange={setTeamIds}
-            />
+            <>
+              <SkillScopeSelector
+                scope={scope}
+                onScopeChange={setScope}
+                teamIds={teamIds}
+                onTeamIdsChange={setTeamIds}
+              />
+              <EnvironmentSelector
+                value={environmentId}
+                onChange={setEnvironmentId}
+                hideWhenOnlyDefault
+                helpText="Agents only see skills in their own environment."
+              />
+            </>
           )}
         </div>
       )}

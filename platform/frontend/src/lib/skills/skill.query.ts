@@ -28,7 +28,7 @@ export type SkillCatalogResult =
 type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
   SkillsQuery,
-  "limit" | "offset" | "search" | "sourceRepo"
+  "limit" | "offset" | "search" | "sourceRepo" | "forAgentId"
 >;
 
 // ===== Query hooks =====

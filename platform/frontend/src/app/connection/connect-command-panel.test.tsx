@@ -346,7 +346,10 @@ describe("ConnectCommandPanel", () => {
       ),
     );
     // the skill list isn't even fetched for callers who can't share skills
-    expect(allSkillsMock).toHaveBeenLastCalledWith({ enabled: false });
+    expect(allSkillsMock).toHaveBeenLastCalledWith({
+      enabled: false,
+      forAgentId: "p1",
+    });
   });
 
   describe("per-user provider (GitHub Copilot)", () => {

@@ -1582,13 +1582,21 @@ class AgentModel {
     userId: string;
     isAdmin: boolean;
     excludeAgentId: string;
+    /**
+     * The calling agent's environment: delegation never crosses environment
+     * boundaries (null is the Default environment), mirroring tool isolation.
+     */
+    environmentId: string | null;
   }): Promise<Pick<Agent, "id" | "name" | "description">[]> {
-    const { userId, isAdmin, excludeAgentId } = params;
+    const { userId, isAdmin, excludeAgentId, environmentId } = params;
 
     const baseConditions = [
       eq(schema.agentsTable.agentType, "agent"),
       eq(schema.agentsTable.builtIn, false),
       ne(schema.agentsTable.id, excludeAgentId),
+      environmentId === null
+        ? isNull(schema.agentsTable.environmentId)
+        : eq(schema.agentsTable.environmentId, environmentId),
       notDeleted(schema.agentsTable),
     ];
 

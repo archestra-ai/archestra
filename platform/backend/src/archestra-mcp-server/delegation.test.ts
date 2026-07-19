@@ -1,7 +1,13 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import { vi } from "vitest";
-import { AgentExcludedSubagentModel, AgentModel, ToolModel } from "@/models";
+import db, { schema } from "@/database";
+import {
+  AgentExcludedSubagentModel,
+  AgentModel,
+  EnvironmentModel,
+  ToolModel,
+} from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -520,6 +526,122 @@ describe("Auto-mode subagent delegation", () => {
       },
     );
 
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "No delegation is configured",
+    );
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+
+  test("Auto mode never crosses environment boundaries (surface and dispatch)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const otherEnv = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Other Environment",
+    });
+    const crossEnvTarget = await makeAgent({
+      name: "Cross Env Bot",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: otherEnv.id,
+    });
+
+    // Surface: the parent (Default environment) sees only same-environment
+    // targets.
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+    const names = tools.map((t) => t.name);
+    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`);
+    expect(names).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
+    );
+
+    // Dispatch stays symmetric with the surface.
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
+      { message: "Do the research." },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "No delegation is configured",
+    );
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+
+  test("Custom mode drops an explicit delegation whose target is in another environment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const { organization, user, parent } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      accessAllSubagents: false,
+    });
+    const otherEnv = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Other Environment",
+    });
+    const crossEnvTarget = await makeAgent({
+      name: "Cross Env Expert",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: otherEnv.id,
+    });
+
+    // Explicitly wire a delegation row to the cross-environment target.
+    const [delegationTool] = await db
+      .insert(schema.toolsTable)
+      .values({
+        name: `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
+        delegateToAgentId: crossEnvTarget.id,
+      })
+      .returning();
+    await makeAgentTool(parent.id, delegationTool.id);
+
+    // The assignment exists but is neither advertised nor dispatchable.
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+    expect(tools).toHaveLength(0);
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
+      { message: "Do the research." },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
       "No delegation is configured",

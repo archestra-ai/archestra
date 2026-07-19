@@ -50,6 +50,11 @@ export async function getAgentTools(context: {
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck } = context;
 
+  // Delegation never crosses environment boundaries (null is the Default
+  // environment), mirroring tool isolation: in both modes only same-environment
+  // targets are advertised.
+  const environmentId = await AgentModel.findEnvironmentId(agentId);
+
   // Auto mode only expands for a real authenticated user; system/token flows
   // (chatops, scheduled triggers, A2A) fall back to explicit delegations. This
   // fail-closed gate mirrors the Auto-tool `dynamicAccessContext` gate.
@@ -60,12 +65,15 @@ export async function getAgentTools(context: {
       organizationId,
       // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
       userId: userId!,
+      environmentId,
     });
   }
 
-  // Custom mode: only explicitly-configured delegation targets.
-  const allToolsWithDetails =
-    await ToolModel.getDelegationToolsByAgent(agentId);
+  // Custom mode: only explicitly-configured delegation targets, restricted to
+  // the calling agent's environment.
+  const allToolsWithDetails = (
+    await ToolModel.getDelegationToolsByAgent(agentId)
+  ).filter((t) => t.targetAgent.environmentId === environmentId);
 
   // Filter by user access if user ID is provided (skip for A2A/ChatOps flows)
   let accessibleTools = allToolsWithDetails;
@@ -135,6 +143,10 @@ export async function handleDelegation(
   const userId = context.userId ?? tokenAuth?.userId;
   const isRealUser = Boolean(userId) && userId !== "system";
 
+  // Same environment restriction as the advertised surface: delegation never
+  // crosses environment boundaries.
+  const environmentId = await AgentModel.findEnvironmentId(agentId);
+
   // Resolve the delegation target, mirroring getAgentTools: Auto mode resolves
   // dynamically against the caller-accessible set (minus exclusions); Custom
   // mode resolves against explicit delegation rows. Keeping resolution symmetric
@@ -146,12 +158,14 @@ export async function handleDelegation(
           organizationId,
           // biome-ignore lint/style/noNonNullAssertion: isRealUser guarantees userId
           userId: userId!,
+          environmentId,
           targetAgentSlug,
         })
       : await resolveExplicitDelegationTarget({
           agentId,
           organizationId,
           userId,
+          environmentId,
           targetAgentSlug,
         });
 
@@ -257,8 +271,9 @@ async function buildAutoDelegationTools(params: {
   agentId: string;
   organizationId: string;
   userId: string;
+  environmentId: string | null;
 }): Promise<Tool[]> {
-  const { agentId, organizationId, userId } = params;
+  const { agentId, organizationId, userId, environmentId } = params;
 
   const isAgentAdmin = await userHasPermission(
     userId,
@@ -272,6 +287,7 @@ async function buildAutoDelegationTools(params: {
       userId,
       isAdmin: isAgentAdmin,
       excludeAgentId: agentId,
+      environmentId,
     }),
     AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agentId),
   ]);
@@ -324,9 +340,11 @@ async function resolveAutoDelegationTarget(params: {
   agentId: string;
   organizationId: string;
   userId: string;
+  environmentId: string | null;
   targetAgentSlug: string;
 }): Promise<ResolvedTarget> {
-  const { agentId, organizationId, userId, targetAgentSlug } = params;
+  const { agentId, organizationId, userId, environmentId, targetAgentSlug } =
+    params;
 
   const isAgentAdmin = await userHasPermission(
     userId,
@@ -340,6 +358,7 @@ async function resolveAutoDelegationTarget(params: {
       userId,
       isAdmin: isAgentAdmin,
       excludeAgentId: agentId,
+      environmentId,
     }),
     AgentExcludedSubagentModel.findTargetAgentIdsByAgent(agentId),
   ]);
@@ -364,13 +383,17 @@ async function resolveExplicitDelegationTarget(params: {
   agentId: string;
   organizationId: string;
   userId: string | undefined;
+  environmentId: string | null;
   targetAgentSlug: string;
 }): Promise<ResolvedTarget> {
-  const { agentId, organizationId, userId, targetAgentSlug } = params;
+  const { agentId, organizationId, userId, environmentId, targetAgentSlug } =
+    params;
 
   const delegations = await ToolModel.getDelegationToolsByAgent(agentId);
   const delegation = delegations.find(
-    (d) => slugify(d.targetAgent.name) === targetAgentSlug,
+    (d) =>
+      d.targetAgent.environmentId === environmentId &&
+      slugify(d.targetAgent.name) === targetAgentSlug,
   );
 
   if (!delegation) {

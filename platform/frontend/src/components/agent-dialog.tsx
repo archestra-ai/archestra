@@ -2284,7 +2284,9 @@ export function AgentDialog({
                             <li className="flex gap-2">
                               <CheckIcon className="mt-px size-3.5 shrink-0" />
                               Can delegate to any agent the calling user can
-                              access — new agents included automatically
+                              access, in this{" "}
+                              {agentTypeDisplayName[agentType] || "agent"}'s
+                              environment — new agents included automatically
                             </li>
                             <li className="flex gap-2">
                               <CheckIcon className="mt-px size-3.5 shrink-0" />

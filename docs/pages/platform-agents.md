@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-07-09
+lastUpdated: 2026-07-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -76,7 +76,7 @@ See [Knowledge Bases](/docs/platform-knowledge) for how retrieval works and how 
 
 ## Environments
 
-An agent can be assigned to an [environment](/docs/platform-environments). This does two things: its [code sandbox](/docs/platform-code-sandbox) runs under that environment's egress network policy (the same machinery that governs self-hosted MCP server pods), and the tools and knowledge it can use are scoped to that environment — the agent only sees tools and knowledge connectors in the same environment (built-in servers excepted). With no environment assigned, the agent uses the Default environment.
+An agent can be assigned to an [environment](/docs/platform-environments). This does two things: its [code sandbox](/docs/platform-code-sandbox) runs under that environment's egress network policy (the same machinery that governs self-hosted MCP server pods), and the tools, knowledge, and subagents it can use are scoped to that environment — the agent only sees tools, knowledge connectors, and delegation targets in the same environment (built-in servers excepted). With no environment assigned, the agent uses the Default environment.
 
 See [Environments](/docs/platform-environments) for the isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) for how policies are configured.
 
@@ -84,7 +84,7 @@ See [Environments](/docs/platform-environments) for the isolation model and [net
 
 An agent can delegate work to other agents — its **subagents**. Like **Tools & Knowledge Sources**, delegation has an **Auto** or **Custom** setting, under the **Subagents** tabs in the agent dialog.
 
-In **Custom** mode the agent delegates only to the subagents you assign. In **Auto** mode it can delegate to any agent the calling user can access — new agents included automatically — minus a disabled list. Disable specific agents under **Disabled subagents** on the **Auto** tab (or via `GET`/`PUT /api/agents/:id/subagent-exclusions`). Each user's own access still applies, so **Auto** never means any agent can call any agent — a caller only reaches agents it could already see.
+In **Custom** mode the agent delegates only to the subagents you assign. In **Auto** mode it can delegate to any agent the calling user can access — new agents included automatically — minus a disabled list. Disable specific agents under **Disabled subagents** on the **Auto** tab (or via `GET`/`PUT /api/agents/:id/subagent-exclusions`). Each user's own access still applies, so **Auto** never means any agent can call any agent — a caller only reaches agents it could already see. Both modes stay within the agent's [environment](/docs/platform-environments): only same-environment agents are eligible.
 
 Auto delegation resolves per calling user. It applies in chat and other flows that carry a signed-in user; automated runs without one — a scheduled trigger, for example — fall back to the explicitly assigned targets.
 

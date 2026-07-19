@@ -1,7 +1,9 @@
 import {
+  AGENT_TOOL_PREFIX,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
+  slugify,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
@@ -23,7 +25,13 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel, ToolModel, UserTokenModel } from "@/models";
+import {
+  AgentExcludedSubagentModel,
+  AgentModel,
+  TeamTokenModel,
+  ToolModel,
+  UserTokenModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
 
@@ -199,6 +207,65 @@ describe("MCP Gateway (stateless mode)", () => {
       // If error, it should be "Server not initialized", not a session error
       expect(body.error?.message).toContain("Server not initialized");
     }
+  });
+
+  test("Auto subagent mode: tools/list advertises caller-accessible delegation tools without explicit assignment, honoring exclusions", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const caller = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      name: "Gateway Auto Caller",
+    });
+    await AgentModel.update(caller.id, { accessAllSubagents: true });
+
+    const target = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      scope: "org",
+      name: "Gateway Auto Target",
+    });
+    const excluded = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      scope: "org",
+      name: "Gateway Auto Excluded",
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(caller.id, [excluded.id]);
+
+    // A user token so the gateway resolves a real caller; Auto expansion is
+    // gated on an authenticated user.
+    const token = await UserTokenModel.create(user.id, org.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${caller.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const toolNames = response
+      .json()
+      .result.tools.map((tool: { name: string }) => tool.name);
+
+    // No agent_tools rows exist for the caller: the delegation surface must
+    // come from the Auto resolver, not the assigned-tools query.
+    expect(toolNames).toContain(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`);
+    expect(toolNames).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(excluded.name)}`,
+    );
+    // The agent never delegates to itself.
+    expect(toolNames).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(caller.name)}`,
+    );
   });
 
   test("derives a human 'Open <app>' title for an app launch tool, leaving its slug name and other tools' titles untouched", async ({

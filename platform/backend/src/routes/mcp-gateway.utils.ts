@@ -35,6 +35,7 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
   filterToolNamesByPermission,
+  getAgentTools,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
 import {
@@ -279,8 +280,32 @@ export async function createAgentServer(
       agent.toolExposureMode === "search_and_run_only"
         ? getImplicitArchestraMetaTools()
         : [];
+
+    // Delegation tools resolve through the Auto/Custom subagent seam, not the
+    // assigned-rows query: Auto mode synthesizes caller-scoped tools that have
+    // no agent_tools rows at all, and exclusions/user access apply in both
+    // modes. Drop the raw delegation rows and splice in the resolved surface so
+    // the gateway advertises the same delegation set the dispatch path accepts.
+    const delegationTools = await getAgentTools({
+      agentId,
+      organizationId: agent.organizationId,
+      userId: tokenAuth?.userId,
+    });
     const candidateTools = dedupeToolsByName(
-      [...mcpTools, ...dynamicUiTools, ...implicitMetaTools].map(toMcpListTool),
+      [
+        ...mcpTools.filter((tool) => !tool.delegateToAgentId),
+        ...dynamicUiTools,
+        ...implicitMetaTools,
+        ...delegationTools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          meta: {
+            annotations: (tool.annotations ?? {}) as Record<string, unknown>,
+            _meta: tool._meta,
+          },
+        })),
+      ].map(toMcpListTool),
     );
 
     // Filter Archestra tools based on user RBAC permissions

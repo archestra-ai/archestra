@@ -1020,7 +1020,7 @@ describe("organization routes", () => {
       expect(validateSpy).toHaveBeenCalledWith({
         keyId,
         model: "claude-haiku",
-        organizationId: expect.any(String),
+        organizationId,
       });
     });
 

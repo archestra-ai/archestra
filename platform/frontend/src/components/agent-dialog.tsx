@@ -1811,17 +1811,16 @@ export function AgentDialog({
                   </Collapsible>
                 )}
 
-                {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
+                {/* Section 3: Tools & Knowledge Sources */}
                 {showToolsAndSubagents && (
                   <div
                     className="rounded-lg border bg-card p-4 space-y-4"
-                    data-testid={E2eTestId.AgentCapabilitiesSection}
+                    data-testid={E2eTestId.AgentToolsSection}
                   >
-                    <h3 className="text-sm font-semibold">Capabilities</h3>
-
-                    {/* Tools & knowledge */}
+                    <h3 className="text-sm font-semibold">
+                      Tools & Knowledge Sources
+                    </h3>
                     <div className="space-y-2">
-                      <Label>Tools & Knowledge Sources</Label>
                       <Tabs
                         value={autoToolsMode ? "auto" : "custom"}
                         onValueChange={(value) => {
@@ -1886,7 +1885,7 @@ export function AgentDialog({
                           !autoToolsMode && "hidden",
                         )}
                       >
-                        <p className="text-xs font-medium text-muted-foreground">
+                        <p className="text-sm font-medium text-muted-foreground">
                           Disabled tools
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -1908,7 +1907,7 @@ export function AgentDialog({
                         className={cn("space-y-3", autoToolsMode && "hidden")}
                       >
                         <div className="space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">
+                          <p className="text-sm font-medium text-muted-foreground">
                             Tools ({selectedToolsCount})
                           </p>
                           {((!agent && selectedToolsCount > 0) ||
@@ -2000,7 +1999,7 @@ export function AgentDialog({
                             )}
                         </div>
                         <div className="space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">
+                          <p className="text-sm font-medium text-muted-foreground">
                             Knowledge Sources
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -2260,10 +2259,14 @@ export function AgentDialog({
                         />
                       </div>
                     )}
+                  </div>
+                )}
 
-                    {/* Subagents */}
+                {/* Section 4: Subagents */}
+                {showToolsAndSubagents && (
+                  <div className="rounded-lg border bg-card p-4 space-y-4">
+                    <h3 className="text-sm font-semibold">Subagents</h3>
                     <div className="space-y-2">
-                      <Label>Subagents</Label>
                       <Tabs
                         value={accessAllSubagents ? "auto" : "custom"}
                         onValueChange={(value) =>
@@ -2290,7 +2293,7 @@ export function AgentDialog({
                             </li>
                           </ul>
                           <div className="space-y-1.5">
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm font-medium text-muted-foreground">
                               Disabled subagents ({disabledSubagentIds.length})
                             </p>
                             <SubagentsEditor
@@ -2311,7 +2314,7 @@ export function AgentDialog({
                             to by this{" "}
                             {agentTypeDisplayName[agentType] || "agent"}.
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm font-medium text-muted-foreground">
                             Subagents ({selectedDelegationTargetIds.length})
                           </p>
                           <SubagentsEditor

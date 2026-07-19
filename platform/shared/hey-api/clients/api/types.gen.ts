@@ -10943,6 +10943,7 @@ export type GetAgentsResponses = {
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             accessAllTools: boolean;
+            accessAllSubagents: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -11056,6 +11057,7 @@ export type CreateAgentData = {
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         accessAllTools?: boolean;
+        accessAllSubagents?: boolean;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11186,6 +11188,7 @@ export type CreateAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11394,6 +11397,7 @@ export type GetAllAgentsResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11577,6 +11581,7 @@ export type GetDefaultMcpGatewayResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -11760,6 +11765,7 @@ export type GetDefaultLlmProxyResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12022,6 +12028,7 @@ export type ImportAgentResponses = {
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             accessAllTools: boolean;
+            accessAllSubagents: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
                 autoConfigureOnToolDiscovery: boolean;
@@ -12298,6 +12305,7 @@ export type GetAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12402,6 +12410,7 @@ export type UpdateAgentData = {
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         accessAllTools?: boolean;
+        accessAllSubagents?: boolean;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12534,6 +12543,7 @@ export type UpdateAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -12728,6 +12738,7 @@ export type CloneAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -13151,6 +13162,187 @@ export type UpdateAgentToolExclusionsResponses = {
 
 export type UpdateAgentToolExclusionsResponse = UpdateAgentToolExclusionsResponses[keyof UpdateAgentToolExclusionsResponses];
 
+export type GetAgentSubagentExclusionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/subagent-exclusions';
+};
+
+export type GetAgentSubagentExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentSubagentExclusionsError = GetAgentSubagentExclusionsErrors[keyof GetAgentSubagentExclusionsErrors];
+
+export type GetAgentSubagentExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Target agent IDs excluded from the agent's Auto delegation surface
+         */
+        excludedSubagentIds: Array<string>;
+    };
+};
+
+export type GetAgentSubagentExclusionsResponse = GetAgentSubagentExclusionsResponses[keyof GetAgentSubagentExclusionsResponses];
+
+export type UpdateAgentSubagentExclusionsData = {
+    body: {
+        /**
+         * Target agent IDs excluded from the agent's Auto delegation surface
+         */
+        excludedSubagentIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/subagent-exclusions';
+};
+
+export type UpdateAgentSubagentExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentSubagentExclusionsError = UpdateAgentSubagentExclusionsErrors[keyof UpdateAgentSubagentExclusionsErrors];
+
+export type UpdateAgentSubagentExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Target agent IDs excluded from the agent's Auto delegation surface
+         */
+        excludedSubagentIds: Array<string>;
+    };
+};
+
+export type UpdateAgentSubagentExclusionsResponse = UpdateAgentSubagentExclusionsResponses[keyof UpdateAgentSubagentExclusionsResponses];
+
 export type RestoreAgentData = {
     body?: never;
     path: {
@@ -13255,6 +13447,7 @@ export type RestoreAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
             autoConfigureOnToolDiscovery: boolean;
@@ -52456,6 +52649,7 @@ export type GetMcpToolCallsResponses = {
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
             createdAt: string;
             userName: string | null;
+            appName: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -52570,6 +52764,7 @@ export type GetMcpToolCallResponses = {
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
         createdAt: string;
         userName: string | null;
+        appName: string | null;
     };
 };
 
@@ -58862,6 +59057,7 @@ export type GetOrganizationResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59157,6 +59353,7 @@ export type UpdateAppearanceSettingsResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59325,6 +59522,7 @@ export type UpdateSecuritySettingsResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59491,6 +59689,7 @@ export type UpdateLlmSettingsResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59562,6 +59761,172 @@ export type UpdateLlmSettingsResponses = {
 };
 
 export type UpdateLlmSettingsResponse = UpdateLlmSettingsResponses[keyof UpdateLlmSettingsResponses];
+
+export type UpdateMcpSettingsData = {
+    body: {
+        onlineMcpCatalogEnabled?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/mcp-settings';
+};
+
+export type UpdateMcpSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateMcpSettingsError = UpdateMcpSettingsErrors[keyof UpdateMcpSettingsErrors];
+
+export type UpdateMcpSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        analyticsInstanceId: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: EmbeddingDimensions | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot' | 'microsoft-365-copilot';
+        defaultModelId: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        iconLogoDark: string | null;
+        chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
+        showTwoFactor: boolean;
+        oauthAccessTokenLifetimeSeconds: number;
+        connectionDefaultMcpGatewayId: string | null;
+        connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
+        connectionShownClientIds: Array<string> | null;
+        connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
+        skillToolsEnabled: boolean;
+    };
+};
+
+export type UpdateMcpSettingsResponse = UpdateMcpSettingsResponses[keyof UpdateMcpSettingsResponses];
 
 export type UpdateAgentSettingsData = {
     body: {
@@ -59658,6 +60023,7 @@ export type UpdateAgentSettingsResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59836,6 +60202,7 @@ export type UpdateConnectionSettingsResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60012,6 +60379,7 @@ export type UpdateDefaultEnvironmentResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60178,6 +60546,7 @@ export type UpdateAuthSettingsResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60346,6 +60715,7 @@ export type UpdateKnowledgeSettingsResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60509,6 +60879,7 @@ export type DropEmbeddingConfigResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60848,6 +61219,7 @@ export type CompleteOnboardingResponses = {
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -65509,6 +65881,10 @@ export type GetSkillsData = {
         offset?: number;
         search?: string;
         sourceRepo?: string;
+        /**
+         * Restrict results to skills visible from this agent's environment (strict match, built-in skills exempt).
+         */
+        forAgentId?: string;
     };
     url: '/api/skills';
 };
@@ -65588,6 +65964,7 @@ export type GetSkillsResponses = {
             organizationId: string;
             authorId: string | null;
             scope: 'personal' | 'team' | 'org';
+            environmentId: string | null;
             name: string;
             description: string;
             content: string;
@@ -65595,6 +65972,7 @@ export type GetSkillsResponses = {
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
+            agentName: string | null;
             templated: boolean;
             metadata: {
                 [key: string]: string;
@@ -65627,7 +66005,7 @@ export type GetSkillsResponse = GetSkillsResponses[keyof GetSkillsResponses];
 export type CreateSkillData = {
     body: {
         /**
-         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context.
          */
         content: string;
         files?: Array<{
@@ -65643,6 +66021,10 @@ export type CreateSkillData = {
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        /**
+         * Environment the skill belongs to; null (or omitted on create) is the Default environment. Agents only see skills in their own environment.
+         */
+        environmentId?: string | null;
         /**
          * Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.
          */
@@ -65727,6 +66109,7 @@ export type CreateSkillResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         name: string;
         description: string;
         content: string;
@@ -65734,6 +66117,7 @@ export type CreateSkillResponses = {
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
+        agentName: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -65848,6 +66232,7 @@ export type ConvertAgentToSkillResponses = {
             organizationId: string;
             authorId: string | null;
             scope: 'personal' | 'team' | 'org';
+            environmentId: string | null;
             name: string;
             description: string;
             content: string;
@@ -65855,6 +66240,7 @@ export type ConvertAgentToSkillResponses = {
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
+            agentName: string | null;
             templated: boolean;
             metadata: {
                 [key: string]: string;
@@ -66147,6 +66533,7 @@ export type GetSkillResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         name: string;
         description: string;
         content: string;
@@ -66154,6 +66541,7 @@ export type GetSkillResponses = {
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
+        agentName: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -66184,7 +66572,7 @@ export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
 export type UpdateSkillData = {
     body: {
         /**
-         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context.
          */
         content: string;
         files?: Array<{
@@ -66200,6 +66588,10 @@ export type UpdateSkillData = {
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        /**
+         * Environment the skill belongs to; null (or omitted on create) is the Default environment. Agents only see skills in their own environment.
+         */
+        environmentId?: string | null;
         /**
          * Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.
          */
@@ -66286,6 +66678,7 @@ export type UpdateSkillResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         name: string;
         description: string;
         content: string;
@@ -66293,6 +66686,7 @@ export type UpdateSkillResponses = {
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
+        agentName: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -66486,6 +66880,7 @@ export type ResetSkillResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
         name: string;
         description: string;
         content: string;
@@ -66493,6 +66888,7 @@ export type ResetSkillResponses = {
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
+        agentName: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -66886,6 +67282,7 @@ export type PreviewGithubSkillResponses = {
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
+        agentName: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -66997,6 +67394,7 @@ export type ImportGithubSkillsResponses = {
             organizationId: string;
             authorId: string | null;
             scope: 'personal' | 'team' | 'org';
+            environmentId: string | null;
             name: string;
             description: string;
             content: string;
@@ -67004,6 +67402,7 @@ export type ImportGithubSkillsResponses = {
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
+            agentName: string | null;
             templated: boolean;
             metadata: {
                 [key: string]: string;

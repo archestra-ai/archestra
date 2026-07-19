@@ -84,14 +84,14 @@ export default function CatalogAppRunPage({
       <QueryLoadError
         title="Couldn't load this app"
         onRetry={() => refetch()}
-        className="h-screen"
+        className="h-app-viewport"
       />
     );
   }
 
   if (!isPending && !data) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="flex h-app-viewport flex-col items-center justify-center gap-4 p-8 text-center">
         <output className="text-sm text-muted-foreground">
           This app does not exist or you do not have access to it.
         </output>
@@ -112,7 +112,7 @@ export default function CatalogAppRunPage({
   };
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-app-viewport flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
         <Button asChild variant="ghost" size="sm">
           <Link href="/apps">

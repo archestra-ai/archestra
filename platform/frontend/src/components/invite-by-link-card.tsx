@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useCreateInvitation } from "@/lib/organization.query";
 
 interface InviteByLinkCardProps {
@@ -55,7 +56,7 @@ function InviteByLinkCardContent({
   const handleCopyLink = useCallback(async () => {
     if (!invitationLink) return;
 
-    await navigator.clipboard.writeText(invitationLink);
+    await copyToClipboard(invitationLink);
     setIsCopied(true);
     toast.success("Link copied", {
       description: "Invitation link copied to clipboard",

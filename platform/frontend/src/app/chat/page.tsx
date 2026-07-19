@@ -50,6 +50,7 @@ import {
   usePlaywrightSetupRequired,
 } from "@/components/chat/playwright-install-dialog";
 import {
+  AppsPanelContent,
   type RightPanelTab,
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
@@ -114,7 +115,6 @@ import {
   useUpdateConversationEnabledTools,
   useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
-import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
 import { useSetChatMessageFeedback } from "@/lib/chat/chat-message.query";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import {
@@ -149,7 +149,7 @@ import {
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig, useFeature } from "@/lib/config/config.query";
+import { useConfig } from "@/lib/config/config.query";
 import {
   type ConnectivityState,
   useConnectivity,
@@ -325,7 +325,7 @@ export function ChatPageContent({
   const cannotCreateDueToNoTeams =
     !isAgentAdmin && (!teams || teams.length === 0);
 
-  const _isMobile = useIsMobile();
+  const isMobile = useIsMobile();
 
   // State for browser panel. Restored per-conversation by the conversation-load
   // effect below (a fresh /chat with no conversation has no saved state).
@@ -501,10 +501,13 @@ export function ChatPageContent({
   // Same query the composer's slash-command table is built from (identical
   // input → shared TanStack cache entry). The prefill token must come from
   // that table, not be re-derived from the skill name, so slug collisions
-  // resolve to the right skill.
+  // resolve to the right skill. Deep links land on a new chat, where the
+  // composer's agent is the initial agent — so the same environment filter
+  // (forAgentId) applies here; a cross-environment skill resolves
+  // "unavailable" rather than prefilling a token the composer can't parse.
   const urlSkillCommandsQuery = useSkillsPaginated(
-    { limit: 100 },
-    { enabled: urlSkillWanted && skillToolsEnabled },
+    { limit: 100, forAgentId: initialAgentId ?? undefined },
+    { enabled: urlSkillWanted && skillToolsEnabled && !!initialAgentId },
   );
   useEffect(() => {
     if (urlSkillProcessedRef.current || !urlSkillId) return;
@@ -1135,9 +1138,6 @@ export function ChatPageContent({
     },
     [setMessages, conversationId, messages, setChatMessageFeedback],
   );
-  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
-  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
-
   // A scheduled run's transcript is persisted only when it completes, so a run
   // opened while still running seeds the live chat session empty. When the run
   // finishes, the completion effect refetches the conversation; hydrate the
@@ -1273,20 +1273,10 @@ export function ChatPageContent({
     syncPersistedMessageMetadata(persistedConversationMessages);
   }, [persistedConversationMessages, status, syncPersistedMessageMetadata]);
 
-  const {
-    conversationAgentId,
-    activeAgentId,
-    promptAgentId,
-    swappedAgentName,
-  } = useChatAgentState({
-    conversation,
-    initialAgentId,
-    messages,
-    agents: internalAgents.map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-    })),
-  });
+  const conversationAgentId =
+    conversation?.agentId ?? conversation?.agent?.id ?? null;
+  const activeAgentId = conversationAgentId ?? initialAgentId;
+  const promptAgentId = conversation?.agent?.id ?? activeAgentId;
   const newChatAgentId =
     activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
 
@@ -1345,7 +1335,9 @@ export function ChatPageContent({
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
   const handleCompactConversation = useCallback(async () => {
-    if (!conversationId || isReadOnlyConversation) {
+    // The compaction guard matters now that the composer stays usable during
+    // compaction when queueing is on — a second /compact must not re-enter.
+    if (!conversationId || isReadOnlyConversation || isContextCompacting) {
       return;
     }
 
@@ -1432,6 +1424,7 @@ export function ChatPageContent({
   }, [
     compactConversationMutation,
     conversationId,
+    isContextCompacting,
     isReadOnlyConversation,
     recordContextCompaction,
     syncPersistedMessageMetadata,
@@ -1701,7 +1694,7 @@ export function ChatPageContent({
       });
     };
 
-    const queueEnabled = isMessageQueueEnabled && !!conversationId;
+    const queueEnabled = !!conversationId;
     const submitAction = classifyChatSubmitAction({
       status,
       queueEnabled,
@@ -1709,10 +1702,10 @@ export function ChatPageContent({
     });
 
     if (submitAction === "stop") {
-      // Queueing off: the submit button doubles as Stop while a turn streams.
-      // (Stopping is the submit button's onClick, not a form submit.) Throw to
-      // keep the textarea and draft intact — see onSubmit contract in
-      // ArchestraPromptInputProps.
+      // No conversation to queue into (new-chat composer): the submit button
+      // doubles as Stop while a turn streams. (Stopping is the submit button's
+      // onClick, not a form submit.) Throw to keep the textarea and draft
+      // intact — see onSubmit contract in ArchestraPromptInputProps.
       handleStopStreaming();
       throw new Error("stop-not-submit");
     }
@@ -2529,6 +2522,7 @@ export function ChatPageContent({
             scheduledRun,
             isArtifactOpen,
             isBrowserVisible: isBrowserPanelVisible,
+            isAppsVisible: isAppsTabOpen,
             showBrowserButton,
             isPlaywrightSetupVisible,
             onClose: closeRightPanel,
@@ -2580,6 +2574,14 @@ export function ChatPageContent({
                           handleInitialNavigateComplete
                         }
                       />
+                    </div>
+                  )}
+                  {/* Gated on isMobile (not just CSS) so the app iframe only
+                      ever mounts once — the desktop panel below unmounts on
+                      mobile the same way. */}
+                  {activeRightTab === "apps" && isMobile && (
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      <AppsPanelContent agentId={browserToolsAgentId} />
                     </div>
                   )}
                 </div>
@@ -2778,7 +2780,6 @@ export function ChatPageContent({
                                 isPlaywrightSetupVisible
                               }
                               selectorAgentId={activeAgentId}
-                              selectorAgentName={swappedAgentName ?? undefined}
                               onAgentChange={handleConversationAgentChange}
                               modelSource={conversationModelSource}
                               onResetModelOverride={
@@ -2955,24 +2956,28 @@ export function ChatPageContent({
             </div>
           </div>
 
-          {/* Right-side panel - desktop only */}
-          <div className="hidden md:flex h-full min-h-0">
-            <RightSidePanel
-              isOpen={isRightPanelOpen}
-              activeTab={activeRightTab}
-              onClose={closeRightPanel}
-              canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
-              scheduledRun={scheduledRun}
-              artifact={conversation?.artifact}
-              projectId={conversation?.projectId}
-              conversationId={conversationId}
-              agentId={browserToolsAgentId}
-              onCreateConversationWithUrl={handleCreateConversationWithUrl}
-              isCreatingConversation={createConversationMutation.isPending}
-              initialNavigateUrl={pendingBrowserUrl}
-              onInitialNavigateComplete={handleInitialNavigateComplete}
-            />
-          </div>
+          {/* Right-side panel - desktop only. Unmounted (not just CSS-hidden)
+              on mobile so its Apps tab never hosts a second, invisible copy of
+              the app iframe alongside the inline mobile panel above. */}
+          {!isMobile && (
+            <div className="hidden md:flex h-full min-h-0">
+              <RightSidePanel
+                isOpen={isRightPanelOpen}
+                activeTab={activeRightTab}
+                onClose={closeRightPanel}
+                canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
+                scheduledRun={scheduledRun}
+                artifact={conversation?.artifact}
+                projectId={conversation?.projectId}
+                conversationId={conversationId}
+                agentId={browserToolsAgentId}
+                onCreateConversationWithUrl={handleCreateConversationWithUrl}
+                isCreatingConversation={createConversationMutation.isPending}
+                initialNavigateUrl={pendingBrowserUrl}
+                onInitialNavigateComplete={handleInitialNavigateComplete}
+              />
+            </div>
+          )}
         </div>
 
         <CustomServerRequestDialog

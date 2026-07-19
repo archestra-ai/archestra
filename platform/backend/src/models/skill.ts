@@ -11,6 +11,7 @@ import {
   or,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
 import { ApiError } from "@/types";
 import type { SkillFileEncoding, SkillFileKind } from "@/types/skill";
@@ -26,6 +27,12 @@ class SkillModel {
     sourceRepo?: string;
     /** When set, restricts results to these skill IDs (scope filtering). */
     accessibleSkillIds?: string[];
+    /**
+     * When set (null = Default environment), restricts results to skills
+     * visible from that environment: strict match, built-in skills exempt.
+     * Omit for management surfaces that list every environment.
+     */
+    environmentId?: string | null;
   }): Promise<Skill[]> {
     let query = db
       .select()
@@ -49,6 +56,8 @@ class SkillModel {
     search?: string;
     sourceRepo?: string;
     accessibleSkillIds?: string[];
+    /** Same environment-visibility filter as `findByOrganization`. */
+    environmentId?: string | null;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -408,6 +417,7 @@ function buildOrgFilters(params: {
   search?: string;
   sourceRepo?: string;
   accessibleSkillIds?: string[];
+  environmentId?: string | null;
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
@@ -415,6 +425,9 @@ function buildOrgFilters(params: {
     eq(schema.skillsTable.organizationId, params.organizationId),
     ...(params.accessibleSkillIds !== undefined
       ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
+      : []),
+    ...(params.environmentId !== undefined
+      ? [skillInEnvironmentPredicate(params.environmentId)]
       : []),
     ...(normalizedSearch
       ? [

@@ -62,3 +62,33 @@ export function connectorInEnvironmentPredicate(
 ): SQL {
   return sql`${connectors.environmentId} is not distinct from ${agentEnvironmentId}`;
 }
+
+/**
+ * SQL predicate selecting `skills` rows visible from `agentEnvironmentId`'s
+ * environment (strict equality, null = Default). Built-in skills are exempt —
+ * always visible — mirroring the built-in catalog exemption on tools.
+ */
+export function skillInEnvironmentPredicate(
+  agentEnvironmentId: string | null,
+  skills = schema.skillsTable,
+): SQL {
+  return or(
+    sql`${skills.sourceType} = 'built_in'`,
+    sql`${skills.environmentId} is not distinct from ${agentEnvironmentId}`,
+  ) as SQL;
+}
+
+/**
+ * JS counterpart of {@link skillInEnvironmentPredicate} for callers that
+ * already hold the skill row. Same rules: built-in skills are visible in every
+ * environment; everything else matches strictly (null = Default).
+ */
+export function skillVisibleInEnvironment(
+  skill: { sourceType: string; environmentId: string | null },
+  agentEnvironmentId: string | null,
+): boolean {
+  return (
+    skill.sourceType === "built_in" ||
+    skill.environmentId === agentEnvironmentId
+  );
+}

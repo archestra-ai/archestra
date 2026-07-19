@@ -21,7 +21,6 @@ import {
   generateId,
   generateObject,
   generateText,
-  hasToolCall,
   InvalidToolInputError,
   jsonSchema,
   type ModelMessage,
@@ -35,7 +34,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
@@ -3236,19 +3234,8 @@ export function resolveTitleUserInput(
 export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
   return [
     stepCountIs(MAX_AGENT_STEPS),
-    hasToolCall(getChatStopToolNames().swapAgentToolName),
-    hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
     repeatCeilingStopCondition(repeatTracker),
   ];
-}
-
-export function getChatStopToolNames() {
-  return {
-    swapAgentToolName: archestraMcpBranding.getToolName("swap_agent"),
-    swapToDefaultAgentToolName: archestraMcpBranding.getToolName(
-      "swap_to_default_agent",
-    ),
-  };
 }
 
 /**
@@ -3587,8 +3574,8 @@ function getMessagesNotYetPersisted(params: {
 
     // Persisted messages are re-keyed to DB UUIDs when conversations reload, but
     // in-flight useChat requests can still carry the original temporary content
-    // ids. Track both forms so follow-up turns after swap_agent do not get
-    // dropped just because the incoming thread is shorter than the DB thread.
+    // ids. Track both forms so follow-up turns do not get dropped just because
+    // the incoming thread is shorter than the DB thread.
     const contentId = getMessageContentId(message.content);
 
     if (contentId && contentId.length > 0) {

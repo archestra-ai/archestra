@@ -95,9 +95,13 @@ export function CloneAgentDialog({
     setTeamIds((prev) => prev.filter((id) => assignable.has(id)));
   }, [teams]);
 
+  // A team-scoped agent must have at least one team, otherwise it is
+  // inaccessible to everyone (issue #6624). Applies to admins too.
+  const requiresTeamSelection = scope === "team" && teamIds.length === 0;
+
   const handleSubmit = async () => {
     if (!agent) return;
-    if (!isAdmin && scope === "team" && teamIds.length === 0) {
+    if (requiresTeamSelection) {
       toast.error("Please select at least one team");
       return;
     }
@@ -144,7 +148,7 @@ export function CloneAgentDialog({
                 assignedTeamIds={teamIds}
                 onTeamIdsChange={setTeamIds}
                 hasNoAvailableTeams={!teams || teams.length === 0}
-                showTeamRequired={!isAdmin && scope === "team"}
+                showTeamRequired={scope === "team"}
               />
             </DialogBody>
 
@@ -157,7 +161,10 @@ export function CloneAgentDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={cloneAgent.isPending}>
+              <Button
+                type="submit"
+                disabled={cloneAgent.isPending || requiresTeamSelection}
+              >
                 {cloneAgent.isPending && (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 )}

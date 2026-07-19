@@ -102,6 +102,7 @@ import {
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
+import { msTeamsWebhookRoutes } from "./routes/chatops";
 import { publicConfigRoutes } from "./routes/config";
 import { createOAuthAwareCorsDelegate } from "./routes/oauth-cors";
 import {
@@ -796,6 +797,43 @@ const startMetricsServer = async () => {
   );
 };
 
+// ============ Public-endpoints listener ============
+
+/**
+ * Optional dedicated Fastify listener (ARCHESTRA_PUBLIC_ENDPOINTS_PORT) that
+ * aliases the publicly-exposable endpoints on their own port. Currently that
+ * is the MS Teams incoming webhook; other endpoints that must be reachable
+ * from the Internet may join it later.
+ *
+ * It registers the exact same route handler as the main server, and the main
+ * API port keeps serving the endpoint in every configuration. The dedicated
+ * port exists so a firewall can expose only the endpoints that must be
+ * publicly reachable without exposing the whole API.
+ *
+ * As on the main port, the webhook authenticates in-route (Bot Framework JWT
+ * validation), so the auth plugin is not registered here.
+ */
+let publicEndpointsServerInstance: FastifyInstanceWithZod | null = null;
+
+const startPublicEndpointsServer = async () => {
+  const { publicEndpointsPort } = config.api;
+  if (!publicEndpointsPort) {
+    return;
+  }
+
+  const server = createFastifyInstance();
+  publicEndpointsServerInstance = server;
+
+  server.get(HEALTH_PATH, () => ({ status: "ok" }));
+
+  await server.register(msTeamsWebhookRoutes);
+
+  await server.listen({ port: publicEndpointsPort, host });
+  server.log.info(
+    `Public-endpoints listener started on port ${publicEndpointsPort} (aliasing the main API port's MS Teams webhook endpoint)`,
+  );
+};
+
 // ============ MCP Sandbox Server ============
 
 /**
@@ -1326,6 +1364,10 @@ const startWebServer = async () => {
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
 
+    // Optional dedicated listener aliasing the MS Teams webhook on its own
+    // port (see startPublicEndpointsServer).
+    await startPublicEndpointsServer();
+
     // Start WebSocket server using the same HTTP server
     websocketService.start(fastify.server);
     fastify.log.info("WebSocket service started");
@@ -1395,6 +1437,11 @@ function registerWebServerShutdown(
       if (metricsServerInstance) {
         await metricsServerInstance.close();
         fastify.log.info("Metrics server closed");
+      }
+
+      if (publicEndpointsServerInstance) {
+        await publicEndpointsServerInstance.close();
+        fastify.log.info("Public-endpoints listener closed");
       }
 
       await fastify.close();

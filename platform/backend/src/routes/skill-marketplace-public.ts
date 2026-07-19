@@ -233,6 +233,7 @@ async function loadSkillsForLink(
       license: skill.license ?? null,
       compatibility: skill.compatibility ?? null,
       allowedTools: skill.allowedTools ?? null,
+      agentName: skill.agentName ?? null,
       templated: skill.templated ?? false,
       metadata: (skill.metadata ?? {}) as Record<string, string>,
       updatedAt: skill.updatedAt,

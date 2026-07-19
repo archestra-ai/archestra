@@ -18,7 +18,7 @@ const {
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
   mockControllerState: { value: "", files: [] as { url: string }[] },
-  mockFeatureState: { chatSecretScanEnabled: false, betaEnabled: false },
+  mockFeatureState: { chatSecretScanEnabled: false },
   mockProfileState: {
     agent: null as { sandboxAvailable: boolean } | null,
   },
@@ -153,8 +153,14 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     <div>{children}</div>
   ),
   PromptInputSpeechButton: () => <button type="button">Speech</button>,
-  PromptInputSubmit: ({ status }: { status?: string }) => (
-    <button data-testid="prompt-submit" type="submit">
+  PromptInputSubmit: ({
+    status,
+    disabled,
+  }: {
+    status?: string;
+    disabled?: boolean;
+  }) => (
+    <button data-testid="prompt-submit" type="submit" disabled={disabled}>
       Submit {status ?? "unset"}
     </button>
   ),
@@ -294,9 +300,6 @@ describe("ArchestraPromptInput", () => {
       if (flag === "chatSecretScanEnabled") {
         return mockFeatureState.chatSecretScanEnabled;
       }
-      if (flag === "betaEnabled") {
-        return mockFeatureState.betaEnabled;
-      }
       return undefined;
     });
     mockUseChatPlaceholder.mockReturnValue({
@@ -310,7 +313,6 @@ describe("ArchestraPromptInput", () => {
     mockControllerState.value = "";
     mockControllerState.files = [];
     mockFeatureState.chatSecretScanEnabled = false;
-    mockFeatureState.betaEnabled = false;
     mockProfileState.agent = null;
     localStorage.clear();
   });
@@ -962,7 +964,6 @@ describe("ArchestraPromptInput", () => {
 
   describe("queue keyboard shortcuts", () => {
     it("pops the most recently queued message into the composer on ArrowUp when empty", () => {
-      mockFeatureState.betaEnabled = true;
       const conversationId = "conv-arrowup-pop";
       chatMessageQueue.clear(conversationId);
       chatMessageQueue.enqueue(conversationId, { text: "first queued" });
@@ -991,7 +992,6 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("prefixes a queued skill command when popping it back", () => {
-      mockFeatureState.betaEnabled = true;
       const conversationId = "conv-arrowup-skill";
       chatMessageQueue.clear(conversationId);
       chatMessageQueue.enqueue(conversationId, {
@@ -1018,7 +1018,6 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("leaves the queue alone on ArrowUp when the composer already has text", () => {
-      mockFeatureState.betaEnabled = true;
       const conversationId = "conv-arrowup-nonempty";
       chatMessageQueue.clear(conversationId);
       chatMessageQueue.enqueue(conversationId, { text: "queued" });
@@ -1078,6 +1077,70 @@ describe("ArchestraPromptInput", () => {
       });
 
       expect(onStop).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("context compaction", () => {
+    // The Enter path is routed through the submit button's disabled state (the
+    // textarea refuses to requestSubmit while the button is disabled), so the
+    // button assertions below pin the keyboard contract too.
+    const getSubmitButton = (): HTMLButtonElement => {
+      const button = document.querySelector('button[type="submit"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("submit button not found");
+      }
+      return button;
+    };
+
+    it("keeps the composer usable mid-stream when queueing can absorb the message", () => {
+      const onSubmit = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+          conversationId="conv-compacting-queue"
+          isContextCompacting
+        />,
+      );
+
+      expect(
+        screen.getByTestId(E2eTestId.ChatPromptTextarea),
+      ).not.toBeDisabled();
+      expect(getSubmitButton()).not.toBeDisabled();
+
+      // A submit during compaction still reaches the consumer (which queues it).
+      mockControllerState.value = "queued while compacting";
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it("locks the composer during compaction when there is no conversation to queue into", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          isContextCompacting
+        />,
+      );
+
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toBeDisabled();
+      expect(getSubmitButton()).toBeDisabled();
+    });
+
+    it("locks the composer during an idle (manual) compaction", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="ready"
+          conversationId="conv-compacting-idle"
+          isContextCompacting
+        />,
+      );
+
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toBeDisabled();
+      expect(getSubmitButton()).toBeDisabled();
     });
   });
 });

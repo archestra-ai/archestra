@@ -8,7 +8,7 @@ exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
     "additionalProperties": false,
     "properties": {
       "content": {
-        "description": "A complete SKILL.md manifest: a YAML frontmatter block with \`name\` and \`description\` (and optional \`license\`, \`compatibility\`, \`allowed-tools\`, \`templated\`, \`metadata\`), followed by the Markdown instruction body. Set \`templated: true\` to render the body through Handlebars (e.g. \`{{user.name}}\`) at activation. \`allowed-tools\` is a space-separated list of tools the skill is pre-approved to use.",
+        "description": "A complete SKILL.md manifest: a YAML frontmatter block with \`name\` and \`description\` (and optional \`license\`, \`compatibility\`, \`allowed-tools\`, \`agent\`, \`templated\`, \`metadata\`), followed by the Markdown instruction body. Set \`templated: true\` to render the body through Handlebars (e.g. \`{{user.name}}\`) at activation. \`allowed-tools\` is a space-separated list of tools the skill is pre-approved to use. \`agent\` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context.",
         "maxLength": 10485760,
         "minLength": 1,
         "type": "string",
@@ -436,7 +436,7 @@ exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
     "additionalProperties": false,
     "properties": {
       "content": {
-        "description": "A complete SKILL.md manifest: a YAML frontmatter block with \`name\` and \`description\` (and optional \`license\`, \`compatibility\`, \`allowed-tools\`, \`templated\`, \`metadata\`), followed by the Markdown instruction body. Set \`templated: true\` to render the body through Handlebars (e.g. \`{{user.name}}\`) at activation. \`allowed-tools\` is a space-separated list of tools the skill is pre-approved to use.",
+        "description": "A complete SKILL.md manifest: a YAML frontmatter block with \`name\` and \`description\` (and optional \`license\`, \`compatibility\`, \`allowed-tools\`, \`agent\`, \`templated\`, \`metadata\`), followed by the Markdown instruction body. Set \`templated: true\` to render the body through Handlebars (e.g. \`{{user.name}}\`) at activation. \`allowed-tools\` is a space-separated list of tools the skill is pre-approved to use. \`agent\` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context.",
         "maxLength": 10485760,
         "minLength": 1,
         "type": "string",

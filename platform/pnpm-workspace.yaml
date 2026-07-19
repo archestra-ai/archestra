@@ -47,6 +47,7 @@ overrides:
   glob: 11.1.0
   # GHSA-gv7w-rqvm-qjhr (esbuild "Untrusted Search Path", HIGH) fixed in 0.28.1.
   esbuild: '>=0.28.1'
+  adm-zip: 0.6.0
   mdast-util-to-hast: 13.2.1
   express: 5.2.0
   express-rate-limit: 8.3.1

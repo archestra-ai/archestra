@@ -124,15 +124,13 @@ async function openCatalogToolAssignment({
   const dialog = page.getByRole("dialog", { name: dialogTitle });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-  const capabilitiesAnchor = dialog.getByTestId(
-    E2eTestId.AgentCapabilitiesSection,
-  );
-  await capabilitiesAnchor.scrollIntoViewIfNeeded();
+  const toolsSectionAnchor = dialog.getByTestId(E2eTestId.AgentToolsSection);
+  await toolsSectionAnchor.scrollIntoViewIfNeeded();
 
-  const capabilitiesHeading = dialog.getByRole("heading", {
-    name: "Capabilities",
+  const toolsSectionHeading = dialog.getByRole("heading", {
+    name: "Tools & Knowledge Sources",
   });
-  await expect(capabilitiesHeading).toBeVisible({ timeout: 10_000 });
+  await expect(toolsSectionHeading).toBeVisible({ timeout: 10_000 });
 
   const addButton = dialog.getByTestId(E2eTestId.AgentToolsAddButton);
   await expect(addButton).toBeVisible({ timeout: 10_000 });

@@ -10,6 +10,7 @@ export function composeManifest(skill: {
   license: string | null;
   compatibility: string | null;
   allowedTools: string | null;
+  agentName: string | null;
   templated: boolean;
   metadata: Record<string, string>;
   content: string;
@@ -26,6 +27,7 @@ export function composeManifest(skill: {
   if (skill.allowedTools) {
     lines.push(`allowed-tools: ${yamlScalar(skill.allowedTools)}`);
   }
+  if (skill.agentName) lines.push(`agent: ${yamlScalar(skill.agentName)}`);
   if (skill.templated) lines.push("templated: true");
   const metadataEntries = Object.entries(skill.metadata ?? {});
   if (metadataEntries.length > 0) {

@@ -15,6 +15,7 @@ import {
   ToolModel,
 } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
+import { isUniqueConstraintError } from "@/utils/db";
 import type { ArchestraContext } from "./types";
 
 export function isAbortLikeError(error: unknown): boolean {
@@ -504,12 +505,6 @@ export function formatZodErrorWithSchema(
       return path ? `${path}: ${enriched}` : enriched;
     })
     .join("; ");
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  // PostgreSQL unique_violation code
-  return "code" in error && (error as { code: string }).code === "23505";
 }
 
 function formatZodIssue(issue: z.core.$ZodIssue): string {

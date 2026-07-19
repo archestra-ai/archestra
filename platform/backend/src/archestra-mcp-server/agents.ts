@@ -158,6 +158,12 @@ const EditAgentToolArgsSchema = z
           .describe(
             "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only'.",
           ),
+        accessAllSubagents: z
+          .boolean()
+          .optional()
+          .describe(
+            "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions).",
+          ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)
           .optional()
@@ -265,10 +271,9 @@ const registry = defineArchestraTools([
           {
             agentType: "agent",
             ...(args.name ? { name: args.name } : {}),
-            // Hide other users' personal agents. swap_agent is the primary
-            // Archestra MCP use-case and requires only the caller's own
-            // personal agents to be visible, even though admins can see all
-            // personal agents in the UI.
+            // Hide other users' personal agents. MCP tools only need the
+            // caller's own personal agents to be visible, even though admins
+            // can see all personal agents in the UI.
             excludeOtherPersonalAgents: true,
           },
           context.userId,

@@ -13,6 +13,7 @@ import {
 } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
+import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 const MermaidDiagram = dynamic(
@@ -197,7 +198,7 @@ export function ConversationArtifactPanel({
       return;
     }
     try {
-      await navigator.clipboard.writeText(artifact);
+      await copyToClipboard(artifact);
       toast.success("Artifact copied to clipboard");
     } catch (_error) {
       toast.error("Failed to copy artifact");

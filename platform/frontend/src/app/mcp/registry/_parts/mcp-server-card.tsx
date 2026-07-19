@@ -24,7 +24,6 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Avatar,
@@ -32,7 +31,6 @@ import {
   AvatarGroup,
   AvatarGroupCount,
 } from "@/components/ui/avatar";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -53,6 +51,7 @@ import {
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -791,7 +790,7 @@ export function McpServerCard({
   const isInstallAdmin = !!isMcpServerInstallAdmin;
 
   const copyApprovalLink = () => {
-    void navigator.clipboard.writeText(
+    void copyToClipboard(
       `${window.location.origin}/mcp/registry/${item.id}/edit`,
     );
     toast.success("Link copied — share it with an admin to approve this image");

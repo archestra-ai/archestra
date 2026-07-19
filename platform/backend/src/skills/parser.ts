@@ -19,6 +19,12 @@ export interface ParsedSkill {
    * YAML sequence. `null` when the field is absent or empty.
    */
   allowedTools: string | null;
+  /**
+   * Optional `agent` field: the name of the agent the skill runs in. When set,
+   * activation delegates the skill to that agent instead of loading the
+   * instructions into the caller's context.
+   */
+  agentName: string | null;
   /** When true, the body is rendered through Handlebars at activation. */
   templated: boolean;
   metadata: Record<string, string>;
@@ -86,6 +92,7 @@ export function parseSkillManifest(raw: string): ParsedSkill {
     license: readString(fields.license) || null,
     compatibility: readString(fields.compatibility) || null,
     allowedTools: readAllowedTools(fields["allowed-tools"]),
+    agentName: readString(fields.agent) || null,
     templated: readBoolean(fields.templated),
     metadata: readStringMap(fields.metadata),
   };

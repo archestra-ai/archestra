@@ -28,7 +28,6 @@ import { useOrgScopedAgents } from "@/lib/agent.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   useOrganization,
   useUpdateAgentSettings,
@@ -45,7 +44,6 @@ import {
 type FileUploadsEnabled = "enabled" | "disabled";
 
 export default function AgentSettingsPage() {
-  const { getToolName } = useArchestraMcpIdentity();
   const appName = useAppName();
   const { data: organization } = useOrganization();
   const {
@@ -314,7 +312,7 @@ export default function AgentSettingsPage() {
       />
       <SettingsBlock
         title="Default Agent"
-        description={`The default agent is preselected for all new chat conversations. To enable agent routing, assign ${getToolName("swap_agent")} to the default agent so it can swap to other agents, and ${getToolName("swap_to_default_agent")} to other agents so they can swap back automatically.`}
+        description="The default agent is preselected for all new chat conversations."
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}

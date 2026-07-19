@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
+import AppModel from "./app";
 import McpToolCallModel from "./mcp-tool-call";
 
 describe("McpToolCallModel", () => {
@@ -769,6 +770,99 @@ describe("McpToolCallModel", () => {
 
       expect(existingAgentCall).toBeDefined();
       expect(existingAgentCall?.agentId).toBe(agentToKeep.id);
+    });
+  });
+
+  describe("app-owned tool calls", () => {
+    test("findAllPaginated and findById return the owning app's name", async ({
+      makeAdmin,
+      makeApp,
+    }) => {
+      const admin = await makeAdmin();
+      const app = await makeApp({ name: "My Dashboard App" });
+
+      const created = await McpToolCallModel.create({
+        ownerType: "app",
+        appId: app.id,
+        mcpServerName: "app-server",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "app_data_get", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+      );
+
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].ownerType).toBe("app");
+      expect(toolCalls.data[0].agentId).toBeNull();
+      expect(toolCalls.data[0].appId).toBe(app.id);
+      expect(toolCalls.data[0].appName).toBe("My Dashboard App");
+
+      const found = await McpToolCallModel.findById(created.id, admin.id, true);
+      expect(found?.appName).toBe("My Dashboard App");
+      expect(found?.ownerType).toBe("app");
+    });
+
+    test("tool call is preserved with null appId/appName when the app is deleted", async ({
+      makeAdmin,
+      makeApp,
+    }) => {
+      const admin = await makeAdmin();
+      const app = await makeApp({ name: "App To Delete" });
+
+      const created = await McpToolCallModel.create({
+        ownerType: "app",
+        appId: app.id,
+        mcpServerName: "app-server",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "app_data_set", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      await AppModel.delete(app.id);
+
+      const found = await McpToolCallModel.findById(created.id, admin.id, true);
+      expect(found).toBeDefined();
+      expect(found?.ownerType).toBe("app");
+      expect(found?.appId).toBeNull();
+      expect(found?.appName).toBeNull();
+      expect(found?.agentId).toBeNull();
+    });
+
+    test("agent-owned tool calls have a null appName", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      await McpToolCallModel.create({
+        agentId,
+        mcpServerName: "agent-server",
+        method: "tools/call",
+        toolCall: { id: "test-id", name: "someTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+      });
+
+      const toolCalls = await McpToolCallModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+      );
+      expect(toolCalls.data).toHaveLength(1);
+      expect(toolCalls.data[0].appName).toBeNull();
+
+      const agentScoped =
+        await McpToolCallModel.getAllMcpToolCallsForAgentPaginated(agentId, {
+          limit: 100,
+          offset: 0,
+        });
+      expect(agentScoped.data).toHaveLength(1);
+      expect(agentScoped.data[0].appName).toBeNull();
     });
   });
 });

@@ -14,6 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 export function MessageActions({
@@ -41,7 +42,7 @@ export function MessageActions({
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(textToCopy);
+    await copyToClipboard(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

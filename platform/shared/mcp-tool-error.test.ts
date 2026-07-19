@@ -283,17 +283,17 @@ Tool call blocked: context contains sensitive data`),
         structuredContent: {
           archestraError: {
             type: "tool_state",
-            code: "already_using_agent",
-            message: "Already using agent.",
-            toolName: "archestra__swap_agent",
+            code: "skill_not_found",
+            message: "Skill not found.",
+            toolName: "archestra__load_skill",
           },
         },
       }),
     ).toEqual({
       type: "tool_state",
-      code: "already_using_agent",
-      message: "Already using agent.",
-      toolName: "archestra__swap_agent",
+      code: "skill_not_found",
+      message: "Skill not found.",
+      toolName: "archestra__load_skill",
     });
   });
 });

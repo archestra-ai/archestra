@@ -137,8 +137,6 @@ export const TOOL_PERMISSIONS: Record<
 
   // Chat — available to all (operate within user's own chat session)
   todo_write: null,
-  swap_agent: { resource: "agent", action: "read" },
-  swap_to_default_agent: null,
   create_project_from_conversation: { resource: "project", action: "create" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself

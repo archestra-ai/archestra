@@ -265,34 +265,6 @@ describe("ChatMessages", () => {
     vi.mocked(useAppIconLogo).mockReturnValue("/custom-logo.png");
   });
 
-  it("renders the swap divider for branded built-in swap tools", () => {
-    const messages = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-sparky__swap_agent",
-            toolCallId: "call-1",
-            state: "output-available",
-            input: { agent_name: "GitHub Agent" },
-            output: { ok: true },
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-      />,
-    );
-
-    expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
-  });
-
   it("does not render an accordion for an empty reasoning part", () => {
     const messages = [
       {
@@ -416,101 +388,6 @@ describe("ChatMessages", () => {
     expect(loadingLogo).toHaveClass(
       "[animation:archestra-chat-logo-bounce_700ms_ease-in-out_200ms_infinite]",
     );
-  });
-
-  it("deduplicates adjacent swap dividers for the same target", () => {
-    const messages = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-sparky__swap_agent",
-            toolCallId: "call-1",
-            state: "input-available",
-            input: { agent_name: "Jira Agent" },
-          },
-        ],
-      },
-      {
-        id: "assistant-2",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-sparky__swap_agent",
-            toolCallId: "call-1",
-            state: "output-available",
-            input: { agent_name: "Jira Agent" },
-            output: { ok: true },
-          },
-        ],
-      },
-      {
-        id: "assistant-3",
-        role: "assistant",
-        parts: [{ type: "text", text: "I am the Jira Agent." }],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-      />,
-    );
-
-    expect(screen.getAllByText("Switched to Jira Agent")).toHaveLength(1);
-  });
-
-  it("renders failed swap tools as compact error indicators instead of swap dividers", () => {
-    const messages = [
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-sparky__swap_agent",
-            toolCallId: "call-1",
-            state: "output-available",
-            input: { agent_name: "Jira Agent" },
-            output: JSON.stringify({
-              success: false,
-              code: "already_using_agent",
-              message:
-                'Already using agent "Jira Agent". Choose a different agent.',
-              archestraError: {
-                type: "tool_state",
-                code: "already_using_agent",
-                message:
-                  'Already using agent "Jira Agent". Choose a different agent.',
-                toolName: "swap_agent",
-              },
-            }),
-          },
-        ],
-      },
-    ] as UIMessage[];
-
-    render(
-      <ChatMessages
-        conversationId="conv-1"
-        messages={messages}
-        status="ready"
-      />,
-    );
-
-    const toolButtons = screen.getAllByRole("button");
-    expect(toolButtons).toHaveLength(1);
-    expect(
-      screen.queryByText("tool-sparky__swap_agent"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Switched to Jira Agent"),
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(toolButtons[0]);
-    expect(screen.getByText("tool-sparky__swap_agent")).toBeInTheDocument();
   });
 
   it("renders persisted chat errors between messages by timestamp", () => {

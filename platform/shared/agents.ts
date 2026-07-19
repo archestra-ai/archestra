@@ -1,4 +1,3 @@
-import { TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME } from "./archestra-mcp-server";
 import { MCP_SERVER_TOOL_NAME_SEPARATOR } from "./consts";
 
 /**
@@ -39,16 +38,6 @@ export function isSkillTool(toolName: string): boolean {
   return toolName.startsWith(SKILL_TOOL_PREFIX);
 }
 
-export const SWAP_AGENT_POKE_TEXT =
-  "(Agent was swapped. Please continue the conversation.)";
-export const SWAP_AGENT_POKE_PREFIX = "(Switched to ";
-export const SWAP_AGENT_POKE_AGENT_NAME_SUFFIX =
-  ". Please continue the conversation.";
-export const SWAP_AGENT_FAILED_POKE_TEXT =
-  "(The agent swap failed — you are still the same agent. Briefly explain to the user that the switch did not happen and continue the conversation.)";
-export const SWAP_TO_DEFAULT_AGENT_POKE_TEXT =
-  "(Switched back to the default agent. Briefly explain why you switched back and continue the conversation.)";
-
 // Hop-by-hop (RFC 7230) and protocol-level headers that must not be forwarded
 export const BLOCKED_PASSTHROUGH_HEADERS = new Set([
   "connection",
@@ -66,7 +55,3 @@ export const BLOCKED_PASSTHROUGH_HEADERS = new Set([
 export const MAX_PASSTHROUGH_HEADERS = 20;
 
 export const HEADER_NAME_REGEX = /^[a-zA-Z0-9-]+$/;
-
-export function makeSwapAgentPokeText(agentName: string): string {
-  return `${SWAP_AGENT_POKE_PREFIX}${agentName}${SWAP_AGENT_POKE_AGENT_NAME_SUFFIX} If you have the ${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME} tool and you don't have the right tools to fulfill the request, use it immediately — write a brief message explaining why you are switching back, then call ${TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME}.)`;
-}

@@ -1059,10 +1059,9 @@ describe("ChatProvider auto title generation", () => {
     vi.useRealTimers();
   });
 
-  // An agent swap inserts a tool-only assistant message and an auto-poke user
-  // message into the first exchange, so the first exchange spans two user and
-  // two assistant messages, none of which carry assistant text.
-  const swapMessages: UIMessage[] = [
+  // A tool-only first exchange spans two user and two assistant messages,
+  // none of which carry assistant text.
+  const toolOnlyMessages: UIMessage[] = [
     {
       id: "u1",
       role: "user",
@@ -1073,7 +1072,7 @@ describe("ChatProvider auto title generation", () => {
       role: "assistant",
       parts: [
         {
-          type: "tool-swap_agent",
+          type: "tool-search",
           toolCallId: "t1",
           state: "output-available",
           input: {},
@@ -1084,7 +1083,7 @@ describe("ChatProvider auto title generation", () => {
     {
       id: "u2",
       role: "user",
-      parts: [{ type: "text", text: "(poke)" }],
+      parts: [{ type: "text", text: "continue" }],
     },
     {
       id: "a2",
@@ -1101,7 +1100,7 @@ describe("ChatProvider auto title generation", () => {
     } as unknown as UIMessage,
   ];
 
-  it("titles an untitled chat after a tool-only agent-swap exchange", async () => {
+  it("titles an untitled chat after a tool-only exchange", async () => {
     let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
 
     mocks.useChat.mockImplementation((options) => {
@@ -1110,7 +1109,7 @@ describe("ChatProvider auto title generation", () => {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: swapMessages,
+        messages: toolOnlyMessages,
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
@@ -1135,7 +1134,7 @@ describe("ChatProvider auto title generation", () => {
     // Trigger onFinish to simulate the AI stream completing
     act(() => {
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
     });
@@ -1157,7 +1156,7 @@ describe("ChatProvider auto title generation", () => {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: swapMessages,
+        messages: toolOnlyMessages,
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
@@ -1177,7 +1176,7 @@ describe("ChatProvider auto title generation", () => {
 
     act(() => {
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
     });
@@ -1199,7 +1198,7 @@ describe("ChatProvider auto title generation", () => {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: swapMessages,
+        messages: toolOnlyMessages,
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
@@ -1218,7 +1217,7 @@ describe("ChatProvider auto title generation", () => {
     await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
     act(() => {
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
     });
@@ -1235,7 +1234,7 @@ describe("ChatProvider auto title generation", () => {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: swapMessages,
+        messages: toolOnlyMessages,
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
@@ -1255,11 +1254,11 @@ describe("ChatProvider auto title generation", () => {
 
     act(() => {
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
     });

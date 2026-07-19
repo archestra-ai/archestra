@@ -191,7 +191,6 @@ const PromptInputContent = ({
   onCompactConversation,
   isPlaywrightSetupVisible = false,
   selectorAgentId,
-  selectorAgentName,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -876,7 +875,6 @@ const PromptInputContent = ({
             inputModalities={inputModalities}
             agentLlmApiKeyId={agentLlmApiKeyId}
             selectorAgentId={selectorAgentId}
-            selectorAgentName={selectorAgentName}
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             toolsUnavailable={toolsUnavailable}
@@ -961,7 +959,6 @@ const ArchestraPromptInput = ({
   onCompactConversation,
   isPlaywrightSetupVisible,
   selectorAgentId,
-  selectorAgentName,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1056,7 +1053,6 @@ const ArchestraPromptInput = ({
           onCompactConversation={onCompactConversation}
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
-          selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}

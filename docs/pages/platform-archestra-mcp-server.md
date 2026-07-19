@@ -1748,8 +1748,6 @@ Required RBAC permission: `knowledgeSource:update`
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `todo_write` | Write todos to the current conversation. | None (no additional RBAC permission required) |
-| `swap_agent` | Switch the current conversation to a different agent. | `agent:read` |
-| `swap_to_default_agent` | Return to the default agent. | None (no additional RBAC permission required) |
 | `create_project_from_conversation` | Turn the current chat into a project. | `project:create` |
 
 #### todo_write
@@ -1771,38 +1769,6 @@ Required RBAC permission: None (no additional RBAC permission required)
 |-------|------|----------|-------------|
 | `success` | `boolean` | Yes | Whether the write succeeded. |
 | `todoCount` | `integer` | Yes | How many todo items were written. |
-
-#### swap_agent
-
-Required RBAC permission: `agent:read`
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `agent_name` | `string` | Yes | The name of the agent to switch to. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the swap succeeded. |
-| `agent_id` | `string` | Yes | The agent ID the conversation now uses. |
-| `agent_name` | `string` | Yes | The agent name the conversation now uses. |
-
-#### swap_to_default_agent
-
-Required RBAC permission: None (no additional RBAC permission required)
-
-This tool takes no arguments.
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the swap succeeded. |
-| `agent_id` | `string` | Yes | The agent ID the conversation now uses. |
-| `agent_name` | `string` | Yes | The agent name the conversation now uses. |
 
 #### create_project_from_conversation
 

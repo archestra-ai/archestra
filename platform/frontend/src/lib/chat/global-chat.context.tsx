@@ -2,21 +2,15 @@
 
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
-  type ArchestraToolShortName,
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
   ContextWindowBreakdownSchema,
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
-  makeSwapAgentPokeText,
-  SWAP_AGENT_FAILED_POKE_TEXT,
-  SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   stripDanglingToolCalls,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
-  TOOL_SWAP_AGENT_SHORT_NAME,
-  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   type TokenUsage,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -62,17 +56,10 @@ import {
   shouldFreezeChatMessages,
 } from "@/lib/chat/chat-session-utils";
 import {
-  applyTextEditToMessages,
   getChatExternalAgentId,
   getConversationDisplayTitle,
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
-import {
-  extractSwapTargetAgentName,
-  getRenderedToolName,
-  getSwapToolShortName,
-  hasSwapToolErrorInPart,
-} from "@/lib/chat/swap-agent.utils";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
@@ -471,9 +458,6 @@ function ChatSessionHook({
     useUpdateChatMessage(conversationId);
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
-  // Track when swap_agent was called so we can auto-poke the new agent on finish
-  // Stores the poke text to send, or null if no swap is pending
-  const swapAgentPendingRef = useRef<string | null>(null);
   // A user-initiated Stop pauses queued-message auto-drain (stop means stop);
   // cleared when the user sends a message again, which resumes the queue.
   const queueDrainSuspendedRef = useRef(false);
@@ -664,25 +648,6 @@ function ChatSessionHook({
           getCurrentArchestraToolShortName(toolName, appName),
       })) {
         queryClient.invalidateQueries({ queryKey });
-      }
-
-      // After a swap_agent stop, poke the new agent so it responds.
-      // The new /api/chat POST re-reads the conversation from DB and
-      // loads the swapped agent's system prompt + tools.
-      if (swapAgentPendingRef.current) {
-        // Check if the swap tool errored — if so, poke with a "swap failed" message
-        // instead of the normal swap poke, so the current agent can inform the user
-        const swapToolErrored = hasSwapToolError(message, appName);
-        const pokeText = swapToolErrored
-          ? SWAP_AGENT_FAILED_POKE_TEXT
-          : swapAgentPendingRef.current;
-        swapAgentPendingRef.current = null;
-        setTimeout(() => {
-          sendMessageRef.current?.({
-            role: "user",
-            parts: [{ type: "text", text: pokeText }],
-          });
-        }, 100);
       }
 
       // Free early UI HTML blobs now that all tool calls have rendered.
@@ -878,31 +843,10 @@ function ChatSessionHook({
         setPendingCustomServerToolCall(toolCall);
       }
 
-      // Detect swap_agent tool and flag for poke on finish.
-      // The backend's stopWhen: hasToolCall(...) stops the agentic loop
-      // after swap_agent executes, so the old agent won't continue.
-      // onFinish then sends a poke to trigger the new agent.
-      if (toolShortName === TOOL_SWAP_AGENT_SHORT_NAME) {
-        const agentName = getSwapAgentName(toolCall);
-        swapAgentPendingRef.current = makeSwapAgentPokeText(
-          typeof agentName === "string" ? agentName : "another agent",
-        );
-        queryClient.invalidateQueries({
-          queryKey: ["conversation", conversationId],
-        });
-      }
-
-      if (toolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME) {
-        swapAgentPendingRef.current = SWAP_TO_DEFAULT_AGENT_POKE_TEXT;
-        queryClient.invalidateQueries({
-          queryKey: ["conversation", conversationId],
-        });
-      }
-
       // Agents created through chat tool calls bypass the normal frontend
       // create-agent mutations, so the cached useInternalAgents() list can stay
       // stale unless we invalidate it here. Without this, the prompt input's
-      // agent selector may not reflect a newly created/swapped-to agent yet.
+      // agent selector may not reflect a newly created agent yet.
       if (toolShortName === TOOL_CREATE_AGENT_SHORT_NAME) {
         queryClient.invalidateQueries({ queryKey: ["agents"] });
       }
@@ -1002,13 +946,10 @@ function ChatSessionHook({
         }
       }
     },
-    sendAutomaticallyWhen: ({ messages: msgs }) => {
-      // Don't auto-resubmit after swap_agent — the poke in onFinish handles it
-      if (swapAgentPendingRef.current) return false;
-      return lastAssistantMessageIsCompleteWithApprovalResponses({
+    sendAutomaticallyWhen: ({ messages: msgs }) =>
+      lastAssistantMessageIsCompleteWithApprovalResponses({
         messages: msgs,
-      });
-    },
+      }),
   } as Parameters<typeof useChat>[0]);
 
   // Text and tool-call deltas update the SDK's raw message list. Track that
@@ -1133,7 +1074,6 @@ function ChatSessionHook({
       queueDrainInFlightRef.current ||
       queueDrainSuspendedRef.current ||
       recoveringRef.current ||
-      swapAgentPendingRef.current ||
       hasPendingApprovalRequest ||
       pendingMcpElicitation ||
       pendingCustomServerToolCall ||
@@ -1238,26 +1178,7 @@ function ChatSessionHook({
         setMessages(canonical);
         void regenerate({ messageId: anchorId });
         clearStalePersistedChatErrors();
-        return;
       }
-
-      // --- swap_agent support (safe to delete this block) ---
-      // After switching agents the target message can still be in-session: its
-      // id is an AI SDK nanoid, so it isn't found in the saved thread above.
-      // Regenerate in place using the live id (the backend matches it to the
-      // stored row by content id). Apply the edited text to the live message
-      // first: regenerate() re-sends the live thread, which otherwise still
-      // holds the pre-edit text.
-      setMessages((current) =>
-        applyTextEditToMessages({
-          messages: current,
-          messageId,
-          partIndex,
-          text,
-        }),
-      );
-      void regenerate({ messageId });
-      clearStalePersistedChatErrors();
     },
     [
       updateChatMessageAsync,
@@ -1366,46 +1287,6 @@ function ChatSessionHook({
       }}
     />
   );
-}
-
-function getSwapAgentName(toolCall: unknown): string | null {
-  if (typeof toolCall !== "object" || toolCall === null) {
-    return null;
-  }
-
-  const args =
-    "args" in toolCall && typeof toolCall.args === "object"
-      ? toolCall.args
-      : undefined;
-
-  return extractSwapTargetAgentName({
-    input: args,
-  });
-}
-
-function hasSwapToolError(message: UIMessage, appName: string): boolean {
-  return (message.parts ?? []).some((part) => {
-    if (typeof part !== "object" || !part) return false;
-    const toolName = getRenderedToolName(part);
-    if (!toolName) return false;
-
-    const shortName = getSwapToolShortName({
-      toolName,
-      getToolShortName: (fullToolName): ArchestraToolShortName | null =>
-        getCurrentArchestraToolShortName(
-          fullToolName,
-          appName,
-        ) as ArchestraToolShortName | null,
-    });
-    if (
-      shortName !== TOOL_SWAP_AGENT_SHORT_NAME &&
-      shortName !== TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME
-    ) {
-      return false;
-    }
-
-    return hasSwapToolErrorInPart(part);
-  });
 }
 
 function getCurrentArchestraToolShortName(

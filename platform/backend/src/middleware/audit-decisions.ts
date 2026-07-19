@@ -531,10 +531,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ChatOps message dedup; runtime state",
   },
-  chatopsThreadAgentOverrideTable: {
-    audited: false,
-    reason: "ChatOps thread override; runtime state",
-  },
 
   // =========================================================================
   // Email / messaging ingest

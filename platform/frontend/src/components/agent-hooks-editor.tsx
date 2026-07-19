@@ -531,14 +531,14 @@ function HookEditorPanel({
 
   return (
     <div className="rounded-md border bg-background/50 p-4 space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor={`${fieldId}-event`}>Event</Label>
           <Select
             value={event}
             onValueChange={(value) => setEvent(value as HookEvent)}
           >
-            <SelectTrigger id={`${fieldId}-event`}>
+            <SelectTrigger id={`${fieldId}-event`} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -554,7 +554,7 @@ function HookEditorPanel({
         <div className="space-y-2">
           <Label htmlFor={`${fieldId}-language`}>Language</Label>
           <Select value={language} onValueChange={handleLanguageChange}>
-            <SelectTrigger id={`${fieldId}-language`}>
+            <SelectTrigger id={`${fieldId}-language`} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

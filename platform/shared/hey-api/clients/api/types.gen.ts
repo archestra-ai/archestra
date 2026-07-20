@@ -59201,6 +59201,7 @@ export type GetOrganizationResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59497,6 +59498,7 @@ export type UpdateAppearanceSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59666,6 +59668,7 @@ export type UpdateSecuritySettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59833,6 +59836,7 @@ export type UpdateLlmSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -59999,6 +60003,7 @@ export type UpdateMcpSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60070,6 +60075,173 @@ export type UpdateMcpSettingsResponses = {
 };
 
 export type UpdateMcpSettingsResponse = UpdateMcpSettingsResponses[keyof UpdateMcpSettingsResponses];
+
+export type UpdateSkillsSettingsData = {
+    body: {
+        onlineSkillCatalogEnabled?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/organization/skills-settings';
+};
+
+export type UpdateSkillsSettingsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSkillsSettingsError = UpdateSkillsSettingsErrors[keyof UpdateSkillsSettingsErrors];
+
+export type UpdateSkillsSettingsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        slug: string;
+        analyticsInstanceId: string;
+        logo: string | null;
+        logoDark: string | null;
+        createdAt: string;
+        metadata: string | null;
+        onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
+        theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+        customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+        convertToolResultsToToon: boolean;
+        compressionScope: 'organization' | 'team';
+        onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
+        defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
+        defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
+        embeddingModel: string | null;
+        embeddingDimensions: EmbeddingDimensions | null;
+        embeddingChatApiKeyId: string | null;
+        rerankerChatApiKeyId: string | null;
+        rerankerModel: string | null;
+        defaultLlmModel: string | null;
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot' | 'microsoft-365-copilot';
+        defaultModelId: string | null;
+        defaultLlmApiKeyId: string | null;
+        defaultUserLimitValue: number | null;
+        defaultUserLimitModel: Array<string> | null;
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultAgentId: string | null;
+        favicon: string | null;
+        appName: string | null;
+        ogDescription: string | null;
+        footerText: string | null;
+        chatLinks: Array<{
+            label: string;
+            url: string;
+        }> | null;
+        onboardingWizard: {
+            label: string;
+            pages: Array<{
+                image?: string | null;
+                content: string;
+            }>;
+        } | null;
+        chatPlaceholders: Array<string> | null;
+        animateChatPlaceholders: boolean;
+        iconLogo: string | null;
+        iconLogoDark: string | null;
+        chatErrorSupportMessage: string | null;
+        slimChatErrorUi: boolean;
+        showTwoFactor: boolean;
+        oauthAccessTokenLifetimeSeconds: number;
+        connectionDefaultMcpGatewayId: string | null;
+        connectionDefaultLlmProxyId: string | null;
+        connectionDefaultClientId: string | null;
+        connectionShownClientIds: Array<string> | null;
+        connectionShownProviders: Array<string> | null;
+        connectionBaseUrls: Array<{
+            url: string;
+            description: string;
+            isDefault: boolean;
+            visible: boolean;
+        }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicy: {
+            egressMode: 'off' | 'restricted' | 'unrestricted';
+            domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+            allowedDomains: Array<string>;
+            allowedCidrs: Array<string>;
+        } | null;
+        defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
+        defaultEnvironmentTrustedImageRegistries: Array<string> | null;
+        skillToolsEnabled: boolean;
+    };
+};
+
+export type UpdateSkillsSettingsResponse = UpdateSkillsSettingsResponses[keyof UpdateSkillsSettingsResponses];
 
 export type UpdateAgentSettingsData = {
     body: {
@@ -60167,6 +60339,7 @@ export type UpdateAgentSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60346,6 +60519,7 @@ export type UpdateConnectionSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60523,6 +60697,7 @@ export type UpdateDefaultEnvironmentResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60690,6 +60865,7 @@ export type UpdateAuthSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -60859,6 +61035,7 @@ export type UpdateKnowledgeSettingsResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -61023,6 +61200,7 @@ export type DropEmbeddingConfigResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;
@@ -61276,6 +61454,7 @@ export type CompleteOnboardingResponses = {
         convertToolResultsToToon: boolean;
         compressionScope: 'organization' | 'team';
         onlineMcpCatalogEnabled: boolean;
+        onlineSkillCatalogEnabled: boolean;
         defaultDiscoveredToolInvocationPolicy: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         defaultDiscoveredToolResultPolicy: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads: boolean;

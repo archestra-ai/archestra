@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { AuditLog } from "@/lib/audit-log/audit-log.query";
@@ -43,10 +43,29 @@ function makeEvent(overrides: Partial<AuditLog> = {}): AuditLog {
   };
 }
 
-function renderDialog(event: AuditLog | null) {
+function renderDialog(
+  event: AuditLog | null,
+  shareUrl = "https://app.example.com/audit/logs?event=evt-1",
+) {
   const onClose = vi.fn();
-  render(<AuditLogDetailDialog event={event} onClose={onClose} />);
+  render(
+    <AuditLogDetailDialog
+      event={event}
+      shareUrl={shareUrl}
+      onClose={onClose}
+    />,
+  );
   return { onClose };
+}
+
+/**
+ * The dialog title has its own copy-link button with the same accessible
+ * name, so scope request-ID copy button queries to the "Request ID" row.
+ */
+function queryRequestIdCopyButton() {
+  const row = screen.queryByText("Request ID:")?.parentElement;
+  if (!row) return null;
+  return within(row).queryByRole("button", { name: /Copy to clipboard/i });
 }
 
 describe("AuditLogDetailDialog", () => {
@@ -82,27 +101,33 @@ describe("AuditLogDetailDialog", () => {
     expect(screen.getByText("SSO")).toBeInTheDocument();
   });
 
-  it("does not render a copy button when requestId is null", () => {
+  it("does not render a request-ID copy button when requestId is null", () => {
     renderDialog(makeEvent({ requestId: null }));
-    expect(
-      screen.queryByRole("button", { name: /Copy to clipboard/i }),
-    ).not.toBeInTheDocument();
+    expect(queryRequestIdCopyButton()).not.toBeInTheDocument();
   });
 
   it("renders a copy button and the request ID when requestId is set", () => {
     renderDialog(makeEvent({ requestId: "req-abc-123" }));
     expect(screen.getByText("req-abc-123")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Copy to clipboard/i }),
-    ).toBeInTheDocument();
+    expect(queryRequestIdCopyButton()).toBeInTheDocument();
   });
 
   it("copies the request ID to clipboard when copy button is clicked", async () => {
     renderDialog(makeEvent({ requestId: "req-copy-me" }));
+    const copyButton = queryRequestIdCopyButton();
+    if (!copyButton) throw new Error("request-ID copy button not rendered");
+    await userEvent.click(copyButton);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("req-copy-me");
+  });
+
+  it("copies the shareable event URL from the copy-link button in the dialog title", async () => {
+    const shareUrl = "https://app.example.com/audit/logs?event=evt-1";
+    renderDialog(makeEvent({ requestId: null }), shareUrl);
+    // With requestId null the title copy-link button is the only copy button.
     await userEvent.click(
       screen.getByRole("button", { name: /Copy to clipboard/i }),
     );
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("req-copy-me");
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(shareUrl);
   });
 
   it("shows only the occurred timestamp, never a separate recorded one", () => {

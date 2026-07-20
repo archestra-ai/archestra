@@ -35,10 +35,11 @@ export function useLimits(params?: LimitsParams) {
   });
 }
 
-export function useLimit(id: string) {
+export function useLimit(id: string | undefined) {
   return useQuery({
     queryKey: ["limits", id],
     queryFn: async () => {
+      if (!id) return null;
       const { data, error } = await getLimit({ path: { id } });
       throwOnApiError(error, { allowNotFound: true });
       return data ?? null;

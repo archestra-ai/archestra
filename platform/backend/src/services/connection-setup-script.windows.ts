@@ -337,9 +337,14 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
   if (ctx.mcp) {
+    // Register at USER scope so the gateway is visible in every directory for
+    // this user (see connection-setup-script.ts for the full rationale). Clear
+    // both local and user scopes first so a stale local entry can't shadow the
+    // user entry.
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-try { claude mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
-claude mcp add --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}`);
+try { claude mcp remove --scope local ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
+try { claude mcp remove --scope user ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
+claude mcp add --scope user --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}`);
   }
 
   if (ctx.proxy) {

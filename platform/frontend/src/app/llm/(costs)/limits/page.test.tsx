@@ -4,7 +4,14 @@ import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
+const mockUseLimit = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
+
+// The ?edit= dialog deep-link syncs open state to the URL through
+// useDialogUrlParam, which reads next/navigation hooks. Bare vi.mock resolves
+// to the root-level __mocks__/next/navigation.ts (all hooks are vi.fn()s,
+// configured in beforeEach).
+vi.mock("next/navigation");
 
 vi.mock("next/link", () => ({
   default: ({
@@ -28,6 +35,7 @@ vi.mock("@/app/llm/(costs)/layout", () => ({
 
 vi.mock("@/lib/limits.query", () => ({
   useLimits: (...args: unknown[]) => mockUseLimits(...args),
+  useLimit: (...args: unknown[]) => mockUseLimit(...args),
   useCreateLimit: () => ({ mutateAsync: vi.fn() }),
   useUpdateLimit: () => ({ mutateAsync: vi.fn() }),
   useDeleteLimit: () => ({ mutateAsync: vi.fn() }),
@@ -93,6 +101,7 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useHasPermissions,
   useMissingPermissions,
@@ -319,6 +328,14 @@ vi.mock("@/components/searchable-multi-select", () => ({
 describe("LimitsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(usePathname).mockReturnValue("/llm/limits");
+    vi.mocked(useRouter).mockReturnValue({
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
+    mockUseLimit.mockReturnValue({ data: undefined });
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,

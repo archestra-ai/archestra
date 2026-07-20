@@ -169,6 +169,60 @@ describe("GET /api/internal_mcp_catalog", () => {
     expect(backing).toBeDefined();
     // The backing's `open` launch tool exposes a ui:// resource.
     expect(backing.providesUi).toBe(true);
+    // A live (enabled) app reports appEnabled: true.
+    expect(backing.appEnabled).toBe(true);
+  });
+
+  test("includeApps hides another author's disabled app-backing catalog", async ({
+    makeApp,
+    makeUser,
+  }) => {
+    const otherAuthor = await makeUser();
+    const disabled = await makeApp({
+      organizationId,
+      authorId: otherAuthor.id,
+      scope: "org",
+      enabled: false,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?includeApps=true",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(
+      response
+        .json()
+        .some(
+          (item: { serverType: string; appId?: string | null }) =>
+            item.serverType === "app" && item.appId === disabled.id,
+        ),
+    ).toBe(false);
+  });
+
+  test("includeApps still surfaces the caller's own disabled app-backing, marked appEnabled: false", async ({
+    makeApp,
+  }) => {
+    const ownDisabled = await makeApp({
+      organizationId,
+      authorId: user.id,
+      scope: "org",
+      enabled: false,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?includeApps=true",
+    });
+    expect(response.statusCode).toBe(200);
+    const backing = response
+      .json()
+      .find(
+        (item: { serverType: string; appId?: string | null }) =>
+          item.serverType === "app" && item.appId === ownDisabled.id,
+      );
+    expect(backing).toBeDefined();
+    expect(backing.appEnabled).toBe(false);
   });
 
   test("includeApps is ignored for a caller without app:read", async () => {

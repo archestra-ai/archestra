@@ -14,6 +14,7 @@ import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema, type Transaction } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
@@ -101,10 +102,22 @@ class McpServerModel {
       teamId: serverData.teamId ?? null,
     });
 
+    // Freeze K8s deployment identity at creation (needs the id up front —
+    // supplying one is equivalent to the column's defaultRandom()). Renames
+    // update `name` but must never re-derive the deployment name; that would
+    // orphan the running deployment. Remote installs have no deployment.
+    // Multitenant installs share the catalog-level deployment, so this
+    // per-install name is simply never read for them.
+    const id = crypto.randomUUID();
+    const deploymentName =
+      serverData.serverType === "local"
+        ? constructFrozenMcpDeploymentName(mcpServerName, id)
+        : null;
+
     // ownerId is part of serverData and will be inserted
     const [createdServer] = await (tx ?? db)
       .insert(schema.mcpServersTable)
-      .values({ ...serverData, name: mcpServerName })
+      .values({ ...serverData, id, name: mcpServerName, deploymentName })
       .returning();
 
     // Assign user to the MCP server if provided (personal auth)
@@ -120,6 +133,22 @@ class McpServerModel {
       ...createdServer,
       users: userId ? [userId] : [],
     };
+  }
+
+  /**
+   * Writes the frozen `deployment_name`. Deliberately bypasses the
+   * UpdateMcpServer type-omit: deployment identity is written exactly once —
+   * by `create`, the startup adopt pass, or the rename cascade's
+   * freeze-fallback — and never follows the mutable display name.
+   */
+  static async setDeploymentName(
+    params: { id: string; deploymentName: string },
+    tx?: Transaction,
+  ): Promise<void> {
+    await (tx ?? db)
+      .update(schema.mcpServersTable)
+      .set({ deploymentName: params.deploymentName })
+      .where(eq(schema.mcpServersTable.id, params.id));
   }
 
   /**
@@ -978,8 +1007,11 @@ class McpServerModel {
     return row?.server ?? null;
   }
 
-  static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
-    return await db
+  static async findByCatalogId(
+    catalogId: string,
+    tx?: Transaction,
+  ): Promise<McpServer[]> {
+    return await (tx ?? db)
       .select()
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.catalogId, catalogId));
@@ -1004,6 +1036,7 @@ class McpServerModel {
   static async update(
     id: string,
     server: Partial<UpdateMcpServer>,
+    tx?: Transaction,
   ): Promise<McpServer | null> {
     const serverData = server;
 
@@ -1011,7 +1044,7 @@ class McpServerModel {
 
     // Only update server table if there are fields to update
     if (Object.keys(serverData).length > 0) {
-      [updatedServer] = await db
+      [updatedServer] = await (tx ?? db)
         .update(schema.mcpServersTable)
         .set(serverData)
         .where(eq(schema.mcpServersTable.id, id))
@@ -1022,7 +1055,7 @@ class McpServerModel {
       }
     } else {
       // No fields to update, fetch the existing server
-      const [existingServer] = await db
+      const [existingServer] = await (tx ?? db)
         .select()
         .from(schema.mcpServersTable)
         .where(eq(schema.mcpServersTable.id, id));

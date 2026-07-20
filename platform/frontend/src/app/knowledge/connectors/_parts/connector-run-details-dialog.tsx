@@ -24,7 +24,7 @@ export function ConnectorRunDetailsDialog({
   runId,
   onClose,
 }: ConnectorRunDetailsDialogProps) {
-  const { data: run } = useConnectorRun({ connectorId, runId });
+  const { data: run, isLoading } = useConnectorRun({ connectorId, runId });
   const formattedLogs = run?.logs ? formatConnectorRunLogs(run.logs) : null;
   const isPermissionRun = run?.runType === "permission";
   const phase = run ? contentRunPhase(run) : null;
@@ -294,9 +294,14 @@ export function ConnectorRunDetailsDialog({
                 </div>
               )}
             </div>
-          ) : (
+          ) : isLoading ? (
             <div className="text-sm text-muted-foreground">
               Loading sync run details...
+            </div>
+          ) : (
+            // Resolved to nothing: a stale or invisible `?run=<id>` deep link.
+            <div className="text-sm text-muted-foreground">
+              This sync run no longer exists.
             </div>
           )}
         </DialogBody>

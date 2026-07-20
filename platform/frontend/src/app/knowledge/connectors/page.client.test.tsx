@@ -9,6 +9,7 @@ const mockUseConnectorsPaginated = vi.fn();
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectorsPaginated: (params: unknown) =>
     mockUseConnectorsPaginated(params),
+  useConnector: () => ({ data: null }),
   useDeleteConnector: () => ({
     mutateAsync: vi.fn(),
     isPending: false,

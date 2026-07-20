@@ -633,6 +633,43 @@ describe("read_app / edit_app", () => {
     expect(edit.isError).toBe(true);
   });
 
+  test("publish_app enables a disabled app so its new audience can see it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Shareable", scope: "personal" },
+      context,
+    );
+    const appId = structured(created).id as string;
+    // Disable it so this test genuinely exercises publish_app's enable step.
+    await AppModel.setEnabled(appId, false);
+
+    // A disabled personal app: another member cannot see it yet.
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    const memberCtx: ArchestraContext = { ...context, userId: member.id };
+    const readAppAs = (ctx: ArchestraContext) =>
+      executeArchestraTool(
+        getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+        { appId },
+        ctx,
+      );
+    expect((await readAppAs(memberCtx)).isError).toBe(true);
+
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
+      { appId, scope: "org" },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    // publish_app flips the app enabled, not just its scope...
+    expect((await AppModel.findById(appId))?.enabled).toBe(true);
+    // ...so the org audience can now see it.
+    expect((await readAppAs(memberCtx)).isError).toBe(false);
+  });
+
   test("a single edit forks exactly one version", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>Hello</h1>");
     const result = await editApp(appId, version, [

@@ -1,23 +1,42 @@
 /**
  * Pure cascade-decision logic for the catalog edit form. Mirrors the
- * backend gate in `backend/src/services/mcp-reinstall.ts` and the
- * route's gate sequence in `cascadeReinstallForCatalog`.
+ * backend gate in `backend/src/services/mcp-reinstall.ts` and the PUT
+ * route's rename branch + gate sequence around
+ * `cascadeReinstallForCatalog`.
  *
  * Decision tree (must match backend exactly):
  *   1. No installs to affect → "skip"
  *   2. Any field requires user re-prompt → "manual"
- *      (covers: name, runtime config, prompted env schema breaks,
- *       required userConfig changes, OAuth added/removed)
+ *      (covers: runtime config, prompted env schema breaks,
+ *       required userConfig changes, OAuth added/removed —
+ *       NOT the name: a rename is a pure DB cascade)
  *   3. Only forward-compatible env/userConfig changes (or pure
- *      metadata) → "skip"
+ *      metadata) → "skip" — unless the name changed: a rename alone →
+ *      "rename" (tools re-slug in place, no pod restarts), upgraded to
+ *      "manual" when the catalog's deploymentSpecYaml references the
+ *      serverName placeholder (the one way the display name reaches a
+ *      pod spec, so those installs genuinely need a reinstall).
  *   4. Otherwise → "auto" (breaking change with no re-prompt needed)
+ *
+ * `renamed` rides along with the mode so the confirm bar can append the
+ * MCP-client tool-list reload warning even when a rename composes with
+ * a breaking change (modes 2 and 4).
  *
  * If this diverges from the backend gate, the scenario matrix's
  * frontend + backend sweeps will disagree. That's the contract — fix
  * either the code or the scenario, not the test.
  */
 
-export type CascadeOutcome = "skip" | "manual" | "auto";
+import { SERVER_NAME_PLACEHOLDER } from "@archestra/shared";
+
+export type CascadeOutcome = "skip" | "manual" | "auto" | "rename";
+
+export type CascadeDecision = {
+  mode: CascadeOutcome;
+  /** The catalog name changed — tools will be renamed in place and
+   *  connected MCP clients must reload their tool list. */
+  renamed: boolean;
+};
 
 /**
  * Subset of the catalog item shape that the decision actually inspects.
@@ -36,6 +55,9 @@ export type CascadeSnapshot = {
   enterpriseManagedConfig?: unknown;
   multitenant?: boolean;
   icon?: string | null;
+  /** Not editable through the form (separate YAML dialog), so `prev`'s
+   *  value is authoritative for the rename placeholder check. */
+  deploymentSpecYaml?: string | null;
   localConfig?: {
     command?: string;
     arguments?: string[];
@@ -73,36 +95,58 @@ export type ComputeCascadeOutcomeOptions = {
 
 /**
  * Decide what the cascade-confirm bar should do for an edit. The form
- * uses the return value to either:
+ * uses the returned mode to either:
  *   • "skip"   — perform the save directly, no bar
- *   • "manual" — fire the bar in manual mode ("Save and mark for reinstall")
- *   • "auto"   — fire the bar in auto mode ("Save and reinstall")
+ *   • "manual" — fire the bar in manual mode ("Save change")
+ *   • "auto"   — fire the bar in auto mode ("Save and restart")
+ *   • "rename" — fire the bar in rename mode ("Save and rename"):
+ *                pure DB cascade, client-reload warning, no restarts
  */
 export function computeCascadeOutcome(
   prev: CascadeSnapshot,
   next: CascadeSnapshot,
   { affectedServerCount }: ComputeCascadeOutcomeOptions,
-): CascadeOutcome {
-  if (affectedServerCount === 0) return "skip";
+): CascadeDecision {
+  // Hoisted above the serverType branches: remote catalogs rename their
+  // tools through the same DB cascade as local ones.
+  const renamed = (prev.name ?? "") !== (next.name ?? "");
+
+  if (affectedServerCount === 0) return { mode: "skip", renamed };
 
   // ── Manual ───────────────────────────────────────────────────────
   // Mirror of backend `requiresNewUserInputForReinstall`. Any field
   // here invalidates existing installs in a way the user must
   // explicitly re-confirm at install time (re-prompt for value,
   // re-issue secrets, etc.).
-  if (requiresUserReprompt(prev, next)) return "manual";
+  if (requiresUserReprompt(prev, next)) return { mode: "manual", renamed };
 
-  // ── Skip via forward-compat ──────────────────────────────────────
+  // ── Skip / rename via forward-compat ─────────────────────────────
   // Mirror of backend `onlyForwardCompatibleEnvDiff`. After the manual
   // checks pass, the remaining diffs may be entirely forward-
   // compatible (added-optional, demoted required → optional, pure
-  // metadata, or truly nothing).
-  if (onlyForwardCompatibleDiff(prev, next)) return "skip";
+  // metadata, or truly nothing) — a name change is then the only thing
+  // left to act on.
+  if (onlyForwardCompatibleDiff(prev, next)) {
+    if (!renamed) return { mode: "skip", renamed };
+    // Mirror of the backend's `flagReinstallRequired`: the serverName
+    // placeholder is the one way the display name reaches a pod spec.
+    const serverType = next.serverType ?? prev.serverType;
+    const renameNeedsReinstall =
+      serverType === "local" &&
+      Boolean(
+        (next.deploymentSpecYaml ?? prev.deploymentSpecYaml)?.includes(
+          SERVER_NAME_PLACEHOLDER,
+        ),
+      );
+    return { mode: renameNeedsReinstall ? "manual" : "rename", renamed };
+  }
 
   // ── Auto ─────────────────────────────────────────────────────────
   // A breaking diff exists but doesn't need a user re-prompt. The
-  // backend will fire its setImmediate background restart.
-  return "auto";
+  // backend will fire its setImmediate background restart (which also
+  // regenerates a placeholder-bearing YAML with the new name, so a
+  // combined rename needs no extra flag here).
+  return { mode: "auto", renamed };
 }
 
 // Manual-path predicate. Mirror of `requiresNewUserInputForReinstall`.
@@ -114,13 +158,14 @@ function requiresUserReprompt(
   const serverType = next.serverType ?? prev.serverType;
 
   if (serverType === "local") {
-    // 1. Name change — affects K8s deployment naming + secret paths.
-    if ((prev.name ?? "") !== (next.name ?? "")) return true;
-    // 2. localExecutionConfigChanged
+    // Name changes are handled by the rename mode, not here — deployment
+    // identity is frozen and secret names are id-keyed, so a rename needs
+    // no re-prompt.
+    // 1. localExecutionConfigChanged
     if (localExecutionConfigChanged(prev, next)) return true;
-    // 3. promptedEnvVarsChanged (schema evolution on prompted env vars)
+    // 2. promptedEnvVarsChanged (schema evolution on prompted env vars)
     if (promptedEnvVarsChanged(prev, next)) return true;
-    // 4. requiredUserConfigChanged (required field added/removed/type)
+    // 3. requiredUserConfigChanged (required field added/removed/type)
     if (requiredUserConfigChanged(prev, next)) return true;
     return false;
   }

@@ -372,11 +372,18 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     );
     // Client CLIs run detached from the tty so they print plain linear text.
     expect(script).toContain('cli() { "$@" </dev/null 2>&1 | cat; }');
+    // Remove per-scope: a scopeless `claude mcp remove` errors ("exists in
+    // multiple scopes") when both a local and user entry exist, which would
+    // abort the script under `set -euo pipefail`. Add at user scope so the
+    // gateway is visible from every directory, not just where connect ran.
     expect(script).toContain(
-      "cli claude mcp remove 'prod_gateway' >/dev/null 2>&1 || true",
+      "cli claude mcp remove --scope local 'prod_gateway' >/dev/null 2>&1 || true",
     );
     expect(script).toContain(
-      `cli claude mcp add --transport http 'prod_gateway' '${MCP.url}'`,
+      "cli claude mcp remove --scope user 'prod_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      `cli claude mcp add --scope user --transport http 'prod_gateway' '${MCP.url}'`,
     );
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
@@ -684,9 +691,21 @@ describe("renderSetupScript (windows)", () => {
         // (emitted when the server is not yet registered — e.g. a first run or a
         // renamed gateway) to a terminating error that 2>$null does not suppress,
         // which would abort the script before the add ever runs.
-        expect(script).toContain(
-          `try { ${binary} mcp remove 'prod_gateway' 2>$null | Out-Null } catch { }`,
-        );
+        if (clientId === "claude-code") {
+          // Claude Code registers at user scope, so it removes per-scope: a
+          // scopeless remove errors ("exists in multiple scopes") once both a
+          // local and user entry exist, which would abort the script.
+          expect(script).toContain(
+            `try { ${binary} mcp remove --scope local 'prod_gateway' 2>$null | Out-Null } catch { }`,
+          );
+          expect(script).toContain(
+            `try { ${binary} mcp remove --scope user 'prod_gateway' 2>$null | Out-Null } catch { }`,
+          );
+        } else {
+          expect(script).toContain(
+            `try { ${binary} mcp remove 'prod_gateway' 2>$null | Out-Null } catch { }`,
+          );
+        }
       }
     });
   }
@@ -713,10 +732,13 @@ describe("renderSetupScript (windows)", () => {
   test("claude-code: remove-then-add MCP and merge settings.json env", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
     expect(script).toContain(
-      "try { claude mcp remove 'prod_gateway' 2>$null | Out-Null } catch { }",
+      "try { claude mcp remove --scope local 'prod_gateway' 2>$null | Out-Null } catch { }",
     );
     expect(script).toContain(
-      `claude mcp add --transport http 'prod_gateway' '${MCP.url}'`,
+      "try { claude mcp remove --scope user 'prod_gateway' 2>$null | Out-Null } catch { }",
+    );
+    expect(script).toContain(
+      `claude mcp add --scope user --transport http 'prod_gateway' '${MCP.url}'`,
     );
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");

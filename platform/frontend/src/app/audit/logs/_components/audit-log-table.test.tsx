@@ -133,6 +133,7 @@ describe("AuditLogTable", () => {
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
+      replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(usePathname).mockReturnValue("/audit/logs");
     vi.mocked(useSearchParams).mockReturnValue(
@@ -380,6 +381,7 @@ describe("AuditLogTable", () => {
     const push = vi.fn();
     vi.mocked(useRouter).mockReturnValue({
       push,
+      replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams(

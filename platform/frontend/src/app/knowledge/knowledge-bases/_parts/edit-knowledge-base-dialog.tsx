@@ -17,8 +17,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { useUpdateKnowledgeBase } from "@/lib/knowledge/knowledge-base.query";
 
-type KnowledgeBaseItem =
-  archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number];
+type KnowledgeBaseItem = Pick<
+  archestraApiTypes.GetKnowledgeBasesResponses["200"]["data"][number],
+  "id" | "name" | "description"
+>;
 
 interface EditKnowledgeBaseFormValues {
   name: string;

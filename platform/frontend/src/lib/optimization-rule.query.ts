@@ -7,6 +7,7 @@ import { handleApiError, throwOnApiError } from "./utils";
 
 const {
   getOptimizationRules,
+  getOptimizationRule,
   createOptimizationRule,
   updateOptimizationRule,
   deleteOptimizationRule,
@@ -33,6 +34,23 @@ export function useOptimizationRules() {
       throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? [];
     },
+  });
+}
+
+// Get a single optimization rule by ID
+export function useOptimizationRule(id: string | undefined) {
+  return useQuery({
+    queryKey: ["optimization-rules", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const response = await getOptimizationRule({ path: { id } });
+      throwOnApiError(response.error, {
+        allowNotFound: true,
+        toastOnError: false,
+      });
+      return response.data ?? null;
+    },
+    enabled: !!id,
   });
 }
 

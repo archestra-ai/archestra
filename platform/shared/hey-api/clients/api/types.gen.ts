@@ -16266,6 +16266,7 @@ export type GetAppsResponses = {
             authorName: string | null;
             viewerRole: 'owner' | 'shared' | 'admin';
             latestVersion: number;
+            enabled: boolean;
             teams: Array<{
                 id: string;
                 name: string;
@@ -16427,6 +16428,7 @@ export type CreateAppResponses = {
             tools: Array<string>;
         } | null;
         latestVersion: number;
+        enabled: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -17342,6 +17344,7 @@ export type GetAppResponses = {
             tools: Array<string>;
         } | null;
         latestVersion: number;
+        enabled: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -17488,6 +17491,7 @@ export type UpdateAppResponses = {
             tools: Array<string>;
         } | null;
         latestVersion: number;
+        enabled: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -17498,6 +17502,258 @@ export type UpdateAppResponses = {
 };
 
 export type UpdateAppResponse = UpdateAppResponses[keyof UpdateAppResponses];
+
+export type EnableAppData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/enable';
+};
+
+export type EnableAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type EnableAppError = EnableAppErrors[keyof EnableAppErrors];
+
+export type EnableAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        name: string;
+        description: string | null;
+        templateId: string | null;
+        mcpServerId: string | null;
+        spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
+            summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
+            features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
+            data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
+            ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
+            tools: Array<string>;
+        } | null;
+        latestVersion: number;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        authorName: string | null;
+    };
+};
+
+export type EnableAppResponse = EnableAppResponses[keyof EnableAppResponses];
+
+export type DisableAppData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/disable';
+};
+
+export type DisableAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisableAppError = DisableAppErrors[keyof DisableAppErrors];
+
+export type DisableAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        name: string;
+        description: string | null;
+        templateId: string | null;
+        mcpServerId: string | null;
+        spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
+            summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
+            features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
+            data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
+            ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
+            tools: Array<string>;
+        } | null;
+        latestVersion: number;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        authorName: string | null;
+    };
+};
+
+export type DisableAppResponse = DisableAppResponses[keyof DisableAppResponses];
 
 export type GetAppVersionsData = {
     body?: never;
@@ -18375,6 +18631,116 @@ export type GetAuditLogsResponses = {
 };
 
 export type GetAuditLogsResponse = GetAuditLogsResponses[keyof GetAuditLogsResponses];
+
+export type GetAuditLogData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/audit-logs/{id}';
+};
+
+export type GetAuditLogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAuditLogError = GetAuditLogErrors[keyof GetAuditLogErrors];
+
+export type GetAuditLogResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        eventSequence: number;
+        organizationId: string;
+        occurredAt: string;
+        createdAt: string;
+        actorId: string | null;
+        actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
+        actorName: string | null;
+        actorEmail: string | null;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        outcome: 'success' | 'failure' | 'denied';
+        resourceType: string | null;
+        resourceId: string | null;
+        before: {
+            [key: string]: unknown;
+        } | null;
+        after: {
+            [key: string]: unknown;
+        } | null;
+        httpMethod: string | null;
+        httpPath: string | null;
+        httpRoute: string | null;
+        httpStatus: number | null;
+        requestId: string | null;
+        sourceIp: string | null;
+        userAgent: string | null;
+    };
+};
+
+export type GetAuditLogResponse = GetAuditLogResponses[keyof GetAuditLogResponses];
 
 export type GetDefaultCredentialsStatusData = {
     body?: never;
@@ -41253,6 +41619,7 @@ export type GetInternalMcpCatalogResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -41369,6 +41736,7 @@ export type GetInternalMcpCatalogResponses = {
         toolCount: number;
         providesUi?: boolean;
         appId?: string | null;
+        appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
     }>;
 };
@@ -41596,6 +41964,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -41896,6 +42265,7 @@ export type GetInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -42234,6 +42604,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -42713,6 +43084,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -42928,6 +43300,7 @@ export type ApproveCatalogItemImageResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -51659,6 +52032,7 @@ export type GetMcpServersResponses = {
     200: Array<{
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -51800,6 +52174,7 @@ export type InstallMcpServerResponses = {
     200: {
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -52007,6 +52382,7 @@ export type GetMcpServerResponses = {
     200: {
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -52139,6 +52515,7 @@ export type ReauthenticateMcpServerResponses = {
     200: {
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -52543,6 +52920,7 @@ export type ReinstallMcpServerResponses = {
     200: {
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -71660,6 +72038,111 @@ export type DeleteVirtualApiKeyResponses = {
 };
 
 export type DeleteVirtualApiKeyResponse = DeleteVirtualApiKeyResponses[keyof DeleteVirtualApiKeyResponses];
+
+export type GetVirtualApiKeyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-virtual-keys/{id}';
+};
+
+export type GetVirtualApiKeyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetVirtualApiKeyError = GetVirtualApiKeyErrors[keyof GetVirtualApiKeyErrors];
+
+export type GetVirtualApiKeyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        keyType: 'standard' | 'passthrough';
+        secretId: string;
+        tokenStart: string;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        expiresAt: string | null;
+        createdAt: string;
+        lastUsedAt: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        authorName: string | null;
+        providerApiKeys: Array<{
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot' | 'microsoft-365-copilot';
+            providerApiKeyId: string;
+            providerApiKeyName: string;
+        }>;
+    };
+};
+
+export type GetVirtualApiKeyResponse = GetVirtualApiKeyResponses[keyof GetVirtualApiKeyResponses];
 
 export type UpdateVirtualApiKeyData = {
     body: {

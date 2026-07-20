@@ -209,7 +209,7 @@ describe("POST /api/app-recordings/enhance", () => {
     });
   });
 
-  test("403s when the hackathon recorder is disabled on the deployment", async () => {
+  test("403s when the deployment does not offer the recorder (enterprise, no override)", async () => {
     config.hackathonRecorder.enabled = false;
 
     const response = await ctx.app.inject({
@@ -219,7 +219,7 @@ describe("POST /api/app-recordings/enhance", () => {
     });
     expect(response.statusCode).toBe(403);
     expect(response.json().error.message).toContain(
-      "The hackathon recorder is disabled",
+      "not available on this deployment",
     );
   });
 

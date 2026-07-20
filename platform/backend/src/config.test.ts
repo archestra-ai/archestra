@@ -1983,47 +1983,32 @@ describe("parseAuditLogRetentionDays", () => {
 
 describe("parseHackathonRecorderEnabled", () => {
   const parse = (
-    envValue: string | undefined,
     enterpriseLicenseActivated: boolean,
     enterpriseOverride?: string,
   ) =>
     parseHackathonRecorderEnabled({
-      envValue,
       enterpriseLicenseActivated,
       enterpriseOverride,
     });
 
-  test("defaults on for community deployments", () => {
-    expect(parse(undefined, false)).toBe(true);
-  });
-
-  test('an explicit "false" switches a community deployment off', () => {
-    expect(parse("false", false)).toBe(false);
-  });
-
-  test("an unrecognized value leaves a community deployment on", () => {
-    expect(parse("yes", false)).toBe(true);
+  test("on for every community deployment — there is no opt-out flag", () => {
+    // The date window and the org toggle already decide when and whether it
+    // shows, so a community deployment has no switch of its own.
+    expect(parse(false)).toBe(true);
+    expect(parse(false, "true")).toBe(true);
   });
 
   test("stays off when the enterprise license is activated", () => {
-    expect(parse(undefined, true)).toBe(false);
-  });
-
-  test("an enterprise deployment cannot switch it on with the public flag", () => {
-    // The whole point of the enterprise rule: a licensed customer must not be
-    // able to opt into a temporary community promotion, so the documented flag
-    // is not a way in. Only the separate, undocumented override is.
-    expect(parse("true", true)).toBe(false);
+    expect(parse(true)).toBe(false);
   });
 
   test("the undocumented override is the only enterprise way in", () => {
-    expect(parse(undefined, true, "true")).toBe(true);
-    expect(parse("false", true, "true")).toBe(true);
+    expect(parse(true, "true")).toBe(true);
   });
 
   test("the override does nothing unless it is exactly true", () => {
-    expect(parse(undefined, true, "yes")).toBe(false);
-    expect(parse(undefined, true, "")).toBe(false);
+    expect(parse(true, "yes")).toBe(false);
+    expect(parse(true, "")).toBe(false);
   });
 });
 

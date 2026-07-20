@@ -48,6 +48,7 @@ export function makeConfig(
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
+      hackathonRecorderEnabled: true,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

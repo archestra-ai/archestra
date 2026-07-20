@@ -455,6 +455,9 @@ export const RouteId = {
   // MCP Settings Routes (organization-level)
   UpdateMcpSettings: "updateMcpSettings",
 
+  // Skills Settings Routes (organization-level)
+  UpdateSkillsSettings: "updateSkillsSettings",
+
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
 

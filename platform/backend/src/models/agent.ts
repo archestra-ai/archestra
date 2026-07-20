@@ -57,6 +57,7 @@ import type {
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
@@ -3085,15 +3086,51 @@ class AgentModel {
     // Fetch relational data so audit diffs capture tool/KB/team changes —
     // not just main-table columns.  Each sub-query is lightweight (index
     // lookup by agent_id) and the parallel fetch keeps latency low.
-    const [tools, teams, labels, knowledgeBaseIds, connectorIds, delegations] =
-      await Promise.all([
-        AgentToolModel.getToolsForAgent(id),
-        AgentTeamModel.getTeamDetailsForAgent(id),
-        AgentLabelModel.getLabelsForAgent(id),
-        AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
-        AgentConnectorAssignmentModel.getConnectorIds(id),
-        AgentToolModel.getDelegationTargets(id),
-      ]);
+    const [
+      tools,
+      teams,
+      labels,
+      knowledgeBaseIds,
+      connectorIds,
+      delegations,
+      excludedSubagentIds,
+      modelRows,
+      keyRows,
+    ] = await Promise.all([
+      AgentToolModel.getToolsForAgent(id),
+      AgentTeamModel.getTeamDetailsForAgent(id),
+      AgentLabelModel.getLabelsForAgent(id),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
+      AgentConnectorAssignmentModel.getConnectorIds(id),
+      AgentToolModel.getDelegationTargets(id),
+      AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      // Resolve the live modelId FK to its human-readable identity so a model
+      // change surfaces as a real diff — the legacy llmModel text column is
+      // deprecated (never written) and would always read null.
+      row.modelId
+        ? db
+            .select({ externalId: schema.modelsTable.externalId })
+            .from(schema.modelsTable)
+            .where(eq(schema.modelsTable.id, row.modelId))
+            .limit(1)
+        : Promise.resolve([]),
+      // The model and its API key are set as a pair; capture a redacted key
+      // identity (id/name/scope + provider) so an LLM-config change is legible
+      // and a swap between two same-provider keys still diffs — without ever
+      // touching key material (secretId is excluded).
+      row.llmApiKeyId
+        ? db
+            .select({
+              id: schema.llmProviderApiKeysTable.id,
+              name: schema.llmProviderApiKeysTable.name,
+              scope: schema.llmProviderApiKeysTable.scope,
+              provider: schema.llmProviderApiKeysTable.provider,
+            })
+            .from(schema.llmProviderApiKeysTable)
+            .where(eq(schema.llmProviderApiKeysTable.id, row.llmApiKeyId))
+            .limit(1)
+        : Promise.resolve([]),
+    ]);
 
     const delegationTargets = [...delegations]
       .sort((a, b) => a.id.localeCompare(b.id))
@@ -3109,15 +3146,25 @@ class AgentModel {
       systemPrompt: row.systemPrompt ?? null,
       slug: row.slug ?? null,
       isDefault: row.isDefault,
-      llmModel: row.llmModel ?? null,
+      model: modelRows[0]?.externalId ?? null,
+      llmProvider: keyRows[0]?.provider ?? null,
+      llmApiKey: keyRows[0]
+        ? {
+            id: keyRows[0].id,
+            name: keyRows[0].name,
+            scope: keyRows[0].scope,
+          }
+        : null,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
+      accessAllSubagents: row.accessAllSubagents,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),
       teams: teams.map((t) => t.name).sort(),
       labels: labels.sort(),
       delegationTargets,
+      excludedSubagentIds: [...excludedSubagentIds].sort(),
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };

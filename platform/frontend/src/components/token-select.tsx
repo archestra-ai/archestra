@@ -31,13 +31,6 @@ interface TokenSelectProps {
   assignmentTeamIds?: string[];
   shouldSetDefaultValue: boolean;
   prefersEnterpriseManaged?: boolean;
-  /**
-   * Scope of the agent this credential is assigned to. Picking a personal-scope
-   * connection for a shared (team/org) agent makes every caller authenticate as
-   * that one owner, so it is confirmed on selection. A personal agent is
-   * single-user and skips the confirmation. Unknown scope falls to the safe side.
-   */
-  agentScope?: AgentScope;
 }
 
 /**
@@ -56,7 +49,6 @@ export function TokenSelect({
   assignmentTeamIds,
   shouldSetDefaultValue,
   prefersEnterpriseManaged = false,
-  agentScope,
 }: TokenSelectProps) {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -104,13 +96,11 @@ export function TokenSelect({
     isCurrentUser: boolean;
   } | null>(null);
 
-  // A personal connection pinned to a shared agent authenticates every caller
-  // as that one owner; confirm the pick before applying it. A personal agent is
-  // single-user, so it skips the gate; unknown scope falls to the safe side.
-  const isSharedAgent = agentScope !== "personal";
-
+  // Pinning a personal connection makes every caller of this tool authenticate
+  // as that one owner; confirm the pick before applying it, regardless of the
+  // agent's scope — a personal agent can still be shared later.
   const handleSelect = (newValue: string | null) => {
-    if (isSharedAgent && newValue && newValue !== DYNAMIC_CREDENTIAL_VALUE) {
+    if (newValue && newValue !== DYNAMIC_CREDENTIAL_VALUE) {
       const server = mcpServers.find((s) => s.id === newValue);
       if (server?.scope === "personal") {
         setPendingPersonalPin({

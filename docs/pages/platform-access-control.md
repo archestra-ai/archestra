@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-13
+lastUpdated: 2026-07-20
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -65,6 +65,8 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
 | LLM Settings | `read`, `update` |
+| MCP Settings | `read`, `update` |
+| Skills Settings | `read`, `update` |
 | Knowledge Settings | `read`, `update` |
 | Users | `read` |
 | Invitations | `read` |
@@ -240,6 +242,8 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpServerInstallationRequest:update` | Add notes to installation requests |
 | `mcpServerInstallationRequest:delete` | Delete installation requests |
 | `mcpServerInstallationRequest:admin` | Approve or decline installation requests |
+| `mcpSettings:read` | View MCP settings (online catalog availability) |
+| `mcpSettings:update` | Modify MCP settings |
 | `member:read` | View organization members and their roles |
 | `member:create` | Add new members to the organization |
 | `member:update` | Change member roles and settings |
@@ -278,6 +282,8 @@ The following table lists all available permissions that can be assigned to cust
 | `skill:delete` | Delete agent skills |
 | `skill:team-admin` | Manage team assignments for agent skills |
 | `skill:admin` | Full administrative control over all agent skills, bypassing team restrictions |
+| `skillsSettings:read` | View Skills settings (online catalog availability) |
+| `skillsSettings:update` | Modify Skills settings |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

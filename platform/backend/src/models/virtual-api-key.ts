@@ -363,6 +363,77 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Find a virtual key by ID with teams, author, and provider key mappings,
+   * scoped to an organization.
+   */
+  static async findByIdWithParentInfo(
+    id: string,
+    organizationId: string,
+  ): Promise<VirtualApiKeyWithParentInfo | null> {
+    const virtualKey = await VirtualApiKeyModel.findById(id);
+    if (!virtualKey || virtualKey.organizationId !== organizationId) {
+      return null;
+    }
+
+    const [metadata, mappings] = await Promise.all([
+      VirtualApiKeyModel.getVisibilityMetadata([id]),
+      VirtualApiKeyModel.getProviderApiKeys(id),
+    ]);
+
+    return {
+      ...virtualKey,
+      teams: metadata.teams.get(id) ?? [],
+      authorName: metadata.authorName.get(id) ?? null,
+      providerApiKeys: mappings,
+    };
+  }
+
+  /**
+   * Find a virtual key by ID with teams, author, and provider key mappings,
+   * returning it only when it is visible to the given user. Visibility follows
+   * the same predicate as {@link findAllByOrganization} (via
+   * {@link getAccessibleIds}): org-scoped keys are visible to every member,
+   * personal keys only to their owner, team keys only to members of an
+   * assigned team, and admins see everything. The team and admin lookups are
+   * lazy so they are only paid when the key's scope requires them.
+   */
+  static async findVisibleById(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    getUserTeamIds: () => Promise<string[]>;
+    getIsAdmin: () => Promise<boolean>;
+  }): Promise<VirtualApiKeyWithParentInfo | null> {
+    const { id, organizationId, userId, getUserTeamIds, getIsAdmin } = params;
+
+    const virtualKey = await VirtualApiKeyModel.findByIdWithParentInfo(
+      id,
+      organizationId,
+    );
+    if (!virtualKey) {
+      return null;
+    }
+
+    if (virtualKey.scope === "org") {
+      return virtualKey;
+    }
+
+    const userTeamIds =
+      virtualKey.scope === "team" ? await getUserTeamIds() : [];
+    const accessibleIds = await VirtualApiKeyModel.getAccessibleIds({
+      organizationId,
+      userId,
+      userTeamIds,
+      isAdmin: false,
+    });
+    if (accessibleIds.includes(id)) {
+      return virtualKey;
+    }
+
+    return (await getIsAdmin()) ? virtualKey : null;
+  }
+
+  /**
    * Find access-related metadata for a virtual key.
    */
   static async findAccessContextById(

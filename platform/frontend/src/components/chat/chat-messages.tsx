@@ -10,15 +10,7 @@ import {
   parseArchestraAppResourceUri,
   parseFullToolName,
   type ResourceVisibilityScope,
-  SWAP_AGENT_FAILED_POKE_TEXT,
-  SWAP_AGENT_POKE_PREFIX,
-  SWAP_AGENT_POKE_TEXT,
-  SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SWAP_AGENT_FULL_NAME,
-  TOOL_SWAP_AGENT_SHORT_NAME,
-  TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
-  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
@@ -69,7 +61,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
@@ -92,10 +84,6 @@ import {
   type ToolAuthState,
 } from "@/lib/chat/mcp-error-ui";
 import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
-import {
-  getSwapToolShortName,
-  type SwapToolPart,
-} from "@/lib/chat/swap-agent.utils";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -130,10 +118,6 @@ import {
   UnsafeContextStartsHereDivider,
 } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
-import {
-  getSwapAgentBoundaryLabel,
-  SwapAgentBoundaryDivider,
-} from "./swap-agent-boundary";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -249,9 +233,6 @@ export function ChatMessages({
   contextCompactionFeedback = null,
   unsafeContextBoundary,
 }: ChatMessagesProps) {
-  const { data: authSession } = useSession();
-  const isDebugging = authSession?.user?.name?.endsWith("(debugging)") ?? false;
-
   // Track editing by messageId-partIndex to support multiple text parts per message
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -271,11 +252,7 @@ export function ChatMessages({
   const nonCompactToolNames = useMemo(
     () =>
       new Set([
-        TOOL_SWAP_AGENT_FULL_NAME,
-        TOOL_SWAP_TO_DEFAULT_AGENT_FULL_NAME,
         TOOL_TODO_WRITE_FULL_NAME,
-        getToolName(TOOL_SWAP_AGENT_SHORT_NAME),
-        getToolName(TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME),
         getToolName(TOOL_TODO_WRITE_SHORT_NAME),
         // Owned-app management tools render the app inline; compact grouping
         // would swallow their parts before MessageTool sees them.
@@ -566,20 +543,8 @@ export function ChatMessages({
             }
 
             const { message, messageIndex: idx } = item;
-            // Hide the auto-poke message sent after agent swap
-            if (!isDebugging && isSwapAgentPokeMessage(message)) return null;
-
             const isDimmed =
               editingMessageIndex !== -1 && idx > editingMessageIndex;
-            const previousSwapBoundaryLabel =
-              message.role === "assistant"
-                ? getPreviousAssistantSwapBoundaryLabel({
-                    messages,
-                    beforeIndex: idx,
-                    getToolShortName,
-                    hasToolError: hasSwapToolError,
-                  })
-                : null;
 
             return (
               <div
@@ -660,7 +625,6 @@ export function ChatMessages({
                                             subagentToolCalls={
                                               subagentToolCalls
                                             }
-                                            isDebugging={isDebugging}
                                             canExpandToolCalls={
                                               canExpandToolCalls
                                             }
@@ -1206,7 +1170,6 @@ export function ChatMessages({
                               toolResultPart={toolResultPart}
                               toolName={toolName}
                               agentId={agentId}
-                              isDebugging={isDebugging}
                               canExpandToolCalls={canExpandToolCalls}
                               onToolApprovalResponse={onToolApprovalResponse}
                               onInstallMcp={
@@ -1309,7 +1272,6 @@ export function ChatMessages({
                                 toolResultPart={outputPart}
                                 toolName={toolName}
                                 agentId={agentId}
-                                isDebugging={isDebugging}
                                 canExpandToolCalls={canExpandToolCalls}
                                 onToolApprovalResponse={onToolApprovalResponse}
                                 onInstallMcp={
@@ -1390,7 +1352,6 @@ export function ChatMessages({
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
                                 agentId={agentId}
-                                isDebugging={isDebugging}
                                 canExpandToolCalls={canExpandToolCalls}
                                 onToolApprovalResponse={onToolApprovalResponse}
                                 onInstallMcp={
@@ -1422,7 +1383,6 @@ export function ChatMessages({
                                     <SubagentToolCalls
                                       parentToolCallId={tcId}
                                       subagentToolCalls={subagentToolCalls}
-                                      isDebugging={isDebugging}
                                       canExpandToolCalls={canExpandToolCalls}
                                       connectedCatalogIds={
                                         orchestrator.connectedCatalogIds
@@ -1443,14 +1403,6 @@ export function ChatMessages({
                     }
                   });
                 })()}
-                {message.role === "assistant" && (
-                  <SwapAgentBoundaryDivider
-                    parts={message.parts ?? []}
-                    getToolShortName={getToolShortName}
-                    hasToolError={hasSwapToolError}
-                    suppressLabel={previousSwapBoundaryLabel}
-                  />
-                )}
               </div>
             );
           })}
@@ -1481,7 +1433,6 @@ export function ChatMessages({
               toolResultPart={null}
               toolName={toolCall.toolName}
               agentId={agentId}
-              isDebugging={isDebugging}
               canExpandToolCalls={canExpandToolCalls}
               onToolApprovalResponse={onToolApprovalResponse}
               onInstallMcp={orchestrator.triggerInstallByCatalogId}
@@ -1631,7 +1582,6 @@ const MessageTool = memo(
     toolResultPart,
     toolName,
     agentId,
-    isDebugging,
     canExpandToolCalls = true,
     onToolApprovalResponse,
     onInstallMcp,
@@ -1647,7 +1597,6 @@ const MessageTool = memo(
     toolResultPart: ToolUIPart | DynamicToolUIPart | null;
     toolName: string;
     agentId?: string;
-    isDebugging?: boolean;
     canExpandToolCalls?: boolean;
     onToolApprovalResponse?: (params: {
       id: string;
@@ -1784,36 +1733,6 @@ const MessageTool = memo(
       onInstallMcp,
       onReauthMcp,
     });
-
-    // Successful swap_agent / swap_to_default_agent calls are rendered as dividers after all message parts.
-    // Failed/no-op swap calls use the compact tool status indicator so they do not render a false divider.
-    // Show the raw tool call when the user's name ends with "(debugging)".
-    const swapToolShortName = getSwapToolShortName({
-      toolName,
-      getToolShortName,
-    });
-    const isSwapTool =
-      swapToolShortName === TOOL_SWAP_AGENT_SHORT_NAME ||
-      swapToolShortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME;
-    if (!isDebugging && isSwapTool) {
-      return errorText ? (
-        <CompactToolGroup
-          tools={[
-            {
-              kind: "tool",
-              key: part.toolCallId ?? toolName,
-              toolName,
-              part,
-              toolResultPart,
-              errorText,
-            },
-          ]}
-          toolIconMap={toolIconMap}
-          canExpandToolCalls={canExpandToolCalls}
-          onToolApprovalResponse={onToolApprovalResponse}
-        />
-      ) : null;
-    }
 
     if (getToolShortName(toolName) === TOOL_TODO_WRITE_SHORT_NAME) {
       return (
@@ -2075,57 +1994,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Renders a "Switched to {agent}" divider after all parts of a message
- * that contains a swap_agent tool call.
- */
-function isSwapAgentPokeMessage(message: UIMessage): boolean {
-  if (message.role !== "user") return false;
-  const textParts = message.parts?.filter((p) => p.type === "text") ?? [];
-  if (textParts.length !== 1) return false;
-  const text = (textParts[0] as { text?: string }).text;
-  if (typeof text !== "string") return false;
-  return (
-    text === SWAP_AGENT_POKE_TEXT ||
-    text === SWAP_AGENT_FAILED_POKE_TEXT ||
-    text === SWAP_TO_DEFAULT_AGENT_POKE_TEXT ||
-    text.startsWith(SWAP_AGENT_POKE_PREFIX)
-  );
-}
-
-function getPreviousAssistantSwapBoundaryLabel({
-  messages,
-  beforeIndex,
-  getToolShortName,
-  hasToolError,
-}: {
-  messages: UIMessage[];
-  beforeIndex: number;
-  getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
-  hasToolError: (part: SwapToolPart, allParts: SwapToolPart[]) => boolean;
-}) {
-  for (let i = beforeIndex - 1; i >= 0; i--) {
-    const previousMessage = messages[i];
-    if (previousMessage.role === "user") {
-      return null;
-    }
-    if (previousMessage.role !== "assistant") {
-      continue;
-    }
-
-    const label = getSwapAgentBoundaryLabel({
-      parts: previousMessage.parts ?? [],
-      getToolShortName,
-      hasToolError,
-    });
-    if (label) {
-      return label;
-    }
-  }
-
-  return null;
-}
-
 /** Synthesize a tool UI part from a surfaced subagent call so the existing tool card renders it. */
 function synthesizeSubagentToolPart(
   entry: SubagentChildEntry,
@@ -2159,7 +2027,6 @@ function SubagentToolCalls({
   parentToolCallId,
   subagentToolCalls,
   depth = 0,
-  isDebugging,
   canExpandToolCalls,
   connectedCatalogIds,
   getToolShortName,
@@ -2168,7 +2035,6 @@ function SubagentToolCalls({
   parentToolCallId: string;
   subagentToolCalls: Map<string, SubagentChildEntry[]>;
   depth?: number;
-  isDebugging?: boolean;
   canExpandToolCalls?: boolean;
   connectedCatalogIds: ReadonlySet<string>;
   getToolShortName: (toolName: string) => ArchestraToolShortName | null;
@@ -2196,7 +2062,6 @@ function SubagentToolCalls({
             part={synthesizeSubagentToolPart(child)}
             toolResultPart={null}
             toolName={child.toolName}
-            isDebugging={isDebugging}
             canExpandToolCalls={canExpandToolCalls}
             connectedCatalogIds={connectedCatalogIds}
             getToolShortName={getToolShortName}
@@ -2207,7 +2072,6 @@ function SubagentToolCalls({
                   parentToolCallId={child.toolCallId}
                   subagentToolCalls={subagentToolCalls}
                   depth={depth + 1}
-                  isDebugging={isDebugging}
                   canExpandToolCalls={canExpandToolCalls}
                   connectedCatalogIds={connectedCatalogIds}
                   getToolShortName={getToolShortName}
@@ -2998,23 +2862,4 @@ function ContextCompactionTimelineEvent({
       </div>
     </div>
   );
-}
-
-// biome-ignore lint/suspicious/noExplicitAny: Tool parts have dynamic structure
-function hasSwapToolError(part: any, allParts: any[]): boolean {
-  // Check the part itself for errors
-  if (getToolErrorText({ part, toolResultPart: null })) return true;
-
-  // Check the paired result part (same toolCallId, different instance)
-  if (part.toolCallId) {
-    const resultPart = allParts.find(
-      (p) => p !== part && isToolPart(p) && p.toolCallId === part.toolCallId,
-    );
-    if (resultPart) {
-      if (getToolErrorText({ part: resultPart, toolResultPart: null })) {
-        return true;
-      }
-    }
-  }
-  return false;
 }

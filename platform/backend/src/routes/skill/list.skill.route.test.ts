@@ -1,9 +1,63 @@
+import { EnvironmentModel } from "@/models";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import skillRoutes from "./skill.routes";
-import { MANIFEST } from "./skill.test-helpers";
+import { MANIFEST, manifestNamed } from "./skill.test-helpers";
 
 describe("GET /api/skills", () => {
   const ctx = useRouteTestApp(skillRoutes);
+
+  test("forAgentId restricts the list to the agent's environment", async ({
+    makeAgent,
+  }) => {
+    const env = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Staging",
+    });
+    const envAgent = await makeAgent({
+      name: "Env Agent",
+      organizationId: ctx.organizationId,
+      environmentId: env.id,
+    });
+    const defaultAgent = await makeAgent({
+      name: "Default Agent",
+      organizationId: ctx.organizationId,
+    });
+
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("default-env-skill") },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: manifestNamed("staging-skill"),
+        environmentId: env.id,
+      },
+    });
+
+    const staging = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?forAgentId=${envAgent.id}`,
+    });
+    expect(staging.statusCode).toBe(200);
+    expect(staging.json().data.map((s: { name: string }) => s.name)).toEqual([
+      "staging-skill",
+    ]);
+
+    const dflt = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?forAgentId=${defaultAgent.id}`,
+    });
+    expect(dflt.json().data.map((s: { name: string }) => s.name)).toEqual([
+      "default-env-skill",
+    ]);
+
+    // without the filter, the management surface lists every environment
+    const all = await ctx.app.inject({ method: "GET", url: "/api/skills" });
+    expect(all.json().data).toHaveLength(2);
+  });
 
   test("lists skills with a file count that includes SKILL.md", async () => {
     await ctx.app.inject({

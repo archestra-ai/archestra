@@ -1,5 +1,5 @@
 {
-  "id": "3491ada0-45e4-4161-94cd-7377d4db6061",
+  "id": "cfd74a18-17d4-4b71-b5ac-f60cbb2819ab",
   "prevId": "568e1d27-11fb-4d57-90a7-c35c4a999c7e",
   "version": "7",
   "dialect": "postgresql",
@@ -2630,13 +2630,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
         },
         "created_at": {
           "name": "created_at",
@@ -11411,6 +11404,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'organization'"
+        },
+        "online_mcp_catalog_enabled": {
+          "name": "online_mcp_catalog_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "global_tool_policy": {
           "name": "global_tool_policy",

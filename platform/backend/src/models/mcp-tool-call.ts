@@ -111,6 +111,8 @@ class McpToolCallModel {
           ...getTableColumns(schema.mcpToolCallsTable),
           userName: schema.usersTable.name,
           agentDeletedAt: schema.agentsTable.deletedAt,
+          appName: schema.appsTable.name,
+          appDeletedAt: schema.appsTable.deletedAt,
         })
         .from(schema.mcpToolCallsTable)
         .leftJoin(
@@ -120,6 +122,10 @@ class McpToolCallModel {
         .leftJoin(
           schema.agentsTable,
           eq(schema.mcpToolCallsTable.agentId, schema.agentsTable.id),
+        )
+        .leftJoin(
+          schema.appsTable,
+          eq(schema.mcpToolCallsTable.appId, schema.appsTable.id),
         )
         .where(whereClause)
         .orderBy(orderByClause)
@@ -169,6 +175,8 @@ class McpToolCallModel {
         ...getTableColumns(schema.mcpToolCallsTable),
         userName: schema.usersTable.name,
         agentDeletedAt: schema.agentsTable.deletedAt,
+        appName: schema.appsTable.name,
+        appDeletedAt: schema.appsTable.deletedAt,
       })
       .from(schema.mcpToolCallsTable)
       .leftJoin(
@@ -178,6 +186,10 @@ class McpToolCallModel {
       .leftJoin(
         schema.agentsTable,
         eq(schema.mcpToolCallsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.appsTable,
+        eq(schema.mcpToolCallsTable.appId, schema.appsTable.id),
       )
       .where(eq(schema.mcpToolCallsTable.id, id));
 
@@ -270,6 +282,9 @@ class McpToolCallModel {
         .select({
           ...getTableColumns(schema.mcpToolCallsTable),
           userName: schema.usersTable.name,
+          // Agent-scoped rows are never app-owned; select the column anyway so
+          // rows satisfy the McpToolCall contract (appName is non-optional).
+          appName: sql<string | null>`null`,
         })
         .from(schema.mcpToolCallsTable)
         .leftJoin(
@@ -352,16 +367,23 @@ class McpToolCallModel {
 export default McpToolCallModel;
 
 function toVisibleMcpToolCall(
-  row: McpToolCall & { agentDeletedAt?: Date | null },
+  row: McpToolCall & {
+    agentDeletedAt?: Date | null;
+    appDeletedAt?: Date | null;
+  },
 ): McpToolCall {
-  const { agentDeletedAt: _agentDeletedAt, ...toolCall } = row;
+  const {
+    agentDeletedAt: _agentDeletedAt,
+    appDeletedAt: _appDeletedAt,
+    ...toolCall
+  } = row;
 
-  if (row.agentDeletedAt) {
-    return {
-      ...toolCall,
-      agentId: null,
-    };
-  }
-
-  return toolCall;
+  return {
+    ...toolCall,
+    // Null out references to soft-deleted owners so consumers can't resolve
+    // them; ownerType still tells which kind of owner made the call.
+    agentId: row.agentDeletedAt ? null : toolCall.agentId,
+    appId: row.appDeletedAt ? null : toolCall.appId,
+    appName: row.appDeletedAt ? null : toolCall.appName,
+  };
 }

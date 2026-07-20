@@ -3,7 +3,7 @@ title: MS Teams
 category: Agents
 order: 7
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-07-12
+lastUpdated: 2026-07-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,6 +27,10 @@ The wizard will walk you through creating an Azure Bot, configuring the Teams ap
 See [Deployment — Environment Variables](/docs/platform-deployment#environment-variables) for the full list of environment variables if you prefer manual configuration.
 
 If your instance is not already publicly reachable (for example, running locally), Archestra can open an [ngrok](https://ngrok.com) tunnel so Teams can deliver messages. The setup wizard's **Configure ngrok** step takes your ngrok auth token and brings the tunnel up live — no restart needed. For Docker or unattended deployments, set `ARCHESTRA_NGROK_AUTH_TOKEN` instead and the tunnel starts on boot.
+
+### Dedicated Webhook Port
+
+Teams delivers messages to `POST /api/webhooks/chatops/ms-teams` on the main API port. Set `ARCHESTRA_PUBLIC_ENDPOINTS_PORT` to also serve the webhook on a dedicated port — an alias with the same handler, so the main port keeps working. This lets a firewall or load balancer expose only the webhook to the Internet and keep the rest of the API internal. See [Deployment — Environment Variables](/docs/platform-deployment#application--api-configuration) for details.
 
 ## Usage
 

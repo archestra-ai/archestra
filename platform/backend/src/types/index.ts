@@ -7,6 +7,7 @@ export * from "./agent";
 export * from "./agent-connector-assignment";
 export * from "./agent-export";
 export * from "./agent-knowledge-base";
+export * from "./agent-subagent-exclusion";
 export * from "./agent-suggested-prompt";
 export * from "./agent-tool";
 export * from "./agent-tool-exclusion";

@@ -19,6 +19,7 @@
  */
 
 import {
+  CHATGPT_SUBSCRIPTION_LABEL,
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -75,7 +76,7 @@ export function perUserCredentialLabel(params: {
   apiKey: string | null | undefined;
 }): string {
   return isOpenAiCodexCredential(params.apiKey ?? undefined)
-    ? "ChatGPT Subscription"
+    ? CHATGPT_SUBSCRIPTION_LABEL
     : params.provider;
 }
 

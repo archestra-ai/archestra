@@ -58,6 +58,34 @@ describe("resolveAuditableRouteConfig", () => {
     expect(typeof resolved?.cfg.fetchById).toBe("function");
   });
 
+  test("delegations sync route is registered so its POST is not dropped as a walk-up", () => {
+    // POST /api/agents/:agentId/delegations is unregistered → walks up to
+    // /api/agents/:agentId → the hook discards POST walk-ups → the record falls
+    // to the unknown.created fallback with a null resourceType. Registering it
+    // directly pins the correct agent.updated semantics.
+    const resolved = resolveAuditableRouteConfig(
+      "/api/agents/:agentId/delegations",
+    );
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("agent");
+    expect(resolved?.cfg.action).toBe("agent.updated");
+    expect(resolved?.cfg.resourceIdParam).toBe("agentId");
+    expect(typeof resolved?.cfg.fetchById).toBe("function");
+  });
+
+  test("single-delegation DELETE inherits agent.updated, not agent.deleted", () => {
+    // DELETE /api/agents/:agentId/delegations/:targetAgentId walks up. A DELETE
+    // walk-up is NOT suppressed, so without the explicit /delegations entry it
+    // would inherit /api/agents/:agentId and derive agent.deleted — mislabeling
+    // the removal of one delegation as deleting the whole agent.
+    const resolved = resolveAuditableRouteConfig(
+      "/api/agents/:agentId/delegations/:targetAgentId",
+    );
+    expect(resolved?.viaWalkUp).toBe(true);
+    expect(resolved?.cfg.action).toBe("agent.updated");
+    expect(resolved?.cfg.resourceType).toBe("agent");
+  });
+
   test("walk-up match returns viaWalkUp=true with the parent config", () => {
     // /api/mcp_server/:id/some-subroute is not registered; walks up to /api/mcp_server/:id
     const resolved = resolveAuditableRouteConfig(

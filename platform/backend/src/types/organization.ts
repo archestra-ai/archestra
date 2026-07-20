@@ -410,6 +410,14 @@ export const UpdateLlmSettingsSchema = z.object({
   compressionScope: OrganizationCompressionScopeSchema.optional(),
 });
 
+export const UpdateMcpSettingsSchema = z.object({
+  onlineMcpCatalogEnabled: z.boolean().optional(),
+});
+
+export const UpdateSkillsSettingsSchema = z.object({
+  onlineSkillCatalogEnabled: z.boolean().optional(),
+});
+
 export const UpdateAgentSettingsSchema = z.object({
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),

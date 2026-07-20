@@ -8,7 +8,14 @@ import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mustExist,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 const {
@@ -1249,7 +1256,7 @@ describe("mcp server inspect route", () => {
     expect(updatedServer?.secretId).toBeTruthy();
 
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).toMatchObject({
       header_existing: "on-the-bag",
@@ -1313,7 +1320,7 @@ describe("mcp server inspect route", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).not.toHaveProperty("header_optional");
     // Unrelated bag entries (OAuth tokens, etc.) must stay put.
@@ -1377,7 +1384,7 @@ describe("mcp server inspect route", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).toMatchObject({
       header_required: "valid-value",
@@ -1692,7 +1699,7 @@ describe("mcp server inspect route", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).toMatchObject({
       EXISTING_SECRET: "in-the-bag",
@@ -1811,7 +1818,7 @@ describe("mcp server inspect route", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).toMatchObject({
       API_SECRET: "valid-credential",

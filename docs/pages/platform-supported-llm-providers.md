@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-10
+lastUpdated: 2026-07-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -68,7 +68,7 @@ Reuse a ChatGPT/Codex subscription for chat instead of a metered API key. Add an
 
 First turn on device code authorization for the account, in ChatGPT → Settings → Security → **Enable device code authorization for Codex**. It is off by default, and ChatGPT blocks the approval step until you enable it.
 
-These keys are per-user and personal-only: each person connects their own ChatGPT account. Requests are billed to the subscription.
+These keys are per-user and personal-only: each person connects their own ChatGPT account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
 
 ## Anthropic
 

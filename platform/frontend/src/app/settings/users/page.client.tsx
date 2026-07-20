@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import {
   useCanImpersonate,
@@ -351,7 +352,7 @@ function MembersTab({
                   onClick: async () => {
                     if (!member.invitationId) return;
                     const link = `${window.location.origin}/auth/sign-up-with-invitation?invitationId=${member.invitationId}&email=${encodeURIComponent(member.email)}`;
-                    await navigator.clipboard.writeText(link);
+                    await copyToClipboard(link);
                   },
                 },
                 {

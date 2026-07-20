@@ -1,11 +1,17 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import { vi } from "vitest";
-import { ToolModel } from "@/models";
+import db, { schema } from "@/database";
+import {
+  AgentExcludedSubagentModel,
+  AgentModel,
+  EnvironmentModel,
+  ToolModel,
+} from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
-import { type ArchestraContext, executeArchestraTool } from ".";
+import { type ArchestraContext, executeArchestraTool, getAgentTools } from ".";
 
 const mockExecuteA2AMessage = vi.fn();
 
@@ -317,5 +323,329 @@ describe("delegation error propagation", () => {
     await expect(
       executeArchestraTool(toolName, { message: "hello" }, baseContext),
     ).rejects.toBe(abortError);
+  });
+});
+
+describe("Auto-mode subagent delegation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // A parent agent in Auto mode plus an org-scoped target the caller can reach,
+  // with no explicit delegation wiring between them.
+  async function setupAutoMode(fixtures: {
+    makeOrganization: any;
+    makeUser: any;
+    makeMember: any;
+    makeAgent: any;
+    accessAllSubagents?: boolean;
+  }) {
+    const { makeOrganization, makeUser, makeMember, makeAgent } = fixtures;
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "member" });
+    const parent = await makeAgent({
+      name: "Parent Agent",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+    });
+    if (fixtures.accessAllSubagents !== false) {
+      await AgentModel.update(parent.id, { accessAllSubagents: true });
+    }
+    const target = await makeAgent({
+      name: "Research Bot",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+    });
+    return { organization, user, parent, target };
+  }
+
+  test("exposes accessible internal agents as delegation tools", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+    const names = tools.map((t) => t.name);
+
+    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`);
+    // The agent never delegates to itself.
+    expect(names).not.toContain(`${AGENT_TOOL_PREFIX}${slugify(parent.name)}`);
+  });
+
+  test("omits excluded delegation targets from the surface", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(parent.id, [target.id]);
+
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+
+    expect(tools.map((t) => t.name)).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+    );
+  });
+
+  test("does not expand for system/token flows (no real user)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, parent } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    // Auto mode is on, but there is no authenticated user: fall back to
+    // explicit delegations only (none configured here).
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: "system",
+      skipAccessCheck: true,
+    });
+
+    expect(tools).toHaveLength(0);
+  });
+
+  test("Custom mode ignores accessible agents (explicit only)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      accessAllSubagents: false,
+    });
+
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+
+    expect(tools).toHaveLength(0);
+  });
+
+  test("dispatches to an accessible target without explicit assignment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "auto-delegation-1",
+      text: "Handled by subagent",
+      finishReason: "stop",
+    });
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+      { message: "Do the research." },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: target.id,
+        message: "Do the research.",
+        organizationId: organization.id,
+        userId: user.id,
+      }),
+    );
+  });
+
+  test("refuses to dispatch to an excluded target", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(parent.id, [target.id]);
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+      { message: "Do the research." },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "No delegation is configured",
+    );
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+
+  test("Auto mode never crosses environment boundaries (surface and dispatch)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const otherEnv = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Other Environment",
+    });
+    const crossEnvTarget = await makeAgent({
+      name: "Cross Env Bot",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: otherEnv.id,
+    });
+
+    // Surface: the parent (Default environment) sees only same-environment
+    // targets.
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+    const names = tools.map((t) => t.name);
+    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`);
+    expect(names).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
+    );
+
+    // Dispatch stays symmetric with the surface.
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
+      { message: "Do the research." },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "No delegation is configured",
+    );
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+
+  test("Custom mode drops an explicit delegation whose target is in another environment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const { organization, user, parent } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      accessAllSubagents: false,
+    });
+    const otherEnv = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Other Environment",
+    });
+    const crossEnvTarget = await makeAgent({
+      name: "Cross Env Expert",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: otherEnv.id,
+    });
+
+    // Explicitly wire a delegation row to the cross-environment target.
+    const [delegationTool] = await db
+      .insert(schema.toolsTable)
+      .values({
+        name: `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
+        delegateToAgentId: crossEnvTarget.id,
+      })
+      .returning();
+    await makeAgentTool(parent.id, delegationTool.id);
+
+    // The assignment exists but is neither advertised nor dispatchable.
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+    expect(tools).toHaveLength(0);
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
+      { message: "Do the research." },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "No delegation is configured",
+    );
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
 });

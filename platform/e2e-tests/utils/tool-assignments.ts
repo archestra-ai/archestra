@@ -45,11 +45,10 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
 }
 
 /**
- * Choosing a personal-scope connection for a shared (team/org) agent or gateway
- * prompts a confirmation ("Use this connection for everyone?") because every
- * caller would then connect as that one owner. Confirm it so the choice applies;
- * non-personal connections and personal-scope targets don't prompt. Returns
- * whether a confirmation was handled.
+ * Choosing a personal-scope connection prompts a confirmation ("Use this
+ * connection for everyone?") because every caller of the tool would then connect
+ * as that one owner. Confirm it so the choice applies; non-personal connections
+ * don't prompt. Returns whether a confirmation was handled.
  */
 async function confirmPersonalCredentialPinIfPrompted(
   page: Page,
@@ -124,15 +123,13 @@ async function openCatalogToolAssignment({
   const dialog = page.getByRole("dialog", { name: dialogTitle });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-  const capabilitiesAnchor = dialog.getByTestId(
-    E2eTestId.AgentCapabilitiesSection,
-  );
-  await capabilitiesAnchor.scrollIntoViewIfNeeded();
+  const toolsSectionAnchor = dialog.getByTestId(E2eTestId.AgentToolsSection);
+  await toolsSectionAnchor.scrollIntoViewIfNeeded();
 
-  const capabilitiesHeading = dialog.getByRole("heading", {
-    name: "Capabilities",
+  const toolsSectionHeading = dialog.getByRole("heading", {
+    name: "Tools & Knowledge Sources",
   });
-  await expect(capabilitiesHeading).toBeVisible({ timeout: 10_000 });
+  await expect(toolsSectionHeading).toBeVisible({ timeout: 10_000 });
 
   const addButton = dialog.getByTestId(E2eTestId.AgentToolsAddButton);
   await expect(addButton).toBeVisible({ timeout: 10_000 });

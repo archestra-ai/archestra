@@ -1,7 +1,15 @@
 "use client";
 
-import { ChevronsUpDown, LogOut, Settings } from "lucide-react";
+import {
+  ChevronsUpDown,
+  LogOut,
+  Monitor,
+  Moon,
+  Settings,
+  Sun,
+} from "lucide-react";
 import Link from "next/link";
+import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/lib/auth/auth.query";
+import { cn } from "@/lib/utils";
 
 /**
  * Sidebar footer user menu: avatar + name/email trigger with Settings and
@@ -24,6 +33,7 @@ import { useSession } from "@/lib/auth/auth.query";
  */
 export function SidebarUserMenu() {
   const { data: session } = useSession();
+  const { theme, setTheme } = useTheme();
   const user = session?.user;
 
   if (!user) return null;
@@ -59,6 +69,9 @@ export function SidebarUserMenu() {
       <DropdownMenuContent
         align="center"
         side="top"
+        // Keeps the menu off the viewport edge when the collapsed-rail
+        // trigger sits in the bottom-left corner.
+        collisionPadding={8}
         className="min-w-56"
         // Closing via an outside click otherwise returns focus to the trigger,
         // which re-shows its focus ring and reads as a stray border. Keep focus
@@ -80,6 +93,25 @@ export function SidebarUserMenu() {
             Settings
           </Link>
         </DropdownMenuItem>
+        <div className="flex gap-1 px-2 py-1.5">
+          {themeOptions.map(({ value, label, Icon }) => (
+            <Button
+              key={value}
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                "flex-1 text-muted-foreground",
+                theme === value && "bg-accent text-accent-foreground",
+              )}
+              aria-label={label}
+              aria-pressed={theme === value}
+              title={label}
+              onClick={() => setTheme(value)}
+            >
+              <Icon className="size-4" />
+            </Button>
+          ))}
+        </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/auth/sign-out">
@@ -91,3 +123,9 @@ export function SidebarUserMenu() {
     </DropdownMenu>
   );
 }
+
+const themeOptions = [
+  { value: "system", label: "System", Icon: Monitor },
+  { value: "light", label: "Light", Icon: Sun },
+  { value: "dark", label: "Dark", Icon: Moon },
+] as const;

@@ -97,29 +97,6 @@ beforeEach(() => {
 });
 
 describe("MessageThread", () => {
-  it("renders the swap-agent divider instead of the raw swap tool box", () => {
-    const messages: PartialUIMessage[] = [
-      {
-        id: "assistant-swap",
-        role: "assistant",
-        parts: [
-          {
-            type: "tool-spark_swap_agent",
-            toolCallId: "swap-call",
-            state: "output-available",
-            input: { agent_name: "child agent" },
-            output: { ok: true },
-          },
-        ],
-      },
-    ];
-
-    render(<MessageThread messages={messages} />);
-
-    expect(screen.getByText("Switched to child agent")).toBeInTheDocument();
-    expect(screen.queryByText("tool-spark_swap_agent")).not.toBeInTheDocument();
-  });
-
   it("does not render a message bubble for whitespace-only text parts", () => {
     const messages: PartialUIMessage[] = [
       {

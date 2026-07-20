@@ -41,6 +41,10 @@ export const ArchestraInternalErrorCode = {
    * Archestra's inactivity deadline elapsed. Transient and safe to retry.
    */
   UpstreamTimeout: "upstream_timeout",
+  /**
+   * The upstream provider declared a transient overload (HTTP 503/529).
+   */
+  ProviderOverloaded: "provider_overloaded",
 } as const;
 
 export type ArchestraInternalErrorCode =

@@ -68,6 +68,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   auditLog: ["read"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
+  mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
@@ -135,6 +137,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   auditLog: [],
   agentSettings: [],
   llmSettings: ["read", "update"],
+  mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read"],
   invitation: ["read"],
@@ -208,6 +212,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
   auditLog: [],
   agentSettings: [],
   llmSettings: [],
+  mcpSettings: [],
+  skillsSettings: [],
   knowledgeSettings: [],
   member: [],
   invitation: [],
@@ -377,6 +383,10 @@ export const permissionDescriptions: Record<string, string> = {
   "optimizationRule:delete": "Remove optimization rules",
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
+  "mcpSettings:read": "View MCP settings (online catalog availability)",
+  "mcpSettings:update": "Modify MCP settings",
+  "skillsSettings:read": "View Skills settings (online catalog availability)",
+  "skillsSettings:update": "Modify Skills settings",
   "agentSettings:read":
     "View agent settings (default model, default agent, default tool guardrails, file uploads)",
   "agentSettings:update":
@@ -511,6 +521,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Tool exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentToolExclusions]: {},
   [RouteId.UpdateAgentToolExclusions]: {},
+  // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
+  [RouteId.GetAgentSubagentExclusions]: {},
+  [RouteId.UpdateAgentSubagentExclusions]: {},
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -1001,6 +1014,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAllVirtualApiKeys]: {
     llmVirtualKey: ["read"],
   },
+  [RouteId.GetVirtualApiKey]: {
+    llmVirtualKey: ["read"],
+  },
   [RouteId.CreateVirtualApiKey]: {
     llmVirtualKey: ["create"],
   },
@@ -1101,6 +1117,12 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateLlmSettings]: {
     llmSettings: ["update"],
+  },
+  [RouteId.UpdateMcpSettings]: {
+    mcpSettings: ["update"],
+  },
+  [RouteId.UpdateSkillsSettings]: {
+    skillsSettings: ["update"],
   },
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
@@ -1448,6 +1470,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAuditLogs]: {
     auditLog: ["read"],
   },
+  [RouteId.GetAuditLog]: {
+    auditLog: ["read"],
+  },
 
   // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
   // The public marketplace git endpoint stays outside this map; it is allowlisted in
@@ -1490,6 +1515,17 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same trust model as diagnostics: the host page posts the viewer's render
   // screenshot, the handler re-checks app-visibility.
   [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
+  // App session recordings live client-side (IndexedDB); sharing forwards a
+  // client-assembled bundle to the public demo catalog. Any viewer of an app
+  // they can see may share their own recording; the handler re-checks app
+  // visibility and the feature flag.
+  // Reads the recording's conversation to draft the enhancement, so it takes
+  // the same permission as the chat-scoped generation routes.
+  [RouteId.EnhanceAppRecording]: { chat: ["update"] },
+  [RouteId.RenderAppRecordingVideo]: { chat: ["update"] },
+  [RouteId.GetAppRecordingRenderStatus]: { chat: ["update"] },
+  [RouteId.DownloadAppRecordingVideo]: { chat: ["update"] },
+  [RouteId.CancelAppRecordingRender]: { chat: ["update"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
@@ -1591,6 +1627,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/api-keys": { apiKey: ["read"] },
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
+  "/settings/mcp": { mcpSettings: ["read"] },
+  "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/environments": { environment: ["admin"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },

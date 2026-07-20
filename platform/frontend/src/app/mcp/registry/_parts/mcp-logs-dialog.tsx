@@ -39,6 +39,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
 import websocketService from "@/lib/websocket/websocket";
 import {
@@ -396,7 +397,7 @@ export function McpLogsContent({
 
   const handleCopyLogs = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(streamedLogs);
+      await copyToClipboard(streamedLogs);
       setCopied(true);
       toast.success("Logs copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
@@ -407,7 +408,7 @@ export function McpLogsContent({
 
   const handleCopyCommand = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(command);
+      await copyToClipboard(command);
       setCommandCopied(true);
       toast.success("Command copied to clipboard");
       setTimeout(() => setCommandCopied(false), 2000);

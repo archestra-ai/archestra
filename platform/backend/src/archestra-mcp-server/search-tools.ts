@@ -32,6 +32,7 @@ import {
   structuredSuccessResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
+import { getSkillDelegationTools } from "./skill-delegation";
 
 const SearchToolsArgsSchema = z
   .object({
@@ -364,6 +365,12 @@ async function getSearchableTools(params: {
           skipAccessCheck: userId === "system",
         })
       : [];
+  // Agent-designated skills are searchable through their skill__<slug>
+  // delegation tools, resolved per calling user like agent delegations.
+  const skillDelegationTools =
+    organizationId != null
+      ? await getSkillDelegationTools({ agentId, organizationId, userId })
+      : [];
 
   const catalogsById = await getCatalogsById(filteredTools);
   const catalogsWithInstalls = await getCatalogIdsWithInstalls(filteredTools);
@@ -389,7 +396,7 @@ async function getSearchableTools(params: {
     );
   }
 
-  for (const tool of delegationTools) {
+  for (const tool of [...delegationTools, ...skillDelegationTools]) {
     candidates.set(tool.name, toDelegationToolCandidate(tool));
   }
 

@@ -214,7 +214,7 @@ describe("TokenSelect", () => {
     expect(screen.getByText("Owned by member@example.com")).toBeInTheDocument();
   });
 
-  it("confirms before applying a personal credential on a shared agent, and applies it on confirm", () => {
+  it("confirms before applying a personal credential, and applies it on confirm", () => {
     useMcpServersGroupedByCatalogMock.mockReturnValue({
       "catalog-1": [personalCred],
     });
@@ -226,7 +226,6 @@ describe("TokenSelect", () => {
         onValueChange={onValueChange}
         catalogId="catalog-1"
         shouldSetDefaultValue={false}
-        agentScope="org"
       />,
     );
 
@@ -259,7 +258,6 @@ describe("TokenSelect", () => {
         onValueChange={onValueChange}
         catalogId="catalog-1"
         shouldSetDefaultValue={false}
-        agentScope="org"
       />,
     );
 
@@ -281,7 +279,6 @@ describe("TokenSelect", () => {
         onValueChange={vi.fn()}
         catalogId="catalog-1"
         shouldSetDefaultValue={false}
-        agentScope="team"
       />,
     );
 
@@ -289,9 +286,9 @@ describe("TokenSelect", () => {
     expect(lastPins()?.[0]?.isCurrentUser).toBe(true);
   });
 
-  it("applies a personal credential without confirmation on a personal-scope agent", () => {
+  it("confirms before applying the selector's own personal credential", () => {
     useMcpServersGroupedByCatalogMock.mockReturnValue({
-      "catalog-1": [personalCred],
+      "catalog-1": [ownPersonalCred],
     });
     const onValueChange = vi.fn();
 
@@ -301,16 +298,15 @@ describe("TokenSelect", () => {
         onValueChange={onValueChange}
         catalogId="catalog-1"
         shouldSetDefaultValue={false}
-        agentScope="personal"
       />,
     );
 
-    fireEvent.click(screen.getByText("member@example.com"));
-    expect(onValueChange).toHaveBeenCalledWith("user-cred");
-    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("me@example.com"));
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
   });
 
-  it("applies an org/team credential on a shared agent without confirmation", () => {
+  it("applies an org/team credential without confirmation", () => {
     useMcpServersGroupedByCatalogMock.mockReturnValue({
       "catalog-1": [orgCred],
     });
@@ -322,7 +318,6 @@ describe("TokenSelect", () => {
         onValueChange={onValueChange}
         catalogId="catalog-1"
         shouldSetDefaultValue={false}
-        agentScope="org"
       />,
     );
 

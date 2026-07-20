@@ -398,7 +398,9 @@ export function resolvePlaceholders(
  *   - `app: "mcp-server"`
  *   - `mcp-server-id: <serverId>`
  *   - `mcp-server-name: <serverName>`
- * - `spec.selector.matchLabels` - Always set to system labels (required for pod selection)
+ * - `spec.selector.matchLabels` - Always set to the id-only selector labels
+ *   (`app` + `mcp-server-id`); selectors are immutable, so the mutable
+ *   `mcp-server-name` label must never be part of pod identity
  * - `spec.template.metadata.labels` - System labels merged in (required for selector matching)
  *
  * ## User-Customizable Fields
@@ -414,6 +416,7 @@ export function customYamlToDeployment(
     serverId: string;
     serverName: string;
     labels: Record<string, string>;
+    selectorLabels: Record<string, string>;
   },
 ): k8s.V1Deployment | null {
   try {
@@ -446,9 +449,10 @@ export function customYamlToDeployment(
       ...systemValues.labels,
     };
 
-    // Set selector matchLabels (always system-managed)
+    // Set selector matchLabels (always system-managed; id-only — the mutable
+    // mcp-server-name label must not be part of the immutable selector)
     parsed.spec.selector = {
-      matchLabels: systemValues.labels,
+      matchLabels: systemValues.selectorLabels,
     };
 
     // Merge template labels

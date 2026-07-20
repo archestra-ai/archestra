@@ -69,6 +69,7 @@ import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
 const mockAnthropicWifIsEnabled = vi.mocked(
@@ -1487,6 +1488,38 @@ describe("LLM Provider API Keys Scope Update", () => {
     const updatedKey = updateResponse.json();
     expect(updatedKey.scope).toBe("org");
     expect(updatedKey.userId).toBeNull();
+  });
+
+  test("rejects a ChatGPT-subscription credential pasted into an org key without a scope change", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Org OpenAI Key",
+        provider: "openai",
+        apiKey: "sk-openai-org-key",
+        scope: "org",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+
+    // Only the secret value changes — scope/team stay org — so this must be
+    // classified by the new value, or one person's subscription becomes the
+    // shared org credential.
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "refresh-token",
+          accountId: "account-id",
+        }),
+      },
+    });
+
+    expect(updateResponse.statusCode).toBe(400);
+    expect(updateResponse.json().error.message).toContain("per-user");
   });
 });
 

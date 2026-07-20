@@ -16,7 +16,7 @@ export const roleKeys = {
   all: ["roles"] as const,
   lists: () => [...roleKeys.all, "list"] as const,
   details: () => [...roleKeys.all, "detail"] as const,
-  detail: (id: string) => [...roleKeys.details(), id] as const,
+  detail: (id: string | undefined) => [...roleKeys.details(), id] as const,
 };
 
 /**
@@ -64,10 +64,11 @@ export function useRolesPaginated(params: RolesPaginatedParams) {
 /**
  * Hook to fetch a specific role by ID
  */
-export function useRole(roleId: string) {
+export function useRole(roleId: string | undefined) {
   return useQuery({
     queryKey: roleKeys.detail(roleId),
     queryFn: async () => {
+      if (!roleId) return null;
       const response = await getRole({ path: { roleId } });
       throwOnApiError(response.error, {
         allowNotFound: true,

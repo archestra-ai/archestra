@@ -9,7 +9,6 @@ import { broadcastMcpInstallationStatus } from "@/websocket";
  * Checks if a catalog edit requires new user input for reinstallation.
  *
  * Returns true (manual reinstall required) when:
- * - Server name changed (local servers) - affects secret paths
  * - Local execution config changed (command/args/docker/transport) - restart should be explicit
  * - Prompted env vars changed: added, removed, or key/required/type changed (local servers)
  * - OAuth config changed: added or removed (remote servers)
@@ -19,29 +18,18 @@ import { broadcastMcpInstallationStatus } from "@/websocket";
  * - Only non-prompted config changed (local servers) - existing secrets can be reused
  * - Only non-auth config changed (remote servers) - existing auth can be reused
  *
- * Note: We compare old vs new config to allow auto-reinstall when auth-related
- * settings haven't changed. This enables auto-reinstall for name/URL changes.
- *
- * Note 2:
- * We don't check if the deployment spec YAML changed (advanced yaml config),
- * because it's impossible to set a prompted env var and do not allow to change name of the mcp server.
+ * Name changes never reach this gate: the PUT route strips them and applies
+ * them through `InternalMcpCatalogModel.renameCascade` — a pure DB cascade.
+ * Deployment identity is frozen (`deployment_name`) and secret names are
+ * id-keyed, so a rename needs no reinstall at all.
  */
 export function requiresNewUserInputForReinstall(
   oldCatalogItem: InternalMcpCatalog,
   newCatalogItem: InternalMcpCatalog,
 ): boolean {
-  // Local servers: check if name or prompted env vars changed
+  // Local servers: check if prompted env vars changed
   if (newCatalogItem.serverType === "local") {
-    // 1. Check if name changed - affects secret paths
-    if (oldCatalogItem.name !== newCatalogItem.name) {
-      logger.info(
-        { catalogId: newCatalogItem.id },
-        "Catalog name changed - manual reinstall required",
-      );
-      return true;
-    }
-
-    // 2. Check if prompted env vars changed
+    // Check if prompted env vars changed
     const oldPromptedEnvVars = getPromptedEnvVars(oldCatalogItem);
     const newPromptedEnvVars = getPromptedEnvVars(newCatalogItem);
 
@@ -70,7 +58,7 @@ export function requiresNewUserInputForReinstall(
       return true;
     }
 
-    // 4. Check if required userConfig fields changed (e.g. header-backed fields
+    // Check if required userConfig fields changed (e.g. header-backed fields
     // added by editing the Headers section). Without this, installs end up with
     // a credential record that has no value for the new field and the header is
     // silently omitted on the wire.

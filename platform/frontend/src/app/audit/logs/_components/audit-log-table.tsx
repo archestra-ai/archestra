@@ -24,9 +24,11 @@ import {
   type AuditEventName,
   type AuditLog,
   type AuditOutcome,
+  useAuditLog,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMembersPaginated } from "@/lib/member.query";
 import { formatDate } from "@/lib/utils";
 import {
@@ -86,7 +88,26 @@ export function AuditLogTable() {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
   ]);
-  const [selectedEvent, setSelectedEvent] = useState<AuditLog | null>(null);
+  const eventId = searchParams.get("event");
+  const { data: eventFromUrl } = useAuditLog(eventId ?? undefined);
+  const {
+    entity: selectedEvent,
+    open: openEventDialog,
+    close: closeEventDialog,
+  } = useDialogUrlParam({
+    paramName: "event",
+    entityFromUrl: eventFromUrl ?? null,
+  });
+
+  // Shareable URL for the open event: force `event` onto the current params so
+  // the link is complete even before router.replace lands (or after a back nav
+  // strips it while the dialog stays open), origin-prefixed for a full URL.
+  const eventShareUrl = useMemo(() => {
+    if (typeof window === "undefined" || !selectedEvent) return "";
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("event", selectedEvent.id);
+    return `${window.location.origin}${pathname}?${params.toString()}`;
+  }, [selectedEvent, pathname, searchParams]);
 
   const updateUrlParams = useCallback(
     (updates: Record<string, string | null>) => {
@@ -469,12 +490,13 @@ export function AuditLogTable() {
         emptyMessage="No audit events recorded yet. Administrative actions will appear here as they happen."
         filteredEmptyMessage="No audit events match your filters. Try adjusting your search."
         onClearFilters={clearFilters}
-        onRowClick={(row) => setSelectedEvent(row)}
+        onRowClick={openEventDialog}
       />
 
       <AuditLogDetailDialog
         event={selectedEvent}
-        onClose={() => setSelectedEvent(null)}
+        shareUrl={eventShareUrl}
+        onClose={closeEventDialog}
       />
     </div>
   );

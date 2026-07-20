@@ -50,6 +50,24 @@ class AuditLogModel {
     return row;
   }
 
+  static async findById(
+    id: string,
+    organizationId: string,
+  ): Promise<AuditLog | null> {
+    const [row] = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.id, id),
+          eq(schema.auditLogsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    return (row as AuditLog | undefined) ?? null;
+  }
+
   static async findPaginated(opts: {
     organizationId: string;
     limit: number;

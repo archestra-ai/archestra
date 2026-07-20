@@ -1770,19 +1770,14 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
   // this distinction to decide whether to fail closed.
   test("treats a whitespace-only host as unset, without logging an error", () => {
     vi.mocked(logger.error).mockClear();
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: true, envValue: "   " }),
-    ).toBeUndefined();
+    expect(parseCodeRuntimeDaggerRunnerHost("   ")).toBeUndefined();
     expect(logger.error).not.toHaveBeenCalled();
   });
 
   test("rejects a supported scheme in the wrong case, and says so", () => {
     vi.mocked(logger.error).mockClear();
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: "TCP://dagger:1234",
-      }),
+      parseCodeRuntimeDaggerRunnerHost("TCP://dagger:1234"),
     ).toBeUndefined();
     expect(logger.error).toHaveBeenCalled();
   });
@@ -1861,10 +1856,7 @@ describe("isCodeRuntimeEnabled", () => {
     expect(
       isCodeRuntimeEnabled({
         ...base,
-        runnerHost: parseCodeRuntimeDaggerRunnerHost({
-          enabled: true,
-          envValue,
-        }),
+        runnerHost: parseCodeRuntimeDaggerRunnerHost(envValue),
         runnerHostEnv: envValue,
         codeRuntimeEnabledEnv: "true",
         loadKubeconfigFromCurrentCluster: "true",
@@ -1877,10 +1869,7 @@ describe("isCodeRuntimeEnabled", () => {
     expect(
       isCodeRuntimeEnabled({
         ...base,
-        runnerHost: parseCodeRuntimeDaggerRunnerHost({
-          enabled: true,
-          envValue,
-        }),
+        runnerHost: parseCodeRuntimeDaggerRunnerHost(envValue),
         runnerHostEnv: envValue,
       }),
     ).toBe(true);

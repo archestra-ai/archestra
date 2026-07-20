@@ -2168,7 +2168,7 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
-// Resource requests/limits for a code-managed engine StatefulSet (K8s
+    // Resource requests/limits for a code-managed engine StatefulSet (K8s
     // quantity strings). Production defaults; override down for small/local
     // clusters that can't schedule the full engine.
     engine: {

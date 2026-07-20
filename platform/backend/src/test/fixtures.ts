@@ -447,6 +447,9 @@ async function makeApp(
   const created = await AppModel.create({
     app: {
       name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
+      // Default to a live (enabled) app so existing tests exercise normal
+      // visibility/consumption; disabled-specific tests pass `enabled: false`.
+      enabled: true,
       ...appOverrides,
       authorId,
       organizationId,

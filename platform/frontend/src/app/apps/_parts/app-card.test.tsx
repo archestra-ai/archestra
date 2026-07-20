@@ -108,6 +108,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   authorName: "Ada Lovelace",
   viewerRole: "owner",
   latestVersion: 1,
+  enabled: true,
   teams: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
@@ -305,5 +306,17 @@ describe("OwnedAppCard", () => {
 
     expect(screen.getByLabelText("Personal")).toBeInTheDocument();
     expect(screen.getByText("Owned by Grace Hopper")).toBeInTheDocument();
+  });
+
+  it("shows a 'Disabled' badge for a disabled app", () => {
+    render(<AppCard app={{ ...ownedApp, enabled: false }} />);
+
+    expect(screen.getByText("Disabled")).toBeInTheDocument();
+  });
+
+  it("hides the 'Disabled' badge for a live app", () => {
+    render(<AppCard app={{ ...ownedApp, enabled: true }} />);
+
+    expect(screen.queryByText("Disabled")).not.toBeInTheDocument();
   });
 });

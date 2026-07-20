@@ -24,6 +24,7 @@ const noopMutation = () => ({
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnector: (id: string) => mockUseConnector(id),
+  useConnectorRun: () => ({ data: null }),
   useConnectorRuns: (params: unknown) => mockUseConnectorRuns(params),
   useConnectorKnowledgeBases: (id: string) =>
     mockUseConnectorKnowledgeBases(id),
@@ -77,7 +78,7 @@ vi.mock("@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog", () => ({
 
 vi.mock("next/navigation");
 
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import ConnectorDetailPage from "./page.client";
 
@@ -104,10 +105,11 @@ function makeConnector(
 }
 
 function setSearchParams(params: Record<string, string>) {
-  vi.mocked(useSearchParams).mockReturnValue({
-    get: (key: string) => params[key] ?? null,
-    toString: () => new URLSearchParams(params).toString(),
-  } as unknown as ReturnType<typeof useSearchParams>);
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(params) as unknown as ReturnType<
+      typeof useSearchParams
+    >,
+  );
 }
 
 beforeEach(() => {
@@ -115,6 +117,10 @@ beforeEach(() => {
   vi.mocked(usePathname).mockReturnValue(
     `/knowledge/connectors/${CONNECTOR_ID}`,
   );
+  vi.mocked(useRouter).mockReturnValue({
+    push: vi.fn(),
+    replace: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
   setSearchParams({});
   mockUseConnector.mockReturnValue({
     data: makeConnector(),

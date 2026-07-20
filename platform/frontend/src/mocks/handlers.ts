@@ -212,6 +212,9 @@ export const handlers: HttpHandler[] = [
   // LLM provider API keys (plain array — not paginated)
   ...getJson("/api/llm-provider-api-keys", llmProviderApiKeysSeed),
   ...getJson("/api/llm-provider-api-keys/available", []),
+  // Deep-linkable detail dialogs refetch the opened key by id; keep this after
+  // "/available" so that route isn't swallowed by ":id".
+  ...getJson("/api/llm-provider-api-keys/:id", makeLlmProviderApiKey()),
   ...postJson("/api/llm-provider-api-keys", makeLlmProviderApiKey()),
   ...patchJson("/api/llm-provider-api-keys/:id", makeLlmProviderApiKey()),
   ...deleteJson("/api/llm-provider-api-keys/:id"),

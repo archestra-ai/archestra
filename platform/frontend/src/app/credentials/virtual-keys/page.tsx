@@ -63,6 +63,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
@@ -71,6 +72,7 @@ import {
   useCreateVirtualApiKey,
   useDeleteVirtualApiKey,
   useUpdateVirtualApiKey,
+  useVirtualKey,
 } from "@/lib/virtual-api-keys.query";
 import { OwnerSelectField, shouldShowOwnerField } from "./owner-select-field";
 
@@ -150,9 +152,16 @@ export default function VirtualKeysPage() {
   );
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingKey, setEditingKey] = useState<VirtualKeyWithParent | null>(
-    null,
-  );
+  const editId = searchParams.get("edit");
+  const { data: editKeyFromUrl } = useVirtualKey(editId ?? undefined);
+  const {
+    entity: editingKey,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<VirtualKeyWithParent>({
+    paramName: "edit",
+    entityFromUrl: editKeyFromUrl ?? null,
+  });
   const [providerApiKeyFilterOpen, setProviderApiKeyFilterOpen] =
     useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -254,7 +263,7 @@ export default function VirtualKeysPage() {
               {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
-                onClick: () => setEditingKey(row.original),
+                onClick: () => openEditDialog(row.original),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -271,7 +280,7 @@ export default function VirtualKeysPage() {
         ),
       },
     ],
-    [session?.user?.id],
+    [session?.user?.id, openEditDialog],
   );
 
   const parentableKeys = apiKeys;
@@ -411,7 +420,7 @@ export default function VirtualKeysPage() {
 
       <EditVirtualKeyDialog
         open={!!editingKey}
-        onOpenChange={(open) => !open && setEditingKey(null)}
+        onOpenChange={(open) => !open && closeEditDialog()}
         virtualKey={editingKey}
         providerApiKeys={parentableKeys}
         visibilityOptions={visibilityOptions}

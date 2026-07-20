@@ -243,7 +243,9 @@ export function ImportSkillsDialog({
     let patId = githubPatId;
     if (authMethod === "pat" && !patId && githubToken.trim()) {
       const created = await createPat.mutateAsync({
-        name: newTokenName.trim() || `${repoSlug || "GitHub"} token`,
+        name:
+          newTokenName.trim() ||
+          `${repoSlug?.split("/").pop() || "GitHub"} token`,
         token: githubToken.trim(),
       });
       if (!created) return;
@@ -529,13 +531,9 @@ export function ImportSkillsDialog({
                     className="relative w-full"
                   />
                   <div className="flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      disabled={selectableFiltered.length === 0}
-                      onClick={toggleAllFiltered}
-                      className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground select-none hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground"
-                    >
+                    <div className="flex items-center gap-2">
                       <Checkbox
+                        id="import-skills-select-all"
                         checked={
                           allFilteredSelected
                             ? true
@@ -544,18 +542,19 @@ export function ImportSkillsDialog({
                               : false
                         }
                         disabled={selectableFiltered.length === 0}
-                        className="pointer-events-none"
-                        tabIndex={-1}
-                        aria-label="Select all visible skills"
+                        onCheckedChange={toggleAllFiltered}
                       />
-                      <span>
+                      <label
+                        htmlFor="import-skills-select-all"
+                        className="cursor-pointer text-xs font-medium text-muted-foreground select-none hover:text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-50 peer-disabled:hover:text-muted-foreground"
+                      >
                         {allFilteredSelected
                           ? "Deselect all"
                           : search.trim()
                             ? `Select all (${selectableFiltered.length} visible)`
                             : "Select all"}
-                      </span>
-                    </button>
+                      </label>
+                    </div>
                     <span className="text-xs tabular-nums text-muted-foreground">
                       {selected.size} of {totalImportable} selected
                       {totalExisting > 0 && ` · ${totalExisting} imported`}
@@ -593,23 +592,14 @@ export function ImportSkillsDialog({
                               : "hover:bg-muted/40",
                         )}
                       >
-                        <button
-                          type="button"
-                          disabled={skill.exists}
-                          onClick={() => toggle(skill.skillPath)}
+                        <label
+                          htmlFor={`import-skill-${skill.skillPath}`}
                           className={cn(
                             "flex min-w-0 flex-1 items-center gap-3 text-left",
                             skill.exists
                               ? "cursor-not-allowed"
                               : "cursor-pointer",
                           )}
-                          aria-label={
-                            skill.exists
-                              ? `${skill.name} (already imported)`
-                              : isSelected
-                                ? `Deselect ${skill.name}`
-                                : `Select ${skill.name}`
-                          }
                         >
                           {skill.exists ? (
                             <CheckCircle2
@@ -618,9 +608,15 @@ export function ImportSkillsDialog({
                             />
                           ) : (
                             <Checkbox
+                              id={`import-skill-${skill.skillPath}`}
                               checked={isSelected}
-                              className="pointer-events-none shrink-0"
-                              tabIndex={-1}
+                              onCheckedChange={() => toggle(skill.skillPath)}
+                              className="shrink-0"
+                              aria-label={
+                                isSelected
+                                  ? `Deselect ${skill.name}`
+                                  : `Select ${skill.name}`
+                              }
                             />
                           )}
                           <div className="min-w-0 flex-1">
@@ -662,7 +658,7 @@ export function ImportSkillsDialog({
                               )}
                             </div>
                           </div>
-                        </button>
+                        </label>
                         <div className="flex shrink-0 items-center gap-3">
                           <span className="text-xs tabular-nums text-muted-foreground">
                             {skill.fileCount}{" "}

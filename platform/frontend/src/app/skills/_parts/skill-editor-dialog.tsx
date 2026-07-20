@@ -1004,7 +1004,7 @@ function GithubSyncPanel({
   const authLabel = skill.githubPatId ? (
     <Link
       href="/settings/github"
-      className="underline-offset-4 hover:underline"
+      className="max-w-44 min-w-0 truncate underline-offset-4 hover:underline"
       title="Manage saved tokens in Settings → GitHub"
     >
       {patName ? `saved token “${patName}”` : "a saved token"}

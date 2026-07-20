@@ -1497,6 +1497,17 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same trust model as diagnostics: the host page posts the viewer's render
   // screenshot, the handler re-checks app-visibility.
   [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
+  // App session recordings live client-side (IndexedDB); sharing forwards a
+  // client-assembled bundle to the public demo catalog. Any viewer of an app
+  // they can see may share their own recording; the handler re-checks app
+  // visibility and the feature flag.
+  // Reads the recording's conversation to draft the enhancement, so it takes
+  // the same permission as the chat-scoped generation routes.
+  [RouteId.EnhanceAppRecording]: { chat: ["update"] },
+  [RouteId.RenderAppRecordingVideo]: { chat: ["update"] },
+  [RouteId.GetAppRecordingRenderStatus]: { chat: ["update"] },
+  [RouteId.DownloadAppRecordingVideo]: { chat: ["update"] },
+  [RouteId.CancelAppRecordingRender]: { chat: ["update"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},

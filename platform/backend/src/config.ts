@@ -223,6 +223,40 @@ const addLoopbackEquivalents = (origins: string[]): string[] => {
 };
 
 /**
+ * Where the offline video renderer reaches this deployment's own frontend to
+ * load the replay page it films.
+ *
+ * Falls back to this deployment's first configured origin before loopback.
+ * That set is the same one CORS, auth and the app sandbox are built from, so
+ * whichever way a deployment spells its frontend — a public hostname, a
+ * tunnel, an extra trusted origin — the renderer targets something already
+ * trusted rather than an address nothing was configured for. Defaulting
+ * straight to loopback is what makes a tunnelled deployment film an empty app
+ * pane: the sandbox declines to be framed by an untrusted origin, and the
+ * render cannot tell that apart from an app that drew nothing.
+ *
+ * The backend's own base URL is deliberately not a candidate: the page being
+ * filmed is a frontend route.
+ *
+ * @public — exported for testability
+ */
+export function resolveRenderBaseUrl(params: {
+  explicit: string | undefined;
+  configuredOrigins: string[];
+}): string {
+  return (
+    params.explicit?.trim() ||
+    params.configuredOrigins[0] ||
+    "http://localhost:3000"
+  );
+}
+
+const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
+  explicit: process.env.ARCHESTRA_HACKATHON_RECORDER_RENDER_BASE_URL,
+  configuredOrigins: getConfiguredOrigins(),
+});
+
+/**
  * Get CORS origin configuration for Fastify.
  * When no origin env vars are set, accepts all origins.
  * When configured, only allows the specified origins.
@@ -777,16 +811,32 @@ export const getConnectionBaseUrlSources = (): string[] => {
  * absolute SDK/stylesheet URLs in the owned-app envelope so they resolve from a
  * foreign MCP host's opaque-origin iframe (a relative `/_sandbox/...` has no
  * base there). This URL is handed to the browser as a script source and CSP
- * source, so it must be the public origin: `ARCHESTRA_API_BASE_URL` is an
- * internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
- * so a public `https://` entry is preferred over a cluster-internal one. Each
- * candidate is parsed to its `URL.origin` (dropping any path and normalizing),
- * falling back to the local API origin. Never derived from request headers —
- * those are spoofable (see request-origin.ts).
+ * source, so it must be the public origin the app is viewed on.
+ *
+ * Resolution order:
+ *  1. A public `https://` entry in `ARCHESTRA_API_BASE_URL` — that var is an
+ *     internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
+ *     so a public entry is preferred over a cluster-internal one.
+ *  2. Any `ARCHESTRA_API_BASE_URL` entry.
+ *  3. `frontendBaseUrl` (`ARCHESTRA_FRONTEND_URL`) — the origin the browser
+ *     actually loads the app on, and whose Next.js rewrite proxies `/_sandbox/*`
+ *     to the backend. Falling back here (rather than to a loopback API origin)
+ *     keeps the assets same-origin with the page, so the browser's Private
+ *     Network Access policy never blocks them when the app is served over a
+ *     tunnel or any public origin. The old loopback fallback only ever loaded
+ *     when the browser itself was on localhost; over a public origin it was
+ *     refused, taking the injected recorder/replay SDK down with it.
+ *
+ * This only widens the CSP's fixed asset-URL host from loopback to the trusted,
+ * operator-configured frontend origin — it does not touch the network lockdown
+ * (`connect-src 'none'`, CDN allowlist), and is never request-derived (those are
+ * spoofable, see request-origin.ts). Each candidate is parsed to its
+ * `URL.origin` (dropping any path). Foreign-host renders inline their assets
+ * (`selfContained`) and set `ARCHESTRA_API_BASE_URL` explicitly, so this
+ * fallback is confined to Archestra's own session render.
  * @public — consumed by the owned-app SDK injection
  */
 export const getAppAssetBaseOrigin = (): string => {
-  const localFallback = `http://127.0.0.1:${getPortFromUrl()}`;
   const entries =
     process.env.ARCHESTRA_API_BASE_URL?.split(",")
       .map((entry) => entry.trim())
@@ -794,7 +844,7 @@ export const getAppAssetBaseOrigin = (): string => {
   const candidates = [
     ...entries.filter((entry) => entry.startsWith("https://")),
     ...entries,
-    localFallback,
+    frontendBaseUrl,
   ];
   for (const candidate of candidates) {
     try {
@@ -803,7 +853,9 @@ export const getAppAssetBaseOrigin = (): string => {
       // skip a malformed entry and try the next candidate
     }
   }
-  return new URL(localFallback).origin;
+  // `frontendBaseUrl` itself defaults to http://localhost:3000, so this is only
+  // reached if it was overridden with a malformed value.
+  return new URL("http://localhost:3000").origin;
 };
 
 export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
@@ -1074,6 +1126,23 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
     return process.env.ARCHESTRA_BETA === "true";
   }
   return envValue === "true";
+}
+
+/**
+ * The hackathon recorder (record/replay/edit app demo sessions): on by default
+ * for community deployments, off by default when an enterprise license is
+ * activated. An explicit `"true"`/`"false"` on
+ * `ARCHESTRA_HACKATHON_RECORDER` always wins.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonRecorderEnabled(
+  envValue: string | undefined,
+  enterpriseLicenseActivated: boolean,
+): boolean {
+  if (envValue === "true") return true;
+  if (envValue === "false") return false;
+  return !enterpriseLicenseActivated;
 }
 
 // the code execution sandbox (run_command / upload_file / download_file, plus
@@ -1584,6 +1653,36 @@ const config = {
       "true",
     fullWhiteLabeling:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
+  },
+  hackathonRecorder: {
+    enabled: parseHackathonRecorderEnabled(
+      process.env.ARCHESTRA_HACKATHON_RECORDER,
+      process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+    ),
+    /**
+     * Escape hatch, not a requirement: the renderer finds or installs its own
+     * Chromium (see app-recording-render-runtime). Set this only to pin a
+     * specific browser — it must be a FULL Chromium, since Playwright's
+     * headless shell carries no WebCodecs encoder.
+     */
+    chromiumPath:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_CHROMIUM_PATH?.trim() ||
+      undefined,
+    /**
+     * Where the renderer reaches this deployment's own frontend to load the
+     * replay page it films.
+     */
+    renderBaseUrl: hackathonRecorderRenderBaseUrl,
+    /**
+     * The origins that base URL may be reached as, so the app sandbox can name
+     * them as permitted frame ancestors. Loopback is spelled two ways and they
+     * are distinct origins to a browser: a render that loads `127.0.0.1` is
+     * refused by a policy naming only `localhost`, and the app pane films
+     * empty.
+     */
+    renderFrameAncestors: addLoopbackEquivalents([
+      hackathonRecorderRenderBaseUrl,
+    ]),
   },
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.

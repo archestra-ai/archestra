@@ -13,7 +13,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { MemberModel, TeamModel } from "@/models";
+import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
 import {
   canManageTeamMembers,
   canReadTeam,
@@ -23,8 +23,10 @@ import {
 } from "@/services/team-authorization";
 import type { Team, TeamMember, TeamMemberListItem } from "@/types";
 import { TeamMemberRoleSchema, UuidIdSchema } from "@/types";
+import { AgentLabelOutputSchema, LabelInputSchema } from "./agent-resources";
 import {
   catchError,
+  deduplicateLabels,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -46,6 +48,9 @@ const TeamOutputItemSchema = z.object({
   memberCount: z
     .number()
     .describe("The number of members currently in the team."),
+  labels: z
+    .array(AgentLabelOutputSchema)
+    .describe("Key-value labels assigned to the team."),
   createdAt: z.string().describe("ISO timestamp when the team was created."),
   updatedAt: z
     .string()
@@ -84,6 +89,12 @@ const CreateTeamToolArgsSchema = z
       .string()
       .optional()
       .describe("Optional human-readable description of the team."),
+    labels: z
+      .array(LabelInputSchema)
+      .optional()
+      .describe(
+        "Optional key-value labels to assign to the team for organization and categorization (e.g. cost-center, environment).",
+      ),
   })
   .strict();
 
@@ -121,6 +132,12 @@ const EditTeamToolArgsSchema = z
       .optional()
       .describe(
         "Optional new team description. Pass null to clear an existing description.",
+      ),
+    labels: z
+      .array(LabelInputSchema)
+      .optional()
+      .describe(
+        "Replace the team's labels with this set. Pass an empty array to remove all labels. Omit to leave labels unchanged.",
       ),
   })
   .strict();
@@ -177,7 +194,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_TEAM_SHORT_NAME,
     title: "Create Team",
     description:
-      "Create a new team in the organization. Teams group users and control access to profiles and MCP servers.",
+      "Create a new team in the organization, optionally with key-value labels. Teams group users and control access to profiles and MCP servers.",
     schema: CreateTeamToolArgsSchema,
     outputSchema: z.object({ team: TeamOutputItemSchema }),
     async handler({ args, context }) {
@@ -217,7 +234,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_TEAM_SHORT_NAME,
     title: "Edit Team",
     description:
-      "Update a team's name and/or description. At least one field must be provided.",
+      "Update a team's name, description, and/or labels. At least one field must be provided. Labels, when provided, replace the team's existing labels.",
     schema: EditTeamToolArgsSchema,
     outputSchema: z.object({ team: TeamOutputItemSchema }),
     async handler({ args, context }) {
@@ -378,9 +395,27 @@ function serializeTeam(team: Team, memberCount: number) {
     organizationId: team.organizationId,
     createdBy: team.createdBy ?? null,
     memberCount,
+    labels: (team.labels ?? []).map((label) => ({
+      key: label.key,
+      value: label.value,
+    })),
     createdAt: team.createdAt.toISOString(),
     updatedAt: team.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Human-readable `\nLabels: ...` suffix for a serialized team's text summary,
+ * or an empty string when the team has no labels.
+ */
+function formatLabelsLine(labels: Array<{ key: string; value: string }>) {
+  if (labels.length === 0) {
+    return "";
+  }
+  const formatted = labels
+    .map((label) => `${label.key}: ${label.value}`)
+    .join(", ");
+  return `\nLabels: ${formatted}`;
 }
 
 function serializeMember(member: TeamMember | TeamMemberListItem) {
@@ -416,6 +451,7 @@ async function handleCreateTeam(params: {
       description: args.description,
       organizationId: context.organizationId,
       createdBy: context.userId,
+      labels: args.labels ? deduplicateLabels(args.labels) : undefined,
     });
 
     // A freshly created team has no members yet.
@@ -424,7 +460,7 @@ async function handleCreateTeam(params: {
       { team: serialized },
       `Successfully created team.\n\nTeam ID: ${serialized.id}\nName: ${serialized.name}${
         serialized.description ? `\nDescription: ${serialized.description}` : ""
-      }`,
+      }${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
     return catchError(error, "creating team");
@@ -465,14 +501,18 @@ async function handleGetTeam(params: {
       return readDenied;
     }
 
-    // findByName does not hydrate members; count them explicitly.
-    const members = await TeamModel.getTeamMembers(team.id);
-    const serialized = serializeTeam(team, members.length);
+    // findByName/getTeamForOrg do not hydrate members or labels; fetch both
+    // explicitly.
+    const [members, labels] = await Promise.all([
+      TeamModel.getTeamMembers(team.id),
+      TeamLabelModel.getLabelsForTeam(team.id),
+    ]);
+    const serialized = serializeTeam({ ...team, labels }, members.length);
     return structuredSuccessResult(
       { team: serialized },
       `Team ID: ${serialized.id}\nName: ${serialized.name}${
         serialized.description ? `\nDescription: ${serialized.description}` : ""
-      }\nMembers: ${serialized.memberCount}`,
+      }\nMembers: ${serialized.memberCount}${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
     return catchError(error, "getting team");
@@ -511,8 +551,15 @@ async function handleListTeams(params: {
       ? visible.filter((team) => team.name.toLowerCase().includes(nameFilter))
       : visible;
 
+    // findByOrganization hydrates members but not labels; batch-fetch them.
+    const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
+      filtered.map((team) => team.id),
+    );
     const serialized = filtered.map((team) =>
-      serializeTeam(team, team.members?.length ?? 0),
+      serializeTeam(
+        { ...team, labels: labelsByTeam.get(team.id) ?? [] },
+        team.members?.length ?? 0,
+      ),
     );
 
     if (serialized.length === 0) {
@@ -555,7 +602,11 @@ async function handleEditTeam(params: {
   }
 
   try {
-    if (args.name === undefined && args.description === undefined) {
+    if (
+      args.name === undefined &&
+      args.description === undefined &&
+      args.labels === undefined
+    ) {
       return errorResult("No fields provided to update.");
     }
 
@@ -569,6 +620,9 @@ async function handleEditTeam(params: {
       ...(args.description !== undefined
         ? { description: args.description }
         : {}),
+      ...(args.labels !== undefined
+        ? { labels: deduplicateLabels(args.labels) }
+        : {}),
     });
 
     if (!updated) {
@@ -580,7 +634,7 @@ async function handleEditTeam(params: {
       { team: serialized },
       `Successfully updated team.\n\nTeam ID: ${serialized.id}\nName: ${serialized.name}${
         serialized.description ? `\nDescription: ${serialized.description}` : ""
-      }`,
+      }${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
     return catchError(error, "updating team");

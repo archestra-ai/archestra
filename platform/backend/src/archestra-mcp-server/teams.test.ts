@@ -3,7 +3,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
-import { TeamModel } from "@/models";
+import { TeamLabelModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -70,6 +70,65 @@ describe("team tool execution", () => {
     expect(persisted?.name).toBe("Engineering");
   });
 
+  test("create_team assigns labels at creation time", async () => {
+    const result = await executeArchestraTool(
+      toolName("create_team"),
+      {
+        name: "Platform",
+        labels: [
+          { key: "cost-center", value: "cc-123" },
+          { key: "environment", value: "production" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const team = (result.structuredContent as any).team;
+    expect(team.labels).toEqual([
+      { key: "cost-center", value: "cc-123" },
+      { key: "environment", value: "production" },
+    ]);
+    expect((result.content[0] as any).text).toContain(
+      "Labels: cost-center: cc-123, environment: production",
+    );
+
+    const persisted = await TeamLabelModel.getLabelsForTeam(team.id);
+    expect(persisted.map(({ key, value }) => ({ key, value }))).toEqual([
+      { key: "cost-center", value: "cc-123" },
+      { key: "environment", value: "production" },
+    ]);
+  });
+
+  test("create_team keeps one value per label key", async () => {
+    const result = await executeArchestraTool(
+      toolName("create_team"),
+      {
+        name: "Deduped",
+        labels: [
+          { key: "environment", value: "staging" },
+          { key: "environment", value: "production" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).team.labels).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+  });
+
+  test("create_team rejects labels with reserved characters", async () => {
+    const result = await executeArchestraTool(
+      toolName("create_team"),
+      { name: "Bad Labels", labels: [{ key: "a:b", value: "ok" }] },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Validation error in archestra__create_team",
+    );
+  });
+
   // === get_team ===
 
   test("get_team requires an id or name", async () => {
@@ -95,6 +154,27 @@ describe("team tool execution", () => {
     );
     expect(result.isError).toBe(false);
     expect((result.structuredContent as any).team.name).toBe("Support");
+  });
+
+  test("get_team includes the team's labels", async ({ makeTeam }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Labeled",
+    });
+    await TeamLabelModel.syncTeamLabels(team.id, [
+      { key: "environment", value: "production" },
+    ]);
+    const result = await executeArchestraTool(
+      toolName("get_team"),
+      { id: team.id },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).team.labels).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+    expect((result.content[0] as any).text).toContain(
+      "Labels: environment: production",
+    );
   });
 
   test("get_team fetches by name", async ({ makeTeam }) => {
@@ -163,6 +243,29 @@ describe("team tool execution", () => {
     const teams = (filtered.structuredContent as any).teams;
     expect(teams).toHaveLength(1);
     expect(teams[0].name).toBe("Alpha");
+  });
+
+  test("list_teams includes each team's labels", async ({ makeTeam }) => {
+    const labeled = await makeTeam(organizationId, adminUserId, {
+      name: "Labeled",
+    });
+    await makeTeam(organizationId, adminUserId, { name: "Unlabeled" });
+    await TeamLabelModel.syncTeamLabels(labeled.id, [
+      { key: "cost-center", value: "cc-123" },
+    ]);
+
+    const result = await executeArchestraTool(
+      toolName("list_teams"),
+      {},
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const teams = (result.structuredContent as any).teams;
+    const byName = Object.fromEntries(
+      teams.map((team: any) => [team.name, team.labels]),
+    );
+    expect(byName.Labeled).toEqual([{ key: "cost-center", value: "cc-123" }]);
+    expect(byName.Unlabeled).toEqual([]);
   });
 
   test("list_teams only returns teams from the caller's organization", async ({
@@ -234,6 +337,62 @@ describe("team tool execution", () => {
     expect(result.isError).toBe(false);
     const persisted = await TeamModel.findById(team.id);
     expect(persisted?.description).toBeNull();
+  });
+
+  test("edit_team replaces labels when provided", async ({ makeTeam }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Relabel Me",
+    });
+    await TeamLabelModel.syncTeamLabels(team.id, [
+      { key: "environment", value: "staging" },
+      { key: "cost-center", value: "cc-old" },
+    ]);
+
+    const result = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: team.id, labels: [{ key: "environment", value: "production" }] },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).team.labels).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+
+    const persisted = await TeamLabelModel.getLabelsForTeam(team.id);
+    expect(persisted.map(({ key, value }) => ({ key, value }))).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+  });
+
+  test("edit_team clears labels with an empty array and keeps them when omitted", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Sticky Labels",
+    });
+    await TeamLabelModel.syncTeamLabels(team.id, [
+      { key: "environment", value: "production" },
+    ]);
+
+    // A rename that omits labels must not touch them.
+    const renamed = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: team.id, name: "Renamed" },
+      mockContext,
+    );
+    expect(renamed.isError).toBe(false);
+    expect((renamed.structuredContent as any).team.labels).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+
+    const cleared = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: team.id, labels: [] },
+      mockContext,
+    );
+    expect(cleared.isError).toBe(false);
+    expect((cleared.structuredContent as any).team.labels).toEqual([]);
+    expect(await TeamLabelModel.getLabelsForTeam(team.id)).toEqual([]);
   });
 
   test("edit_team returns error for nonexistent team", async () => {

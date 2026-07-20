@@ -1,3 +1,7 @@
+import {
+  type AppRecordingBundle,
+  pruneTrailingTrimEvents,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   backfilledEnhancement,
@@ -826,5 +830,157 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain("scrollbar-width: none");
     expect(html).toContain("::-webkit-scrollbar");
     expect(html).toContain("<body>app</body>");
+  });
+});
+
+describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
+  // The offline renderer drives buildPlayback frame by frame, so the prune is
+  // lossless iff buildPlayback's output — events, segments, transcript, duration
+  // and the time mapping — is byte-for-byte the same on the pruned bundle.
+  function recToBundle(rec: Recording): AppRecordingBundle {
+    return {
+      formatVersion: 1,
+      app: { id: null, name: rec.appName },
+      recording: {
+        title: rec.title,
+        startedAt: rec.startedAt,
+        durationMs: rec.durationMs,
+        events: rec.events,
+        segments: rec.segments,
+        transcript: rec.transcript,
+      },
+      edits: rec.edits,
+      enhancement: rec.enhancement,
+      meta: {
+        authorName: null,
+        createdAt: rec.startedAt,
+        platform: "archestra",
+      },
+    };
+  }
+
+  function pruned(rec: Recording): Recording {
+    const out = pruneTrailingTrimEvents(recToBundle(rec));
+    return { ...rec, events: out.recording.events };
+  }
+
+  function expectSamePlayback(rec: Recording) {
+    const before = buildPlayback(rec);
+    const after = buildPlayback(pruned(rec));
+    expect(after.events).toEqual(before.events);
+    expect(after.segments).toEqual(before.segments);
+    expect(after.transcript).toEqual(before.transcript);
+    expect(after.duration).toBe(before.duration);
+    for (const ms of [0, before.duration / 2, before.duration]) {
+      expect(after.toPlaybackMs(ms)).toBeCloseTo(before.toPlaybackMs(ms), 6);
+      expect(after.toRawMs(ms)).toBe(before.toRawMs(ms));
+    }
+  }
+
+  it("drops a full end trim's tail without changing playback", () => {
+    const rec = recording({
+      durationMs: 5_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "canvas", t: 1_000, sel: "#c", data: "keep" },
+        { kind: "canvas", t: 3_500, sel: "#c", data: "cut" },
+        { kind: "dom", t: 4_200, op: "html", sel: "#a", html: "cut2" },
+      ],
+      edits: { cuts: [{ fromMs: 2_000, toMs: 5_000 }] },
+    });
+    expect(pruned(rec).events.length).toBeLessThan(rec.events.length);
+    expectSamePlayback(rec);
+  });
+
+  it("preserves playback under an enhanced (final-version-only) replay", () => {
+    const rec = recording({
+      durationMs: 6_000,
+      segments: [
+        { version: 1, html: "<a></a>", atMs: 0 },
+        { version: 2, html: "<b></b>", atMs: 2_000 },
+      ],
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "canvas", t: 2_500, sel: "#c", data: "shown" },
+        { kind: "canvas", t: 4_500, sel: "#c", data: "cut" },
+      ],
+      edits: { cuts: [{ fromMs: 4_000, toMs: 6_000 }] },
+      enhancement: { description: "d", prompt: "build it" },
+    });
+    expect(pruned(rec).events.length).toBeLessThan(rec.events.length);
+    expectSamePlayback(rec);
+  });
+
+  it("keeps an event just past the trim end (anchor within the eps slack)", () => {
+    const rec = recording({
+      durationMs: 5_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "canvas", t: 3_000, sel: "#c", data: "cut" },
+        { kind: "canvas", t: 4_990, sel: "#c", data: "tail-anchor" },
+      ],
+      edits: { cuts: [{ fromMs: 2_000, toMs: 4_980 }] },
+    });
+    expect(pruned(rec).events.length).toBeLessThan(rec.events.length);
+    expectSamePlayback(rec);
+  });
+
+  it("leaves a mid cut alone and keeps playback identical", () => {
+    const rec = recording({
+      durationMs: 5_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "canvas", t: 1_500, sel: "#c", data: "a" },
+        { kind: "canvas", t: 4_000, sel: "#c", data: "b" },
+      ],
+      edits: { cuts: [{ fromMs: 1_000, toMs: 2_000 }] },
+    });
+    expect(pruned(rec).events.length).toBe(rec.events.length);
+    expectSamePlayback(rec);
+  });
+
+  it("merges overlapping cuts that together reach the end", () => {
+    const rec = recording({
+      durationMs: 5_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "canvas", t: 1_000, sel: "#c", data: "keep" },
+        { kind: "canvas", t: 3_500, sel: "#c", data: "cut" },
+        { kind: "canvas", t: 4_500, sel: "#c", data: "cut2" },
+      ],
+      edits: {
+        cuts: [
+          { fromMs: 3_000, toMs: 4_000 },
+          { fromMs: 3_800, toMs: 5_000 },
+        ],
+      },
+    });
+    expect(pruned(rec).events.length).toBeLessThan(rec.events.length);
+    expectSamePlayback(rec);
+  });
+
+  it("keeps a trim-straddling mcp so idle-gap compression is unchanged", () => {
+    // The mcp fires at t=5000 (inside the trim) but STARTED at t-durationMs=1000
+    // (before it), planting a compression anchor in the kept region. Naively
+    // dropping the whole event would merge a >900ms idle gap and shorten the
+    // video; the anchor must survive.
+    const rec = recording({
+      durationMs: 10_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "mcp", t: 5_000, method: "tools/call", durationMs: 4_000 },
+        { kind: "canvas", t: 3_000, sel: "#c", data: "kept" },
+        { kind: "canvas", t: 9_000, sel: "#c", data: "cut" },
+      ],
+      edits: { cuts: [{ fromMs: 4_000, toMs: 10_000 }] },
+    });
+    // The tail canvas is dropped, but the straddling mcp is retained.
+    expect(pruned(rec).events.length).toBe(rec.events.length - 1);
+    expect(
+      pruned(rec).events.some(
+        (event) => event.kind === "mcp" && event.t === 5_000,
+      ),
+    ).toBe(true);
+    expectSamePlayback(rec);
   });
 });

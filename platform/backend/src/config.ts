@@ -22,7 +22,7 @@ import {
 } from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
-type ProcessType = "web" | "worker" | "all";
+type ProcessType = "web" | "worker" | "renderer" | "all";
 type FileStorageProviderType = "db" | "filesystem" | "s3";
 
 /**
@@ -252,6 +252,10 @@ export function resolveRenderBaseUrl(params: {
 }
 
 const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
+  // Undocumented on purpose, like the rest of the Apps Hackathon recorder (a
+  // temporary, hackathon-only feature — see the recorder flag below). Do not add
+  // this to .env.example or the deployment docs. It rarely needs setting anyway:
+  // the fallback already targets a trusted configured origin.
   explicit: process.env.ARCHESTRA_HACKATHON_RECORDER_RENDER_BASE_URL,
   configuredOrigins: getConfiguredOrigins(),
 });
@@ -1013,7 +1017,13 @@ export function parseConnectorSyncMaxDuration(
 /** @public — exported for testability */
 export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();
-  if (normalized === "web" || normalized === "worker") return normalized;
+  if (
+    normalized === "web" ||
+    normalized === "worker" ||
+    normalized === "renderer"
+  ) {
+    return normalized;
+  }
   return "all";
 }
 
@@ -1703,6 +1713,9 @@ const config = {
      * Chromium (see app-recording-render-runtime). Set this only to pin a
      * specific browser — it must be a FULL Chromium, since Playwright's
      * headless shell carries no WebCodecs encoder.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
      */
     chromiumPath:
       process.env.ARCHESTRA_HACKATHON_RECORDER_CHROMIUM_PATH?.trim() ||
@@ -1722,6 +1735,20 @@ const config = {
     renderFrameAncestors: addLoopbackEquivalents([
       hackathonRecorderRenderBaseUrl,
     ]),
+    /**
+     * The in-cluster URL of the dedicated render service, when video rendering
+     * runs as its own single-replica deployment (see startRenderer). Set it and
+     * the web tier stops rendering in-process and proxies render/status/
+     * download/cancel there instead — so a multi-replica web tier no longer
+     * scatters a render's follow-up requests across pods that never held its
+     * (in-memory) job. Unset — the OSS single container, local dev — and the web
+     * process renders in-process exactly as before.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    rendererUrl:
+      process.env.ARCHESTRA_APP_RECORDING_RENDERER_URL?.trim() || undefined,
   },
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
@@ -2042,8 +2069,15 @@ const config = {
   },
 };
 
-export const shouldRunWebServer = config.processType !== "worker";
-export const shouldRunWorker = config.processType !== "web";
+// "all" runs the web server and the worker in one process; "web"/"worker" run
+// exactly one. "renderer" is neither — it runs only the isolated app-recording
+// video render service (see startRenderer), so a multi-replica web tier can
+// offload rendering to a single stable pod that owns every in-memory job.
+export const shouldRunWebServer =
+  config.processType === "web" || config.processType === "all";
+export const shouldRunWorker =
+  config.processType === "worker" || config.processType === "all";
+export const shouldRunRenderer = config.processType === "renderer";
 
 export default config;
 

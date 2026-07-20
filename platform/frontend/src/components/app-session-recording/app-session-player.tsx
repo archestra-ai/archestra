@@ -6,7 +6,9 @@ import {
   APP_RECORDING_RENDER_REGION_ATTR,
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolShortName,
+  normalizeCuts,
   parseFullToolName,
+  TRIM_EDGE_EPS_MS,
   validateRecordingBundle,
 } from "@archestra/shared";
 import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
@@ -91,7 +93,6 @@ type PlaybackRecording = AppRecordingBundle["recording"] & {
   edits?: AppRecordingBundle["edits"];
   enhancement?: AppRecordingBundle["enhancement"];
 };
-type RecordingCut = NonNullable<AppRecordingBundle["edits"]>["cuts"][number];
 type RecordingChatEdits = NonNullable<
   NonNullable<AppRecordingBundle["edits"]>["chat"]
 >;
@@ -2215,8 +2216,6 @@ type TimelineTourGesture = "cut" | "restore" | "resize";
 
 /** Smallest selectable/keepable stretch on the timeline, in timeline ms. */
 const MIN_CUT_TIMELINE_MS = 250;
-/** A cut touching an end of the session (within this slack) is a trim. */
-const TRIM_EDGE_EPS_MS = 25;
 /** Pointer travel at or past this many px is always a drag-selection. */
 const CLICK_DRAG_PX = 5;
 /** A press released within this many ms AND under CLICK_DRAG_PX of travel is
@@ -4469,23 +4468,6 @@ export function presentedTranscript(
  */
 export function partEditId(messageId: string, partIndex: number): string {
   return `${messageId}#${partIndex}`;
-}
-
-/** Drop degenerate cuts, sort, and merge overlaps into disjoint ranges. */
-function normalizeCuts(cuts: RecordingCut[]): RecordingCut[] {
-  const sorted = cuts
-    .filter((cut) => cut.toMs > cut.fromMs)
-    .sort((a, b) => a.fromMs - b.fromMs);
-  const merged: RecordingCut[] = [];
-  for (const cut of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && cut.fromMs <= last.toMs) {
-      last.toMs = Math.max(last.toMs, cut.toMs);
-    } else {
-      merged.push({ ...cut });
-    }
-  }
-  return merged;
 }
 
 /**

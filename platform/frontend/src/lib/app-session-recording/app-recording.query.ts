@@ -1,6 +1,7 @@
 import {
   APP_RECORDING_RENDER_FPS,
   archestraApiSdk,
+  pruneTrailingTrimEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
 import {
@@ -186,7 +187,13 @@ export function useRenderAppRecordingVideo() {
 
       try {
         const started = await renderAppRecordingVideo({
-          body: { bundle: validation.bundle, title: params.title },
+          // Ship the trimmed recording without its cut-away tail: a size
+          // optimization that renders byte-for-byte the same (see
+          // pruneTrailingTrimEvents). Nothing else about the bundle changes.
+          body: {
+            bundle: pruneTrailingTrimEvents(validation.bundle),
+            title: params.title,
+          },
         });
         if (started.error || !started.data?.jobId) {
           toast.dismiss(toastId);
@@ -579,8 +586,20 @@ function videoFileName(title: string): string {
  * of rendering, so a finer number would be false precision either way.
  */
 function renderEstimate(bundle: AppRecordingBundle): string {
+  // Estimate against the FINAL CUT, not the raw recording: cuts shorten the
+  // video, so a session trimmed 35s → 14s renders ~14s of frames. Only the part
+  // of a cut overlapping the recording counts — a cut addressing the
+  // pre-recording chat head (negative time) removes no rendered frames. Coarse
+  // on purpose (the real length comes from the replay at render time); this only
+  // has to land in the right bucket, so overlapping cuts aren't merged.
+  const { durationMs } = bundle.recording;
+  const cutMs = (bundle.edits?.cuts ?? []).reduce((total, cut) => {
+    const from = Math.max(0, cut.fromMs);
+    const to = Math.min(durationMs, cut.toMs);
+    return total + Math.max(0, to - from);
+  }, 0);
   const frames =
-    (bundle.recording.durationMs / 1000) * APP_RECORDING_RENDER_FPS;
+    (Math.max(0, durationMs - cutMs) / 1000) * APP_RECORDING_RENDER_FPS;
   const seconds = RENDER_STARTUP_SECONDS + frames * RENDER_SECONDS_PER_FRAME;
   if (seconds < 30) return "half a minute";
   if (seconds < 75) return "a minute";

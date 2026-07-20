@@ -53,7 +53,11 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
-import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
+import config, {
+  shouldRunRenderer,
+  shouldRunWebServer,
+  shouldRunWorker,
+} from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -72,6 +76,7 @@ import { classifyErrorForTracking } from "@/observability/error-tracking-policy"
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
+import renderServiceRoutes from "@/services/apps/app-recording-render-service";
 import {
   APP_BASE_CSS_PATH,
   APP_SDK_PATH,
@@ -540,7 +545,13 @@ export const createFastifyInstance = () =>
       // size. The frontend chat-error mapper picks up `error.message`, so a
       // useful text here flows straight into the UI.
       if (isBodyTooLargeError(error)) {
-        const limit = config.api.bodyLimit;
+        // Report the limit that actually applied. A route can raise its own
+        // above the global default (the app-recording render route accepts
+        // large recording bundles), so naming the global here would misstate
+        // the ceiling the request hit.
+        const routeLimit = request.routeOptions?.bodyLimit;
+        const limit =
+          typeof routeLimit === "number" ? routeLimit : config.api.bodyLimit;
         const contentLength = parseContentLength(request);
         const message = formatBodyTooLargeMessage({ limit, contentLength });
 
@@ -1676,6 +1687,68 @@ const startWorker = async () => {
   }
 };
 
+/**
+ * Starts the process as the dedicated app-recording video render service.
+ *
+ * Renders drive a whole browser and hold their jobs in memory, so running them
+ * in the multi-replica web tier means a render's follow-up poll and download
+ * scatter across pods that never held the job. This process is the one place a
+ * job lives: a single replica the web tier proxies to (see the render client),
+ * with no database, worker or session of its own — it renders, and enforces
+ * per-render ownership from the user id the web tier forwards.
+ */
+const startRenderer = async () => {
+  logger.info(
+    "Starting in renderer-only mode (ARCHESTRA_PROCESS_TYPE=renderer)",
+  );
+
+  try {
+    const renderServer = createFastifyInstance();
+
+    renderServer.get("/health", async () => ({ status: "ok" }));
+    // Ready the instant it can take work: the render browser is fetched in the
+    // background (warmRenderRuntime) and installed on first use if that has not
+    // finished, so readiness must not block on it.
+    renderServer.get("/ready", async () => ({ status: "ok" }));
+
+    await renderServer.register(renderServiceRoutes);
+
+    await registerStandaloneMetricsEndpoint({
+      fastify: renderServer,
+      enableDefaultMetrics: true,
+    });
+
+    // Fetch (or install) Chromium now, so the first export does not pay for it.
+    warmRenderRuntime();
+
+    await renderServer.listen({ port, host });
+    logger.info(`Render service started on port ${port}`);
+
+    // A container runtime can deliver SIGTERM then SIGINT in quick succession;
+    // guard so the second signal does not start a concurrent renderServer.close()
+    // and race the first handler's process.exit.
+    let shuttingDown = false;
+    const gracefulShutdown = async (signal: string) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      logger.info(`Renderer received ${signal}, shutting down...`);
+      try {
+        await renderServer.close();
+        process.exit(0);
+      } catch (error) {
+        logger.error({ error }, "Renderer shutdown error");
+        process.exit(1);
+      }
+    };
+
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  } catch (err) {
+    logger.error(err, "Renderer failed to start");
+    process.exit(1);
+  }
+};
+
 // Dagger SDK v0.20.8 has a bug in bin.js:198-201 where it throws inside a
 // .catch() callback, creating an unhandled rejection that is never awaited.
 // This handler logs those leaks and keeps the server alive.
@@ -1705,7 +1778,9 @@ process.on("unhandledRejection", (reason) => {
  * This allows other scripts to import helper functions without starting the server
  */
 if (isMainModule) {
-  if (shouldRunWorker && !shouldRunWebServer) {
+  if (shouldRunRenderer) {
+    startRenderer();
+  } else if (shouldRunWorker && !shouldRunWebServer) {
     startWorker();
   } else if (shouldRunWebServer) {
     startWebServer();

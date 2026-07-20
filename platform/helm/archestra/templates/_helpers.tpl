@@ -371,6 +371,28 @@ app.kubernetes.io/part-of: archestra
 {{- end }}
 
 {{/*
+Renderer selector labels (app-recording video render service)
+*/}}
+{{- define "archestra-platform.rendererSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-renderer
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: renderer
+{{- end }}
+
+{{/*
+Renderer labels
+*/}}
+{{- define "archestra-platform.rendererLabels" -}}
+helm.sh/chart: {{ include "archestra-platform.chart" . }}
+{{ include "archestra-platform.rendererSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
+{{- end }}
+
+{{/*
 Database migration Job labels.
 
 The name label is suffixed with `-migrate` so the platform Service selector

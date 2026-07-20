@@ -1627,11 +1627,17 @@ describe("parseProcessType", () => {
     expect(parseProcessType("worker")).toBe("worker");
   });
 
+  test("should return 'renderer' for 'renderer'", () => {
+    expect(parseProcessType("renderer")).toBe("renderer");
+  });
+
   test("should be case insensitive", () => {
     expect(parseProcessType("WEB")).toBe("web");
     expect(parseProcessType("WORKER")).toBe("worker");
+    expect(parseProcessType("RENDERER")).toBe("renderer");
     expect(parseProcessType("Web")).toBe("web");
     expect(parseProcessType("Worker")).toBe("worker");
+    expect(parseProcessType("Renderer")).toBe("renderer");
   });
 
   test("should return 'all' for unknown values", () => {
@@ -1641,25 +1647,55 @@ describe("parseProcessType", () => {
   });
 
   test.each([
-    { input: undefined, processType: "all", webServer: true, worker: true },
-    { input: "", processType: "all", webServer: true, worker: true },
-    { input: "all", processType: "all", webServer: true, worker: true },
-    { input: "web", processType: "web", webServer: true, worker: false },
-    { input: "WEB", processType: "web", webServer: true, worker: false },
-    { input: "worker", processType: "worker", webServer: false, worker: true },
-    { input: "WORKER", processType: "worker", webServer: false, worker: true },
-    { input: "unknown", processType: "all", webServer: true, worker: true },
-  ])("input=$input → shouldRunWebServer=$webServer, shouldRunWorker=$worker", ({
+    { input: undefined, type: "all", web: true, worker: true, renderer: false },
+    { input: "", type: "all", web: true, worker: true, renderer: false },
+    { input: "all", type: "all", web: true, worker: true, renderer: false },
+    { input: "web", type: "web", web: true, worker: false, renderer: false },
+    { input: "WEB", type: "web", web: true, worker: false, renderer: false },
+    {
+      input: "worker",
+      type: "worker",
+      web: false,
+      worker: true,
+      renderer: false,
+    },
+    {
+      input: "WORKER",
+      type: "worker",
+      web: false,
+      worker: true,
+      renderer: false,
+    },
+    {
+      input: "renderer",
+      type: "renderer",
+      web: false,
+      worker: false,
+      renderer: true,
+    },
+    {
+      input: "RENDERER",
+      type: "renderer",
+      web: false,
+      worker: false,
+      renderer: true,
+    },
+    { input: "unknown", type: "all", web: true, worker: true, renderer: false },
+  ])("input=$input → web=$web worker=$worker renderer=$renderer", ({
     input,
-    processType,
-    webServer,
+    type,
+    web,
     worker,
+    renderer,
   }) => {
     const result = parseProcessType(input);
-    expect(result).toBe(processType);
-    // These match the derivation: shouldRunWebServer = processType !== "worker", shouldRunWorker = processType !== "web"
-    expect(result !== "worker").toBe(webServer);
-    expect(result !== "web").toBe(worker);
+    expect(result).toBe(type);
+    // Mirror the derivations in config.ts: only "web"/"all" run the web
+    // server, only "worker"/"all" run the worker, and "renderer" is neither —
+    // it runs only the isolated app-recording render service.
+    expect(result === "web" || result === "all").toBe(web);
+    expect(result === "worker" || result === "all").toBe(worker);
+    expect(result === "renderer").toBe(renderer);
   });
 });
 

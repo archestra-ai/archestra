@@ -9,12 +9,8 @@ import { z } from "zod";
 import config from "@/config";
 import { AgentModel, ConversationModel, OrganizationModel } from "@/models";
 import { draftRecordingEnhancement } from "@/services/apps/app-recording-enhancement";
-import {
-  cancelRenderJob,
-  renderJobStatus,
-  startRenderJob,
-  takeRenderedVideo,
-} from "@/services/apps/app-recording-render-jobs";
+import { renderJobClient } from "@/services/apps/app-recording-render-client";
+import { RENDER_BUNDLE_BODY_LIMIT_BYTES } from "@/services/apps/app-recording-render-protocol";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
@@ -93,6 +89,9 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/app-recordings/render",
     {
+      // A recording bundle carries the whole session (frames as data URIs), so
+      // it runs well past the general API body limit; this route accepts it.
+      bodyLimit: RENDER_BUNDLE_BODY_LIMIT_BYTES,
       schema: {
         operationId: RouteId.RenderAppRecordingVideo,
         description:
@@ -120,7 +119,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // gap compression both move it. It is checked in the renderer, against
       // the length the replay itself reports. Measuring the raw recording here
       // instead would refuse a trimmed-to-14s session for being 35s long.
-      const jobId = startRenderJob({
+      const jobId = await renderJobClient.start({
         bundle: validation.bundle,
         userId: user.id,
         title: body.title,
@@ -148,7 +147,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params, user }, reply) => {
       return reply.send(
-        renderJobStatus({ jobId: params.jobId, userId: user.id }),
+        await renderJobClient.status({ jobId: params.jobId, userId: user.id }),
       );
     },
   );
@@ -165,7 +164,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, user }, reply) => {
-      const { video, fileName } = takeRenderedVideo({
+      const { video, fileName } = await renderJobClient.takeVideo({
         jobId: params.jobId,
         userId: user.id,
       });
@@ -198,7 +197,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, user }, reply) => {
-      cancelRenderJob({ jobId: params.jobId, userId: user.id });
+      await renderJobClient.cancel({ jobId: params.jobId, userId: user.id });
       return reply.send({ cancelled: true });
     },
   );

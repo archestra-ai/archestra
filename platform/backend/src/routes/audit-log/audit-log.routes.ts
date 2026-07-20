@@ -7,6 +7,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AuditLogModel } from "@/models";
 import {
+  ApiError,
   AuditActorTypeSchema,
   AuditEventNameSchema,
   AuditOutcomeSchema,
@@ -101,6 +102,31 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send(result);
+    },
+  );
+
+  fastify.get(
+    "/api/audit-logs/:id",
+    {
+      schema: {
+        operationId: RouteId.GetAuditLog,
+        description:
+          "Get a single audit log event by ID. Requires auditLog:read permission (Admin only by default).",
+        tags: ["Audit Log"],
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        response: constructResponseSchema(SelectAuditLogSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const auditLog = await AuditLogModel.findById(id, organizationId);
+
+      if (!auditLog) {
+        throw new ApiError(404, "Audit log event not found");
+      }
+
+      return reply.send(auditLog);
     },
   );
 };

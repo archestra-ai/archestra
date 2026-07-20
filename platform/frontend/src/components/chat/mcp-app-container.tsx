@@ -31,6 +31,7 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/app.query";
 import {
@@ -468,6 +469,20 @@ export function McpAppEntryContent({
           <span className="min-w-0 truncate px-1 text-sm font-medium">
             {headerName}
           </span>
+          {isOwnedInPanel && !ownedApp.enabled ? (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              title="Disabled — only you can see this app. Click to enable."
+            >
+              <Badge
+                variant="outline"
+                className="cursor-pointer transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                Disabled
+              </Badge>
+            </button>
+          ) : null}
         </>
       }
       right={

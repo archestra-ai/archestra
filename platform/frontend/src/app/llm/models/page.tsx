@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
@@ -74,6 +75,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ModelWithApiKeys,
   useModelsWithApiKeys,
@@ -108,9 +110,16 @@ export default function ModelsPage() {
   const [modelTypeFilter, setModelTypeFilter] =
     useState<ModelsPageModelTypeFilter>("all");
   const [freeOnly, setFreeOnly] = useState(false);
-  const [editingModel, setEditingModel] = useState<ModelWithApiKeys | null>(
-    null,
+  const editId = useSearchParams().get("edit");
+  const modelFromUrl = useMemo(
+    () => models.find((model) => model.id === editId) ?? null,
+    [models, editId],
   );
+  const {
+    entity: editingModel,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam({ paramName: "edit", entityFromUrl: modelFromUrl });
 
   const canFilterFreeModels = useMemo(
     () =>
@@ -343,14 +352,14 @@ export default function ModelsPage() {
               {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
-                onClick: () => setEditingModel(row.original),
+                onClick: () => openEditDialog(row.original),
               },
             ]}
           />
         ),
       },
     ],
-    [updateModel],
+    [updateModel, openEditDialog],
   );
 
   if (isModelsLoadError) {
@@ -515,7 +524,7 @@ export default function ModelsPage() {
           model={editingModel}
           open={!!editingModel}
           onOpenChange={(open) => {
-            if (!open) setEditingModel(null);
+            if (!open) closeEditDialog();
           }}
         />
       )}

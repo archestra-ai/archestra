@@ -1171,7 +1171,12 @@ const registry = defineArchestraTools([
         await assertCallerMayAuthorApp({
           userId,
           organizationId,
-          app: { id: app.id, scope: app.scope, authorId: app.authorId },
+          app: {
+            id: app.id,
+            scope: app.scope,
+            authorId: app.authorId,
+            enabled: app.enabled,
+          },
           resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         await assertCallerMayModifyApp({
@@ -1198,6 +1203,12 @@ const registry = defineArchestraTools([
       // exactly as the REST re-scope path does — otherwise the registry/gateway
       // would expose the app under its old scope.
       await syncAppBacking(updated);
+
+      // publish_app is the agent-facing "make this available" verb, so it flips
+      // the app enabled as well as promoting scope. Without this a scaffolded
+      // disabled app would stay author-only — invisible to the very audience
+      // just granted, and with its launch tool still withheld from the gateway.
+      await AppModel.setEnabled(args.appId, true);
 
       const runUrl = appRunUrl(updated.id);
       const audience =
@@ -1543,7 +1554,12 @@ async function loadApp(params: {
       await assertCallerMayAuthorApp({
         userId: params.userId,
         organizationId: params.organizationId,
-        app: { id: app.id, scope: app.scope, authorId: app.authorId },
+        app: {
+          id: app.id,
+          scope: app.scope,
+          authorId: app.authorId,
+          enabled: app.enabled,
+        },
         resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
     } catch (error) {

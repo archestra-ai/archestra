@@ -7,6 +7,7 @@ import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
   listGithubAppConfigs,
+  getGithubAppConfig,
   createGithubAppConfig,
   updateGithubAppConfig,
   deleteGithubAppConfig,
@@ -36,6 +37,22 @@ export function useGithubAppConfigs() {
       return response.data ?? [];
     },
     enabled: isAuthenticated && !!canRead,
+  });
+}
+
+export function useGithubAppConfig(id: string | undefined) {
+  return useQuery({
+    queryKey: [...githubAppConfigKeys.all, "detail", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const response = await getGithubAppConfig({ path: { id } });
+      throwOnApiError(response.error, {
+        allowNotFound: true,
+        toastOnError: false,
+      });
+      return response.data ?? null;
+    },
+    enabled: !!id,
   });
 }
 
@@ -82,7 +99,7 @@ export function useUpdateGithubAppConfig() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      queryClient.invalidateQueries({ queryKey: githubAppConfigKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: githubAppConfigKeys.all });
       toast.success("GitHub App configuration updated");
     },
   });
@@ -101,7 +118,7 @@ export function useDeleteGithubAppConfig() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      queryClient.invalidateQueries({ queryKey: githubAppConfigKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: githubAppConfigKeys.all });
       toast.success("GitHub App configuration deleted");
     },
   });

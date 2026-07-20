@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
+  useTeam,
   useTeamLabelKeys,
   useTeamLabelValues,
   useTeams,
@@ -141,6 +142,9 @@ describe("TeamsList", () => {
           data: !permissions.team?.includes("update"),
         }) as ReturnType<typeof useHasPermissions>,
     );
+    vi.mocked(useTeam).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useTeam>);
     vi.mocked(useTeamLabelKeys).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useTeamLabelKeys>);

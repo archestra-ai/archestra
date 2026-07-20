@@ -15,7 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -67,9 +67,11 @@ import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useCreateLimit,
   useDeleteLimit,
+  useLimit,
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
@@ -201,7 +203,7 @@ export default function LimitsPage() {
   const { data: agents = [] } = useProfiles({
     filters: { agentTypes: ["agent"] },
   });
-  const { data: llmProxies = [] } = useProfiles({
+  const { data: llmProxies = [], isPending: llmProxiesPending } = useProfiles({
     filters: { agentTypes: ["llm_proxy"] },
   });
   const { data: environmentsData } = useEnvironments();
@@ -215,11 +217,21 @@ export default function LimitsPage() {
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
   const modelFilter = searchParams.get("model") || "all";
-  const [editingLimit, setEditingLimit] = useState<LimitData | null>(null);
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [formState, setFormState] =
     useState<LimitFormState>(DEFAULT_FORM_STATE);
+
+  const editId = searchParams.get("edit");
+  const { data: limitFromUrl } = useLimit(editId ?? undefined);
+  const {
+    entity: editingLimit,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<LimitData>({
+    paramName: "edit",
+    entityFromUrl: limitFromUrl ?? null,
+  });
 
   const llmLimits = useMemo(
     () => limits.filter((limit) => limit.limitType === "token_cost"),
@@ -239,10 +251,10 @@ export default function LimitsPage() {
   );
 
   const handleCreateOpen = useCallback(() => {
-    setEditingLimit(null);
+    closeEditDialog();
     setFormState(DEFAULT_FORM_STATE);
-    setIsDialogOpen(true);
-  }, []);
+    setIsCreateDialogOpen(true);
+  }, [closeEditDialog]);
 
   useEffect(() => {
     setActionButton(
@@ -258,9 +270,8 @@ export default function LimitsPage() {
     return () => setActionButton(null);
   }, [handleCreateOpen, setActionButton]);
 
-  const handleEditOpen = useCallback(
-    (limit: LimitData) => {
-      setEditingLimit(limit);
+  const buildEditFormState = useCallback(
+    (limit: LimitData): LimitFormState => {
       const models = getLimitModels(limit);
       const isAllModels =
         models.length === 0 && limit.limitType === "token_cost";
@@ -275,7 +286,7 @@ export default function LimitsPage() {
         }
       }
 
-      setFormState({
+      return {
         entityType,
         entityId: limit.entityType === "organization" ? "" : limit.entityId,
         limitValue: String(limit.limitValue),
@@ -283,11 +294,33 @@ export default function LimitsPage() {
           limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
         models: isAllModels ? [] : models,
         isAllModels,
-      });
-      setIsDialogOpen(true);
+      };
     },
     [llmProxies],
   );
+
+  // Seed the edit form exactly once per opened limit — row clicks and deep
+  // links share this path. Keyed on the opened id rather than
+  // buildEditFormState, whose llmProxies dep changes on refetch and would
+  // otherwise wipe in-progress edits.
+  const seededEditIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editingLimit) {
+      seededEditIdRef.current = null;
+      return;
+    }
+    if (seededEditIdRef.current === editingLimit.id) {
+      return;
+    }
+    // Classifying an agent-typed limit as agent vs llm_proxy needs llmProxies.
+    // Seeding (and locking the ref) before they load would misclassify an
+    // llm_proxy limit as "agent" and never reseed once they arrive.
+    if (editingLimit.entityType === "agent" && llmProxiesPending) {
+      return;
+    }
+    seededEditIdRef.current = editingLimit.id;
+    setFormState(buildEditFormState(editingLimit));
+  }, [editingLimit, buildEditFormState, llmProxiesPending]);
 
   const getEntityLabel = useCallback(
     (limit: LimitData) => {
@@ -584,7 +617,7 @@ export default function LimitsPage() {
               {
                 icon: <Edit className="h-4 w-4" />,
                 label: "Edit limit",
-                onClick: () => handleEditOpen(row.original),
+                onClick: () => openEditDialog(row.original),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -597,7 +630,7 @@ export default function LimitsPage() {
         ),
       },
     ],
-    [getEntityIcon, getEntityLabel, getUsageStatus, handleEditOpen],
+    [getEntityIcon, getEntityLabel, getUsageStatus, openEditDialog],
   );
 
   const hasActiveFilters =
@@ -610,6 +643,14 @@ export default function LimitsPage() {
     DocsPage.PlatformCostsAndLimits,
     "usage-limits",
   );
+
+  function closeDialog() {
+    if (editingLimit) {
+      closeEditDialog();
+    } else {
+      setIsCreateDialogOpen(false);
+    }
+  }
 
   async function handleSubmit() {
     const entityType =
@@ -632,15 +673,14 @@ export default function LimitsPage() {
         ...body,
       });
       if (result) {
-        setIsDialogOpen(false);
-        setEditingLimit(null);
+        closeEditDialog();
       }
       return;
     }
 
     const result = await createLimit.mutateAsync(body);
     if (result) {
-      setIsDialogOpen(false);
+      setIsCreateDialogOpen(false);
     }
   }
 
@@ -762,8 +802,8 @@ export default function LimitsPage() {
       </LoadingWrapper>
 
       <FormDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
+        open={isCreateDialogOpen || !!editingLimit}
+        onOpenChange={(open) => !open && closeDialog()}
         title={editingLimit ? "Edit limit" : "Create limit"}
         description="Configure scoped LLM token-cost limits."
         size="medium"
@@ -1023,11 +1063,7 @@ export default function LimitsPage() {
             </div>
           </DialogBody>
           <DialogStickyFooter className="mt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsDialogOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={closeDialog}>
               Cancel
             </Button>
             <Button

@@ -1,5 +1,5 @@
 {
-  "id": "0c3fdcc8-79c3-4d19-bb60-26605be90713",
+  "id": "951c6fba-f764-4241-9d05-a01ea6be4ec2",
   "prevId": "d2b20edd-1700-4742-8492-86a50e85637e",
   "version": "7",
   "dialect": "postgresql",
@@ -2705,6 +2705,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -5089,46 +5096,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.encryption_key_canaries": {
-      "name": "encryption_key_canaries",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "encrypted_canary": {
-          "name": "encrypted_canary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

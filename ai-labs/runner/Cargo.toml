@@ -17,14 +17,14 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "proce
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
+toml = "1.1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream", "cookies"] }
 url = "2"
 percent-encoding = "2"
 jsonschema = "0.29"
 rmcp = { version = "1.7", features = ["server", "macros", "transport-streamable-http-server"] }
 axum = "0.8"
-nix = { version = "0.30", features = ["process", "signal"] }
+nix = { version = "0.31", features = ["process", "signal"] }
 indicatif = "0.18"
 tempfile = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }

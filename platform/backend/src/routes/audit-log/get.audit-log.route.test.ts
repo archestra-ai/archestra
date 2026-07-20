@@ -86,7 +86,7 @@ describe("GET /api/audit-logs", () => {
       }
     });
 
-    const { default: auditLogRoutes } = await import("./audit-log");
+    const { default: auditLogRoutes } = await import("./audit-log.routes");
     await app.register(auditLogRoutes);
   });
 

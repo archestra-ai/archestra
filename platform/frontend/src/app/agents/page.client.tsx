@@ -45,9 +45,9 @@ import {
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { AgentActions } from "./agent-actions";
 import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
@@ -197,8 +197,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     name: string;
     agentType: AgentType;
   } | null>(null);
-  const editDialog = useAgentDialogUrlParam("edit");
-  const viewDialog = useAgentDialogUrlParam("view");
+  const editId = searchParams.get("edit");
+  const { data: editAgentFromUrl } = useProfile(editId ?? undefined);
+  const editDialog = useDialogUrlParam<AgentData>({
+    paramName: "edit",
+    entityFromUrl: editAgentFromUrl ?? null,
+  });
+  const viewId = searchParams.get("view");
+  const { data: viewAgentFromUrl } = useProfile(viewId ?? undefined);
+  const viewDialog = useDialogUrlParam<AgentData>({
+    paramName: "view",
+    entityFromUrl: viewAgentFromUrl ?? null,
+  });
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
   const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
@@ -516,16 +526,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             )}
 
             <AgentDialog
-              open={!!editDialog.agent}
+              open={!!editDialog.entity}
               onOpenChange={(open) => !open && editDialog.close()}
-              agent={editDialog.agent}
+              agent={editDialog.entity}
               agentType="agent"
             />
 
             <AgentDialog
-              open={!!viewDialog.agent}
+              open={!!viewDialog.entity}
               onOpenChange={(open) => !open && viewDialog.close()}
-              agent={viewDialog.agent}
+              agent={viewDialog.entity}
               agentType="agent"
               readOnly
             />

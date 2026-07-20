@@ -30,11 +30,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
 import {
   useCreateOptimizationRule,
   useDeleteOptimizationRule,
+  useOptimizationRule,
   useOptimizationRules,
   useUpdateOptimizationRule,
 } from "@/lib/optimization-rule.query";
@@ -51,6 +53,17 @@ const DEFAULT_RULE = {
 } satisfies Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">;
 
 type RuleDraft = Omit<OptimizationRule, "id" | "createdAt" | "updatedAt">;
+
+function toDraft(rule: OptimizationRule): RuleDraft {
+  return {
+    entityType: rule.entityType,
+    entityId: rule.entityId,
+    conditions: rule.conditions,
+    provider: rule.provider,
+    targetModel: rule.targetModel,
+    enabled: rule.enabled,
+  };
+}
 
 function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
   const logoNames = {
@@ -98,11 +111,27 @@ export default function OptimizationRulesPage() {
   const targetModelFilter = searchParams.get("targetModel") || "all";
 
   const [draft, setDraft] = useState<RuleDraft>(DEFAULT_RULE);
-  const [editingRule, setEditingRule] = useState<OptimizationRule | null>(null);
   const [ruleToDelete, setRuleToDelete] = useState<OptimizationRule | null>(
     null,
   );
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+
+  const editId = searchParams.get("edit");
+  const { data: ruleFromUrl } = useOptimizationRule(editId ?? undefined);
+  const {
+    entity: editingRule,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam({
+    paramName: "edit",
+    entityFromUrl: ruleFromUrl ?? null,
+  });
+
+  useEffect(() => {
+    if (editingRule) {
+      setDraft(toDraft(editingRule));
+    }
+  }, [editingRule]);
 
   const tokenPrices = useMemo(
     () =>
@@ -128,10 +157,10 @@ export default function OptimizationRulesPage() {
   );
 
   const handleCreateOpen = useCallback(() => {
-    setEditingRule(null);
+    closeEditDialog();
     setDraft(DEFAULT_RULE);
-    setIsDialogOpen(true);
-  }, []);
+    setIsCreateDialogOpen(true);
+  }, [closeEditDialog]);
 
   useEffect(() => {
     setActionButton(
@@ -224,18 +253,7 @@ export default function OptimizationRulesPage() {
                 icon: <Edit className="h-4 w-4" />,
                 label: "Edit rule",
                 permissions: { optimizationRule: ["update"] },
-                onClick: () => {
-                  setEditingRule(row.original);
-                  setDraft({
-                    entityType: row.original.entityType,
-                    entityId: row.original.entityId,
-                    conditions: row.original.conditions,
-                    provider: row.original.provider,
-                    targetModel: row.original.targetModel,
-                    enabled: row.original.enabled,
-                  });
-                  setIsDialogOpen(true);
-                },
+                onClick: () => openEditDialog(row.original),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -249,8 +267,16 @@ export default function OptimizationRulesPage() {
         ),
       },
     ],
-    [teams, updateRule],
+    [teams, updateRule, openEditDialog],
   );
+
+  function closeDialog() {
+    if (editingRule) {
+      closeEditDialog();
+    } else {
+      setIsCreateDialogOpen(false);
+    }
+  }
 
   async function handleSubmit() {
     if (draft.entityType === "organization" && !organization?.id) {
@@ -269,8 +295,7 @@ export default function OptimizationRulesPage() {
         entityId,
       });
       if (result) {
-        setIsDialogOpen(false);
-        setEditingRule(null);
+        closeEditDialog();
       }
       return;
     }
@@ -280,7 +305,7 @@ export default function OptimizationRulesPage() {
       entityId,
     });
     if (result) {
-      setIsDialogOpen(false);
+      setIsCreateDialogOpen(false);
     }
   }
 
@@ -386,8 +411,8 @@ export default function OptimizationRulesPage() {
       </LoadingWrapper>
 
       <FormDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
+        open={isCreateDialogOpen || !!editingRule}
+        onOpenChange={(open) => !open && closeDialog()}
         title={
           editingRule ? "Edit optimization rule" : "Create optimization rule"
         }
@@ -413,11 +438,7 @@ export default function OptimizationRulesPage() {
             />
           </DialogBody>
           <DialogStickyFooter className="mt-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsDialogOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={closeDialog}>
               Cancel
             </Button>
             <Button

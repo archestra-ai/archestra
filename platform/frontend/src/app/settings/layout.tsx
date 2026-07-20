@@ -54,6 +54,10 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "MCP",
     description: "Configure how MCP servers are added and managed.",
   },
+  "/settings/skills": {
+    title: "Skills",
+    description: "Configure how skills are discovered and added.",
+  },
   "/settings/organization": {
     title: "Organization",
     description:

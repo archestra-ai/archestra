@@ -1,6 +1,6 @@
 {
-  "id": "99aa57d2-022d-48e7-bc42-6d87c208b5b5",
-  "prevId": "e2e28efe-04d0-455c-bf74-47848331c66e",
+  "id": "d2b20edd-1700-4742-8492-86a50e85637e",
+  "prevId": "bac623f2-3997-4abe-b00a-f60e2640a0e6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -6750,6 +6750,12 @@
           "notNull": true,
           "default": false
         },
+        "deployment_name": {
+          "name": "deployment_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "dynamic_connection_mcp_server_id": {
           "name": "dynamic_connection_mcp_server_id",
           "type": "uuid",
@@ -9633,6 +9639,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "deployment_name": {
+          "name": "deployment_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "catalog_id": {
           "name": "catalog_id",
           "type": "uuid",
@@ -11365,6 +11377,13 @@
         },
         "online_mcp_catalog_enabled": {
           "name": "online_mcp_catalog_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "online_skill_catalog_enabled": {
+          "name": "online_skill_catalog_enabled",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -14537,49 +14556,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "github_sync_interval": {
-          "name": "github_sync_interval",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "github_sync_ref": {
-          "name": "github_sync_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "github_app_config_id": {
-          "name": "github_app_config_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_synced_at": {
-          "name": "last_synced_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_sync_error": {
-          "name": "last_sync_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "usage_count": {
-          "name": "usage_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -14637,22 +14613,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "skills_github_sync_due_idx": {
-          "name": "skills_github_sync_due_idx",
-          "columns": [
-            {
-              "expression": "last_synced_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"skills\".\"github_sync_interval\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -14728,19 +14688,6 @@
           "tableTo": "environments",
           "columnsFrom": [
             "environment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "skills_github_app_config_id_github_app_configs_id_fk": {
-          "name": "skills_github_app_config_id_github_app_configs_id_fk",
-          "tableFrom": "skills",
-          "tableTo": "github_app_configs",
-          "columnsFrom": [
-            "github_app_config_id"
           ],
           "columnsTo": [
             "id"

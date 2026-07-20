@@ -6,14 +6,15 @@ import {
   IDENTITY_TRUSTED_PROVIDER_IDS,
   type IdentityProviderId,
 } from "@archestra/shared";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
 import { LoadingSpinner } from "@/components/loading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { CreateIdentityProviderDialog } from "./create-identity-provider-dialog.ee";
 import { EditIdentityProviderDialog } from "./edit-identity-provider-dialog.ee";
 import type { IdentityProviderDialogSection } from "./identity-provider-dialog-shell.ee";
@@ -260,31 +261,29 @@ type IdentityProvider = NonNullable<
 >[number];
 
 export function IdentityProvidersSettingsContent() {
-  const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { data: identityProviders = [], isLoading } = useIdentityProviders();
   const [createConfig, setCreateConfig] = useState<{
     providerId: string;
     config: IdpConfig;
   } | null>(null);
-  const [editingProvider, setEditingProvider] =
-    useState<IdentityProvider | null>(null);
-  const [initialEditSection, setInitialEditSection] =
-    useState<IdentityProviderDialogSection>();
 
-  useEffect(() => {
-    const editProviderId = searchParams.get("edit");
-    if (!editProviderId) return;
-
-    const provider = identityProviders.find(
-      (item) => item.id === editProviderId,
-    );
-    if (!provider) return;
-
-    setEditingProvider(provider);
-    setInitialEditSection(getDeepLinkedSection(searchParams.get("section")));
-  }, [identityProviders, searchParams]);
+  const editIdFromUrl = searchParams.get("edit");
+  const providerFromUrl =
+    identityProviders.find((item) => item.id === editIdFromUrl) ?? null;
+  const {
+    entity: editingProvider,
+    open: openEditDialog,
+    close: closeEditDialog,
+    openedFromUrl: editOpenedFromUrl,
+  } = useDialogUrlParam<IdentityProvider>({
+    paramName: "edit",
+    entityFromUrl: providerFromUrl,
+    alsoClearOnClose: ["section"],
+  });
+  const initialEditSection = editOpenedFromUrl
+    ? getDeepLinkedSection(searchParams.get("section"))
+    : undefined;
 
   // Find existing providers by matching provider ID
   const getProviderStatus = useCallback(
@@ -319,8 +318,7 @@ export function IdentityProvidersSettingsContent() {
 
       if (existingProvider) {
         // Edit existing provider
-        setEditingProvider(existingProvider);
-        setInitialEditSection(undefined);
+        openEditDialog(existingProvider);
       } else {
         // Create new provider
         setCreateConfig({
@@ -329,28 +327,7 @@ export function IdentityProvidersSettingsContent() {
         });
       }
     },
-    [getProviderStatus],
-  );
-
-  const clearEditDeepLink = useCallback(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (!params.has("edit") && !params.has("section")) return;
-    params.delete("edit");
-    params.delete("section");
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, {
-      scroll: false,
-    });
-  }, [pathname, router, searchParams]);
-
-  const handleEditDialogOpenChange = useCallback(
-    (open: boolean) => {
-      if (open) return;
-      setEditingProvider(null);
-      setInitialEditSection(undefined);
-      clearEditDeepLink();
-    },
-    [clearEditDeepLink],
+    [getProviderStatus, openEditDialog],
   );
 
   // Gating is handled by the parent (DisabledEnterpriseSection in
@@ -477,7 +454,7 @@ export function IdentityProvidersSettingsContent() {
         <EditIdentityProviderDialog
           identityProviderId={editingProvider.id}
           open={!!editingProvider}
-          onOpenChange={handleEditDialogOpenChange}
+          onOpenChange={(open) => !open && closeEditDialog()}
           initialSection={initialEditSection}
         />
       )}

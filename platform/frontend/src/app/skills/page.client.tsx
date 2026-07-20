@@ -48,6 +48,7 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useDeleteSkill,
   useResetSkill,
@@ -56,11 +57,7 @@ import {
 } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import {
-  withEditorClosed,
-  withEditorOpen,
-  withOpenEditRewritten,
-} from "./_parts/editor-url";
+import { withOpenEditRewritten } from "./_parts/editor-url";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
@@ -166,36 +163,24 @@ function SkillsList() {
     [sorting, pathname, router, searchParams],
   );
 
-  // The open editor is driven by the `edit=<skillId>` search param. It stays
-  // in the URL while the dialog is open so the link is copyable at any moment
-  // (deliberate divergence from pages that strip it after opening). The dialog
-  // fetches the skill by id itself, so deep links work regardless of the
-  // current page/search of the table.
-  const editingSkillId = searchParams.get("edit");
+  // The dialog fetches the skill by id itself, so deep links open instantly
+  // and work regardless of the current page/search of the table.
+  const editId = searchParams.get("edit");
+  const {
+    entity: editingSkill,
+    open: openEditor,
+    close: closeEditor,
+  } = useDialogUrlParam<SkillItem | { id: string }>({
+    paramName: "edit",
+    entityFromUrl: editId ? { id: editId } : null,
+  });
+
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
   const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
   const items = skills?.data ?? [];
-
-  const openEditor = useCallback(
-    (skillId: string) => {
-      const params = withEditorOpen(
-        new URLSearchParams(searchParams.toString()),
-        skillId,
-      );
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [pathname, router, searchParams],
-  );
-
-  const closeEditor = useCallback(() => {
-    const params = withEditorClosed(
-      new URLSearchParams(searchParams.toString()),
-    );
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams]);
 
   // Deep-link support: /skills?openEdit=<name> auto-opens the skill editor for
   // the matching skill (e.g. from the chat SkillPill). Once the name resolves
@@ -383,7 +368,7 @@ function SkillsList() {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
             permissions: { skill: ["update"] },
-            onClick: () => openEditor(skill.id),
+            onClick: () => openEditor(skill),
           },
           {
             icon: <MessageSquare className="h-4 w-4" />,
@@ -500,17 +485,17 @@ function SkillsList() {
                   scroll: false,
                 });
               }}
-              onRowClick={(row) => openEditor(row.id)}
+              onRowClick={(row) => openEditor(row)}
               isLoading={isFetching}
             />
           </>
         )}
       </PageLayout>
 
-      {editingSkillId && (
+      {editingSkill && (
         <SkillEditorDialog
-          skillId={editingSkillId}
-          open={!!editingSkillId}
+          skillId={editingSkill.id}
+          open={!!editingSkill}
           onOpenChange={(open) => !open && closeEditor()}
         />
       )}

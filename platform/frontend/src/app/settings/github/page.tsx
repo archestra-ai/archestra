@@ -3,7 +3,8 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Info, KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
@@ -31,6 +32,7 @@ import {
   type GithubAppConfig,
   useCreateGithubAppConfig,
   useDeleteGithubAppConfig,
+  useGithubAppConfig,
   useGithubAppConfigs,
   useUpdateGithubAppConfig,
 } from "@/lib/github-app-config.query";
@@ -41,6 +43,7 @@ import {
   useGithubPats,
   useUpdateGithubPat,
 } from "@/lib/github-pat.query";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { useSetSettingsAction } from "../layout";
 
@@ -78,12 +81,36 @@ export default function GithubSettingsPage() {
     useGithubAppConfigs();
   const { data: pats = [], isPending: isLoadingPats } = useGithubPats();
 
-  // one dialog open at a time: which credential kind, and "new" or the row
-  const [appDialog, setAppDialog] = useState<GithubAppConfig | "new" | null>(
-    null,
+  // the App edit dialog is deep-linkable via `?edit=<id>`; PAT dialogs and
+  // the create dialog are plain local state.
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+  const { data: editingConfigFromUrl } = useGithubAppConfig(
+    editId ?? undefined,
   );
+  const {
+    entity: editingConfig,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<GithubAppConfig>({
+    paramName: "edit",
+    entityFromUrl: editingConfigFromUrl ?? null,
+  });
+  const [isAppCreateOpen, setIsAppCreateOpen] = useState(false);
   const [patDialog, setPatDialog] = useState<GithubPat | "new" | null>(null);
   const [rowToDelete, setRowToDelete] = useState<CredentialRow | null>(null);
+  const appDialog: GithubAppConfig | "new" | null =
+    editingConfig ?? (isAppCreateOpen ? "new" : null);
+  // Cancel any pending `?edit=<id>` deep link before opening create, or the
+  // by-id fetch could land and flip the create dialog into edit mode.
+  const handleAppCreateOpen = useCallback(() => {
+    closeEditDialog();
+    setIsAppCreateOpen(true);
+  }, [closeEditDialog]);
+  const closeAppDialog = useCallback(() => {
+    setIsAppCreateOpen(false);
+    closeEditDialog();
+  }, [closeEditDialog]);
 
   const rows: CredentialRow[] = useMemo(
     () =>
@@ -122,7 +149,7 @@ export default function GithubSettingsPage() {
         </PermissionButton>
         <PermissionButton
           permissions={{ githubAppConfig: ["create"] }}
-          onClick={() => setAppDialog("new")}
+          onClick={handleAppCreateOpen}
         >
           <Plus className="h-4 w-4" />
           Add GitHub App
@@ -130,7 +157,7 @@ export default function GithubSettingsPage() {
       </div>,
     );
     return () => setActionButton(null);
-  }, [setActionButton]);
+  }, [setActionButton, handleAppCreateOpen]);
 
   const columns: ColumnDef<CredentialRow>[] = useMemo(() => {
     const baseColumns: ColumnDef<CredentialRow>[] = [
@@ -194,7 +221,7 @@ export default function GithubSettingsPage() {
                       label: "Edit",
                       onClick: () =>
                         row.original.kind === "app"
-                          ? setAppDialog(row.original.app)
+                          ? openEditDialog(row.original.app)
                           : setPatDialog(row.original.pat),
                     },
                   ]
@@ -214,7 +241,7 @@ export default function GithubSettingsPage() {
         ),
       },
     ];
-  }, [canUpdate, canDelete]);
+  }, [canUpdate, canDelete, openEditDialog]);
 
   return (
     <div className="space-y-6">
@@ -254,7 +281,7 @@ export default function GithubSettingsPage() {
         </LoadingWrapper>
       )}
 
-      <GithubAppDialog dialogState={appDialog} onClose={setAppDialog} />
+      <GithubAppDialog dialogState={appDialog} onClose={closeAppDialog} />
       <GithubPatDialog dialogState={patDialog} onClose={setPatDialog} />
       <DeleteCredentialDialog row={rowToDelete} onClose={setRowToDelete} />
     </div>

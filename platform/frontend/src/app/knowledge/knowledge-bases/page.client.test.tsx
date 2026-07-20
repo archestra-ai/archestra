@@ -11,6 +11,8 @@ const mockUseConnectors = vi.fn();
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBasesPaginated: (params: unknown) =>
     mockUseKnowledgeBasesPaginated(params),
+  // By-id query behind the ?edit= deep link; no param in these tests.
+  useKnowledgeBase: () => ({ data: undefined }),
   useDeleteKnowledgeBase: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -19,6 +21,8 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectors: (params: unknown) => mockUseConnectors(params),
+  // By-id query behind the ?connector= deep link; no param in these tests.
+  useConnector: () => ({ data: undefined }),
   useAssignConnectorToKnowledgeBases: () => ({
     mutateAsync: vi.fn(),
     isPending: false,

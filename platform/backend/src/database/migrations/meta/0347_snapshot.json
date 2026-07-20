@@ -1,5 +1,5 @@
 {
-  "id": "e2e28efe-04d0-455c-bf74-47848331c66e",
+  "id": "bac623f2-3997-4abe-b00a-f60e2640a0e6",
   "prevId": "e0c73465-343e-4755-bdec-2c94ba50d30a",
   "version": "7",
   "dialect": "postgresql",
@@ -11370,6 +11370,13 @@
           "notNull": true,
           "default": true
         },
+        "online_skill_catalog_enabled": {
+          "name": "online_skill_catalog_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "global_tool_policy": {
           "name": "global_tool_policy",
           "type": "varchar",
@@ -14534,19 +14541,6 @@
         "source_commit": {
           "name": "source_commit",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "usage_count": {
-          "name": "usage_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },

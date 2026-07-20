@@ -191,7 +191,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
           title: "Add the gateway",
           terminalTitle: "terminal",
           buildCommand: ({ url, serverName }) =>
-            `claude mcp add --transport http ${shellArg(serverName)} ${shellArg(url)}`,
+            `claude mcp add --scope user --transport http ${shellArg(serverName)} ${shellArg(url)}`,
         },
         {
           title:

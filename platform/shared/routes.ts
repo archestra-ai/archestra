@@ -670,6 +670,8 @@ export const RouteId = {
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",
+  EnableApp: "enableApp",
+  DisableApp: "disableApp",
   DeleteApp: "deleteApp",
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",

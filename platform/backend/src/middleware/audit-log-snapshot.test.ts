@@ -399,6 +399,69 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("model", "google/gemini-2.5-pro");
     expect(snapshot).toHaveProperty("llmProvider", "gemini");
     expect(snapshot).not.toHaveProperty("llmModel");
+    // A redacted key identity (id/name/scope) so a swap between two
+    // same-provider keys still diffs — never any secret material.
+    expect(snapshot?.llmApiKey).toEqual({
+      id: key.id,
+      name: "Gemini Key",
+      scope: "org",
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("secretId");
+  });
+
+  test("AgentModel.findByIdForAudit diffs a swap between two same-provider keys", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const model = await ModelModel.create({
+      externalId: "google/gemini-2.5-pro",
+      provider: "gemini",
+      modelId: "gemini-2.5-pro",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    const [keyA] = await db
+      .insert(schema.llmProviderApiKeysTable)
+      .values({
+        organizationId: org.id,
+        name: "Gemini Key A",
+        provider: "gemini",
+        scope: "org",
+        baseUrl: null,
+      })
+      .returning();
+    const [keyB] = await db
+      .insert(schema.llmProviderApiKeysTable)
+      .values({
+        organizationId: org.id,
+        name: "Gemini Key B",
+        provider: "gemini",
+        scope: "org",
+        baseUrl: null,
+      })
+      .returning();
+    const agent = await AgentModel.create({
+      name: "Key Swap Agent",
+      organizationId: org.id,
+      scope: "org",
+      teams: [],
+      knowledgeBaseIds: [],
+      modelId: model.id,
+      llmApiKeyId: keyA.id,
+    });
+
+    const before = await AgentModel.findByIdForAudit(agent.id, org.id);
+    await AgentModel.update(agent.id, { llmApiKeyId: keyB.id });
+    const after = await AgentModel.findByIdForAudit(agent.id, org.id);
+
+    // llmProvider is identical (same provider), so the diff must come from the
+    // key identity — otherwise the swap would be invisible in the audit log.
+    expect(before?.llmProvider).toBe(after?.llmProvider);
+    expect(before?.llmApiKey).not.toEqual(after?.llmApiKey);
+    expect(after?.llmApiKey).toMatchObject({
+      id: keyB.id,
+      name: "Gemini Key B",
+    });
   });
 
   test("AgentModel.findByIdForAudit captures accessAllSubagents and excluded subagent ids so a subagent-permission change diffs", async ({

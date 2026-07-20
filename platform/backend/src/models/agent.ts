@@ -3114,11 +3114,18 @@ class AgentModel {
             .where(eq(schema.modelsTable.id, row.modelId))
             .limit(1)
         : Promise.resolve([]),
-      // The model and its API key are set as a pair; capture the key's provider
-      // so an LLM-config change is legible without exposing key material.
+      // The model and its API key are set as a pair; capture a redacted key
+      // identity (id/name/scope + provider) so an LLM-config change is legible
+      // and a swap between two same-provider keys still diffs — without ever
+      // touching key material (secretId is excluded).
       row.llmApiKeyId
         ? db
-            .select({ provider: schema.llmProviderApiKeysTable.provider })
+            .select({
+              id: schema.llmProviderApiKeysTable.id,
+              name: schema.llmProviderApiKeysTable.name,
+              scope: schema.llmProviderApiKeysTable.scope,
+              provider: schema.llmProviderApiKeysTable.provider,
+            })
             .from(schema.llmProviderApiKeysTable)
             .where(eq(schema.llmProviderApiKeysTable.id, row.llmApiKeyId))
             .limit(1)
@@ -3141,6 +3148,13 @@ class AgentModel {
       isDefault: row.isDefault,
       model: modelRows[0]?.externalId ?? null,
       llmProvider: keyRows[0]?.provider ?? null,
+      llmApiKey: keyRows[0]
+        ? {
+            id: keyRows[0].id,
+            name: keyRows[0].name,
+            scope: keyRows[0].scope,
+          }
+        : null,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,

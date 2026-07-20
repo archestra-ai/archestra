@@ -58,7 +58,7 @@ export default function SkillsSettingsPage() {
     <SettingsSectionStack>
       <SettingsBlock
         title="Online skill catalog"
-        description="Let people discover skills from the public online catalog — the popular-repository list and the skill index search on the add-skill page. When disabled, skills are always added from a specific GitHub URL or a blank template."
+        description="Let people discover and import skills from the public online catalog — the popular-repository list, the skill index search, and GitHub-repo imports on the add-skill page. When disabled, the add-skill page opens the blank-template editor directly."
         control={
           <WithPermissions
             permissions={{ skillsSettings: ["update"] }}

@@ -7,10 +7,12 @@ vi.mock("@/lib/organization.query");
 vi.mock("@/lib/skills/skill.query");
 
 vi.mock("../_parts/import-skills-dialog", () => ({
-  ImportSkillsDialog: () => <div data-testid="import-skills-dialog" />,
+  ImportSkillsDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="import-skills-dialog" /> : null,
 }));
 vi.mock("../_parts/skill-editor-dialog", () => ({
-  SkillEditorDialog: () => <div data-testid="skill-editor-dialog" />,
+  SkillEditorDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="skill-editor-dialog" /> : null,
 }));
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -56,7 +58,7 @@ function renderPage() {
 }
 
 describe("NewSkillPage catalog gating", () => {
-  it("shows the popular-repositories catalog when the online catalog is enabled", () => {
+  it("shows the catalog and both entry points when the online catalog is enabled", () => {
     mockOrganization(true);
     renderPage();
 
@@ -64,9 +66,13 @@ describe("NewSkillPage catalog gating", () => {
     expect(
       screen.getByPlaceholderText(/Search skills by name/i),
     ).toBeInTheDocument();
+    expect(screen.getByText("Custom GitHub URL")).toBeInTheDocument();
+    expect(screen.getByText("Blank template")).toBeInTheDocument();
+    // The blank-template form stays closed until the user opens it.
+    expect(screen.queryByTestId("skill-editor-dialog")).not.toBeInTheDocument();
   });
 
-  it("hides the catalog and search when the online catalog is disabled", () => {
+  it("hides the catalog and both entry points and opens the blank form when disabled", () => {
     mockOrganization(false);
     renderPage();
 
@@ -74,20 +80,23 @@ describe("NewSkillPage catalog gating", () => {
     expect(
       screen.queryByPlaceholderText(/Search skills by name/i),
     ).not.toBeInTheDocument();
-    // The always-available manual entry points remain.
-    expect(screen.getByText("Custom GitHub URL")).toBeInTheDocument();
-    expect(screen.getByText("Blank template")).toBeInTheDocument();
+    expect(screen.queryByText("Custom GitHub URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Blank template")).not.toBeInTheDocument();
+    // The blank-template form opens directly.
+    expect(screen.getByTestId("skill-editor-dialog")).toBeInTheDocument();
   });
 
-  it("hides the catalog while the org setting is still loading", () => {
+  it("shows neither the catalog nor the form while the org setting is loading", () => {
     mockOrganization(true, true);
     renderPage();
 
     expect(screen.queryByText("Popular repositories")).not.toBeInTheDocument();
-    expect(screen.getByText("Custom GitHub URL")).toBeInTheDocument();
+    expect(screen.queryByText("Custom GitHub URL")).not.toBeInTheDocument();
+    // No flash of the blank form before the setting resolves.
+    expect(screen.queryByTestId("skill-editor-dialog")).not.toBeInTheDocument();
   });
 
-  it("fails closed — hides the catalog when the org read resolves without data", () => {
+  it("fails closed — opens the blank form when the org read resolves without data", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: undefined,
       isPending: false,
@@ -95,6 +104,7 @@ describe("NewSkillPage catalog gating", () => {
     renderPage();
 
     expect(screen.queryByText("Popular repositories")).not.toBeInTheDocument();
-    expect(screen.getByText("Custom GitHub URL")).toBeInTheDocument();
+    expect(screen.queryByText("Custom GitHub URL")).not.toBeInTheDocument();
+    expect(screen.getByTestId("skill-editor-dialog")).toBeInTheDocument();
   });
 });

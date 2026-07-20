@@ -44,14 +44,14 @@ describe("POST /api/apps/:appId/(enable|disable)", () => {
   const get = (appId: string) =>
     app.inject({ method: "GET", url: `/api/apps/${appId}` });
 
-  test("a new app is created disabled", async () => {
+  test("a new app is created enabled", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
       payload: { name: "Fresh", scope: "org" },
     });
     expect(created.statusCode).toBe(200);
-    expect(created.json().enabled).toBe(false);
+    expect(created.json().enabled).toBe(true);
   });
 
   test("a disabled org app is author-only, hidden even from another app admin", async ({

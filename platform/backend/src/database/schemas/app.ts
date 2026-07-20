@@ -70,11 +70,11 @@ const appsTable = softDeletablePgTable(
     /**
      * Whether the app is live. Disabled (`false`) is author-only for viewing and
      * is not consumable anywhere — its `<name>__open` launch tool is withheld
-     * from every gateway/agent surface until enabled — so an author can build
-     * privately before exposing it. Orthogonal to `scope` (which lives on the
-     * backing catalog and answers *who* the audience is once enabled).
+     * from every gateway/agent surface until enabled — so an author can pull an
+     * app back to build on it privately. Orthogonal to `scope` (which lives on
+     * the backing catalog and answers *who* the audience is once enabled).
      */
-    enabled: boolean("enabled").notNull().default(false),
+    enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

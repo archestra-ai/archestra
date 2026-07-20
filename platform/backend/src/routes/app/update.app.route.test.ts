@@ -228,14 +228,6 @@ describe("PATCH /api/apps/:appId", () => {
     expect(created.statusCode).toBe(200);
     const appId = created.json().id;
 
-    // Enable it while still acting as the author — a disabled app is
-    // author-only, so the admin below could not otherwise reach it for oversight.
-    const enabled = await app.inject({
-      method: "POST",
-      url: `/api/apps/${appId}/enable`,
-    });
-    expect(enabled.statusCode).toBe(200);
-
     // An app admin who lacks environment:deploy-to-restricted renames the app;
     // the form echoes the unchanged environmentId. The unchanged binding must
     // not be re-authorized, so the edit succeeds rather than 403.

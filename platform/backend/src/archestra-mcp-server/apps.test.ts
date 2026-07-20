@@ -609,9 +609,6 @@ describe("read_app / edit_app", () => {
       context,
     );
     const appId = structured(orgApp).id as string;
-    // A scaffolded app is disabled (author-only); enable it so the org-scope
-    // visibility this test exercises actually applies to a non-author member.
-    await AppModel.setEnabled(appId, true);
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     const memberCtx: ArchestraContext = { ...context, userId: member.id };
@@ -646,8 +643,10 @@ describe("read_app / edit_app", () => {
       context,
     );
     const appId = structured(created).id as string;
+    // Disable it so this test genuinely exercises publish_app's enable step.
+    await AppModel.setEnabled(appId, false);
 
-    // A fresh scaffold is disabled: another member cannot see it yet.
+    // A disabled personal app: another member cannot see it yet.
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     const memberCtx: ArchestraContext = { ...context, userId: member.id };

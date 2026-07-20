@@ -88,7 +88,8 @@ describe("MCP backing for apps", () => {
       ?.resourceUri;
 
   test("a disabled app's launch tool is withheld from dynamic discovery until enabled", async () => {
-    const appId = await createApp("org"); // disabled by default
+    const appId = await createApp("org");
+    await AppModel.setEnabled(appId, false);
     const uri = getArchestraAppResourceUri(appId);
     const discovered = async () =>
       (
@@ -107,7 +108,8 @@ describe("MCP backing for apps", () => {
   });
 
   test("a disabled app's launch tool stays assigned but hidden from the author's gateway, and reappears when enabled", async () => {
-    const appId = await createApp("org"); // disabled; auto-assigned to the author's gateway
+    const appId = await createApp("org"); // auto-assigned to the author's gateway
+    await AppModel.setEnabled(appId, false);
     const uri = getArchestraAppResourceUri(appId);
     const personalGateway = await AgentModel.ensurePersonalMcpGateway({
       userId: user.id,
@@ -133,7 +135,8 @@ describe("MCP backing for apps", () => {
     makeAppTool,
   }) => {
     // The source app owns the launch tool being consumed elsewhere.
-    const sourceAppId = await createApp("org"); // disabled by default
+    const sourceAppId = await createApp("org");
+    await AppModel.setEnabled(sourceAppId, false);
     const sourceServer = await McpServerModel.findById(
       (await AppModel.findById(sourceAppId))!.mcpServerId!,
     );

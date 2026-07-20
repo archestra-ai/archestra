@@ -69,6 +69,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
@@ -137,6 +138,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   agentSettings: [],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read"],
   invitation: ["read"],
@@ -211,6 +213,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   agentSettings: [],
   llmSettings: [],
   mcpSettings: [],
+  skillsSettings: [],
   knowledgeSettings: [],
   member: [],
   invitation: [],
@@ -382,6 +385,8 @@ export const permissionDescriptions: Record<string, string> = {
   "llmSettings:update": "Modify LLM settings",
   "mcpSettings:read": "View MCP settings (online catalog availability)",
   "mcpSettings:update": "Modify MCP settings",
+  "skillsSettings:read": "View Skills settings (online catalog availability)",
+  "skillsSettings:update": "Modify Skills settings",
   "agentSettings:read":
     "View agent settings (default model, default agent, default tool guardrails, file uploads)",
   "agentSettings:update":
@@ -1113,6 +1118,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateMcpSettings]: {
     mcpSettings: ["update"],
   },
+  [RouteId.UpdateSkillsSettings]: {
+    skillsSettings: ["update"],
+  },
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
   },
@@ -1610,6 +1618,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/mcp": { mcpSettings: ["read"] },
+  "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/environments": { environment: ["admin"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },

@@ -1,5 +1,5 @@
 {
-  "id": "949a7081-97f5-4eac-9880-1b879a44f6a4",
+  "id": "bac623f2-3997-4abe-b00a-f60e2640a0e6",
   "prevId": "e0c73465-343e-4755-bdec-2c94ba50d30a",
   "version": "7",
   "dialect": "postgresql",
@@ -6750,12 +6750,6 @@
           "notNull": true,
           "default": false
         },
-        "deployment_name": {
-          "name": "deployment_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "dynamic_connection_mcp_server_id": {
           "name": "dynamic_connection_mcp_server_id",
           "type": "uuid",
@@ -9639,12 +9633,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "deployment_name": {
-          "name": "deployment_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "catalog_id": {
           "name": "catalog_id",
           "type": "uuid",
@@ -11377,6 +11365,13 @@
         },
         "online_mcp_catalog_enabled": {
           "name": "online_mcp_catalog_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "online_skill_catalog_enabled": {
+          "name": "online_skill_catalog_enabled",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

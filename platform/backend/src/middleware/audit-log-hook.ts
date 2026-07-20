@@ -97,6 +97,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
           ? request.auditAfter
           : await resolveAfterState({
               method: request.method,
+              action,
               id,
               organizationId: request.organizationId,
               cfg,
@@ -382,14 +383,19 @@ function extractIp(request: {
 
 async function resolveAfterState(params: {
   method: string;
+  action: AuditEventName;
   id: string | null;
   organizationId: string;
   cfg: AuditableRouteConfig | undefined;
   routeParams?: Record<string, unknown>;
 }): Promise<Record<string, unknown> | null> {
-  const { method, id, organizationId, cfg, routeParams } = params;
+  const { method, action, id, organizationId, cfg, routeParams } = params;
 
-  if (method === "DELETE") return null;
+  // A genuine resource deletion has no post-state. But a DELETE registered with
+  // a non-delete action (e.g. removing one delegation → agent.updated) leaves
+  // the resource alive, so its after-state must be captured — otherwise the row
+  // renders as a full teardown instead of the child-level diff.
+  if (method === "DELETE" && action.endsWith(".deleted")) return null;
   if (!cfg?.fetchById || !id) return null;
 
   return cfg.fetchById(id, organizationId, routeParams).catch((err) => {

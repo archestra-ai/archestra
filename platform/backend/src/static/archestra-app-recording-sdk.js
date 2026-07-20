@@ -916,6 +916,20 @@
         const image = new Image();
         image.onload = () => {
           try {
+            // Restore the canvas's own bitmap size before drawing. The frame
+            // already carries it — toDataURL captures at canvas.width ×
+            // canvas.height — and replay needs it because it serves the app's
+            // SOURCE html and never runs the app's code: a canvas the app
+            // sized in its own JS is still at the HTML default 300x150 here,
+            // so drawing a full frame into it squeezed the whole app down to a
+            // thumbnail while the markup around it stayed full size. Assigning
+            // width resets the bitmap, so only on an actual change.
+            if (canvas.width !== image.naturalWidth) {
+              canvas.width = image.naturalWidth;
+            }
+            if (canvas.height !== image.naturalHeight) {
+              canvas.height = image.naturalHeight;
+            }
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);

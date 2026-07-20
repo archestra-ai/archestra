@@ -33,6 +33,14 @@ tests:
           value:
             - ./node_modules/.bin/drizzle-kit
             - migrate
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
 
   - it: does not create the migration job when disabled
     set:

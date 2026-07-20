@@ -358,8 +358,12 @@ archestra:
     # disable. Ignored when you provide your own PGOPTIONS via migrationJob.env.
     lockTimeout: 5s
     # Resource requests/limits for the migration container.
-    # If not set, inherits from archestra.resources.
-    resources: {}
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        memory: "2Gi"
     # Extra environment variables rendered before the shared platform env. Use
     # this only when ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR)
     # references, such as $(PGPASSWORD), that the hook must expand.

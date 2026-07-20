@@ -183,6 +183,66 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/skills-settings - online catalog", () => {
+    test("defaults onlineSkillCatalogEnabled to true for a new organization", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().onlineSkillCatalogEnabled).toBe(true);
+    });
+
+    test("disables the online catalog and persists it", async () => {
+      const disable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      expect(disable.statusCode).toBe(200);
+      expect(disable.json().onlineSkillCatalogEnabled).toBe(false);
+
+      const afterDisable = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+      expect(afterDisable.json().onlineSkillCatalogEnabled).toBe(false);
+    });
+
+    test("re-enables the online catalog", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: true },
+      });
+
+      expect(enable.statusCode).toBe(200);
+      expect(enable.json().onlineSkillCatalogEnabled).toBe(true);
+    });
+
+    test("captures the catalog toggle in the audit snapshot", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      const snapshot = await OrganizationModel.findByIdForAudit(
+        organizationId,
+        organizationId,
+      );
+      expect(snapshot?.onlineSkillCatalogEnabled).toBe(false);
+    });
+  });
+
   describe("PATCH /api/organization/connection-settings - default provider keys", () => {
     test("rejects a per-user provider (GitHub Copilot) as a default key", async () => {
       const key = await LlmProviderApiKeyModel.create({

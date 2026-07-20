@@ -9,6 +9,7 @@ export function makeInstalledServer(
   return {
     id: "test-server",
     name: "test-server",
+    deploymentName: null,
     catalogId: "test-catalog",
     serverType: "local",
     secretId: null,

@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const {
   updateMutateAsync,
+  setEnabledMutateAsync,
   assignMutateAsync,
   unassignMutateAsync,
   useAppToolsMock,
 } = vi.hoisted(() => ({
   updateMutateAsync: vi.fn(),
+  setEnabledMutateAsync: vi.fn(),
   assignMutateAsync: vi.fn(),
   unassignMutateAsync: vi.fn(),
   useAppToolsMock: vi.fn(),
@@ -16,6 +18,10 @@ const {
 vi.mock("@/lib/app.query", () => ({
   useAppTools: useAppToolsMock,
   useUpdateApp: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
+  useSetAppEnabled: () => ({
+    mutateAsync: setEnabledMutateAsync,
+    isPending: false,
+  }),
   useAssignToolToApp: () => ({
     mutateAsync: assignMutateAsync,
     isPending: false,
@@ -77,6 +83,7 @@ const APP = {
   name: "Budget",
   description: "Team budget tracker",
   scope: "personal",
+  enabled: true,
   teams: [],
   environmentId: null,
 } as unknown as Parameters<typeof AppSettingsForm>[0]["app"];

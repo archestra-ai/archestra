@@ -31,6 +31,16 @@ const mcpServerTable = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
+    /**
+     * Frozen K8s deployment name for local (non-multitenant) installs.
+     * Written once at creation (`mcp-<slug40>-<id8>`); the startup adopt pass
+     * backfills pre-existing rows from their live deployment's actual name.
+     * Never updated on rename — deployment identity must not follow the
+     * mutable display name, or renames orphan the running deployment.
+     * NULL for remote installs and rows created before the column existed
+     * that haven't been adopted yet.
+     */
+    deploymentName: text("deployment_name"),
     catalogId: uuid("catalog_id")
       .references(() => mcpCatalogTable.id, {
         onDelete: "set null",

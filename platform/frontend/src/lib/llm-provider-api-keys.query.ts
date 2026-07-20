@@ -48,6 +48,7 @@ const {
   createLlmProviderApiKey,
   deleteLlmProviderApiKey,
   getAvailableLlmProviderApiKeys,
+  getLlmProviderApiKey,
   getLlmProviderApiKeys,
   updateLlmProviderApiKey,
 } = archestraApiSdk;
@@ -70,6 +71,19 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
       return data ?? [];
     },
     enabled: params?.enabled,
+  });
+}
+
+export function useLlmProviderApiKey(id: string | undefined) {
+  return useQuery({
+    queryKey: ["llm-provider-api-keys", "detail", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await getLlmProviderApiKey({ path: { id } });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!id,
   });
 }
 

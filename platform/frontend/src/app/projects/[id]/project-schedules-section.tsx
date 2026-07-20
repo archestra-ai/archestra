@@ -11,7 +11,7 @@ import {
   Power,
   Trash2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentSelector } from "@/components/agent-selector";
@@ -41,6 +41,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { TimezonePicker } from "@/components/ui/timezone-picker";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   type ScheduleTrigger,
   useCreateScheduleTrigger,
@@ -48,6 +49,7 @@ import {
   useDisableScheduleTrigger,
   useEnableScheduleTrigger,
   useRunScheduleTriggerNow,
+  useScheduleTrigger,
   useScheduleTriggerRuns,
   useScheduleTriggers,
   useUpdateScheduleTrigger,
@@ -73,6 +75,17 @@ export function ProjectSchedulesSection({
 }) {
   const { data } = useScheduleTriggers({ projectId, refetchInterval: 10000 });
   const [createOpen, setCreateOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const scheduleId = searchParams.get("schedule");
+  const { data: scheduleFromUrl } = useScheduleTrigger(scheduleId);
+  const {
+    entity: editingSchedule,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<ScheduleTrigger>({
+    paramName: "schedule",
+    entityFromUrl: scheduleFromUrl ?? null,
+  });
   const schedules = data?.data ?? [];
 
   return (
@@ -101,6 +114,17 @@ export function ProjectSchedulesSection({
         />
       )}
 
+      {editingSchedule && (
+        <ScheduleDialog
+          projectId={editingSchedule.projectId ?? ""}
+          schedule={editingSchedule}
+          open
+          onOpenChange={(open) => {
+            if (!open) closeEditDialog();
+          }}
+        />
+      )}
+
       {schedules.length === 0 ? (
         <p className="rounded-xl border px-3 py-6 text-center text-sm text-muted-foreground">
           No schedules yet — recurring runs you add here show up in this
@@ -109,7 +133,11 @@ export function ProjectSchedulesSection({
       ) : (
         <div className="space-y-2">
           {schedules.map((schedule) => (
-            <ScheduleRow key={schedule.id} schedule={schedule} />
+            <ScheduleRow
+              key={schedule.id}
+              schedule={schedule}
+              onEdit={openEditDialog}
+            />
           ))}
         </div>
       )}
@@ -119,13 +147,18 @@ export function ProjectSchedulesSection({
 
 // === internal components ===
 
-function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
+function ScheduleRow({
+  schedule,
+  onEdit,
+}: {
+  schedule: ScheduleTrigger;
+  onEdit: (schedule: ScheduleTrigger) => void;
+}) {
   const router = useRouter();
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
   const deleteSchedule = useDeleteScheduleTrigger();
   const runNow = useRunScheduleTriggerNow();
-  const [editOpen, setEditOpen] = useState(false);
 
   const { resolve, isResolving } = useResolveRunChat();
   // "Open recent run" (overflow menu) opens this schedule's LAST run's chat.
@@ -152,7 +185,7 @@ function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
     <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
       <button
         type="button"
-        onClick={() => setEditOpen(true)}
+        onClick={() => onEdit(schedule)}
         className={cn(
           "flex min-w-0 flex-1 items-center gap-3 text-left transition-opacity hover:opacity-80",
           !schedule.enabled && "opacity-60",
@@ -245,14 +278,6 @@ function ScheduleRow({ schedule }: { schedule: ScheduleTrigger }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {editOpen && (
-        <ScheduleDialog
-          projectId={schedule.projectId ?? ""}
-          schedule={schedule}
-          open={editOpen}
-          onOpenChange={setEditOpen}
-        />
-      )}
     </div>
   );
 }

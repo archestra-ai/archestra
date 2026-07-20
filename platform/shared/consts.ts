@@ -107,6 +107,15 @@ export const MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
  */
 export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
 
+/**
+ * The one placeholder through which an MCP server's mutable display name can
+ * reach a custom K8s deployment spec (`deploymentSpecYaml`). A catalog rename
+ * flags installs of such catalogs `reinstallRequired` instead of being a pure
+ * DB cascade. Must match the `${archestra.*}` placeholder syntax in the
+ * backend's k8s-yaml-generator (pinned by a backend test).
+ */
+export const SERVER_NAME_PLACEHOLDER = "${archestra.server_name}";
+
 export const WEBSITE_URL = "https://archestra.ai";
 export const GITHUB_REPO_URL = "https://github.com/archestra-ai/archestra";
 export const GITHUB_REPO_NEW_ISSUE_URL = `${GITHUB_REPO_URL}/issues/new`;

@@ -480,9 +480,17 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
   if (ctx.mcp) {
+    // Register at USER scope so the gateway is visible in every directory for
+    // this user. `claude mcp add` defaults to `local` (per-directory) scope,
+    // which makes the server "disappear" the moment Claude Code is run from a
+    // different folder than the one connect happened to run in. Clear BOTH the
+    // local and user scopes first: a stale local entry from an older connect run
+    // would otherwise shadow the user entry and fail `add` under `set -euo
+    // pipefail`, leaving the gateway removed and not re-added.
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-cli claude mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-cli claude mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
+cli claude mcp remove --scope local ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
   }
 
   if (ctx.proxy) {

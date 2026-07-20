@@ -64,9 +64,11 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import {
   useDeleteLlmProviderApiKey,
+  useLlmProviderApiKey,
   useLlmProviderApiKeys,
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
@@ -129,10 +131,22 @@ export default function ApiKeysPage() {
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedApiKey, setSelectedApiKey] =
     useState<LlmProviderApiKeyResponse | null>(null);
+
+  const editId = searchParams.get("edit");
+  const { data: editingApiKeyFromUrl } = useLlmProviderApiKey(
+    editId ?? undefined,
+  );
+  const {
+    entity: editingApiKey,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<LlmProviderApiKeyResponse>({
+    paramName: "edit",
+    entityFromUrl: editingApiKeyFromUrl ?? null,
+  });
 
   const selectedApiKeyId = selectedApiKey?.id ?? null;
   const { data: blockingVirtualKeys, isPending: isLoadingVirtualKeys } =
@@ -169,42 +183,42 @@ export default function ApiKeysPage() {
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
-    if (isEditDialogOpen && selectedApiKey) {
+    if (editingApiKey) {
       editForm.reset({
-        name: selectedApiKey.name,
-        provider: selectedApiKey.provider,
-        apiKey: selectedApiKey.secretId ? LLM_PROVIDER_API_KEY_PLACEHOLDER : "",
-        baseUrl: selectedApiKey.baseUrl ?? null,
-        inferenceBaseUrl: selectedApiKey.inferenceBaseUrl ?? null,
-        extraHeaders: deserializeExtraHeaders(selectedApiKey.extraHeaders),
-        scope: selectedApiKey.scope,
-        teamId: selectedApiKey.teamId ?? "",
-        vaultSecretPath: selectedApiKey.vaultSecretPath ?? null,
-        vaultSecretKey: selectedApiKey.vaultSecretKey ?? null,
-        isPrimary: selectedApiKey.isPrimary ?? false,
+        name: editingApiKey.name,
+        provider: editingApiKey.provider,
+        apiKey: editingApiKey.secretId ? LLM_PROVIDER_API_KEY_PLACEHOLDER : "",
+        baseUrl: editingApiKey.baseUrl ?? null,
+        inferenceBaseUrl: editingApiKey.inferenceBaseUrl ?? null,
+        extraHeaders: deserializeExtraHeaders(editingApiKey.extraHeaders),
+        scope: editingApiKey.scope,
+        teamId: editingApiKey.teamId ?? "",
+        vaultSecretPath: editingApiKey.vaultSecretPath ?? null,
+        vaultSecretKey: editingApiKey.vaultSecretKey ?? null,
+        isPrimary: editingApiKey.isPrimary ?? false,
         bedrockAuthMethod: "api-key",
         awsAccessKeyId: null,
         awsSecretAccessKey: null,
         awsSessionToken: null,
         // Open on the auth-mode tab that matches the stored credential: ChatGPT
         // Subscription keys land on the subscription tab, plain keys on API Key.
-        openaiAuthMethod: selectedApiKey.isChatgptSubscription
+        openaiAuthMethod: editingApiKey.isChatgptSubscription
           ? "chatgpt-subscription"
           : "api-key",
       });
     }
-  }, [isEditDialogOpen, selectedApiKey, editForm]);
+  }, [editingApiKey, editForm]);
 
   const handleEdit = editForm.handleSubmit(async (values) => {
-    if (!selectedApiKey) return;
+    if (!editingApiKey) return;
 
     const apiKeyChanged =
       values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       values.apiKey !== "";
 
     // Detect scope/team changes
-    const scopeChanged = values.scope !== selectedApiKey.scope;
-    const teamIdChanged = values.teamId !== (selectedApiKey.teamId ?? "");
+    const scopeChanged = values.scope !== editingApiKey.scope;
+    const teamIdChanged = values.teamId !== (editingApiKey.teamId ?? "");
 
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
@@ -214,7 +228,7 @@ export default function ApiKeysPage() {
 
     try {
       await updateMutation.mutateAsync({
-        id: selectedApiKey.id,
+        id: editingApiKey.id,
         data: {
           name: values.name || undefined,
           apiKey:
@@ -252,8 +266,7 @@ export default function ApiKeysPage() {
         },
       });
 
-      setIsEditDialogOpen(false);
-      setSelectedApiKey(null);
+      closeEditDialog();
     } catch {
       // Error already handled by mutation's handleApiError
     }
@@ -278,11 +291,6 @@ export default function ApiKeysPage() {
     blockingOauthClients,
     deleteMutation,
   ]);
-
-  const openEditDialog = useCallback((apiKey: LlmProviderApiKeyResponse) => {
-    setSelectedApiKey(apiKey);
-    setIsEditDialogOpen(true);
-  }, []);
 
   const openDeleteDialog = useCallback((apiKey: LlmProviderApiKeyResponse) => {
     setSelectedApiKey(apiKey);
@@ -561,8 +569,10 @@ export default function ApiKeysPage() {
 
         {/* Edit Dialog */}
         <FormDialog
-          open={isEditDialogOpen}
-          onOpenChange={setIsEditDialogOpen}
+          open={!!editingApiKey}
+          onOpenChange={(open) => {
+            if (!open) closeEditDialog();
+          }}
           title="Edit API Key"
           description="Update the name, API key value, or scope"
           size="small"
@@ -574,11 +584,11 @@ export default function ApiKeysPage() {
             className="flex min-h-0 flex-1 flex-col"
           >
             <DialogBody>
-              {selectedApiKey && (
+              {editingApiKey && (
                 <LlmProviderApiKeyForm
                   mode="full"
                   showConsoleLink={false}
-                  existingKey={selectedApiKey}
+                  existingKey={editingApiKey}
                   existingKeys={apiKeys}
                   form={editForm}
                   isPending={updateMutation.isPending}

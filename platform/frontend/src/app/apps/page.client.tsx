@@ -5,6 +5,7 @@ import { AppWindow, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { LoadingWrapper } from "@/components/loading";
+import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useApps } from "@/lib/app.query";
 import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 import { AppsScopeFilter } from "./_parts/apps-scope-filter";
@@ -38,6 +40,7 @@ export default function AppsPage() {
   const scope = searchParams.get("scope") ?? undefined;
   const authorIdsParam = searchParams.get("authorIds");
   const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+  const settingsId = searchParams.get("settings");
 
   const { data, isPending, isLoadingError, refetch } = useApps(
     {
@@ -53,6 +56,20 @@ export default function AppsPage() {
     { toastOnError: false },
   );
   const [createOpen, setCreateOpen] = useState(false);
+
+  // The settings dialog is owned here (one hook instance for the page-level
+  // "settings" param); cards only report which app to open it for, and the
+  // dialog fetches the full app by id itself. So synthesize the entity from the
+  // URL id — the dialog opens instantly and does its own fetching, no
+  // page-level fetch needed.
+  const {
+    entity: settingsApp,
+    open: openSettings,
+    close: closeSettings,
+  } = useDialogUrlParam<{ id: string }>({
+    paramName: "settings",
+    entityFromUrl: settingsId ? { id: settingsId } : null,
+  });
 
   // Only the "kind" split (owned vs external) is client-side now; scope/owner
   // filtering happens on the server. Pinned-first grouping applies on top,
@@ -136,17 +153,36 @@ export default function AppsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <AppSection title="Pinned" apps={pinnedApps} />
-            <AppSection title="Apps" apps={ownedApps} />
+            <AppSection
+              title="Pinned"
+              apps={pinnedApps}
+              onOpenSettings={openSettings}
+            />
+            <AppSection
+              title="Apps"
+              apps={ownedApps}
+              onOpenSettings={openSettings}
+            />
             <AppSection
               title="Apps from installed MCP servers"
               apps={externalApps}
+              onOpenSettings={openSettings}
             />
           </div>
         )}
       </LoadingWrapper>
 
       <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      {settingsApp ? (
+        <AppSettingsDialog
+          appId={settingsApp.id}
+          open={!!settingsApp}
+          onOpenChange={(open) => {
+            if (!open) closeSettings();
+          }}
+        />
+      ) : null}
     </PageLayout>
   );
 }
@@ -154,7 +190,15 @@ export default function AppsPage() {
 // Mirrors the Projects page's ProjectSection: an uppercase header over the
 // card grid. Renders nothing when the group is empty, so only sections with
 // cards appear.
-function AppSection({ title, apps }: { title: string; apps: AppListItem[] }) {
+function AppSection({
+  title,
+  apps,
+  onOpenSettings,
+}: {
+  title: string;
+  apps: AppListItem[];
+  onOpenSettings: (app: { id: string }) => void;
+}) {
   if (apps.length === 0) return null;
 
   return (
@@ -175,6 +219,7 @@ function AppSection({ title, apps }: { title: string; apps: AppListItem[] }) {
                 : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
             }
             app={app}
+            onOpenSettings={onOpenSettings}
           />
         ))}
       </div>

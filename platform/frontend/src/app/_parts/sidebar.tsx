@@ -367,6 +367,7 @@ const contentNavGroups: NavGroup[] = [
           "/settings/security",
           "/settings/llm",
           "/settings/mcp",
+          "/settings/skills",
           "/settings/knowledge",
           "/settings/environments",
           "/settings/users",

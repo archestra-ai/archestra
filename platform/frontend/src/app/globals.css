@@ -171,6 +171,16 @@
   [data-streamdown="inline-code"] {
     background-color: var(--accent) !important;
   }
+  /* Keep table action dropdowns above Streamdown's sticky table headers.
+     This covers both inline tables and the fullscreen portal. */
+  :is(
+    [data-streamdown="table-wrapper"],
+    [data-streamdown="table-fullscreen"]
+  )
+    .relative
+    > .absolute {
+    z-index: 20 !important;
+  }
   /* Override Tailwind's font-sans to use our dynamic CSS variable */
   .font-sans {
     font-family: var(--font-sans) !important;

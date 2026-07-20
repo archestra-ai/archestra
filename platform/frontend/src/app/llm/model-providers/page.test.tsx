@@ -20,12 +20,17 @@ vi.mock("@/components/page-layout", () => ({
   ),
 }));
 
+vi.mock("next/navigation");
+
 vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useDeleteLlmProviderApiKey: () => ({
     mutateAsync: vi.fn(),
     isPending: false,
+  }),
+  useLlmProviderApiKey: () => ({
+    data: null,
   }),
   useLlmProviderApiKeys: (...args: unknown[]) =>
     mockUseLlmProviderApiKeys(...args),
@@ -157,6 +162,7 @@ vi.mock("@/components/ui/select", () => ({
   SelectValue: () => null,
 }));
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -165,6 +171,13 @@ import ApiKeysPage from "./page";
 describe("ApiKeysPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(usePathname).mockReturnValue("/llm/model-providers");
+    vi.mocked(useRouter).mockReturnValue({
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useOrganization>);

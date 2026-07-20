@@ -35,6 +35,7 @@ const app = {
   mcpServerId: "server-1",
   spec: null,
   latestVersion: 1,
+  enabled: true,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   deletedAt: null,

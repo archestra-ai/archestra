@@ -69,6 +69,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
@@ -137,6 +138,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   agentSettings: [],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read"],
   invitation: ["read"],
@@ -211,6 +213,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   agentSettings: [],
   llmSettings: [],
   mcpSettings: [],
+  skillsSettings: [],
   knowledgeSettings: [],
   member: [],
   invitation: [],
@@ -382,6 +385,8 @@ export const permissionDescriptions: Record<string, string> = {
   "llmSettings:update": "Modify LLM settings",
   "mcpSettings:read": "View MCP settings (online catalog availability)",
   "mcpSettings:update": "Modify MCP settings",
+  "skillsSettings:read": "View Skills settings (online catalog availability)",
+  "skillsSettings:update": "Modify Skills settings",
   "agentSettings:read":
     "View agent settings (default model, default agent, default tool guardrails, file uploads)",
   "agentSettings:update":
@@ -1009,6 +1014,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAllVirtualApiKeys]: {
     llmVirtualKey: ["read"],
   },
+  [RouteId.GetVirtualApiKey]: {
+    llmVirtualKey: ["read"],
+  },
   [RouteId.CreateVirtualApiKey]: {
     llmVirtualKey: ["create"],
   },
@@ -1112,6 +1120,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateMcpSettings]: {
     mcpSettings: ["update"],
+  },
+  [RouteId.UpdateSkillsSettings]: {
+    skillsSettings: ["update"],
   },
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
@@ -1459,6 +1470,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAuditLogs]: {
     auditLog: ["read"],
   },
+  [RouteId.GetAuditLog]: {
+    auditLog: ["read"],
+  },
 
   // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
   // The public marketplace git endpoint stays outside this map; it is allowlisted in
@@ -1474,6 +1488,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: { app: ["read"] },
   [RouteId.UpdateApp]: { app: ["update"] },
+  // Enable/disable is a lifecycle transition, not a metadata edit; gated like
+  // an update (the handler further requires scope-modify at the app's scope).
+  [RouteId.EnableApp]: { app: ["update"] },
+  [RouteId.DisableApp]: { app: ["update"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },
@@ -1608,6 +1626,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/mcp": { mcpSettings: ["read"] },
+  "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/security": { agentSettings: ["read"] },
   "/settings/environments": { environment: ["admin"] },

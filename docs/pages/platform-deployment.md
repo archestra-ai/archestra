@@ -246,6 +246,7 @@ Environment network policies require the chart's default MCP manager RBAC so Arc
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
 - `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
 - `archestra.migrationJob.enabled` - Run database migrations in a pre-upgrade Job before rolling web and worker pods (default: true)
+- `archestra.migrationJob.resources` - CPU and memory requests/limits for the migration container (default: 500m CPU request, 512Mi memory request, 2Gi memory limit)
 - `archestra.migrationJob.lockTimeout` - PostgreSQL `lock_timeout` for the migration session (default: `5s`). Migrations fail fast instead of blocking live traffic behind a table lock. Set to `null` to disable.
 - `archestra.migrationJob.envFromSecrets` - Optional hook-only secret values, usually only needed when `ARCHESTRA_DATABASE_URL` uses Kubernetes `$(VAR)` expansion
 

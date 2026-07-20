@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  isBuiltInCatalogId,
+} from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
@@ -173,7 +177,6 @@ interface McpCatalogFormProps {
          */
         hasBlockingErrors: boolean;
       }) => React.ReactNode);
-  nameDisabled?: boolean;
   catalogButton?: React.ReactNode;
   /** Optional banner/notice rendered at the very top of the form body. */
   notice?: React.ReactNode;
@@ -195,7 +198,6 @@ export function McpCatalogForm({
   mode,
   initialValues,
   onSubmit,
-  nameDisabled,
   footer,
   catalogButton,
   notice,
@@ -513,6 +515,15 @@ export function McpCatalogForm({
   // was actually edited. `isReallyDirty` walks the tree and only returns
   // true when SOME leaf is actually true.
   const isNameDirty = mode === "edit" && isReallyDirty(dirtyFields.name);
+  // Built-in items (the browser-preview Playwright server) are system-managed
+  // and app-backed catalogs' names are owned by the Apps API: the backend
+  // silently strips `name` from their PUTs, so an editable field would be a
+  // lie — lock it instead.
+  const isAppBacked = initialValues?.serverType === "app";
+  const isNameLocked =
+    mode === "edit" &&
+    initialValues !== undefined &&
+    (isBuiltInCatalogId(initialValues.id) || isAppBacked);
   const isServerUrlDirty =
     mode === "edit" && isReallyDirty(dirtyFields.serverUrl);
   const isAuthDirty =
@@ -870,7 +881,8 @@ export function McpCatalogForm({
   // no bar.
   const [pendingSubmit, setPendingSubmit] = useState<{
     values: McpCatalogFormValues;
-    mode: "manual" | "auto";
+    mode: "manual" | "auto" | "rename";
+    renamed: boolean;
   } | null>(null);
   // `form.formState.isSubmitting` clears the moment `handleSubmit`
   // returns (which we do early to show the bar), so it can't drive the
@@ -911,13 +923,17 @@ export function McpCatalogForm({
     // matrix-tested without rendering, and so frontend + backend share
     // the same decision tree shape. See `cascade-decision.ts`.
     if (mode === "edit") {
-      const outcome = computeCascadeOutcome(
+      const decision = computeCascadeOutcome(
         (initialValues ?? {}) as CascadeSnapshot,
         transformFormToApiData(values) as CascadeSnapshot,
         { affectedServerCount },
       );
-      if (outcome !== "skip") {
-        setPendingSubmit({ values, mode: outcome });
+      if (decision.mode !== "skip") {
+        setPendingSubmit({
+          values,
+          mode: decision.mode,
+          renamed: decision.renamed,
+        });
         return;
       }
     }
@@ -990,30 +1006,25 @@ export function McpCatalogForm({
                     <FormItem className="flex-1">
                       <FormLabel>
                         Name <span className="text-destructive">*</span>
-                        <ReinstallHint show={isNameDirty} />
+                        <ReinstallHint
+                          show={isNameDirty}
+                          label="renames tools"
+                        />
                       </FormLabel>
                       <FormControl>
-                        {nameDisabled ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Input
-                                placeholder="e.g., GitHub MCP Server"
-                                {...field}
-                                disabled
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Name cannot be changed after the server is
-                              created.
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <Input
-                            placeholder="e.g., GitHub MCP Server"
-                            {...field}
-                          />
-                        )}
+                        <Input
+                          placeholder="e.g., GitHub MCP Server"
+                          disabled={isNameLocked}
+                          {...field}
+                        />
                       </FormControl>
+                      {isNameLocked && (
+                        <FormDescription>
+                          {isAppBacked
+                            ? "This server is backed by an app — rename it from the app's settings."
+                            : "This is a built-in server — its name is system-managed and cannot be changed."}
+                        </FormDescription>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -2595,6 +2606,8 @@ export function McpCatalogForm({
             // we honor that decision even if dirty state shifts while
             // the bar is up (e.g., user tweaks labels mid-confirm).
             mode={pendingSubmit.mode}
+            renamed={pendingSubmit.renamed}
+            newName={pendingSubmit.values.name}
             isMultitenant={isMultitenant}
             affectedServerCount={affectedServerCount}
             isSubmitting={isConfirming}
@@ -2647,11 +2660,17 @@ function isReallyDirty(value: unknown): boolean {
   return Boolean(value);
 }
 
-function ReinstallHint({ show }: { show: boolean }) {
+function ReinstallHint({
+  show,
+  label = "requires reinstall",
+}: {
+  show: boolean;
+  label?: string;
+}) {
   if (!show) return null;
   return (
     <Badge variant="outline" className="ml-2 font-normal">
-      requires reinstall
+      {label}
     </Badge>
   );
 }

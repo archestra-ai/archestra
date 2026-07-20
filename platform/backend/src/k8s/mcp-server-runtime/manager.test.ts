@@ -2039,6 +2039,14 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
 describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks resets call history but NOT implementations. Other describe
+    // blocks install a persistent InternalMcpCatalogModel.findById via
+    // mockResolvedValue (e.g. a multitenant catalog with no `name`), which under
+    // sequence.shuffle can survive into these tests and make the mocked
+    // constructDeploymentName throw — swallowed by cleanupOrphanedDeployments'
+    // try/catch, so nothing is deleted and the assertions flake. Restore the
+    // clean default (findById resolves undefined) so these tests are hermetic.
+    vi.mocked(InternalMcpCatalogModel.findById).mockReset();
   });
 
   async function createManagerWithMockK8s(params: {

@@ -25,7 +25,6 @@ import OrganizationRoleModel from "@/models/organization-role";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
-import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
@@ -435,7 +434,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "join: connection setup × skill; parent (connectionSetups) ephemeral",
   },
-  skillShareLinksTable: { audited: true, model: SkillShareLinkModel },
+  skillShareLinksTable: {
+    audited: false,
+    reason:
+      "skill share links; admin share/revoke not yet wired for audit (follow-up)",
+  },
   skillShareLinkSkillsTable: {
     audited: false,
     reason: "join: share link × skill; parent (skillShareLinks) carries signal",

@@ -501,9 +501,10 @@ class AppModel {
     id: string,
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select()
-      .from(schema.appsTable)
+    // Use the catalog-joined query so the snapshot includes the app's
+    // visibility (scope) and environmentId, which live on the backing catalog
+    // (FR-30) — a visibility-only edit would otherwise show no diff.
+    const [row] = await appWithCatalogQuery()
       .where(
         and(
           eq(schema.appsTable.id, id),

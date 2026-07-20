@@ -1288,11 +1288,17 @@ class TeamModel {
     // Fetch relational data (members, external groups, labels) to provide a
     // complete picture in the audit log diff — without labels here, a
     // labels-only update would produce an identical before/after snapshot.
-    const [members, externalGroups, labels] = await Promise.all([
-      TeamModel.getTeamMembersWithUsers(id),
-      TeamModel.getExternalGroups(id),
-      TeamLabelModel.getLabelsForTeam(id),
-    ]);
+    const [members, externalGroups, labels, vaultFolderRows] =
+      await Promise.all([
+        TeamModel.getTeamMembersWithUsers(id),
+        TeamModel.getExternalGroups(id),
+        TeamLabelModel.getLabelsForTeam(id),
+        db
+          .select({ id: schema.teamVaultFoldersTable.id })
+          .from(schema.teamVaultFoldersTable)
+          .where(eq(schema.teamVaultFoldersTable.teamId, id))
+          .limit(1),
+      ]);
 
     return {
       id: team.id,
@@ -1300,7 +1306,9 @@ class TeamModel {
       description: team.description ?? null,
       organizationId: team.organizationId,
       convertToolResultsToToon: team.convertToolResultsToToon,
-      members: members.map((m) => `${m.name} (${m.email})`).sort(),
+      // Include role so a member role change (not just add/remove) diffs.
+      members: members.map((m) => `${m.name} (${m.email}) [${m.role}]`).sort(),
+      hasVaultFolder: vaultFolderRows.length > 0,
       externalGroups: externalGroups.map((g) => g.groupIdentifier).sort(),
       labels: labels.map((l) => `${l.key}:${l.value}`).sort(),
       createdBy: team.createdBy,

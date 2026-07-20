@@ -504,8 +504,7 @@ describe("team routes", () => {
         offset: 0,
       });
       const row = data.find((r) => r.resourceId === team.id);
-      // Registered as team.updated — previously a suppressed walk-up POST that
-      // fell to unknown.created with a null resourceType.
+      // Adding a member is an update to the team resource.
       expect(row?.action).toBe("team.updated");
       expect(row?.outcome).toBe("success");
       expect(row?.before).not.toBeNull();

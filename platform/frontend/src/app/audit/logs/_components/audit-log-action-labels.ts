@@ -135,10 +135,6 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "skill.updated": "Skill updated",
   "skill.deleted": "Skill deleted",
   "skill.imported": "Skill imported",
-  // Skill share link
-  "skillShareLink.created": "Skill share link created",
-  "skillShareLink.rotated": "Skill share link token rotated",
-  "skillShareLink.revoked": "Skill share link revoked",
   // Team
   "team.created": "Team created",
   "team.updated": "Team updated",

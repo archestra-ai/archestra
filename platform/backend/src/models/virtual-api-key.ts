@@ -819,7 +819,6 @@ class VirtualApiKeyModel {
       keyType: row.keyType,
       authorId: row.authorId,
       teamIds: [...teamIds].sort(),
-      // Which provider keys this virtual key maps to (ids only).
       providerApiKeyIds: providerKeyRows.map((r) => r.providerApiKeyId).sort(),
       tokenStart: row.tokenStart,
       expiresAt: row.expiresAt?.toISOString() ?? null,

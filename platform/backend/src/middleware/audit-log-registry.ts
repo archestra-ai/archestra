@@ -26,7 +26,6 @@ import OrganizationRoleModel from "@/models/organization-role";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
-import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
 import ToolModel from "@/models/tool";
@@ -650,13 +649,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "team.updated",
     fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
   },
-  "/api/teams/:teamId/vault-folder/secrets/keys": {
-    resourceType: "team",
-    resourceIdParam: "teamId",
-    action: "team.updated",
-    fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
-  },
-
   // Team membership & external-group mappings live in join tables the team
   // snapshot reflects; the parent team survives member/mapping removal, so pin
   // team.updated on both the POST (add) and the per-child DELETE.
@@ -824,24 +816,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "mcpOauthClient",
     action: "mcpOauthClient.rotated",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
-  },
-
-  // Skill share links — public share tokens for skills. Create/rotate/revoke are
-  // security-relevant; DELETE is a soft-revoke (row survives with revokedAt), so
-  // it is audited as skillShareLink.revoked (after-state captured), not .deleted.
-  "/api/skill-share-links": {
-    resourceType: "skillShareLink",
-    fetchById: (id, orgId) => SkillShareLinkModel.findByIdForAudit(id, orgId),
-  },
-  "/api/skill-share-links/:id": {
-    resourceType: "skillShareLink",
-    action: "skillShareLink.revoked",
-    fetchById: (id, orgId) => SkillShareLinkModel.findByIdForAudit(id, orgId),
-  },
-  "/api/skill-share-links/:id/rotate": {
-    resourceType: "skillShareLink",
-    action: "skillShareLink.rotated",
-    fetchById: (id, orgId) => SkillShareLinkModel.findByIdForAudit(id, orgId),
   },
 };
 

@@ -240,42 +240,6 @@ class SkillShareLinkModel {
 
     return updated ?? null;
   }
-
-  static async findByIdForAudit(
-    id: string,
-    organizationId: string,
-  ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select()
-      .from(schema.skillShareLinksTable)
-      .where(
-        and(
-          eq(schema.skillShareLinksTable.id, id),
-          eq(schema.skillShareLinksTable.organizationId, organizationId),
-        ),
-      )
-      .limit(1);
-    if (!row) return null;
-
-    const skillRows = await db
-      .select({ skillId: schema.skillShareLinkSkillsTable.skillId })
-      .from(schema.skillShareLinkSkillsTable)
-      .where(eq(schema.skillShareLinkSkillsTable.shareLinkId, id));
-
-    return {
-      id: row.id,
-      organizationId: row.organizationId,
-      name: row.name ?? null,
-      marketplaceName: row.marketplaceName,
-      // Display prefix only — the sha256 tokenHash and raw token never surface.
-      tokenStart: row.tokenStart,
-      skillIds: skillRows.map((s) => s.skillId).sort(),
-      createdByUserId: row.createdByUserId,
-      expiresAt: row.expiresAt?.toISOString() ?? null,
-      revokedAt: row.revokedAt?.toISOString() ?? null,
-      createdAt: row.createdAt.toISOString(),
-    };
-  }
 }
 
 export default SkillShareLinkModel;

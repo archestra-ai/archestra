@@ -349,6 +349,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
     kind: "route",
     value: "/api/teams/:teamId/vault-folder/check-connectivity",
   },
+  // Read-only: returns the key names of a secret in the team's vault folder.
+  { kind: "route", value: "/api/teams/:teamId/vault-folder/secrets/keys" },
   {
     kind: "route",
     value: "/api/schedule-triggers/:id/runs/:runId/conversation",

@@ -13,7 +13,6 @@ import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
-import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
@@ -598,43 +597,6 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("defaultDiscoveredToolResultPolicy");
   });
 
-  test("SkillShareLinkModel.findByIdForAudit redacts the token and captures skills", async ({
-    makeOrganization,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const [skill] = await db
-      .insert(schema.skillsTable)
-      .values({
-        organizationId: org.id,
-        name: "Shared Skill",
-        description: "d",
-        content: "c",
-        latestVersion: 1,
-      })
-      .returning();
-    const { link } = await SkillShareLinkModel.create({
-      organizationId: org.id,
-      createdByUserId: user.id,
-      skillIds: [skill.id],
-      marketplaceName: "shared-skill",
-      name: "My Link",
-    });
-
-    const snapshot = await SkillShareLinkModel.findByIdForAudit(
-      link.id,
-      org.id,
-    );
-
-    expect(snapshot).toHaveProperty("marketplaceName", "shared-skill");
-    expect(snapshot).toHaveProperty("name", "My Link");
-    expect(snapshot?.skillIds).toEqual([skill.id]);
-    // Display prefix is captured; the sha256 hash and raw token never are.
-    expect(typeof snapshot?.tokenStart).toBe("string");
-    expect(snapshot).not.toHaveProperty("tokenHash");
-    expect(JSON.stringify(snapshot)).not.toContain("tokenHash");
-  });
 
   test("AgentModel.findByIdForAudit returns null for wrong org", async ({
     makeOrganization,

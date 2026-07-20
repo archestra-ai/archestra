@@ -216,6 +216,11 @@ async function importEnabledService() {
     "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
     "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
   );
+  // The runner host enables the runtime, but the ARCHESTRA_CODE_RUNTIME_ENABLED
+  // kill switch (via .env, whose shipped default is "false") would win. Set it
+  // to a non-"false" value so enablement is deterministic regardless of the
+  // developer's .env.
+  vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "");
   const { skillSandboxRuntimeService: enabled } = await import(
     "./skill-sandbox-runtime-service"
   );

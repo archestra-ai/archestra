@@ -11,7 +11,7 @@ import {
   flagImageApprovalRequired,
   holdInstallIfImageGated,
 } from "@/services/mcp-install-policy";
-import { describe, expect, test } from "@/test";
+import { describe, expect, mustExist, test } from "@/test";
 import type { CatalogItemApprovalStatus } from "@/types";
 
 const UNTRUSTED_IMAGE = "ghcr.io/evil/x:1";
@@ -216,7 +216,7 @@ describe("assertInstallAllowedOrBlock", () => {
 
     await expect(
       assertInstallAllowedOrBlock({
-        catalogItem: approved!,
+        catalogItem: mustExist(approved),
         organizationId: org.id,
       }),
     ).resolves.toBeUndefined();
@@ -287,7 +287,7 @@ describe("assertInstallAllowedOrBlock", () => {
     const stalePending = await InternalMcpCatalogModel.findById(catalog.id);
     await expect(
       assertInstallAllowedOrBlock({
-        catalogItem: stalePending!,
+        catalogItem: mustExist(stalePending),
         organizationId: org.id,
       }),
     ).resolves.toBeUndefined();
@@ -565,7 +565,7 @@ describe("holdInstallIfImageGated", () => {
 
     await expect(
       holdInstallIfImageGated({
-        catalogItem: approved!,
+        catalogItem: mustExist(approved),
         organizationId: org.id,
       }),
     ).resolves.toBe(false);

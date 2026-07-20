@@ -9,6 +9,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { useAppSessionRecorder } from "@/components/app-session-recording/use-app-session-recorder";
 import { AppDiagnosticsPanel } from "@/components/chat/app-diagnostics-panel";
 import { useApps } from "@/components/chat/apps-context";
 import { mcpToolLabel } from "@/components/chat/chat-messages.utils";
@@ -351,6 +352,13 @@ export function McpAppEntryContent({
     };
   }, [rawOutput, appId]);
 
+  // Feed this chat's session recorder: whichever app frame is live (inline card
+  // or side panel) forwards its MCP exchanges, HTML snapshots, and the injected
+  // SDK's input events to the recorder the chat page provides, so one recording
+  // follows the app across surfaces. The Record/Play controls live in the
+  // composer, not here. Inert until the user starts a recording.
+  const recorder = useAppSessionRecorder();
+
   const handleShowInPanel = () => {
     if (!toolCallId) return;
     setDisplayMode("inline"); // panel is the app's frame — never fullscreen there
@@ -439,6 +447,7 @@ export function McpAppEntryContent({
       // which the runtime gates on a non-null version.
       appVersion={appVersion ?? ownedApp?.latestVersion ?? null}
       reloadNonce={reloadNonce}
+      recorder={appId ? recorder.runtimeHooks : undefined}
       // Third-party apps (no appId) are incidental to a tool call: if their
       // upstream can't serve the advertised ui:// resource, fold the app away
       // and keep the plain tool result rather than showing a load error.
@@ -463,7 +472,12 @@ export function McpAppEntryContent({
       }
       right={
         <>
-          {appId ? <McpAppStandaloneButton appId={appId} /> : null}
+          {appId ? (
+            <McpAppStandaloneButton
+              appId={appId}
+              disabled={recorder.status !== "idle"}
+            />
+          ) : null}
           {isOwnedInPanel ? (
             <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
           ) : null}
@@ -541,7 +555,12 @@ export function McpAppEntryContent({
         // Match the card's 80% width and right-justify so the buttons line
         // up with the app's right edge, not the full chat width.
         <div className="flex w-full max-w-[80%] justify-end gap-1">
-          {appId ? <McpAppStandaloneButton appId={appId} /> : null}
+          {appId ? (
+            <McpAppStandaloneButton
+              appId={appId}
+              disabled={recorder.status !== "idle"}
+            />
+          ) : null}
           <Button
             type="button"
             variant="ghost"

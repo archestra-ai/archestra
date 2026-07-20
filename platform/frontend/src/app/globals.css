@@ -250,6 +250,17 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   min-height: var(--visual-viewport-height, 100svh);
 }
 
+/* Freezes every CSS animation in a subtree, itself included. A paused replay
+   must look paused: enter animations caught mid-flight, blinking carets, and
+   pulsing activity dots all hold their current frame and resume from it,
+   because animation-play-state does not inherit and cannot be set inline. */
+@utility animations-paused {
+  &,
+  & * {
+    animation-play-state: paused !important;
+  }
+}
+
 /* Thin scrollbar for sidebar scroll regions */
 @utility scrollbar-sidebar {
   scrollbar-width: thin;

@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 /** Ghost icon + text button shared by the app top bar's labeled actions. */
-const LABELED_BUTTON_CLASS =
+export const LABELED_BUTTON_CLASS =
   "h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground";
 
 /**
@@ -131,7 +131,46 @@ export function McpAppFullscreenExitButton({
   );
 }
 
-export function McpAppStandaloneButton({ appId }: { appId: string }) {
+export function McpAppStandaloneButton({
+  appId,
+  disabled = false,
+}: {
+  appId: string;
+  /**
+   * Disabled while a recording is in progress: a new tab loads a fresh,
+   * unrecorded app instance, so opening one mid-recording would silently drop
+   * the user out of the session being captured.
+   */
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* Wrap the disabled button so it still receives hover for the
+                tooltip (a disabled control fires no pointer events itself). */}
+            <span className="inline-flex">
+              <Button
+                type="button"
+                aria-label="Open in new tab"
+                variant="ghost"
+                size="sm"
+                className={LABELED_BUTTON_CLASS}
+                disabled
+              >
+                <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+                Open in new tab
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            Stop the recording to open the app in a new tab.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
   return (
     <Button
       asChild

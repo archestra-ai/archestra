@@ -31,6 +31,10 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
+import {
+  AppSessionRecorderProvider,
+  useOwnAppSessionRecorder,
+} from "@/components/app-session-recording/use-app-session-recorder";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
@@ -1049,6 +1053,21 @@ export function ChatPageContent({
     () => openedAppMetadataFromApps(mcpApps),
     [mcpApps],
   );
+
+  // This chat's Apps Hackathon session recorder, owned here as part of the
+  // chat session and provided to the tree below: the composer's control drives
+  // Start/Stop and each app frame feeds capture. Ownership scopes the
+  // recording's lifetime — leaving this conversation (or this page) stops and
+  // saves it. A recording started from scratch (before this chat had an id) is
+  // adopted under the new id in createInitialConversation's onSuccess.
+  const recordedAppId = useMemo(
+    () => mcpApps.find((entry) => entry.appId)?.appId ?? null,
+    [mcpApps],
+  );
+  const appSessionRecorder = useOwnAppSessionRecorder({
+    conversationId: conversationId ?? null,
+    appId: recordedAppId,
+  });
   // When an admin opens another user's app, the seeded conversation (origin
   // "app_open") renders that app, but its server-computed viewerRole is "admin":
   // they may use it and change its settings, not modify it via chat. Mirror the
@@ -1971,6 +1990,10 @@ export function ChatPageContent({
       createConversationMutation.mutate(input, {
         onSuccess: (newConversation) => {
           if (newConversation) {
+            // A recording started from scratch (before this chat had an id)
+            // becomes this conversation's recording now that its id exists, so
+            // the timer and buffered capture carry across the transition.
+            appSessionRecorder.adoptConversation(newConversation.id);
             void onSuccess?.(newConversation);
           }
         },
@@ -1983,6 +2006,7 @@ export function ChatPageContent({
       initialApiKeyId,
       createConversationMutation,
       searchParams,
+      appSessionRecorder.adoptConversation,
     ],
   );
 
@@ -2488,7 +2512,7 @@ export function ChatPageContent({
     autoSendTriggered: autoSendTriggeredRef.current,
   });
 
-  return (
+  const page = (
     <AppsProvider
       key={conversationId ?? "new"}
       apps={mcpApps}
@@ -3063,6 +3087,11 @@ export function ChatPageContent({
         </StandardDialog>
       </div>
     </AppsProvider>
+  );
+  return (
+    <AppSessionRecorderProvider recorder={appSessionRecorder}>
+      {page}
+    </AppSessionRecorderProvider>
   );
 }
 

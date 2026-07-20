@@ -770,6 +770,10 @@ If your nodes can't host the managed pod, you have two options:
   - Default: `262144` (256 KiB)
 - **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel.
   - Default: `16777216` (16 MiB)
+- **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands the shared Dagger session runs at once, deployment-wide. Raise it with the engine's CPU and memory.
+  - Default: `10`
+- **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.
+  - Default: `50`
 
 ### Skills Marketplace
 

@@ -23,6 +23,12 @@ catalog:
   typescript-7: "npm:typescript@7.0.1-rc"
   zod: ^4.3.4
 overrides:
+  # CVE-2026-49356 (GHSA-4x5r-pxfx-6jf8, LOW, arbitrary source-map read via
+  # sourceMappingURL handling) fixed in 7.29.6. Transitive-only (build tooling),
+  # so an override is the only way to lift every resolution past the vulnerable
+  # range. Bounded to <8 so the floor can't drag the toolchain onto Babel 8 while
+  # the sibling @babel/* plugins are still 7.x.
+  '@babel/core': '>=7.29.6 <8'
   '@fastify/reply-from': '>=12.6.2'
   '@fastify/http-proxy': '>=11.4.4'
   protobufjs: '>=8.6.0'

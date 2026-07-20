@@ -45,11 +45,10 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
 }
 
 /**
- * Choosing a personal-scope connection for a shared (team/org) agent or gateway
- * prompts a confirmation ("Use this connection for everyone?") because every
- * caller would then connect as that one owner. Confirm it so the choice applies;
- * non-personal connections and personal-scope targets don't prompt. Returns
- * whether a confirmation was handled.
+ * Choosing a personal-scope connection prompts a confirmation ("Use this
+ * connection for everyone?") because every caller of the tool would then connect
+ * as that one owner. Confirm it so the choice applies; non-personal connections
+ * don't prompt. Returns whether a confirmation was handled.
  */
 async function confirmPersonalCredentialPinIfPrompted(
   page: Page,

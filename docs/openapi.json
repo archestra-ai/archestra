@@ -54964,6 +54964,1186 @@
         }
       }
     },
+    "/api/app-recordings/enhance": {
+      "post": {
+        "operationId": "enhanceAppRecording",
+        "tags": [
+          "App Recordings"
+        ],
+        "description": "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "conversationId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "appName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "conversationId",
+                  "appName"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "prompt": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "response": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "category": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "description",
+                    "prompt",
+                    "response",
+                    "category"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      }
+    },
+    "/api/app-recordings/render": {
+      "post": {
+        "operationId": "renderAppRecordingVideo",
+        "tags": [
+          "App Recordings"
+        ],
+        "description": "Start rendering a recorded app session to an MP4 and return the job's id. Rendering runs in the background — poll the status endpoint and collect the file when it reports done. The recording is rendered from the bundle sent with the request; nothing is read from or written to server storage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bundle": {},
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "bundle",
+                  "title"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "jobId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      }
+    },
+    "/api/app-recordings/render/{jobId}": {
+      "get": {
+        "operationId": "getAppRecordingRenderStatus",
+        "tags": [
+          "App Recordings"
+        ],
+        "description": "How a video render is going. `done` means the file is ready to collect from the download endpoint.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "running",
+                        "done",
+                        "failed",
+                        "cancelled"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      },
+      "delete": {
+        "operationId": "cancelAppRecordingRender",
+        "tags": [
+          "App Recordings"
+        ],
+        "description": "Stop a running render and discard it, freeing the browser it was driving.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cancelled": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "cancelled"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      }
+    },
+    "/api/app-recordings/render/{jobId}/video": {
+      "get": {
+        "operationId": "downloadAppRecordingVideo",
+        "tags": [
+          "App Recordings"
+        ],
+        "description": "Collect a finished render. The job ends here — the file is handed over once and the server keeps no copy.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
+        }
+      }
+    },
     "/api/apps": {
       "get": {
         "operationId": "getApps",
@@ -97775,6 +98955,9 @@
                         },
                         "kbAutoSyncPermissionsEnabled": {
                           "type": "boolean"
+                        },
+                        "hackathonRecorderEnabled": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -97800,7 +98983,8 @@
                         "chatSecretScanEnabled",
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
-                        "kbAutoSyncPermissionsEnabled"
+                        "kbAutoSyncPermissionsEnabled",
+                        "hackathonRecorderEnabled"
                       ],
                       "additionalProperties": false
                     },
@@ -113701,7 +114885,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -114247,7 +115432,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -115214,7 +116400,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -115881,7 +117068,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -116548,7 +117736,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -117761,7 +118950,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -118307,7 +119497,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -120804,7 +121995,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -121350,7 +122542,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -121896,7 +123089,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -122442,7 +123636,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -122988,7 +124183,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -123534,7 +124730,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -124080,7 +125277,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -124615,7 +125813,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -125150,7 +126349,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -125696,7 +126896,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -126242,7 +127443,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -126788,7 +127990,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -129505,7 +130708,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -132227,7 +133431,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -132773,7 +133978,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -133553,7 +134759,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -134786,7 +135993,8 @@
                 "knowledge:embedding",
                 "knowledge:reranker",
                 "knowledge:query-expansion",
-                "app:llm_complete"
+                "app:llm_complete",
+                "app:recording_enhancement"
               ]
             },
             "in": "query",
@@ -134901,7 +136109,8 @@
                               "knowledge:embedding",
                               "knowledge:reranker",
                               "knowledge:query-expansion",
-                              "app:llm_complete"
+                              "app:llm_complete",
+                              "app:recording_enhancement"
                             ]
                           },
                           "sources": {
@@ -134924,7 +136133,8 @@
                                 "knowledge:embedding",
                                 "knowledge:reranker",
                                 "knowledge:query-expansion",
-                                "app:llm_complete"
+                                "app:llm_complete",
+                                "app:recording_enhancement"
                               ]
                             }
                           },
@@ -136026,7 +137236,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -136572,7 +137783,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -137539,7 +138751,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -138206,7 +139419,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -138873,7 +140087,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -140086,7 +141301,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -140632,7 +141848,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -143129,7 +144346,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -143675,7 +144893,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -144221,7 +145440,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -144767,7 +145987,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -145313,7 +146534,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -145859,7 +147081,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -146405,7 +147628,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -146940,7 +148164,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -147475,7 +148700,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -148021,7 +149247,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -148567,7 +149794,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -149113,7 +150341,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -151830,7 +153059,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -154552,7 +155782,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -155098,7 +156329,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {
@@ -155878,7 +157110,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {

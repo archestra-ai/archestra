@@ -9,6 +9,8 @@ import {
   OrganizationModel,
   TeamModel,
 } from "@/models";
+import * as secretsManager from "@/secrets-manager";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { beforeEach, describe, expect, test } from "@/test";
 import * as llmApiKeyResolution from "@/utils/llm-api-key-resolution";
 import {
@@ -744,6 +746,66 @@ describe("resolveConfiguredAgentLlm", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  test("returns the attached key's secret for a plain provider key", async () => {
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-openai",
+      provider: "openai",
+      secretId: "secret-openai",
+      baseUrl: null,
+      inferenceBaseUrl: null,
+    } as never);
+    vi.spyOn(
+      secretsManager,
+      "getSecretValueForLlmProviderApiKey",
+    ).mockResolvedValue("sk-plain");
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({ id: "m-2", modelId: "gpt-4.1", provider: "openai" }),
+    );
+
+    const result = await resolveConfiguredAgentLlm({
+      llmApiKeyId: "key-openai",
+      modelId: "m-2",
+    });
+
+    expect(result?.apiKey).toBe("sk-plain");
+  });
+
+  test("withholds a ChatGPT-subscription credential from this ownership-blind path", async () => {
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-codex",
+      provider: "openai",
+      secretId: "secret-codex",
+      baseUrl: null,
+      inferenceBaseUrl: null,
+    } as never);
+    vi.spyOn(
+      secretsManager,
+      "getSecretValueForLlmProviderApiKey",
+    ).mockResolvedValue(
+      encodeOpenAiCodexCredential({
+        refreshToken: "refresh-token",
+        accountId: "account-id",
+      }),
+    );
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({ id: "m-codex", modelId: "gpt-5-codex", provider: "openai" }),
+    );
+
+    const result = await resolveConfiguredAgentLlm({
+      llmApiKeyId: "key-codex",
+      modelId: "m-codex",
+    });
+
+    // The credential is per-user; the fall-through resolution enforces
+    // ownership for the acting user instead of this helper handing it out.
+    expect(result).toEqual({
+      provider: "openai",
+      apiKey: undefined,
+      modelName: "gpt-5-codex",
+      baseUrl: null,
+    });
   });
 });
 

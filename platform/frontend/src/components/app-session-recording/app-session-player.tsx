@@ -577,40 +577,51 @@ export function AppSessionPlayer({
                   />
 
                   <Tooltip>
+                    {/* The wrapper is what makes the blocked case explain
+                        itself: a disabled button fires no pointer events, so
+                        the tooltip below — the only thing that says WHY the
+                        export is unavailable — never opened on the one button
+                        that needed it. Same span the play and replay buttons
+                        use. */}
                     <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="group size-7 text-muted-foreground hover:text-foreground"
-                        aria-label={
-                          rendering
-                            ? "Cancel preparing the video"
-                            : "Download a video of this session"
-                        }
-                        data-tour="download"
-                        // Live while rendering — this is the way back out of a
-                        // render started by mistake, and the spinner is where
-                        // the author looks for it.
-                        disabled={!rendering && exportBlocked}
-                        onClick={() => {
-                          if (rendering) {
-                            cancelAppRecordingVideoRender();
-                            return;
+                      <span className="inline-flex">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="group size-7 text-muted-foreground hover:text-foreground"
+                          aria-label={
+                            rendering
+                              ? "Cancel preparing the video"
+                              : "Download a video of this session"
                           }
-                          if (!recording) return;
-                          renderVideo.mutate({ conversationId, title });
-                        }}
-                      >
-                        {rendering ? (
-                          <>
-                            <Loader size={14} className="group-hover:hidden" />
-                            <X className="hidden size-4 group-hover:block" />
-                          </>
-                        ) : (
-                          <DownloadIcon className="size-4" />
-                        )}
-                      </Button>
+                          data-tour="download"
+                          // Live while rendering — this is the way back out of
+                          // a render started by mistake, and the spinner is
+                          // where the author looks for it.
+                          disabled={!rendering && exportBlocked}
+                          onClick={() => {
+                            if (rendering) {
+                              cancelAppRecordingVideoRender();
+                              return;
+                            }
+                            if (!recording) return;
+                            renderVideo.mutate({ conversationId, title });
+                          }}
+                        >
+                          {rendering ? (
+                            <>
+                              <Loader
+                                size={14}
+                                className="group-hover:hidden"
+                              />
+                              <X className="hidden size-4 group-hover:block" />
+                            </>
+                          ) : (
+                            <DownloadIcon className="size-4" />
+                          )}
+                        </Button>
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[260px] text-xs">
                       {rendering

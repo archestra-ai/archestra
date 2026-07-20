@@ -1,7 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalEnv": ["ARCHESTRA_*", "NEXT_PUBLIC_ARCHESTRA_*", "CODEGEN"],
-  "globalDependencies": [".env", "pnpm-workspace.yaml"],
+  "globalDependencies": [
+    ".env",
+    "pnpm-workspace.yaml",
+    "shared/hey-api/clients/**"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

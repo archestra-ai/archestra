@@ -55,6 +55,24 @@ describe("MemoryRecordingStore", () => {
     expect((await store.get("app-2"))?.recording.title).toBe("two");
   });
 
+  it("stores an edited bundle and the history describing it together", async () => {
+    const store = new MemoryRecordingStore();
+    // The editor writes both halves of an edit at once — a history that landed
+    // without its bundle would leave undo pointing at a state the recording is
+    // not in.
+    await store.putWithHistory({
+      key: "conv-1",
+      bundle: bundle("app-1", "edited"),
+      history: { entries: [{}, { edits: { cuts: [] } }], cursor: 1 },
+    });
+
+    expect((await store.get("conv-1"))?.recording.title).toBe("edited");
+    expect(await store.getHistory("conv-1")).toEqual({
+      entries: [{}, { edits: { cuts: [] } }],
+      cursor: 1,
+    });
+  });
+
   it("deletes a recording", async () => {
     const store = new MemoryRecordingStore();
     await store.put("app-1", bundle("app-1", "first"));

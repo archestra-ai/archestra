@@ -163,6 +163,15 @@ export function useRenderAppRecordingVideo() {
         toast.error(`Export refused. ${validation.reason}`);
         return null;
       }
+      // This render's own cancellation, registered so the export button can
+      // reach a render whose toast has been dismissed. Per-run rather than one
+      // module-level "the current job": a second render started before the
+      // first settles would take that single slot, and the first render's
+      // Cancel would then point at the wrong job — or at none — leaving a
+      // render the author asked to stop running to the end on their one slot.
+      const cancellation = new AbortController();
+      runningRenders.add(cancellation);
+
       // Rendering runs for tens of seconds, so say so up front and say how
       // long: a silent spinner that long reads as a hang, and the author would
       // otherwise sit and watch a render they are free to walk away from. Both
@@ -172,22 +181,36 @@ export function useRenderAppRecordingVideo() {
       // after the player is gone.
       const toastId = toast.loading(
         `Preparing your video — will take about ${renderEstimate(validation.bundle)}. It downloads when it is done. You can now close the player.`,
-        { action: { label: "Cancel", onClick: () => cancelRender() } },
+        { action: { label: "Cancel", onClick: () => cancellation.abort() } },
       );
 
-      const started = await renderAppRecordingVideo({
-        body: { bundle: validation.bundle, title: params.title },
-      });
-      if (started.error || !started.data?.jobId) {
-        toast.dismiss(toastId);
-        if (started.error) handleApiError(started.error);
-        return null;
-      }
-      const jobId = started.data.jobId;
-      renderJobId = jobId;
-
       try {
-        const outcome = await awaitRenderJob(jobId);
+        const started = await renderAppRecordingVideo({
+          body: { bundle: validation.bundle, title: params.title },
+        });
+        if (started.error || !started.data?.jobId) {
+          toast.dismiss(toastId);
+          if (started.error) handleApiError(started.error);
+          return null;
+        }
+        const jobId = started.data.jobId;
+        // The job has a name now, so calling it off can reach the server —
+        // which is what actually stops it: the job outlives this page, and
+        // dropping it here alone would leave a browser running on the author's
+        // one render slot. A Cancel clicked while the start request was still
+        // in flight fires no listener, so it is applied here rather than lost.
+        const stopOnServer = () => {
+          void cancelAppRecordingRender({ path: { jobId } });
+        };
+        if (cancellation.signal.aborted) {
+          stopOnServer();
+        } else {
+          cancellation.signal.addEventListener("abort", stopOnServer, {
+            once: true,
+          });
+        }
+
+        const outcome = await awaitRenderJob(jobId, cancellation.signal);
         if (outcome === "cancelled") {
           toast.info("Video canceled.", { id: toastId });
           return null;
@@ -218,30 +241,23 @@ export function useRenderAppRecordingVideo() {
         );
         return null;
       } finally {
-        if (renderJobId === jobId) renderJobId = null;
+        runningRenders.delete(cancellation);
       }
     },
   });
 }
 
 /**
- * Stop the running video render, if there is one.
+ * Stop the video renders running in this tab.
  *
  * A mistaken click otherwise costs the author a whole render they have to sit
  * through, so both places that show a render is running — the toast and the
- * export button — can call it off. Telling the server is what actually stops
- * it: the job outlives this page, so forgetting about it here would leave a
- * browser running on the author's one render slot.
+ * export button — can call it off. The toast cancels the one render it belongs
+ * to; this is the export button's way in, and it holds no reference to any
+ * particular render, so it stops whatever is going.
  */
 export function cancelAppRecordingVideoRender(): void {
-  cancelRender();
-}
-
-function cancelRender(): void {
-  const jobId = renderJobId;
-  if (!jobId) return;
-  renderCancelled.add(jobId);
-  void cancelAppRecordingRender({ path: { jobId } });
+  for (const cancellation of runningRenders) cancellation.abort();
 }
 
 /**
@@ -252,23 +268,23 @@ function cancelRender(): void {
  * connection open through whatever sits between here and the server — which is
  * the very thing that made the synchronous render unshippable.
  */
-async function awaitRenderJob(jobId: string): Promise<"done" | "cancelled"> {
+async function awaitRenderJob(
+  jobId: string,
+  cancelled: AbortSignal,
+): Promise<"done" | "cancelled"> {
   const deadline = Date.now() + RENDER_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (renderCancelled.has(jobId)) {
-      renderCancelled.delete(jobId);
-      return "cancelled";
-    }
+    if (cancelled.aborted) return "cancelled";
     await new Promise((resolve) =>
       setTimeout(resolve, RENDER_POLL_INTERVAL_MS),
     );
     const { data, error } = await getAppRecordingRenderStatus({
       path: { jobId },
     });
-    if (renderCancelled.has(jobId)) {
-      renderCancelled.delete(jobId);
-      return "cancelled";
-    }
+    // The cancel and the poll race — a status request already in flight when
+    // the author called it off can land afterwards still reporting `running` —
+    // so the intent is read from the signal, not inferred from the answer.
+    if (cancelled.aborted) return "cancelled";
     if (error) {
       // Jobs live in the server's memory, so a deploy or a restart takes every
       // render that was running with it. That reads as a plain 404 here, which
@@ -295,14 +311,14 @@ function isMissingJob(error: unknown): boolean {
   return /no longer available/i.test(toApiError(error as never).message);
 }
 
-/** The running job, so the toast and the button can call it off. */
-let renderJobId: string | null = null;
 /**
- * Jobs the author has cancelled. The cancel and the poll race — a status that
- * was already in flight can land after the cancel and report `running` — so the
- * intent is remembered here rather than inferred from the answer.
+ * The renders going in this tab, so the export button can call one off: it
+ * holds no reference to the mutation that started one, and the toast that does
+ * may already have been dismissed. A set rather than a single current job —
+ * two renders started in quick succession are both really running, and a
+ * cancel has to reach both rather than whichever one registered last.
  */
-const renderCancelled = new Set<string>();
+const runningRenders = new Set<AbortController>();
 const RENDER_POLL_INTERVAL_MS = 1_500;
 /** Well past the longest export the editor allows, as a stuck-job backstop. */
 const RENDER_POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -402,8 +418,14 @@ export function useAppRecordingEditor(conversationId: string | null) {
         toast.error(`Edit not applied. ${validation.reason}`);
         return null;
       }
-      await recordingStore.putHistory(params.conversationId, params.next);
-      await recordingStore.put(params.conversationId, stamped);
+      // Both halves of the edit in one write: a history that persisted while
+      // the bundle it describes did not would leave undo pointing at a state
+      // the recording is not in.
+      await recordingStore.putWithHistory({
+        key: params.conversationId,
+        bundle: stamped,
+        history: params.next,
+      });
       return params;
     },
     onSuccess: (result) => {

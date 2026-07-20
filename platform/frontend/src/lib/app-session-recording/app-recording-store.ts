@@ -45,6 +45,20 @@ export interface RecordingEditHistory {
 export interface RecordingStore {
   get(key: string): Promise<AppRecordingBundle | null>;
   put(key: string, bundle: AppRecordingBundle): Promise<void>;
+  /**
+   * Store a bundle and the edit history describing it as ONE write.
+   *
+   * They are two halves of a single edit and have to land together. A history
+   * that persisted without its bundle leaves undo pointing at a state the
+   * recording is not in — the player replays the older bundle while the editor
+   * believes the newer one was applied. One transaction means a write refused
+   * partway (the quota the second one trips) takes the first back out with it.
+   */
+  putWithHistory(params: {
+    key: string;
+    bundle: AppRecordingBundle;
+    history: RecordingEditHistory;
+  }): Promise<void>;
   delete(key: string): Promise<void>;
   /**
    * The storage key of the newest stored recording bound to the app — across
@@ -54,7 +68,6 @@ export interface RecordingStore {
    */
   findLatestKeyForApp(appId: string): Promise<string | null>;
   getHistory(key: string): Promise<RecordingEditHistory | null>;
-  putHistory(key: string, history: RecordingEditHistory): Promise<void>;
   deleteHistory(key: string): Promise<void>;
 }
 
@@ -116,6 +129,20 @@ class IndexedDbRecordingStore implements RecordingStore {
     broadcastRecordingChange(key);
   }
 
+  async putWithHistory(params: {
+    key: string;
+    bundle: AppRecordingBundle;
+    history: RecordingEditHistory;
+  }): Promise<void> {
+    void this.requestPersistence();
+    const db = await this.db();
+    await this.runBatch(db, (store) => {
+      store.put(params.bundle, params.key);
+      store.put(params.history, HISTORY_KEY_PREFIX + params.key);
+    });
+    broadcastRecordingChange(params.key);
+  }
+
   async delete(key: string): Promise<void> {
     const db = await this.db();
     await this.run(db, "readwrite", (store) => store.delete(key));
@@ -149,6 +176,10 @@ class IndexedDbRecordingStore implements RecordingStore {
         cursor.continue();
       };
       request.onerror = () => reject(request.error);
+      // The cursor's own error covers a failed read, but not a transaction the
+      // browser tears down under it (an eviction, a force-close). Without this
+      // the promise never settles and the Replay button waits forever.
+      tx.onabort = () => reject(tx.error);
     });
   }
 
@@ -160,13 +191,6 @@ class IndexedDbRecordingStore implements RecordingStore {
       (store) => store.get(HISTORY_KEY_PREFIX + key),
     );
     return value ?? null;
-  }
-
-  async putHistory(key: string, history: RecordingEditHistory): Promise<void> {
-    const db = await this.db();
-    await this.run(db, "readwrite", (store) =>
-      store.put(history, HISTORY_KEY_PREFIX + key),
-    );
   }
 
   async deleteHistory(key: string): Promise<void> {
@@ -208,6 +232,26 @@ class IndexedDbRecordingStore implements RecordingStore {
   }
 
   /**
+   * Apply several writes as ONE transaction — all of them land or none do.
+   *
+   * Settles on the TRANSACTION rather than on the requests: a request that
+   * succeeded says nothing about a later one being refused, and it is that
+   * refusal which has to take the earlier write back out again.
+   */
+  private runBatch(
+    db: IDBDatabase,
+    ops: (store: IDBObjectStore) => void,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(OBJECT_STORE, "readwrite");
+      ops(tx.objectStore(OBJECT_STORE));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+
+  /**
    * Ask the browser to keep this origin's storage from being evicted under disk
    * pressure. Best-effort and one-shot — a denial just leaves the default
    * (still durable across reloads, only evictable under pressure).
@@ -241,6 +285,15 @@ export class MemoryRecordingStore implements RecordingStore {
     this.map.set(key, bundle);
   }
 
+  async putWithHistory(params: {
+    key: string;
+    bundle: AppRecordingBundle;
+    history: RecordingEditHistory;
+  }): Promise<void> {
+    this.map.set(params.key, params.bundle);
+    this.histories.set(params.key, params.history);
+  }
+
   async delete(key: string): Promise<void> {
     this.map.delete(key);
   }
@@ -261,10 +314,6 @@ export class MemoryRecordingStore implements RecordingStore {
 
   async getHistory(key: string): Promise<RecordingEditHistory | null> {
     return this.histories.get(key) ?? null;
-  }
-
-  async putHistory(key: string, history: RecordingEditHistory): Promise<void> {
-    this.histories.set(key, history);
   }
 
   async deleteHistory(key: string): Promise<void> {

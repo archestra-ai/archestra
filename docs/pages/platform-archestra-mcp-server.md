@@ -661,6 +661,9 @@ This tool takes no arguments.
 | `add_team_member` | Add an organization user to a team by user ID or email, optionally as an admin. | `team:read` † |
 | `update_team_member_role` | Change a team member's role between admin and member. | `team:read` † |
 | `remove_team_member` | Remove a member from a team. | `team:read` † |
+| `list_team_external_groups` | List the external identity provider groups mapped to a team for SSO team sync. | `team:read` |
+| `add_team_external_group` | Map an external identity provider group to a team for SSO team sync: users whose SSO group memberships match are automatically added to or removed from the team on login. | `team:read` |
+| `remove_team_external_group` | Remove an external group mapping from a team's SSO team sync, by mapping ID or by group identifier. | `team:read` |
 
 † This tool enforces an additional access requirement beyond its RBAC permission — see its details below.
 
@@ -905,6 +908,66 @@ Additional access requirement: Beyond `team:read`, the caller must be an organiz
 | `success` | `boolean` | Yes |  |
 | `teamId` | `string` | Yes |  |
 | `userId` | `string` | Yes |  |
+
+#### list_team_external_groups
+
+Required RBAC permission: `team:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | `string` | Yes | The ID of the team whose external group mappings to list. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `externalGroups` | `object[]` | Yes |  |
+| `externalGroups[].id` | `string` | Yes | The external group mapping ID. |
+| `externalGroups[].teamId` | `string` | Yes | The team the mapping belongs to. |
+| `externalGroups[].groupIdentifier` | `string` | Yes | The external identity provider group identifier. |
+| `externalGroups[].createdAt` | `string` | Yes | ISO timestamp when the mapping was created. |
+
+#### add_team_external_group
+
+Required RBAC permission: `team:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | `string` | Yes | The ID of the team to map the external group to. |
+| `group_identifier` | `string` | Yes | The external identity provider group identifier. Format varies by provider: LDAP Distinguished Name (e.g. cn=admins,ou=groups,dc=example,dc=com), OAuth/OIDC group name from the groups claim, SAML group attribute value, or Azure AD group object ID (GUID). Matched case-insensitively. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `externalGroup` | `object` | Yes |  |
+| `externalGroup.id` | `string` | Yes | The external group mapping ID. |
+| `externalGroup.teamId` | `string` | Yes | The team the mapping belongs to. |
+| `externalGroup.groupIdentifier` | `string` | Yes | The external identity provider group identifier. |
+| `externalGroup.createdAt` | `string` | Yes | ISO timestamp when the mapping was created. |
+
+#### remove_team_external_group
+
+Required RBAC permission: `team:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | `string` | Yes | The ID of the team. |
+| `group_id` | `string` | No | The ID of the external group mapping to remove. |
+| `group_identifier` | `string` | No | The external group identifier to remove, as an alternative to group_id. Matched case-insensitively. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `boolean` | Yes |  |
+| `teamId` | `string` | Yes |  |
 
 ### Limits
 

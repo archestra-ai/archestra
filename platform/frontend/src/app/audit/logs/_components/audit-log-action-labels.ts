@@ -58,6 +58,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "githubAppConfig.created": "GitHub App configuration created",
   "githubAppConfig.updated": "GitHub App configuration updated",
   "githubAppConfig.deleted": "GitHub App configuration deleted",
+  "githubPat.created": "GitHub token saved",
+  "githubPat.updated": "GitHub token updated",
+  "githubPat.deleted": "GitHub token deleted",
   // Identity provider
   "identityProvider.created": "Identity provider created",
   "identityProvider.updated": "Identity provider updated",

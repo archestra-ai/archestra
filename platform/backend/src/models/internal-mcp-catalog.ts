@@ -7,10 +7,12 @@ import {
   inArray,
   isNull,
   ne,
+  notExists,
   or,
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
@@ -183,6 +185,40 @@ class InternalMcpCatalogModel {
       // App backing catalogs are managed on the Apps page, never surfaced in the
       // MCP registry (UI list or the agent-callable registry search).
       listConditions.push(ne(schema.internalMcpCatalogTable.serverType, "app"));
+    } else {
+      // A disabled app's backing catalog is author-only — never surface
+      // someone else's disabled app in the capability picker, even to a
+      // registry admin (this overrides the catalog-access admin bypass,
+      // matching the Apps-page rule).
+      listConditions.push(
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(schema.appsTable)
+            .innerJoin(
+              schema.mcpServersTable,
+              eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+            )
+            .where(
+              and(
+                eq(
+                  schema.mcpServersTable.catalogId,
+                  schema.internalMcpCatalogTable.id,
+                ),
+                eq(schema.appsTable.enabled, false),
+                notDeleted(schema.appsTable),
+                // Keep the caller's own disabled apps (shown greyed as
+                // "Disabled"); with no viewer, hide every disabled app.
+                userId
+                  ? or(
+                      ne(schema.appsTable.authorId, userId),
+                      isNull(schema.appsTable.authorId),
+                    )
+                  : undefined,
+              ),
+            ),
+        ),
+      );
     }
     const baseListCondition = and(...listConditions);
 

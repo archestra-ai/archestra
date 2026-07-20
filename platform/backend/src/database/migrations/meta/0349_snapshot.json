@@ -1,5 +1,5 @@
 {
-  "id": "d5e2d2e0-6311-4e41-b6ce-9c3f01214d74",
+  "id": "951c6fba-f764-4241-9d05-a01ea6be4ec2",
   "prevId": "d2b20edd-1700-4742-8492-86a50e85637e",
   "version": "7",
   "dialect": "postgresql",
@@ -2704,6 +2704,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "created_at": {
           "name": "created_at",
@@ -6141,13 +6148,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "billing_mode": {
-          "name": "billing_mode",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'metered'"
-        },
         "authenticated_app_id": {
           "name": "authenticated_app_id",
           "type": "text",
@@ -8931,13 +8931,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "billing_mode": {
-          "name": "billing_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'metered'"
         },
         "created_at": {
           "name": "created_at",

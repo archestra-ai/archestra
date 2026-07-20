@@ -83,6 +83,31 @@ describe("getCatalogAssignmentGate", () => {
     expect(gate.disabled).toBe(true);
     expect(gate.disabledReason).toBe("Not in the Default environment");
   });
+
+  it("refuses a disabled app with a 'Disabled' reason", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: true,
+      isEnvIncompatible: false,
+      isDisabledApp: true,
+    });
+
+    expect(gate.disabled).toBe(true);
+    expect(gate.disabledReason).toBe("Disabled");
+    expect(gate.unavailable).toBe(false);
+  });
+
+  it("gates on disabled status before environment incompatibility", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: true,
+      isEnvIncompatible: true,
+      environmentName: "Staging",
+      isDisabledApp: true,
+    });
+
+    expect(gate.disabledReason).toBe("Disabled");
+  });
 });
 
 describe("shouldResetCredentialPin", () => {

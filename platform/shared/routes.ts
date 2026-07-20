@@ -390,6 +390,7 @@ export const RouteId = {
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
+  GetVirtualApiKey: "getVirtualApiKey",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
@@ -480,6 +481,12 @@ export const RouteId = {
   GetGithubAppConfig: "getGithubAppConfig",
   UpdateGithubAppConfig: "updateGithubAppConfig",
   DeleteGithubAppConfig: "deleteGithubAppConfig",
+
+  // Stored GitHub personal access tokens
+  ListGithubPats: "listGithubPats",
+  CreateGithubPat: "createGithubPat",
+  UpdateGithubPat: "updateGithubPat",
+  DeleteGithubPat: "deleteGithubPat",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
@@ -616,6 +623,7 @@ export const RouteId = {
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
   ResetSkill: "resetSkill",
+  UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",
   PreviewGithubSkill: "previewGithubSkill",
@@ -643,6 +651,7 @@ export const RouteId = {
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
+  GetAuditLog: "getAuditLog",
 
   // Hook File Routes
   GetHooks: "getHooks",
@@ -668,6 +677,8 @@ export const RouteId = {
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",
+  EnableApp: "enableApp",
+  DisableApp: "disableApp",
   DeleteApp: "deleteApp",
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",

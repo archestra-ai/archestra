@@ -1,14 +1,17 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   BookOpen,
   Braces,
+  ChevronDown,
+  ChevronUp,
   Info,
   MessageSquare,
   Pencil,
   Plus,
+  RefreshCw,
   RotateCcw,
   Trash2,
 } from "lucide-react";
@@ -27,6 +30,7 @@ import {
   TableRowActions,
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -44,20 +48,25 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useDeleteSkill,
   useResetSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
-import {
-  withEditorClosed,
-  withEditorOpen,
-  withOpenEditRewritten,
-} from "./_parts/editor-url";
+import { cn } from "@/lib/utils";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { withOpenEditRewritten } from "./_parts/editor-url";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
+
+const SYNC_INTERVAL_LABELS: Record<string, string> = {
+  "15m": "Synced every 15 minutes",
+  "1h": "Synced every hour",
+  "1d": "Synced once a day",
+};
 
 const SKILLS_DESCRIPTION =
   "Skills teach your agents reusable expertise — a SKILL.md instruction set plus optional resource files, loaded on demand and invocable in chat as slash commands.";
@@ -83,6 +92,14 @@ function SkillsList() {
   const search = searchParams.get("search") || "";
   const sourceRepo = searchParams.get("sourceRepo") || "";
 
+  type SkillSortBy = NonNullable<
+    NonNullable<archestraApiTypes.GetSkillsData["query"]>["sortBy"]
+  >;
+  const sortBy =
+    (searchParams.get("sortBy") as SkillSortBy | null) || "usageCount";
+  const sortDirection =
+    (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
+
   const {
     data: skills,
     isPending,
@@ -95,6 +112,8 @@ function SkillsList() {
       offset: pageIndex * pageSize,
       search: search || undefined,
       sourceRepo: sourceRepo || undefined,
+      sortBy,
+      sortDirection,
     },
     { toastOnError: false },
   );
@@ -115,36 +134,53 @@ function SkillsList() {
     [pathname, router, searchParams],
   );
 
-  // The open editor is driven by the `edit=<skillId>` search param. It stays
-  // in the URL while the dialog is open so the link is copyable at any moment
-  // (deliberate divergence from pages that strip it after opening). The dialog
-  // fetches the skill by id itself, so deep links work regardless of the
-  // current page/search of the table.
-  const editingSkillId = searchParams.get("edit");
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: sortBy, desc: sortDirection === "desc" },
+  ]);
+
+  // Keep the table's sort indicators in sync with the URL-driven state.
+  useEffect(() => {
+    setSorting([{ id: sortBy, desc: sortDirection === "desc" }]);
+  }, [sortBy, sortDirection]);
+
+  const handleSortingChange = useCallback(
+    (updater: SortingState | ((old: SortingState) => SortingState)) => {
+      const newSorting =
+        typeof updater === "function" ? updater(sorting) : updater;
+      setSorting(newSorting);
+
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", "1");
+      if (newSorting.length > 0) {
+        params.set("sortBy", newSorting[0].id);
+        params.set("sortDirection", newSorting[0].desc ? "desc" : "asc");
+      } else {
+        params.delete("sortBy");
+        params.delete("sortDirection");
+      }
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [sorting, pathname, router, searchParams],
+  );
+
+  // The dialog fetches the skill by id itself, so deep links open instantly
+  // and work regardless of the current page/search of the table.
+  const editId = searchParams.get("edit");
+  const {
+    entity: editingSkill,
+    open: openEditor,
+    close: closeEditor,
+  } = useDialogUrlParam<SkillItem | { id: string }>({
+    paramName: "edit",
+    entityFromUrl: editId ? { id: editId } : null,
+  });
+
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
   const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
   const items = skills?.data ?? [];
-
-  const openEditor = useCallback(
-    (skillId: string) => {
-      const params = withEditorOpen(
-        new URLSearchParams(searchParams.toString()),
-        skillId,
-      );
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [pathname, router, searchParams],
-  );
-
-  const closeEditor = useCallback(() => {
-    const params = withEditorClosed(
-      new URLSearchParams(searchParams.toString()),
-    );
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams]);
 
   // Deep-link support: /skills?openEdit=<name> auto-opens the skill editor for
   // the matching skill (e.g. from the chat SkillPill). Once the name resolves
@@ -178,7 +214,16 @@ function SkillsList() {
     {
       id: "name",
       accessorKey: "name",
-      header: "Skill",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Skill
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
       size: 700,
       cell: ({ row }) => {
         const skill = row.original;
@@ -197,6 +242,32 @@ function SkillsList() {
                   <span className="truncate font-mono text-xs text-muted-foreground">
                     {repo}
                   </span>
+                )}
+                {skill.githubSyncInterval && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "shrink-0 gap-1",
+                          skill.lastSyncError && "text-destructive",
+                        )}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        synced
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {SYNC_INTERVAL_LABELS[skill.githubSyncInterval]} from
+                      GitHub; read-only until disconnected.
+                      {skill.lastSyncError
+                        ? ` Last sync failed: ${skill.lastSyncError}`
+                        : ` Last synced: ${formatRelativeTimeFromNow(
+                            skill.lastSyncedAt,
+                            { neverLabel: "not yet" },
+                          )}.`}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
               {skill.description && (
@@ -259,6 +330,33 @@ function SkillsList() {
       ),
     },
     {
+      id: "usageCount",
+      accessorKey: "usageCount",
+      size: 150,
+      header: ({ column }) => (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            className="h-auto !p-0 font-medium hover:bg-transparent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Uses
+            <SortIcon isSorted={column.getIsSorted()} />
+          </Button>
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="text-right text-sm">
+          <div>{row.original.usageCount}</div>
+          <div className="text-xs text-muted-foreground">
+            {formatRelativeTimeFromNow(row.original.lastUsedAt, {
+              neverLabel: "Never used",
+            })}
+          </div>
+        </div>
+      ),
+    },
+    {
       id: "actions",
       size: 150,
       header: () => <div className="text-right">Actions</div>,
@@ -270,7 +368,7 @@ function SkillsList() {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
             permissions: { skill: ["update"] },
-            onClick: () => openEditor(skill.id),
+            onClick: () => openEditor(skill),
           },
           {
             icon: <MessageSquare className="h-4 w-4" />,
@@ -371,6 +469,9 @@ function SkillsList() {
               onClearFilters={clearFilters}
               hideSelectedCount
               manualPagination
+              manualSorting
+              sorting={sorting}
+              onSortingChange={handleSortingChange}
               pagination={{
                 pageIndex,
                 pageSize,
@@ -384,17 +485,17 @@ function SkillsList() {
                   scroll: false,
                 });
               }}
-              onRowClick={(row) => openEditor(row.id)}
+              onRowClick={(row) => openEditor(row)}
               isLoading={isFetching}
             />
           </>
         )}
       </PageLayout>
 
-      {editingSkillId && (
+      {editingSkill && (
         <SkillEditorDialog
-          skillId={editingSkillId}
-          open={!!editingSkillId}
+          skillId={editingSkill.id}
+          open={!!editingSkill}
           onOpenChange={(open) => !open && closeEditor()}
         />
       )}
@@ -415,6 +516,23 @@ function SkillsList() {
         />
       )}
     </LoadingWrapper>
+  );
+}
+
+function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
+  const upArrow = <ChevronUp className="h-3 w-3" />;
+  const downArrow = <ChevronDown className="h-3 w-3" />;
+  if (isSorted === "asc") {
+    return upArrow;
+  }
+  if (isSorted === "desc") {
+    return downArrow;
+  }
+  return (
+    <div className="text-muted-foreground/50 flex flex-col items-center">
+      {upArrow}
+      <span className="mt-[-4px]">{downArrow}</span>
+    </div>
   );
 }
 

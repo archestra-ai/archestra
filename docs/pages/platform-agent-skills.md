@@ -12,7 +12,7 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, and file count.
+Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
 
 ![The Skills page open under the Studio tab of the sidebar, listing the organization's skills](/docs/automated_screenshots/platform-agent-skills_skills-in-studio.webp)
 
@@ -76,7 +76,7 @@ A skill created from chat is **personal** to its author — sharing it with a te
 
 ![The Add a new skill screen, importing from a GitHub repo, with the skill index searched for ML skills](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 
-Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, paste a token — it is used for the request and never stored.
+Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, use a saved token or GitHub App from **Settings → GitHub**, or paste a token — it is saved there on import.
 
 For anything bigger than a small repo, narrow the scan with the `path` field and supply a GitHub token. Archestra walks the whole tree by default, and anonymous GitHub calls share a 60-requests/hour limit — discovery on a large monorepo is slow without a path and will rate-limit without a token.
 
@@ -86,12 +86,18 @@ The visibility **scope** chosen in the dialog applies to every skill in the batc
 
 Each import records the source (`owner/repo@ref:path`) and the resolved commit SHA, so you can later filter the catalog by repo and see exactly which revision landed.
 
+### Sync
+
+Every import stays synced with the repository. **Keep in sync** in the dialog picks the schedule for the batch — every 15 minutes, every hour, or once a day (the default). Synced skills carry a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Visibility scope, teams, and environment stay editable. A failed pull keeps the last good content and shows the error in the editor.
+
+**Stop syncing** in the skill editor breaks the link: the skill keeps its current content, becomes editable, and stops updating. **Sync now** pulls immediately instead of waiting for the schedule.
+
+Sync authenticates with a saved personal access token or a GitHub App configuration — both managed under **Settings → GitHub** — or not at all (public repos). A token pasted in the import dialog is saved there on import, so scheduled pulls stay authenticated.
+
 A few behaviors worth knowing:
 
-- **Duplicates are skipped.** Importing a skill whose name already exists leaves the local copy alone — no silent overwrite.
 - **One snapshot per session.** The repo tree is cached for five minutes, so what you previewed is what you import even if upstream moves in between.
 - **Per-file 10 MB cap, 500 files per skill.** Binary assets are preserved (base64-encoded), so images and fonts round-trip.
-- **No background sync.** Re-import to pull in upstream changes; your edits are never overwritten.
 
 ## Permissions and scope
 

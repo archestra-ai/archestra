@@ -156,7 +156,7 @@ export function useCreateServiceAccountToken() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
-      toast.success("Service account token created successfully");
+      toast.success("API key created successfully");
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
       queryClient.invalidateQueries({
         queryKey: ["service-account", variables.id],
@@ -182,7 +182,7 @@ export function useDeleteServiceAccountToken() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
-      toast.success("Service account token deleted successfully");
+      toast.success("API key deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
       queryClient.invalidateQueries({
         queryKey: ["service-account", variables.id],
@@ -217,7 +217,7 @@ export function useUpdateServiceAccountToken() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
-      toast.success("Service account token updated successfully");
+      toast.success("API key updated successfully");
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
       queryClient.invalidateQueries({
         queryKey: ["service-account", variables.id],

@@ -65,7 +65,9 @@ export function GithubConfigFields({
       shouldValidate: true,
     });
     if (value === "pat") {
-      form.setValue(`${prefix}.githubAppConfigId`, "", {
+      // undefined, not "": the backend validates the field as an optional
+      // UUID, and an empty string fails that check on submit
+      form.setValue(`${prefix}.githubAppConfigId`, undefined, {
         shouldDirty: true,
         shouldValidate: true,
       });

@@ -3,7 +3,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const { deleteConnectorDocument, getConnectorDocument, getConnectorDocuments } =
   archestraApiSdk;
@@ -61,11 +61,10 @@ export function useConnectorDocument(params: ConnectorDocumentParams) {
       const { data, error } = await getConnectorDocument({
         path: params.path,
       });
-      if (error) {
-        handleApiError(error);
-        throw error;
-      }
-      return data;
+      // A stale/invisible `?document=<id>` deep link resolves to 404 — no-op
+      // silently like the other by-id hooks instead of raising a toast.
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
     },
     enabled:
       Boolean(params.path.id) &&

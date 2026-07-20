@@ -175,7 +175,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpServerInstallationRequest: "Requests for new MCP server installations",
   environment: "Deployment environments (namespace) for catalog items",
   githubAppConfig:
-    "GitHub App credentials for authenticating skill imports and knowledge connectors",
+    "GitHub credentials (App configs and stored personal access tokens) for authenticating skill imports, skill sync, and knowledge connectors",
   optimizationRule: "LLM optimization rules for routing to cheaper models",
   member: "Users and role assignments",
   ac: "Custom RBAC roles",

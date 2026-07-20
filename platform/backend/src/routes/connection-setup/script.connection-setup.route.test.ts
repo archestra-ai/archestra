@@ -132,7 +132,9 @@ describe("GET /api/connection-setups/script/:token", () => {
 
     const script = response.body;
     expect(script).toContain("set -euo pipefail");
-    expect(script).toContain("claude mcp add --transport http 'prod_gateway'");
+    expect(script).toContain(
+      "claude mcp add --scope user --transport http 'prod_gateway'",
+    );
     expect(script).toContain(`/v1/mcp/${gateway.slug ?? gateway.id}`);
     expect(script).toContain(`/v1/anthropic/${proxy.id}`);
     // the real virtual key value is injected, no placeholders
@@ -175,7 +177,9 @@ describe("GET /api/connection-setups/script/:token", () => {
     const script = response.body;
     expect(script).toContain("$ErrorActionPreference = 'Stop'");
     expect(script).not.toContain("set -euo pipefail");
-    expect(script).toContain("claude mcp add --transport http 'prod_gateway'");
+    expect(script).toContain(
+      "claude mcp add --scope user --transport http 'prod_gateway'",
+    );
   });
 
   test("default platform (omitted) renders bash", async ({ makeAgent }) => {

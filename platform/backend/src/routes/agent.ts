@@ -1446,7 +1446,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!hasRead) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(403, AGENT_READ_FORBIDDEN_MESSAGE);
       }
       return reply.send(await AgentLabelModel.getAllKeys());
     },
@@ -1471,7 +1471,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!hasRead) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(403, AGENT_READ_FORBIDDEN_MESSAGE);
       }
       return reply.send(
         key
@@ -1637,7 +1637,7 @@ function getPermittedAgentTypesForList(params: {
 
   const permittedTypes = params.checker.getAgentTypesWithPermission(action);
   if (permittedTypes.length === 0) {
-    throw new ApiError(403, "Forbidden");
+    throw new ApiError(403, AGENT_READ_FORBIDDEN_MESSAGE);
   }
 
   return permittedTypes;
@@ -1688,3 +1688,10 @@ function assertTeamScopeHasTeams(params: {
     );
   }
 }
+
+/**
+ * 403 copy for endpoints that only need read access to at least one agent
+ * type; the caller has none.
+ */
+const AGENT_READ_FORBIDDEN_MESSAGE =
+  "You don't have permission to view agents. This requires read access to at least one agent type (agents, MCP gateways, or LLM proxies).";

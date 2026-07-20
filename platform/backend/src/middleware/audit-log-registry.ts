@@ -8,6 +8,7 @@ import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import GithubAppConfigModel from "@/models/github-app-config";
+import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -351,6 +352,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/github-app-configs/:id": {
     resourceType: "githubAppConfig",
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
+  },
+
+  // Stored GitHub personal access tokens
+  "/api/github-pats": {
+    resourceType: "githubPat",
+    fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-pats/:id": {
+    resourceType: "githubPat",
+    fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),
   },
 
   // Limits

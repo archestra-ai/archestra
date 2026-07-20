@@ -57,15 +57,13 @@ function getTabLabels(tabs: Array<{ label: string }>) {
 }
 
 describe("useSettingsTabs", () => {
-  it("always shows Your Account tab", async () => {
+  it("shows no tabs without permissions", async () => {
     const { result } = renderHook(() => useSettingsTabs(), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => {
-      const labels = getTabLabels(result.current);
-      expect(labels).toContain("Your Account");
-      expect(labels).not.toContain("API Keys");
+      expect(getTabLabels(result.current)).toEqual([]);
     });
   });
 
@@ -75,7 +73,6 @@ describe("useSettingsTabs", () => {
       team: ["read"],
       ac: ["read"],
       organizationSettings: ["read"],
-      apiKey: ["read"],
       serviceAccount: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
@@ -87,9 +84,9 @@ describe("useSettingsTabs", () => {
 
     await waitFor(() => {
       const labels = getTabLabels(result.current);
-      expect(labels).toContain("API Keys");
       expect(labels).toContain("Service Accounts");
-      expect(labels).toContain("Agents");
+      expect(labels).toContain("Chat");
+      expect(labels).toContain("Security");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
@@ -273,7 +270,6 @@ describe("useSettingsTabs", () => {
       identityProvider: ["read"],
       secret: ["read"],
       organizationSettings: ["read"],
-      apiKey: ["read"],
       serviceAccount: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
@@ -286,18 +282,17 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toEqual([
-        "Your Account",
-        "API Keys",
+        "Organization",
         "Service Accounts",
-        "Agents",
+        "Chat",
         "LLM",
+        "Security",
         "Users",
         "Teams",
         "Roles",
         "GitHub",
         "Identity Providers",
         "Secrets",
-        "Organization",
       ]);
     });
   });

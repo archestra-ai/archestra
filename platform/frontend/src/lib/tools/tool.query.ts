@@ -51,6 +51,7 @@ export function useToolsWithAssignments({
   pagination,
   sorting,
   filters,
+  enabled = true,
 }: {
   initialData?: archestraApiTypes.GetToolsWithAssignmentsResponses["200"];
   pagination?: {
@@ -69,6 +70,7 @@ export function useToolsWithAssignments({
     excludeArchestraTools?: boolean;
     includeKnowledgeSourcesTool?: boolean;
   };
+  enabled?: boolean;
 }) {
   return useQuery({
     queryKey: [
@@ -113,5 +115,6 @@ export function useToolsWithAssignments({
       );
     },
     initialData,
+    enabled,
   });
 }

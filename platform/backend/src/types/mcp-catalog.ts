@@ -182,6 +182,10 @@ export const ListInternalMcpCatalogSchema =
     // registry can link to / manage the app. Populated only on the includeApps
     // path; null for everything else.
     appId: z.string().nullable().optional(),
+    // For `serverType:"app"` backings only, whether the backing app is enabled.
+    // The capability picker greys a disabled (false) app as "Disabled".
+    // Populated only on the includeApps path; null/absent for everything else.
+    appEnabled: z.boolean().nullable().optional(),
     // True when installing this item right now would be blocked by the trusted-
     // image-registry gate (gated + not approved), so the registry can prevent the
     // install up front. Populated on the list route only.

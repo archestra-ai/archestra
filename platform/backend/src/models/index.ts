@@ -37,6 +37,7 @@ export { default as EnvironmentModel } from "./environment";
 export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
 export { default as FileModel, FileNameExistsError } from "./file";
 export { default as GithubAppConfigModel } from "./github-app-config";
+export { default as GithubPatModel } from "./github-pat";
 export { default as HookFileModel } from "./hook-file";
 export { default as InstanceUsageModel } from "./instance-usage";
 export { default as InteractionModel } from "./interaction";

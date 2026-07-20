@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ChevronsUpDown,
-  LogOut,
-  Monitor,
-  Moon,
-  Settings,
-  Sun,
-} from "lucide-react";
+import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,7 +9,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -24,8 +16,9 @@ import { useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 
 /**
- * Sidebar footer user menu: avatar + name/email trigger with Settings and
- * Sign Out actions. Renders nothing until a session exists.
+ * Sidebar footer user menu: avatar + name/email trigger. The identity item
+ * opens the account page; below it sit the theme switcher and Sign Out.
+ * Renders nothing until a session exists.
  *
  * The trigger markup (button > div > Avatar + text, chevron as direct svg
  * child) is load-bearing: the collapsed-sidebar styles in sidebar.tsx target
@@ -78,21 +71,19 @@ export function SidebarUserMenu() {
         // off the trigger on pointer-driven close (keyboard Tab still rings it).
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <DropdownMenuLabel className="font-normal">
-          <div className="truncate text-sm font-medium">{displayName}</div>
-          {user.name && (
-            <div className="truncate text-xs font-normal text-muted-foreground">
-              {user.email}
-            </div>
-          )}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/settings/account">
-            <Settings className="size-4" />
-            Settings
+          <Link href="/account">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{displayName}</div>
+              {user.name && (
+                <div className="truncate text-xs font-normal text-muted-foreground">
+                  {user.email}
+                </div>
+              )}
+            </div>
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <div className="flex gap-1 px-2 py-1.5">
           {themeOptions.map(({ value, label, Icon }) => (
             <Button

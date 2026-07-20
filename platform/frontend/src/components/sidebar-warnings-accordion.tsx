@@ -47,7 +47,7 @@ export function SidebarWarningsAccordion() {
   const warnings = [
     showDefaultCredsWarning && {
       label: "Change default credentials",
-      href: "/settings/account?highlight=change-password",
+      href: "/account?highlight=change-password",
     },
   ].filter((w): w is { label: string; href: string } => Boolean(w));
 

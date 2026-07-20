@@ -387,7 +387,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   <a
                     href="/settings/agents"
                     className="underline hover:no-underline"
-                    aria-label="Enable file uploads in agent settings"
+                    aria-label="Enable file uploads in Chat settings"
                   >
                     Enable in settings
                   </a>

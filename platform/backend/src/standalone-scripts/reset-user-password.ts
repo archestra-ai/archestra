@@ -266,7 +266,7 @@ async function runCli(): Promise<number> {
       "   Store it securely — it is not persisted anywhere else. The user",
     );
     console.log(
-      "   should sign in and change it under Settings → Your Account.",
+      "   should sign in and change it on Your Account (click your name in the sidebar).",
     );
   }
   if (result.credentialAccountCreated) {

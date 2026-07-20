@@ -390,6 +390,7 @@ export const RouteId = {
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
+  GetVirtualApiKey: "getVirtualApiKey",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
@@ -453,6 +454,9 @@ export const RouteId = {
 
   // MCP Settings Routes (organization-level)
   UpdateMcpSettings: "updateMcpSettings",
+
+  // Skills Settings Routes (organization-level)
+  UpdateSkillsSettings: "updateSkillsSettings",
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
@@ -640,6 +644,7 @@ export const RouteId = {
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
+  GetAuditLog: "getAuditLog",
 
   // Hook File Routes
   GetHooks: "getHooks",
@@ -665,6 +670,8 @@ export const RouteId = {
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",
+  EnableApp: "enableApp",
+  DisableApp: "disableApp",
   DeleteApp: "deleteApp",
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",

@@ -2,6 +2,9 @@ import * as fs from "node:fs";
 import { PassThrough } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
+// Resolve to this file's model mocks — the adopt tests assert on their calls.
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
+import McpServerModel from "@/models/mcp-server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { McpServer, NetworkPolicy } from "@/types";
 
@@ -82,6 +85,7 @@ const mockK8sDeploymentInstances: Array<{
 vi.mock("@/models/internal-mcp-catalog", () => ({
   default: {
     findById: vi.fn(),
+    setDeploymentName: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -89,6 +93,7 @@ vi.mock("@/models/mcp-server", () => ({
   default: {
     findById: vi.fn().mockResolvedValue(null),
     findByCatalogId: vi.fn().mockResolvedValue([]),
+    setDeploymentName: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -153,8 +158,30 @@ vi.mock("./k8s-deployment", () => {
       static collectImagePullSecretNames(): string[] {
         return [];
       }
-      static constructDeploymentName(mcpServer: { name: string }): string {
-        return `mcp-${mcpServer.name.replaceAll(" ", "-")}`;
+      // Mirrors the real frozen-first logic: the stored deploymentName wins;
+      // the name-derived recompute is only the NULL fallback.
+      static constructDeploymentName(
+        mcpServer: {
+          name: string;
+          deploymentName?: string | null;
+          catalogId?: string | null;
+        },
+        catalogItem?: {
+          multitenant?: boolean;
+          name: string;
+          deploymentName?: string | null;
+        } | null,
+      ): string {
+        if (catalogItem?.multitenant && mcpServer.catalogId) {
+          return (
+            catalogItem.deploymentName ??
+            `mcp-mt-${mcpServer.catalogId.slice(0, 8)}-${catalogItem.name.replaceAll(" ", "-")}`
+          );
+        }
+        return (
+          mcpServer.deploymentName ??
+          `mcp-${mcpServer.name.replaceAll(" ", "-")}`
+        );
       }
     },
     fetchPlatformPodNodeSelector: vi.fn().mockResolvedValue(undefined),
@@ -2010,6 +2037,10 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
 });
 
 describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   async function createManagerWithMockK8s(params: {
     mockK8sApi: Record<string, unknown>;
     mockK8sAppsApi: Record<string, unknown>;
@@ -2024,9 +2055,15 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
 
   function callCleanup(
     manager: unknown,
-    servers: Array<{ id: string; name: string; catalogId: string }>,
+    servers: Array<{
+      id: string;
+      name: string;
+      catalogId: string;
+      deploymentName?: string | null;
+    }>,
   ) {
     const castServers = servers.map((s) => ({
+      deploymentName: null,
       ...s,
       secretId: null,
       ownerId: null,
@@ -2081,6 +2118,8 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
         id: "123e4567-e89b-12d3-a456-426614174000",
         name: "current-name",
         catalogId: "cat-1",
+        // Frozen by the adopt pass (which always runs before the sweep).
+        deploymentName: "mcp-current-name",
       },
     ]);
 
@@ -2091,6 +2130,76 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     expect(mockDeleteService).toHaveBeenCalledWith(
       expect.objectContaining({ name: "mcp-legacy-name-service" }),
     );
+  });
+
+  test("keeps a deployment whose name matches the FROZEN name even when it differs from the recompute", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: vi.fn().mockResolvedValue({}) },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-pre-rename-frozen",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    // Renamed row: the recompute would be "mcp-renamed-name", but deployment
+    // identity is frozen — the live deployment must survive.
+    await callCleanup(manager, [
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        name: "renamed-name",
+        catalogId: "cat-1",
+        deploymentName: "mcp-pre-rename-frozen",
+      },
+    ]);
+
+    expect(mockDeleteDeployment).not.toHaveBeenCalled();
+  });
+
+  test("skips servers whose deployment_name is still NULL instead of comparing a recomputed guess", async () => {
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: vi.fn().mockResolvedValue({}) },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-some-live-name",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    await callCleanup(manager, [
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        name: "current-name",
+        catalogId: "cat-1",
+        deploymentName: null,
+      },
+    ]);
+
+    expect(mockDeleteDeployment).not.toHaveBeenCalled();
   });
 
   test("ignores deployments that do not belong to installed servers", async () => {
@@ -2118,5 +2227,293 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     await callCleanup(manager, []);
 
     expect(mockDeleteDeployment).not.toHaveBeenCalled();
+  });
+});
+
+describe("McpServerRuntimeManager.adoptDeploymentNames", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function makeLocalServerRow(overrides: {
+    id: string;
+    name: string;
+    catalogId?: string | null;
+    deploymentName?: string | null;
+  }) {
+    return {
+      catalogId: "cat-1",
+      deploymentName: null,
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      scope: "org" as const,
+      reinstallRequired: false,
+      localInstallationStatus: "idle" as const,
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local" as const,
+      ...overrides,
+    };
+  }
+
+  async function createManagerForAdopt(
+    deployments: Array<{
+      name: string;
+      selectorId: string;
+      creationTimestamp?: Date;
+      namespace?: string;
+    }>,
+  ) {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sAppsApi: unknown }).k8sAppsApi = {
+      listNamespacedDeployment: vi
+        .fn()
+        .mockImplementation(({ namespace }: { namespace: string }) =>
+          Promise.resolve({
+            items: deployments
+              .filter((d) => (d.namespace ?? "test-namespace") === namespace)
+              .map((d) => ({
+                metadata: {
+                  name: d.name,
+                  labels: { app: "mcp-server", "mcp-server-id": d.selectorId },
+                  creationTimestamp: d.creationTimestamp,
+                },
+              })),
+          }),
+        ),
+    };
+    return manager;
+  }
+
+  function callAdopt(
+    manager: unknown,
+    params: { localServers: unknown[]; localCatalogItems: unknown[] },
+  ) {
+    return (
+      manager as { adoptDeploymentNames: (p: unknown) => Promise<void> }
+    ).adoptDeploymentNames(params);
+  }
+
+  test("adopts the live deployment's ACTUAL name for a diverged row (DB name ≠ live)", async () => {
+    const server = makeLocalServerRow({ id: "srv-1", name: "current-name" });
+    const manager = await createManagerForAdopt([
+      { name: "mcp-old-diverged-name", selectorId: "srv-1" },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(McpServerModel.setDeploymentName).toHaveBeenCalledExactlyOnceWith({
+      id: "srv-1",
+      deploymentName: "mcp-old-diverged-name",
+    });
+    // In-memory mutation — the same row object feeds startServer + sweep.
+    expect(server.deploymentName).toBe("mcp-old-diverged-name");
+  });
+
+  test("adopts the live deployment from an environment namespace (not only the platform namespace)", async () => {
+    const catalog = {
+      id: "cat-env",
+      environmentId: "env-staging",
+      multitenant: false,
+      deploymentName: null as string | null,
+      serverType: "local" as const,
+    };
+    const server = makeLocalServerRow({
+      id: "srv-env",
+      name: "current-name",
+      catalogId: "cat-env",
+    });
+    const manager = await createManagerForAdopt([
+      {
+        name: "mcp-old-diverged-name",
+        selectorId: "srv-env",
+        namespace: "env-staging-ns",
+      },
+    ]);
+    (
+      manager as unknown as {
+        resolveNamespaceForCatalog: (
+          catalogItem: typeof catalog,
+        ) => Promise<string>;
+      }
+    ).resolveNamespaceForCatalog = vi.fn().mockResolvedValue("env-staging-ns");
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [catalog],
+    });
+
+    expect(server.deploymentName).toBe("mcp-old-diverged-name");
+    expect(McpServerModel.setDeploymentName).toHaveBeenCalledExactlyOnceWith({
+      id: "srv-env",
+      deploymentName: "mcp-old-diverged-name",
+    });
+  });
+
+  test("freezes the legacy recompute for a row with no live deployment", async () => {
+    const server = makeLocalServerRow({ id: "srv-1", name: "current-name" });
+    const manager = await createManagerForAdopt([]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(McpServerModel.setDeploymentName).toHaveBeenCalledExactlyOnceWith({
+      id: "srv-1",
+      deploymentName: "mcp-current-name",
+    });
+    expect(server.deploymentName).toBe("mcp-current-name");
+  });
+
+  test("tie-break prefers the deployment matching the legacy recompute", async () => {
+    const server = makeLocalServerRow({ id: "srv-1", name: "current-name" });
+    const manager = await createManagerForAdopt([
+      {
+        name: "mcp-newer-stray",
+        selectorId: "srv-1",
+        creationTimestamp: new Date("2026-01-02"),
+      },
+      {
+        name: "mcp-current-name",
+        selectorId: "srv-1",
+        creationTimestamp: new Date("2026-01-01"),
+      },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(server.deploymentName).toBe("mcp-current-name");
+  });
+
+  test("tie-break falls back to the newest deployment when none matches the recompute", async () => {
+    const server = makeLocalServerRow({ id: "srv-1", name: "current-name" });
+    const manager = await createManagerForAdopt([
+      {
+        name: "mcp-older",
+        selectorId: "srv-1",
+        creationTimestamp: new Date("2026-01-01"),
+      },
+      {
+        name: "mcp-newer",
+        selectorId: "srv-1",
+        creationTimestamp: new Date("2026-01-02"),
+      },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(server.deploymentName).toBe("mcp-newer");
+  });
+
+  test("multitenant freezes onto the CATALOG row (label carries the catalog id) and updates every catalog copy", async () => {
+    // start() fetches a separate catalog object per install.
+    const catalogCopyA = {
+      id: "cat-mt",
+      name: "shared catalog",
+      multitenant: true,
+      deploymentName: null as string | null,
+      serverType: "local" as const,
+    };
+    const catalogCopyB = { ...catalogCopyA };
+    const serverA = makeLocalServerRow({
+      id: "srv-a",
+      name: "install-a",
+      catalogId: "cat-mt",
+    });
+    const serverB = makeLocalServerRow({
+      id: "srv-b",
+      name: "install-b",
+      catalogId: "cat-mt",
+    });
+    const manager = await createManagerForAdopt([
+      { name: "mcp-mt-live-name", selectorId: "cat-mt" },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [serverA, serverB],
+      localCatalogItems: [catalogCopyA, catalogCopyB],
+    });
+
+    expect(
+      InternalMcpCatalogModel.setDeploymentName,
+    ).toHaveBeenCalledExactlyOnceWith({
+      id: "cat-mt",
+      deploymentName: "mcp-mt-live-name",
+    });
+    expect(catalogCopyA.deploymentName).toBe("mcp-mt-live-name");
+    expect(catalogCopyB.deploymentName).toBe("mcp-mt-live-name");
+    // The per-install rows share the catalog deployment — never frozen here.
+    expect(McpServerModel.setDeploymentName).not.toHaveBeenCalled();
+  });
+
+  test("idempotent: already-frozen rows are skipped", async () => {
+    const server = makeLocalServerRow({
+      id: "srv-1",
+      name: "renamed-name",
+      deploymentName: "mcp-frozen-earlier",
+    });
+    const manager = await createManagerForAdopt([
+      { name: "mcp-something-else", selectorId: "srv-1" },
+    ]);
+
+    await callAdopt(manager, {
+      localServers: [server],
+      localCatalogItems: [null],
+    });
+
+    expect(McpServerModel.setDeploymentName).not.toHaveBeenCalled();
+    expect(server.deploymentName).toBe("mcp-frozen-earlier");
+  });
+});
+
+describe("McpServerRuntimeManager.start — adopt gate settling", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // A boot failure BEFORE the adopt block (here: verifyK8sConnection's pod-list
+  // rejects, simulating a transient K8s blip) must still settle
+  // deploymentNamesAdopted. Otherwise the rename route — which awaits that
+  // promise with no timeout — hangs the request for the process lifetime, since
+  // start() is fire-and-forget with no retry.
+  test("rejects deploymentNamesAdopted when start() throws before the adopt pass", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    // All four clients set so start() clears its "not initialized" guard and
+    // reaches verifyK8sConnection; k8sApi's pod-list rejects to fail there.
+    const injected = manager as unknown as {
+      k8sApi: unknown;
+      k8sAppsApi: unknown;
+      k8sNetworkingApi: unknown;
+      k8sCustomObjectsApi: unknown;
+    };
+    injected.k8sApi = {
+      listNamespacedPod: vi.fn().mockRejectedValue(new Error("k8s boot blip")),
+    };
+    injected.k8sAppsApi = {};
+    injected.k8sNetworkingApi = {};
+    injected.k8sCustomObjectsApi = {};
+
+    // The gate is still pending after construction (the mocked kubeconfig loads
+    // fine), so this exercises start()'s outer catch, not the constructor's.
+    const adopted = manager.deploymentNamesAdopted;
+
+    // start() still rethrows (behavior unchanged); the gate now settles too.
+    await expect(manager.start()).rejects.toThrow("k8s boot blip");
+    await expect(adopted).rejects.toThrow("k8s boot blip");
   });
 });

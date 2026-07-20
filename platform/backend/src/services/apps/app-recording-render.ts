@@ -94,6 +94,16 @@ async function render(params: {
     page.on("console", (message) => {
       if (message.type() === "error") pageErrors.push(message.text());
     });
+    // The app pane is an iframe, and an iframe that will not load fails as a
+    // REQUEST, never as a script error: a frame refused by CSP, a host that
+    // will not resolve, a certificate this browser declines. None of those
+    // reach `pageerror`, so without this the one failure a render actually
+    // suffers is the one it can say nothing about.
+    page.on("requestfailed", (request) => {
+      pageErrors.push(
+        `${request.url()} failed: ${request.failure()?.errorText ?? "unknown"}`,
+      );
+    });
 
     const renderUrl = `${config.hackathonRecorder.renderBaseUrl}${APP_RECORDING_RENDER_ROUTE}`;
     await cancellable(
@@ -137,12 +147,33 @@ async function render(params: {
       what: "loading the recording",
       signal: params.abortSignal,
     });
-    const durationMs = await withDeadline({
-      work: page.evaluate(() => window.__archestraRenderReady()),
-      ms: REPLAY_READY_TIMEOUT_MS,
-      what: "waiting for the recorded app to load",
-      signal: params.abortSignal,
-    });
+    let durationMs: number;
+    try {
+      durationMs = await withDeadline({
+        work: page.evaluate(() => window.__archestraRenderReady()),
+        ms: REPLAY_READY_TIMEOUT_MS,
+        what: "waiting for the recorded app to load",
+        signal: params.abortSignal,
+      });
+    } catch (error) {
+      // A cancelled render is not a broken app frame.
+      abort();
+      // The page already knows WHY the app pane never came up — a blocked
+      // frame, a refused certificate, a name that would not resolve — and that
+      // reason is the entire diagnosis. Reporting only that the wait expired
+      // sends whoever reads it hunting through a cluster for something the
+      // browser could have told them outright.
+      logger.error(
+        { renderUrl, pageErrors },
+        "The recorded app never loaded in the render browser",
+      );
+      throw new ApiError(
+        500,
+        `${error instanceof Error ? error.message : "The recorded app never loaded in the render browser"}${
+          pageErrors.length ? ` — ${pageErrors[0]}` : ""
+        }`,
+      );
+    }
     if (!durationMs || durationMs <= 0) {
       throw new ApiError(422, "This recording has nothing to render.");
     }

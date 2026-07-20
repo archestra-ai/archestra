@@ -12,6 +12,13 @@ import { EnvironmentSelector } from "@/components/environment-selector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type VisibilityOption,
@@ -20,6 +27,7 @@ import {
 import {
   useAppTools,
   useAssignToolToApp,
+  useSetAppEnabled,
   useUnassignToolFromApp,
   useUpdateApp,
 } from "@/lib/app.query";
@@ -57,6 +65,7 @@ export function AppSettingsForm({
   const { data: teams } = useAssignableTeams({ isResourceAdmin: !!isAppAdmin });
 
   const updateApp = useUpdateApp();
+  const setEnabled = useSetAppEnabled();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
   const appToolsQuery = useAppTools(app.id);
@@ -68,6 +77,9 @@ export function AppSettingsForm({
 
   const [environmentId, setEnvironmentId] = useState<string | null>(
     app.environmentId ?? null,
+  );
+  const [enabledStatus, setEnabledStatus] = useState<"disabled" | "enabled">(
+    app.enabled ? "enabled" : "disabled",
   );
   const [scope, setScope] = useState<ResourceVisibilityScope>(app.scope);
   const [teamIds, setTeamIds] = useState<string[]>(app.teams.map((t) => t.id));
@@ -92,6 +104,24 @@ export function AppSettingsForm({
 
   const canShareTeams = isAppAdmin || isAppTeamAdmin;
   const hasNoTeams = (teams ?? []).length === 0;
+
+  const enabledOptions = [
+    {
+      value: "disabled" as const,
+      label: "Disabled",
+      description:
+        "You can edit and preview it, but Agents and the MCP Gateway can't reach it",
+    },
+    {
+      value: "enabled" as const,
+      label: "Enabled",
+      description:
+        "Reachable from Agents and the MCP Gateway, for everyone in the scope above",
+    },
+  ];
+  const selectedEnabledDescription = enabledOptions.find(
+    (option) => option.value === enabledStatus,
+  )?.description;
 
   const options: VisibilityOption<ResourceVisibilityScope>[] = [
     {
@@ -132,7 +162,10 @@ export function AppSettingsForm({
   const toolsLoading = appToolsQuery.isPending;
   // Only the mutation drives the button's loading label; data-loading does not.
   const saving =
-    updateApp.isPending || assignTool.isPending || unassignTool.isPending;
+    updateApp.isPending ||
+    setEnabled.isPending ||
+    assignTool.isPending ||
+    unassignTool.isPending;
 
   // Drive the top bar's save button (it lives outside this form).
   useEffect(() => {
@@ -159,6 +192,17 @@ export function AppSettingsForm({
   });
 
   async function submitSettings(values: FormValues) {
+    // Enable/disable is a distinct lifecycle transition on the backend (its
+    // own endpoint, authorized against the app's current scope), so a changed
+    // selection commits via its own call rather than riding the PATCH body.
+    const enabled = enabledStatus === "enabled";
+    if (enabled !== app.enabled) {
+      const result = await setEnabled.mutateAsync({
+        appId: app.id,
+        enabled,
+      });
+      if (!result) return;
+    }
     // Visibility is editable on its own permissions; identity + environment only
     // when the caller can update the app, so omit those fields otherwise (mirrors
     // the field-limited bodies the old publish popover / rename dialog sent).
@@ -296,6 +340,36 @@ export function AppSettingsForm({
               />
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label>App status</Label>
+            <Select
+              value={enabledStatus}
+              onValueChange={(next) =>
+                setEnabledStatus(next as "disabled" | "enabled")
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {enabledOptions.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    description={option.description}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedEnabledDescription ? (
+              <p className="text-xs text-muted-foreground">
+                {selectedEnabledDescription}
+              </p>
+            ) : null}
+          </div>
         </VisibilitySelector>
 
         {canUpdate && (

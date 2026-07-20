@@ -13,7 +13,11 @@
  * exactly the kind of bug the contract is designed to prevent.
  */
 
-import { CASCADE_SCENARIOS, CATALOG_SHAPES } from "@archestra/shared";
+import {
+  CASCADE_SCENARIOS,
+  CATALOG_SHAPES,
+  SERVER_NAME_PLACEHOLDER,
+} from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   type CascadeSnapshot,
@@ -42,7 +46,78 @@ describe("cascade scenarios — frontend full-outcome sweep", () => {
 
     const frontendExpected =
       scenario.knownFrontendOverride?.actual ?? scenario.expected;
-    expect(outcome).toBe(frontendExpected);
+    expect(outcome.mode).toBe(frontendExpected);
+    // None of the matrix scenarios rename — the rename decisions have
+    // their own describe below.
+    expect(outcome.renamed).toBe(false);
+  });
+});
+
+describe("computeCascadeOutcome — rename decisions", () => {
+  const local = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+    name: "old-name",
+    serverType: "local",
+    localConfig: { command: "node", arguments: ["server.js"], environment: [] },
+    ...over,
+  });
+
+  test("pure rename → 'rename' (DB-only cascade, client-reload warning)", () => {
+    expect(
+      computeCascadeOutcome(local(), local({ name: "new-name" }), {
+        affectedServerCount: 1,
+      }),
+    ).toEqual({ mode: "rename", renamed: true });
+  });
+
+  test("remote rename is no longer 'skip' — remote tools re-slug through the same cascade", () => {
+    const remote = (over: Partial<CascadeSnapshot> = {}): CascadeSnapshot => ({
+      name: "old-name",
+      serverType: "remote",
+      serverUrl: "https://api.example.com",
+      ...over,
+    });
+    expect(
+      computeCascadeOutcome(remote(), remote({ name: "new-name" }), {
+        affectedServerCount: 1,
+      }),
+    ).toEqual({ mode: "rename", renamed: true });
+  });
+
+  test("rename on a catalog whose deploymentSpecYaml uses the serverName placeholder → 'manual'", () => {
+    const withYaml = local({
+      deploymentSpecYaml: `metadata:\n  labels:\n    mcp-server-name: ${SERVER_NAME_PLACEHOLDER}\n`,
+    });
+    expect(
+      computeCascadeOutcome(
+        withYaml,
+        // transformFormToApiData never carries the YAML — prev's value is
+        // authoritative (mirrors the real form submit).
+        { ...local(), name: "new-name", deploymentSpecYaml: undefined },
+        { affectedServerCount: 1 },
+      ),
+    ).toEqual({ mode: "manual", renamed: true });
+  });
+
+  test("rename combined with a breaking command change → 'manual' with the renamed flag riding along", () => {
+    const next = local({
+      name: "new-name",
+      localConfig: {
+        command: "bun",
+        arguments: ["server.js"],
+        environment: [],
+      },
+    });
+    expect(
+      computeCascadeOutcome(local(), next, { affectedServerCount: 1 }),
+    ).toEqual({ mode: "manual", renamed: true });
+  });
+
+  test("rename with zero installs → 'skip' (no connected clients to warn)", () => {
+    expect(
+      computeCascadeOutcome(local(), local({ name: "new-name" }), {
+        affectedServerCount: 0,
+      }),
+    ).toEqual({ mode: "skip", renamed: true });
   });
 });
 
@@ -239,7 +314,7 @@ describe("computeCascadeOutcome — `mounted` flip routes to auto, not manual", 
     expect(
       computeCascadeOutcome(base, flipped, {
         affectedServerCount: 1,
-      }),
+      }).mode,
     ).toBe("auto");
   });
 });
@@ -537,7 +612,7 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-      }),
+      }).mode,
     ).toBe("skip");
   });
 
@@ -561,7 +636,7 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-      }),
+      }).mode,
     ).toBe("skip");
   });
 
@@ -583,7 +658,7 @@ describe("API-shape prev vs transform-shape next — shape-mismatch regression",
     expect(
       computeCascadeOutcome(apiPrev, transformedNext, {
         affectedServerCount: 3,
-      }),
+      }).mode,
     ).toBe("auto");
   });
 });

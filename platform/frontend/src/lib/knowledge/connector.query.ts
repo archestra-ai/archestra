@@ -93,10 +93,11 @@ export function useConnectorsPaginated(params: ConnectorsPaginatedParams) {
   });
 }
 
-export function useConnector(id: string) {
+export function useConnector(id: string | undefined) {
   return useQuery({
     queryKey: ["connectors", id],
     queryFn: async () => {
+      if (!id) return null;
       const { data, error } = await getConnector({ path: { id } });
       throwOnApiError(error, { allowNotFound: true });
       return data ?? null;

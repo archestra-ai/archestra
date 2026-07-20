@@ -20,6 +20,7 @@ export function makeCatalogItem(
     authFields: null,
     serverType: "local",
     multitenant: false,
+    deploymentName: null,
     dynamicConnectionMcpServerId: null,
     serverUrl: null,
     docsUrl: null,

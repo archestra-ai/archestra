@@ -80,6 +80,18 @@ vi.mock("./audit-log-registry", async () => {
             }
           : null,
     },
+    // Child-mutation DELETE registered with an explicit `.updated` action: the
+    // parent resource still exists after the delete, so `after` must be captured
+    // rather than forced to null like a genuine resource deletion.
+    "/api/agents/:agentId/delegations": {
+      resourceType: "agent",
+      resourceIdParam: "agentId",
+      action: "agent.updated" as const,
+      fetchById: async (id: string) =>
+        id === KNOWN_RESOURCE_ID
+          ? { id, name: "Some Agent", delegationTargets: [] }
+          : null,
+    },
     // Rotation route with explicit action — key test for action overrides.
     "/api/user-tokens/me/rotate": {
       resourceType: "userToken",
@@ -257,6 +269,12 @@ describe("registerAuditLogHook", () => {
     app.post("/api/agents/:agentId/tools/:toolId", async () => ({ ok: true }));
     app.delete("/api/agents/:agentId/tools/:toolId", async () => ({
       ok: true,
+    }));
+
+    // Child-mutation DELETE — walks up to /api/agents/:agentId/delegations
+    // (explicit agent.updated action); the agent survives the removal.
+    app.delete("/api/agents/:agentId/delegations/:targetAgentId", async () => ({
+      success: true,
     }));
 
     // Unregistered child route — walks up to /api/agents/:agentId.
@@ -460,6 +478,32 @@ describe("registerAuditLogHook", () => {
         name: "Existing Thing",
       });
       expect(rows[0].after).toBeNull();
+    });
+
+    test("semantic-update DELETE (child removal) captures after-state, not null", async () => {
+      const res = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${KNOWN_RESOURCE_ID}/delegations/00000000-0000-0000-0000-0000000000ff`,
+      });
+      expect(res.statusCode).toBe(200);
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      // Explicit `.updated` action → the resource survives, so the removal must
+      // not render as a full deletion (after=null). before/after are both the
+      // agent snapshot; the diff surfaces the delegation change.
+      expect(rows[0].action).toBe("agent.updated");
+      expect(rows[0].before).toEqual({
+        id: KNOWN_RESOURCE_ID,
+        name: "Some Agent",
+        delegationTargets: [],
+      });
+      expect(rows[0].after).toEqual({
+        id: KNOWN_RESOURCE_ID,
+        name: "Some Agent",
+        delegationTargets: [],
+      });
     });
   });
 

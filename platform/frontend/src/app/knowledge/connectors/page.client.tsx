@@ -30,7 +30,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
+  useConnector,
   useConnectorsPaginated,
   useDeleteConnector,
 } from "@/lib/knowledge/connector.query";
@@ -92,8 +94,18 @@ function ConnectorsList() {
           >["connectorType"]),
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingConnector, setEditingConnector] =
-    useState<ConnectorItem | null>(null);
+  const editIdFromUrl = searchParams.get("edit");
+  const { data: connectorFromUrl } = useConnector(editIdFromUrl ?? undefined);
+  const {
+    entity: editingConnector,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<
+    ConnectorItem | archestraApiTypes.GetConnectorResponses["200"]
+  >({
+    paramName: "edit",
+    entityFromUrl: connectorFromUrl ?? null,
+  });
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
     null,
   );
@@ -216,7 +228,7 @@ function ConnectorsList() {
             {
               icon: <Pencil className="h-4 w-4" />,
               label: "Edit connector",
-              onClick: () => setEditingConnector(row.original),
+              onClick: () => openEditDialog(row.original),
             },
             {
               icon: <Trash2 className="h-4 w-4" />,
@@ -300,7 +312,7 @@ function ConnectorsList() {
           <EditConnectorDialog
             connector={editingConnector}
             open={!!editingConnector}
-            onOpenChange={(open) => !open && setEditingConnector(null)}
+            onOpenChange={(open) => !open && closeEditDialog()}
           />
         )}
 

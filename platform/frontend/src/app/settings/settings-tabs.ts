@@ -23,6 +23,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/mcp"]
       ? [{ label: "MCP", href: "/settings/mcp" }]
       : []),
+    ...(permissionMap?.["/settings/skills"]
+      ? [{ label: "Skills", href: "/settings/skills" }]
+      : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]
       : []),

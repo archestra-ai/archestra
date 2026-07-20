@@ -13,6 +13,8 @@ import type z from "zod";
 import config from "@/config";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import {
+  constructLegacyMcpDeploymentName,
+  constructLegacyMultitenantMcpDeploymentName,
   ensureStringIsRfc1123Compliant,
   isK8sConflictError,
   isK8sNotFoundError,
@@ -357,25 +359,36 @@ export default class K8sDeployment {
   }
 
   /**
-   * Constructs a valid Kubernetes deployment name for an MCP server.
+   * Returns the Kubernetes deployment name for an MCP server.
    *
-   * Multi-tenant catalogs share one deployment per catalog (named after the
-   * catalog so all caller mcp_server rows alias the same pod). Single-tenant
-   * (default) gets one deployment per mcp_server row.
+   * Deployment identity is FROZEN: the stored `deploymentName` (written once
+   * at creation, or adopted from the live cluster by the startup adopt pass)
+   * always wins, so a rename never re-derives — and never orphans — the
+   * running deployment. The name-derived recompute is a transitional
+   * fallback for rows not frozen yet (e.g. K8s runtime disabled, so the
+   * adopt pass never ran).
+   *
+   * Multi-tenant catalogs share one deployment per catalog (frozen on the
+   * catalog row so all caller mcp_server rows alias the same pod).
+   * Single-tenant (default) gets one deployment per mcp_server row.
    */
   static constructDeploymentName(
     mcpServer: McpServer,
     catalogItem?: InternalMcpCatalog | null,
   ): string {
     if (catalogItem?.multitenant && mcpServer.catalogId) {
-      const slugified = ensureStringIsRfc1123Compliant(catalogItem.name);
-      return `mcp-mt-${mcpServer.catalogId.slice(0, 8)}-${slugified}`.substring(
-        0,
-        253,
+      return (
+        catalogItem.deploymentName ??
+        constructLegacyMultitenantMcpDeploymentName(
+          mcpServer.catalogId,
+          catalogItem.name,
+        )
       );
     }
-    const slugified = ensureStringIsRfc1123Compliant(mcpServer.name);
-    return `mcp-${slugified}`.substring(0, 253);
+    if (mcpServer.deploymentName) {
+      return mcpServer.deploymentName;
+    }
+    return constructLegacyMcpDeploymentName(mcpServer.name);
   }
 
   /**
@@ -1824,8 +1837,15 @@ export default class K8sDeployment {
       },
       spec: {
         replicas: MCP_ORCHESTRATOR_DEFAULTS.replicas,
+        // Selector keys on `app` + stable `mcp-server-id` only. Selectors are
+        // immutable, so the mutable `mcp-server-name` label must not be part
+        // of pod identity (it would block any in-place update after a
+        // rename). Deployment metadata and pod-template labels keep the full
+        // set — a selector may match a subset of the pod labels. Existing
+        // deployments with the old 3-label selector are left as-is (reconcile
+        // compares only `mcp-server-id`) and converge on natural recreate.
         selector: {
-          matchLabels: labels,
+          matchLabels: this.getPodSelectorLabels(),
         },
         template: {
           metadata: podTemplateMetadata,
@@ -1922,6 +1942,7 @@ export default class K8sDeployment {
       serverId: this.mcpServer.id,
       serverName: this.mcpServer.name,
       labels,
+      selectorLabels: this.getPodSelectorLabels(),
     });
 
     if (!deployment) {

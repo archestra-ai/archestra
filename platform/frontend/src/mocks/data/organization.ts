@@ -20,6 +20,7 @@ export function makeOrganization(
     customFont: "inter",
     convertToolResultsToToon: false,
     onlineMcpCatalogEnabled: true,
+    onlineSkillCatalogEnabled: true,
     skillToolsEnabled: false,
     compressionScope: "organization",
     defaultDiscoveredToolInvocationPolicy: "allow_when_context_is_untrusted",

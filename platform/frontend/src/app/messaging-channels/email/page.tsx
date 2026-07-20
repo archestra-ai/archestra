@@ -2,6 +2,7 @@
 
 import { type archestraApiTypes, DocsPage } from "@archestra/shared";
 import { AlertTriangle, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
@@ -18,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgents, useProfile } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   useAgentEmailAddress,
@@ -30,6 +31,7 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { cn } from "@/lib/utils";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
@@ -63,7 +65,17 @@ export default function EmailPage() {
   const { email: allStepsCompleted } = useTriggerStatuses();
 
   const [setupOpen, setSetupOpen] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+  const { data: editingAgentFromUrl } = useProfile(editId ?? undefined);
+  const {
+    entity: editingAgent,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam({
+    paramName: "edit",
+    entityFromUrl: editingAgentFromUrl ?? null,
+  });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EmailStatusFilter>("all");
 
@@ -321,7 +333,7 @@ export default function EmailPage() {
                         key={agent.id}
                         agent={agent}
                         currentUserId={session?.user?.id}
-                        onEdit={() => setEditingAgent(agent)}
+                        onEdit={() => openEditDialog(agent)}
                         providerEnabled={providerEnabled}
                       />
                     ))
@@ -373,7 +385,7 @@ export default function EmailPage() {
         open={!!editingAgent}
         onOpenChange={(open) => {
           if (!open) {
-            setEditingAgent(null);
+            closeEditDialog();
           }
         }}
         providerEnabled={providerEnabled}

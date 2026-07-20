@@ -3,7 +3,7 @@ title: MS Teams
 category: Agents
 order: 7
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-06-12
+lastUpdated: 2026-07-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -28,6 +28,10 @@ See [Deployment — Environment Variables](/docs/platform-deployment#environment
 
 If your instance is not already publicly reachable (for example, running locally), Archestra can open an [ngrok](https://ngrok.com) tunnel so Teams can deliver messages. The setup wizard's **Configure ngrok** step takes your ngrok auth token and brings the tunnel up live — no restart needed. For Docker or unattended deployments, set `ARCHESTRA_NGROK_AUTH_TOKEN` instead and the tunnel starts on boot.
 
+### Dedicated Webhook Port
+
+Teams delivers messages to `POST /api/webhooks/chatops/ms-teams` on the main API port. Set `ARCHESTRA_PUBLIC_ENDPOINTS_PORT` to also serve the webhook on a dedicated port — an alias with the same handler, so the main port keeps working. This lets a firewall or load balancer expose only the webhook to the Internet and keep the rest of the API internal. See [Deployment — Environment Variables](/docs/platform-deployment#application--api-configuration) for details.
+
 ## Usage
 
 ### First Message
@@ -44,7 +48,7 @@ The bot responds with an **Adaptive Card dropdown** to select which agent handle
 
 In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages and group chats always get a reply, no mention required.
 
-To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. As a reminder, the bot adds a short hint about this to its first reply in each thread.
+To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. Muting also cancels any reply the bot is already working on, so a late answer never lands after you ask for quiet. As a reminder, the bot adds a short hint about this to its first reply in each thread.
 
 ### Commands
 

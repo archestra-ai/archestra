@@ -5,6 +5,7 @@ import {
   hasArchestraTokenPrefix,
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
+  isSkillTool,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   MCP_GATEWAY_OAUTH_SCOPE,
@@ -35,7 +36,9 @@ import {
   archestraMcpBranding,
   executeArchestraTool,
   filterToolNamesByPermission,
+  getAgentTools,
   getArchestraMcpTools,
+  getSkillDelegationTools,
 } from "@/archestra-mcp-server";
 import {
   getUnassignedDiscoverableTools,
@@ -46,10 +49,8 @@ import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import {
-  evaluateSingleMcpToolInvocationPolicy,
-  policyBlockToToolError,
-} from "@/guardrails/tool-invocation";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -80,6 +81,11 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import {
+  appLaunchToolDescription,
+  appLaunchToolTitle,
+  sanitizeAppNameForToolMetadata,
+} from "@/services/apps/app-run-link";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -95,6 +101,7 @@ import {
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
+import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
@@ -275,8 +282,41 @@ export async function createAgentServer(
       agent.toolExposureMode === "search_and_run_only"
         ? getImplicitArchestraMetaTools()
         : [];
+
+    // Delegation tools resolve through the Auto/Custom subagent seam, not the
+    // assigned-rows query: Auto mode synthesizes caller-scoped tools that have
+    // no agent_tools rows at all, and exclusions/user access apply in both
+    // modes. Drop the raw delegation rows and splice in the resolved surface so
+    // the gateway advertises the same delegation set the dispatch path accepts.
+    const [delegationTools, skillDelegationTools] = await Promise.all([
+      getAgentTools({
+        agentId,
+        organizationId: agent.organizationId,
+        userId: tokenAuth?.userId,
+      }),
+      // Agent-designated skills surface as skill__<slug> delegation tools,
+      // resolved per calling user with the same env/access symmetry.
+      getSkillDelegationTools({
+        agentId,
+        organizationId: agent.organizationId,
+        userId: tokenAuth?.userId,
+      }),
+    ]);
     const candidateTools = dedupeToolsByName(
-      [...mcpTools, ...dynamicUiTools, ...implicitMetaTools].map(toMcpListTool),
+      [
+        ...mcpTools.filter((tool) => !tool.delegateToAgentId),
+        ...dynamicUiTools,
+        ...implicitMetaTools,
+        ...[...delegationTools, ...skillDelegationTools].map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          meta: {
+            annotations: (tool.annotations ?? {}) as Record<string, unknown>,
+            _meta: tool._meta,
+          },
+        })),
+      ].map(toMcpListTool),
     );
 
     // Filter Archestra tools based on user RBAC permissions
@@ -298,11 +338,14 @@ export async function createAgentServer(
             TOOL_RENDER_APP_SHORT_NAME,
         );
 
-    // Resolve the backing catalogs of the assigned tools once: their names feed
-    // both the search_tools description and the app launch-tool titles below.
+    // Resolve the backing catalogs of the advertised tools once: their names
+    // feed both the search_tools description and the app launch-tool title and
+    // description below. Cover BOTH assigned tools and the dynamically-widened
+    // ones (access-all-tools) — otherwise a dynamically-surfaced app launch
+    // tool has no catalog here and falls through to its raw stored metadata.
     const catalogsById = await InternalMcpCatalogModel.getByIds([
       ...new Set(
-        mcpTools
+        [...mcpTools, ...dynamicUiTools]
           .map((tool) => tool.catalogId)
           .filter(
             (id): id is string =>
@@ -312,14 +355,35 @@ export async function createAgentServer(
     ]);
 
     // An app's launch tool keeps its unique slug `name` for invocation, but a
-    // gateway client should show a human label. Derive "Open <app>" from the
-    // backing catalog name (kept in lockstep with the app) so it never goes
-    // stale; non-app tools keep their existing title.
+    // gateway client should show a human label and description. Both derive from
+    // the backing catalog name (kept in lockstep with the app) so they never go
+    // stale and are sanitized regardless of the stored value. `appLaunchCatalog`
+    // is the single gate: the catalog only when this row IS the app's `__open`
+    // launch tool, so a non-launch tool that ever shares an app catalog is never
+    // mislabeled. Non-app tools keep their existing title/description.
+    const appLaunchCatalog = (
+      catalogId: string | null | undefined,
+      toolName: string,
+    ) => {
+      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
+      return catalog?.serverType === "app" &&
+        ToolModel.unslugifyName(toolName) === APP_LAUNCH_TOOL_NAME
+        ? catalog
+        : undefined;
+    };
     const appLaunchTitle = (
       catalogId: string | null | undefined,
+      toolName: string,
     ): string | undefined => {
-      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
-      return catalog?.serverType === "app" ? `Open ${catalog.name}` : undefined;
+      const catalog = appLaunchCatalog(catalogId, toolName);
+      return catalog ? appLaunchToolTitle(catalog.name) : undefined;
+    };
+    const appLaunchDescription = (
+      catalogId: string | null | undefined,
+      toolName: string,
+    ): string | undefined => {
+      const catalog = appLaunchCatalog(catalogId, toolName);
+      return catalog ? appLaunchToolDescription(catalog.name) : undefined;
     };
 
     // Dynamically enrich the knowledge sources tool description with the
@@ -350,7 +414,9 @@ export async function createAgentServer(
       ({ name, description, parameters, meta, catalogId }) => ({
         name,
         title:
-          archestraToolTitles.get(name) || appLaunchTitle(catalogId) || name,
+          archestraToolTitles.get(name) ||
+          appLaunchTitle(catalogId, name) ||
+          name,
         description:
           name ===
             archestraMcpBranding.getToolName(
@@ -362,7 +428,9 @@ export async function createAgentServer(
                     TOOL_SEARCH_TOOLS_SHORT_NAME,
                   ) && searchToolsDescription
               ? searchToolsDescription
-              : (description ?? undefined),
+              : (appLaunchDescription(catalogId, name) ??
+                description ??
+                undefined),
         inputSchema: parameters,
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},
@@ -473,9 +541,11 @@ export async function createAgentServer(
       }
 
       try {
-        // Check if this is an Archestra tool or agent delegation tool
+        // Check if this is an Archestra tool or a delegation tool (agent or
+        // skill delegation — both dispatch through executeArchestraTool)
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
+        const isSkillDelegationTool = isSkillTool(name);
         const contextIsTrusted = !agent.considerContextUntrusted;
 
         // tools/list advertises an all-tools agent's dynamically-accessible
@@ -497,6 +567,7 @@ export async function createAgentServer(
         const assignedToolNames =
           !isArchestraTool &&
           !isAgentDelegationTool &&
+          !isSkillDelegationTool &&
           agent.accessAllTools &&
           tokenAuth?.userId &&
           tokenAuth.organizationId
@@ -542,11 +613,15 @@ export async function createAgentServer(
         if (policyBlock) {
           // Carry the machine-readable policy_denied error alongside the prose
           // (in _meta + structuredContent) so MCP clients render the block
-          // structurally instead of scraping the refusal text.
-          const blockedResult = structuredToolErrorResult({
-            error: policyBlockToToolError(policyBlock),
-            text: policyBlock.refusalMessage,
+          // structurally instead of scraping the refusal text. When the caller
+          // can edit guardrails, both gain a deep link to this tool's policy
+          // editor so the external client can offer to review/modify it.
+          const { error, text } = await buildPolicyBlockedToolResult({
+            policyBlock,
+            userId: tokenAuth?.userId,
+            organizationId: tokenAuth?.organizationId,
           });
+          const blockedResult = structuredToolErrorResult({ error, text });
 
           // Blocked calls are still tool calls: report metrics and persist them
           // (isError) so they show up in the MCP gateway logs and dashboards
@@ -588,17 +663,19 @@ export async function createAgentServer(
           return blockedResult;
         }
 
-        if (isArchestraTool || isAgentDelegationTool) {
+        if (isArchestraTool || isAgentDelegationTool || isSkillDelegationTool) {
           logger.info(
             {
               agentId,
               toolName: name,
               toolType: isAgentDelegationTool
                 ? "agent-delegation"
-                : "archestra",
+                : isSkillDelegationTool
+                  ? "skill-delegation"
+                  : "archestra",
             },
-            isAgentDelegationTool
-              ? "Agent delegation tool call received"
+            isAgentDelegationTool || isSkillDelegationTool
+              ? "Delegation tool call received"
               : "Archestra MCP tool call received",
           );
 
@@ -1768,7 +1845,11 @@ export async function buildKnowledgeSourcesDescription(
   const [knowledgeBases, kbConnectors, directConnectors] = await Promise.all([
     kbIds.length > 0 ? KnowledgeBaseModel.findByIds(kbIds) : [],
     kbIds.length > 0
-      ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds)
+      ? // Query scope: the description lists the sources queries may span,
+        // which includes auto-sync-permissions connectors for every user.
+        KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
+          visibilityScope: "query",
+        })
       : [],
     KnowledgeBaseConnectorModel.findByIds(directConnectorIds),
   ]);
@@ -1955,11 +2036,14 @@ async function buildSearchToolsDescription(params: {
     .filter((catalog) => catalog !== undefined);
   const catalogSummaries = resolvedCatalogs
     .slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVERS)
-    .map((catalog) =>
-      catalog.description
-        ? `${catalog.name} (${summarizeCatalogDescription(catalog.description)})`
-        : catalog.name,
-    );
+    .map((catalog) => {
+      // Author-controlled catalog name/description flow into this model-facing
+      // description, so neutralize control/format/whitespace before embedding.
+      const name = sanitizeAppNameForToolMetadata(catalog.name);
+      return catalog.description
+        ? `${name} (${summarizeCatalogDescription(catalog.description)})`
+        : name;
+    });
 
   if (catalogSummaries.length === 0) {
     return baseDescription;
@@ -1973,9 +2057,11 @@ async function buildSearchToolsDescription(params: {
 }
 
 // One-line, length-capped rendering of a catalog's own description for
-// embedding in the search_tools description.
+// embedding in the search_tools description. Collapses control/format
+// characters (bidi overrides, and conservatively ZWJ/ZWNJ) alongside
+// whitespace so an author-set description cannot reshape the model-facing text.
 function summarizeCatalogDescription(description: string): string {
-  const collapsed = description.replace(/\s+/g, " ").trim();
+  const collapsed = description.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim();
   return collapsed.length >
     SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH
     ? `${collapsed.slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH)}…`

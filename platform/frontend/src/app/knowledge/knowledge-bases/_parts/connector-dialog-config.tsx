@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   FormControl,
   FormDescription,
@@ -311,6 +312,87 @@ export function ConnectorAdvancedConfigFields({
 export function getConnectorTypeLabel(type: ConnectorType): string {
   return CONNECTOR_DISPLAY_LABELS[type];
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Connector types whose backend implementation supports auto-sync-permissions
+ * (`supportsPermissionSync`). Stage 1: GitHub, Confluence, Jira. Keep in sync
+ * with the connectors that set `supportsPermissionSync = true`; the backend
+ * re-validates on create/update (400 otherwise), so this only gates the UI.
+ */
+const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
+  "github",
+  "confluence",
+  "jira",
+]);
+
+export function connectorSupportsAutoSync(type: ConnectorType): boolean {
+  return AUTO_SYNC_CONNECTOR_TYPES.has(type);
+}
+
+/**
+ * Atlassian Cloud connectors take an optional organization admin API key
+ * alongside the product API token: the admin APIs (managed-account email
+ * resolution) reject user API tokens, and the product APIs reject org-admin
+ * API keys, so one value cannot serve both.
+ */
+export function connectorSupportsAdminApiKey(type: ConnectorType): boolean {
+  return type === "jira" || type === "confluence";
+}
+
+/**
+ * Description of the admin API key field, shared by the create and edit
+ * dialogs (each appends its own trailing sentence). Says why the key exists —
+ * the email join permission sync needs — and links to the docs for the
+ * how-to (creating a scopeless key in Atlassian administration).
+ */
+export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
+  const label = getConnectorTypeLabel(type);
+  return (
+    <>
+      Permissions auto-sync needs {label} user emails to work. Add a {label}{" "}
+      organization admin API key or set every {label} user&apos;s profile
+      visibility to &quot;Anyone&quot; to let this connector read {label} user
+      emails.{" "}
+      <ExternalDocsLink
+        href={getFrontendDocsUrl(
+          DocsPage.PlatformKnowledge,
+          ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR,
+        )}
+        className="underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
+      .
+    </>
+  );
+}
+
+/**
+ * What the credential must be able to see for auto-sync permissions to
+ * resolve members to users (the email join). Shown under the credential field
+ * when Auto-sync permissions is selected: each source hides emails behind a
+ * specific, non-obvious visibility rule, and a credential without it produces
+ * a snapshot full of unresolvable members. Atlassian says this on its admin
+ * API key field instead, since that field is where the fix lives.
+ */
+export function getPermissionSyncCredentialNote(
+  type: ConnectorType,
+): string | null {
+  switch (type) {
+    case "github":
+      return "Auto-sync permissions matches members by their public GitHub profile email. No token scope reveals a private email, so members without a public profile email are recorded but stay unresolvable.";
+    default:
+      return null;
+  }
+}
+
+const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
+  "atlassian-organization-admin-api-key";
+// SPDX-SnippetEnd
 
 export function getConnectorUrlConfig(
   type: ConnectorType,

@@ -81,6 +81,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
+  openaiAuthMethod: "api-key",
 };
 
 const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
@@ -821,7 +822,7 @@ function KnowledgeSettingsContent() {
 export default function KnowledgeSettingsPage() {
   return (
     <ErrorBoundary>
-      <SmallTeamTierBanner featureName="Knowledge Base with access control" />
+      <SmallTeamTierBanner featureName="Knowledge" />
       <KnowledgeSettingsContent />
     </ErrorBoundary>
   );

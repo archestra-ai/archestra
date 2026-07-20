@@ -325,12 +325,12 @@ rl.on("line", (line) => {
     // footer transforms into an inline confirm bar when the save would
     // cascade — same surface, no stacked dialog. The CTA matches the
     // backend path: this edit (command + prompted env var) takes the
-    // manual reinstall path, so the button is "Save and mark for
-    // reinstall". An auto-path edit would show "Save and reinstall"
-    // instead — match either to keep the test robust.
+    // manual reinstall path, so the button is "Save change". An
+    // auto-path edit shows "Save and restart" and a pure rename "Save
+    // and rename" — match any to keep the test robust.
     await clickButton({ page: adminPage, options: { name: "Save Changes" } });
     const confirmReinstallButton = settingsDialog.getByRole("button", {
-      name: /Save and (mark for )?reinstall/,
+      name: /Save (change|and (restart|rename))/,
     });
     if (await confirmReinstallButton.isVisible().catch(() => false)) {
       await confirmReinstallButton.click();

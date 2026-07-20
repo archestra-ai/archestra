@@ -1656,6 +1656,19 @@ describe("mapProviderError - Fallback behavior", () => {
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 
+  it("should map a mid-stream provider overload to a retryable server error", () => {
+    const error = {
+      message: "The provider is overloaded",
+      type: "api_error",
+      internal_code: ArchestraInternalErrorCode.ProviderOverloaded,
+    };
+    const result = mapProviderError(error, "anthropic");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(result.isRetryable).toBe(true);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
   it("should map a pre-stream upstream empty response 503 to a retryable empty-response card", () => {
     // The other delivery shape: detection before headers commit arrives as an
     // HTTP 503 whose body carries the normalized internal code.
@@ -2118,6 +2131,64 @@ describe("getUnavailableToolErrorDetails", () => {
     expect(getUnavailableToolErrorDetails(undefined)).toBeNull();
     expect(getUnavailableToolErrorDetails({ code: -32601 })).toBeNull();
   });
+
+  it("steers to search_tools/run_tool when the tool list carries the dispatch pair", () => {
+    // search_and_run_only exposure: the live tool list holds only Archestra
+    // built-ins, so "copy an exact name from the list" would be a dead end —
+    // the message must state the run_tool calling convention instead.
+    const details = getUnavailableToolErrorDetails(
+      new NoSuchToolError({
+        toolName: "acme_hr__list_notes",
+        availableTools: [
+          "archestra__search_tools",
+          "archestra__run_tool",
+          "archestra__run_command",
+        ],
+      }),
+    );
+
+    expect(details).not.toBeNull();
+    expect(details?.message).toContain(
+      "cannot be called directly in this chat",
+    );
+    expect(details?.message).toContain("archestra__search_tools");
+    expect(details?.message).toContain(
+      "archestra__run_tool with tool_name set to that exact name",
+    );
+    expect(details?.message).not.toContain("Copy an exact name from the list");
+  });
+
+  it("steers to the dispatch pair for the stringified duplicate too", () => {
+    const details = getUnavailableToolErrorDetails(
+      "Model tried to call unavailable tool 'ghost_tool'. Available tools: archestra__search_tools, archestra__run_tool.",
+    );
+
+    expect(details?.message).toContain("archestra__run_tool");
+    expect(details?.message).not.toContain("Copy an exact name from the list");
+  });
+
+  it("keeps the copy-a-name steer when the dispatch pair is absent or partial", () => {
+    const withoutDispatch = getUnavailableToolErrorDetails(
+      new NoSuchToolError({
+        toolName: "ghost_tool",
+        availableTools: ["real_tool", "other_tool"],
+      }),
+    );
+    expect(withoutDispatch?.message).toContain(
+      "Copy an exact name from the list",
+    );
+
+    // run_tool alone is not a discovery surface; the pair is required
+    const partialDispatch = getUnavailableToolErrorDetails(
+      new NoSuchToolError({
+        toolName: "ghost_tool",
+        availableTools: ["archestra__run_tool", "real_tool"],
+      }),
+    );
+    expect(partialDispatch?.message).toContain(
+      "Copy an exact name from the list",
+    );
+  });
 });
 
 describe("buildAbortiveTurnError", () => {
@@ -2141,6 +2212,22 @@ describe("buildAbortiveTurnError", () => {
 // =============================================================================
 
 describe("mapProviderError - Microsoft 365 Copilot tools rejection", () => {
+  it("maps a mid-stream upstream timeout to a retryable network error", () => {
+    // Once streaming headers are committed the HTTP 504 cannot be changed;
+    // this is the bare SSE error shape delivered by the AI SDK instead.
+    const error = {
+      message:
+        "Microsoft 365 Copilot upstream idle timeout after 120 seconds without new response text.",
+      type: "api_error",
+      internal_code: ArchestraInternalErrorCode.UpstreamTimeout,
+    };
+    const result = mapProviderError(error, "microsoft-365-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.originalError?.message).toContain("upstream idle timeout");
+  });
+
   it("maps the proxy adapter's tools rejection to ToolsUnsupported", () => {
     const error = {
       name: "AI_APICallError",

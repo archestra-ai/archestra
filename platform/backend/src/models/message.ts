@@ -26,7 +26,10 @@ class MessageModel {
       .update(schema.conversationsTable)
       .set({
         updatedAt: new Date(),
-        lastMessageAt: sql`GREATEST(${new Date()}::timestamp, ${schema.conversationsTable.lastReadAt} + interval '1 millisecond')`,
+        // now() (DB clock), not a JS Date param: node-postgres serializes
+        // Dates in host-local time and the ::timestamp cast drops the offset,
+        // shifting the stamp by the host's UTC offset on non-UTC hosts.
+        lastMessageAt: sql`GREATEST(now()::timestamp, ${schema.conversationsTable.lastReadAt} + interval '1 millisecond')`,
       })
       .where(eq(schema.conversationsTable.id, conversationId));
   }

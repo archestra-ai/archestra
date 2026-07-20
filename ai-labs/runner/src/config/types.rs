@@ -116,6 +116,10 @@ pub struct Task {
     pub artifact_key: Option<String>,
     pub max_format_attempts: usize,
     pub state_rest: Vec<String>,
+    /// Optional per-task system prompt (`[agent] system_prompt` in task.toml). A task that sets it
+    /// runs on its own agent instead of the env's shared lane agent, so a poisoned/stale prompt
+    /// scenario can live inside a big env without contaminating the other tasks.
+    pub agent_system_prompt: Option<String>,
 }
 
 impl Task {

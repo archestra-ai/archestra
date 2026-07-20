@@ -103,13 +103,11 @@ type CatalogItem =
 
 interface InitialAgentSelectorProps {
   currentAgentId: string | null;
-  currentAgentName?: string;
   onAgentChange: (agentId: string) => void;
 }
 
 export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
-  currentAgentName,
   onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
@@ -147,8 +145,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
       allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
     [allAgents, currentAgentId],
   );
-  const displayAgentName =
-    currentAgent?.name ?? currentAgentName ?? "Select agent";
+  const displayAgentName = currentAgent?.name ?? "Select agent";
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
   const shouldLoadAgentManagementDetails = open || !!editingAgentId;
   const installer = useMcpInstallOrchestrator({

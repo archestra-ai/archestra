@@ -14,8 +14,10 @@ import {
   consumeStream as consumeReadableStream,
   convertToModelMessages,
   NoOutputGeneratedError,
+  type StepResult,
   stepCountIs,
   type streamText,
+  type ToolSet,
 } from "ai";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
@@ -30,6 +32,7 @@ import mcpClient from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import {
   REPEAT_CALL_TERMINATION_NOTICE,
+  recordUnavailableToolCallStep,
   repeatCeilingStopCondition,
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
@@ -161,6 +164,18 @@ export interface A2AExecuteParams {
    * `subagentToolStream`.
    */
   delegationToolCallId?: string;
+
+  /**
+   * When provided, invoked with each incremental text delta as the model
+   * streams its answer, so a caller (A2A `SendStreamingMessage`) can forward
+   * tokens to an SSE client. The buffered {@link A2AExecuteResult} is still
+   * returned unchanged when the run completes, and its `text` is the
+   * authoritative, thinking-stripped answer — interim deltas are best-effort
+   * and may include raw model output (e.g. inline `<thinking>`). Deltas for a
+   * turn that is silently retried by the recovery loop are not emitted (the
+   * stream is only surfaced for the committed attempt).
+   */
+  onTextDelta?: (delta: string) => void;
 }
 
 /** @public — exported for testability */
@@ -407,6 +422,11 @@ export async function executeA2AMessage(
         stepCountIs(MAX_AGENT_STEPS),
         repeatCeilingStopCondition(repeatTracker),
       ],
+      // Feeds the repeat ceiling above the one call shape it cannot otherwise
+      // see: a tool that is not in the tool list never reaches an execute
+      // wrapper, so nothing fingerprints it.
+      onStepFinish: (step: StepResult<ToolSet>) =>
+        recordUnavailableToolCallStep(repeatTracker, step),
       abortSignal,
       // Request the model's real output ceiling (clamped by the operator
       // ceiling), or a safe fallback when unknown. Without this, providers that
@@ -497,6 +517,30 @@ export async function executeA2AMessage(
         },
       });
 
+      // Forward incremental text deltas to a streaming caller (A2A
+      // SendStreamingMessage). This is a separate buffered accessor over the
+      // same run — the AI SDK buffers each accessor independently, so draining
+      // `textStream` here does not steal events from the toUIMessageStream merge
+      // or the `.text`/`.usage`/`.finishReason` promises below. A failed forward
+      // (e.g. the SSE client disconnected) must not abort the buffered run, so
+      // each callback is guarded; the loop still drains the stream to
+      // completion.
+      const onTextDelta = params.onTextDelta;
+      const textDeltaConsumption = onTextDelta
+        ? (async () => {
+            for await (const delta of stream.textStream) {
+              try {
+                onTextDelta(delta);
+              } catch (error) {
+                logger.debug(
+                  { agentId: agent.id, error },
+                  "Failed to forward A2A text delta (non-fatal)",
+                );
+              }
+            }
+          })()
+        : Promise.resolve();
+
       // Wait for the stream to complete and get the final text.
       // When the underlying provider returns an error (e.g. 400 insufficient
       // credits), the stream produces zero steps and the AI SDK throws
@@ -507,6 +551,7 @@ export async function executeA2AMessage(
         stream.usage,
         stream.finishReason,
         uiMessageStreamConsumption,
+        textDeltaConsumption,
       ]);
 
       if (!responseUiMessage) {
@@ -731,7 +776,16 @@ export async function buildUserContent(
     stageAttachments?: StageAttachmentsFn;
   },
 ): Promise<{ content: UserContent | null; note: string }> {
-  const allAttachments = attachments ?? [];
+  // `A2AAttachment.contentType` is typed non-optional, but every value
+  // originates from an external source (A2A protocol parts, chat-platform or
+  // email uploads) and stays populated only because each ingestion path defaults
+  // it — the A2A path in particular narrows an optional SDK `mediaType` through
+  // an `as string` cast behind a co-located filter. Default a missing content
+  // type once here so a slip at any of those sites can't crash the image/mime
+  // classification below or emit a `data:undefined;base64,...` URL further down.
+  const allAttachments = (attachments ?? []).map((att) =>
+    att.contentType ? att : { ...att, contentType: "application/octet-stream" },
+  );
   // A sandbox is usable iff the caller supplied a stager; deriving it here (vs a
   // separate flag) makes the "available but unstageable" state unrepresentable.
   const sandboxAvailable = opts.stageAttachments !== undefined;

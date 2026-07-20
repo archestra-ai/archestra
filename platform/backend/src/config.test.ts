@@ -10,6 +10,7 @@ import {
 import config, {
   betaFeatureEnabled,
   getAnalyticsConfig,
+  getAppAssetBaseOrigin,
   getCorsOrigins,
   getDatabaseUrl,
   getMCPGatewayOauthAllowedPublicHosts,
@@ -31,13 +32,16 @@ import config, {
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
   parseFileStorageS3Config,
+  parseHackathonRecorderEnabled,
   parseLogFormat,
   parseMetricsPort,
+  parseOptionalPort,
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
   parseSampleRate,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
+  resolveRenderBaseUrl,
 } from "./config";
 
 // Mock the logger
@@ -1051,6 +1055,76 @@ describe("parseMetricsPort", () => {
   });
 });
 
+describe("parseOptionalPort", () => {
+  test("returns undefined (disabled) when no value provided", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("returns undefined when empty or whitespace-only string provided", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "",
+      }),
+    ).toBeUndefined();
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "   ",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("parses valid port value", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "9010",
+      }),
+    ).toBe(9010);
+  });
+
+  test("accepts boundary ports and trims whitespace", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "1",
+      }),
+    ).toBe(1);
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "65535",
+      }),
+    ).toBe(65535);
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "  9010  ",
+      }),
+    ).toBe(9010);
+  });
+
+  test("returns undefined and warns for invalid values", () => {
+    for (const envValue of ["abc", "0", "65536", "-1"]) {
+      expect(
+        parseOptionalPort({
+          envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+          envValue,
+        }),
+      ).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        `Invalid ARCHESTRA_PUBLIC_ENDPOINTS_PORT value "${envValue}", the dedicated listener will not be started`,
+      );
+    }
+  });
+});
+
 describe("parseActiveChatRunPollIntervalMs", () => {
   test("returns default when value is missing", () => {
     expect(
@@ -1624,34 +1698,15 @@ describe("parseSampleRate", () => {
 });
 
 describe("parseCodeRuntimeDaggerRunnerHost", () => {
-  test("should return undefined when runtime is disabled and host is unset", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: false, envValue: undefined }),
-    ).toBeUndefined();
-  });
-
-  test("should not validate host while runtime is disabled", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: false,
-        envValue: "kube-pod://dagger-engine?namespace=dagger",
-      }),
-    ).toBe("kube-pod://dagger-engine?namespace=dagger");
-  });
-
-  test("should return undefined when runtime is enabled but host is unset", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: true, envValue: undefined }),
-    ).toBeUndefined();
+  test("should return undefined when host is unset", () => {
+    expect(parseCodeRuntimeDaggerRunnerHost(undefined)).toBeUndefined();
   });
 
   test("should trim and return kube-pod runner host", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue:
-          " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
-      }),
+      parseCodeRuntimeDaggerRunnerHost(
+        " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
+      ),
     ).toBe(
       "kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine",
     );
@@ -1659,19 +1714,15 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
 
   test("should trim and return TCP runner host", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
-      }),
+      parseCodeRuntimeDaggerRunnerHost(
+        " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
+      ),
     ).toBe("tcp://dagger-runtime.dagger.svc.cluster.local:1234");
   });
 
   test("should return undefined for unsupported runner hosts", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: "unix:///run/dagger/engine.sock",
-      }),
+      parseCodeRuntimeDaggerRunnerHost("unix:///run/dagger/engine.sock"),
     ).toBeUndefined();
   });
 });
@@ -1858,6 +1909,45 @@ describe("getMCPGatewayOauthAllowedPublicHosts", () => {
   });
 });
 
+describe("getAppAssetBaseOrigin", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_API_BASE_URL;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("prefers a public https entry over a cluster-internal one", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "http://archestra.default.svc:9000,https://api.example.com";
+    expect(getAppAssetBaseOrigin()).toBe("https://api.example.com");
+  });
+
+  test("uses a non-https entry when no https entry is present", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "http://api.example.com:9000/base";
+    expect(getAppAssetBaseOrigin()).toBe("http://api.example.com:9000");
+  });
+
+  test("skips a malformed entry and uses the next candidate", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "not-a-url,https://api.example.com";
+    expect(getAppAssetBaseOrigin()).toBe("https://api.example.com");
+  });
+
+  test("falls back to the frontend origin (never a loopback API origin) when ARCHESTRA_API_BASE_URL is unset", () => {
+    // The old fallback was http://127.0.0.1:<backend port>, which a public page
+    // (a tunnel, the shared catalog) cannot load — Private Network Access blocks
+    // it, taking the injected recorder/replay SDK down with it. The frontend
+    // origin is same-origin with the page, so the assets always load.
+    const origin = getAppAssetBaseOrigin();
+    expect(origin).toBe(new URL(config.frontendBaseUrl).origin);
+    expect(origin).not.toContain("127.0.0.1:9000");
+  });
+});
+
 describe("parseAuditLogRetentionDays", () => {
   test("returns 0 (disabled) when env var is not set", () => {
     expect(parseAuditLogRetentionDays(undefined)).toBe(0);
@@ -1888,6 +1978,60 @@ describe("parseAuditLogRetentionDays", () => {
   test("returns default and warns on negative value", () => {
     expect(parseAuditLogRetentionDays("-1")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
+  });
+});
+
+describe("parseHackathonRecorderEnabled", () => {
+  test("defaults on for community deployments", () => {
+    expect(parseHackathonRecorderEnabled(undefined, false)).toBe(true);
+  });
+
+  test("defaults off when the enterprise license is activated", () => {
+    expect(parseHackathonRecorderEnabled(undefined, true)).toBe(false);
+  });
+
+  test('an explicit "true" wins over the enterprise default', () => {
+    expect(parseHackathonRecorderEnabled("true", true)).toBe(true);
+  });
+
+  test('an explicit "false" wins over the community default', () => {
+    expect(parseHackathonRecorderEnabled("false", false)).toBe(false);
+  });
+
+  test("an unrecognized value falls back to the deployment default", () => {
+    expect(parseHackathonRecorderEnabled("yes", false)).toBe(true);
+    expect(parseHackathonRecorderEnabled("yes", true)).toBe(false);
+  });
+});
+
+describe("resolveRenderBaseUrl", () => {
+  test("films the deployment's own first configured origin", () => {
+    // The renderer must reach the frontend at an origin the app sandbox trusts
+    // to be framed by. Reaching it at loopback instead is refused by the
+    // sandbox's frame-ancestors policy, and the export films an empty app pane
+    // rather than failing — so the default has to come from the same set CORS
+    // and auth are built from.
+    expect(
+      resolveRenderBaseUrl({
+        explicit: undefined,
+        configuredOrigins: ["https://apps.example.com", "https://tunnel.test"],
+      }),
+    ).toBe("https://apps.example.com");
+  });
+
+  test("an explicit base URL wins, for a renderer pointed somewhere internal", () => {
+    expect(
+      resolveRenderBaseUrl({
+        explicit: "http://frontend.svc:3000",
+        configuredOrigins: ["https://apps.example.com"],
+      }),
+    ).toBe("http://frontend.svc:3000");
+  });
+
+  test("falls back to loopback only when nothing is configured", () => {
+    expect(
+      resolveRenderBaseUrl({ explicit: "  ", configuredOrigins: [] }),
+    ).toBe("http://localhost:3000");
   });
 });
 

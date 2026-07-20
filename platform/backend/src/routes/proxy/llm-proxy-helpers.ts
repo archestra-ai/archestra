@@ -7,7 +7,7 @@
 
 import {
   ApiError,
-  type ArchestraInternalErrorCode,
+  ArchestraInternalErrorCode,
   type BillingMode,
   type InteractionSource,
   type SupportedProvider,
@@ -34,6 +34,11 @@ import type {
   UnsafeContextBoundary,
   UsageView,
 } from "@/types";
+import {
+  collectErrorCodes,
+  isConnectionErrno,
+  isTimeoutErrno,
+} from "@/utils/network-errors";
 import * as utils from "./utils";
 import { estimateToolTokens } from "./utils/cost-optimization";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -352,6 +357,7 @@ export function handleError(
   // Extract status code from error, checking multiple common property names
   // and ensuring the value is a valid number (not undefined/null)
   let statusCode: number = 500;
+  let hasExplicitStatus = false;
   if (error instanceof Error) {
     const errorObj = error as Error & {
       status?: number;
@@ -359,18 +365,43 @@ export function handleError(
     };
     if (typeof errorObj.status === "number") {
       statusCode = errorObj.status;
+      hasExplicitStatus = true;
     } else if (typeof errorObj.statusCode === "number") {
       statusCode = errorObj.statusCode;
+      hasExplicitStatus = true;
     }
   }
 
+  // Some SDK transport and streaming failures do not carry an HTTP status.
+  if (!hasExplicitStatus) {
+    const upstreamStatus = classifyTransientUpstreamError(error);
+    if (upstreamStatus !== undefined) {
+      statusCode = upstreamStatus;
+    }
+  }
+
+  // The internal code preserves overload semantics after streaming starts.
+  const isUpstreamOverload =
+    statusCode === 529 ||
+    (statusCode === 503 &&
+      !(error instanceof ApiError) &&
+      classifyUpstreamOverload(error) !== undefined);
+
   const errorMessage = extractErrorMessage(error);
-  // Prefer the adapter's classification, but fall back to a code already
-  // carried by an ApiError (e.g. the adapter threw one tagged with
-  // upstream_empty_response) so re-wrapping below doesn't drop it.
   const internalCode =
     extractInternalCode(error) ??
-    (error instanceof ApiError ? error.internalCode : undefined);
+    (error instanceof ApiError ? error.internalCode : undefined) ??
+    (isUpstreamOverload
+      ? ArchestraInternalErrorCode.ProviderOverloaded
+      : undefined);
+
+  // Headers cannot be changed after streaming starts.
+  if (!reply.raw.headersSent) {
+    const retryAfter = extractRetryAfterHeader(error);
+    if (retryAfter !== undefined) {
+      reply.header("retry-after", retryAfter);
+    }
+  }
 
   // If headers already sent (mid-stream error), write error to stream.
   // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
@@ -404,6 +435,106 @@ export function handleError(
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
   throw new ApiError(statusCode, errorMessage, internalCode);
+}
+
+/**
+ * Classify status-less SDK transport and overload errors as upstream failures.
+ */
+function classifyTransientUpstreamError(
+  error: unknown,
+): 502 | 503 | 504 | 529 | undefined {
+  if (!(error instanceof Error)) return undefined;
+
+  const overloadStatus = classifyUpstreamOverload(error);
+  if (overloadStatus !== undefined) return overloadStatus;
+
+  const { name, message } = error;
+  const codes = collectErrorCodes(error);
+
+  const isTimeout =
+    name === "APIConnectionTimeoutError" ||
+    /timed out|timeout/i.test(message) ||
+    codes.some(isTimeoutErrno);
+  if (isTimeout) return 504;
+
+  const isConnectionFailure =
+    name === "APIConnectionError" ||
+    /^connection error\.?$/i.test(message) ||
+    /fetch failed|socket hang up|network error|connection (?:reset|refused|closed|aborted)|terminated/i.test(
+      message,
+    ) ||
+    codes.some(isConnectionErrno);
+  if (isConnectionFailure) return 502;
+
+  return undefined;
+}
+
+/**
+ * Anthropic's `overloaded_error` maps to 529; other provider overloads map to
+ * 503. Message matching is limited to SDK-like errors so internal failures are
+ * not reclassified.
+ */
+function classifyUpstreamOverload(error: unknown): 503 | 529 | undefined {
+  if (!(error instanceof Error)) return undefined;
+
+  if (
+    nestedProviderErrorType(error) === "overloaded_error" ||
+    /\boverloaded_error\b/.test(error.message)
+  ) {
+    return 529;
+  }
+  const hasProviderErrorShape =
+    "error" in error ||
+    "headers" in error ||
+    "status" in error ||
+    "statusCode" in error;
+  if (hasProviderErrorShape && /\boverloaded\b/i.test(error.message)) {
+    return 503;
+  }
+
+  return undefined;
+}
+
+/**
+ * Read a provider error type from the SDK's direct or nested error body.
+ */
+function nestedProviderErrorType(error: Error): string | undefined {
+  const body = (error as Error & { error?: unknown }).error;
+  const inner =
+    body && typeof body === "object"
+      ? (body as { error?: unknown }).error
+      : undefined;
+  for (const candidate of [inner, body]) {
+    if (candidate && typeof candidate === "object") {
+      const type = (candidate as { type?: unknown }).type;
+      if (typeof type === "string" && type !== "error") return type;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Read a valid Retry-After value from current or legacy SDK error headers.
+ */
+function extractRetryAfterHeader(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const headers = (error as Error & { headers?: unknown }).headers;
+
+  let value: unknown;
+  if (headers instanceof Headers) {
+    value = headers.get("retry-after");
+  } else if (headers && typeof headers === "object") {
+    const record = headers as Record<string, unknown>;
+    value = record["retry-after"] ?? record["Retry-After"];
+  }
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return undefined;
+  if (/^\d+$/.test(trimmed) || Number.isFinite(Date.parse(trimmed))) {
+    return trimmed;
+  }
+  return undefined;
 }
 
 /**

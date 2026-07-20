@@ -2,6 +2,7 @@ import {
   buildPolicyDeniedMcpToolError,
   buildToolInvocationRefusalMessages,
   isAgentTool,
+  isSkillTool,
   type PolicyDeniedMcpToolError,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
@@ -47,6 +48,7 @@ export interface PolicyEnforcementContext {
  */
 export function policyBlockToToolError(
   policyBlock: PolicyBlockResult,
+  policyUrl?: string,
 ): PolicyDeniedMcpToolError {
   return buildPolicyDeniedMcpToolError({
     toolName: policyBlock.blockedToolName,
@@ -54,6 +56,7 @@ export function policyBlockToToolError(
     input: policyBlock.toolInput,
     reason: policyBlock.reason,
     message: policyBlock.contentMessage,
+    policyUrl,
   });
 }
 
@@ -79,12 +82,14 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
    */
   resolvedToolId?: string;
 }): Promise<PolicyBlockResult | null> {
-  // Policy-bypassing built-ins and agent delegation tools are always allowed.
-  // Policy-evaluated built-ins like query_knowledge_sources fall through so
-  // their invocation policies are enforced on the gateway execution path too.
+  // Policy-bypassing built-ins and agent/skill delegation tools are always
+  // allowed (the delegated run enforces its own policies). Policy-evaluated
+  // built-ins like query_knowledge_sources fall through so their invocation
+  // policies are enforced on the gateway execution path too.
   if (
     archestraMcpBranding.isPolicyBypassedToolName(params.toolName) ||
-    isAgentTool(params.toolName)
+    isAgentTool(params.toolName) ||
+    isSkillTool(params.toolName)
   ) {
     return null;
   }

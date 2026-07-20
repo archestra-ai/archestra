@@ -62,7 +62,10 @@ describe("handleConnectorSync", () => {
 
     await handleConnectorSync({ connectorId });
 
-    expect(mockWithinResumeBudget).toHaveBeenCalledWith(connectorId);
+    expect(mockWithinResumeBudget).toHaveBeenCalledWith({
+      connectorId,
+      runType: "content",
+    });
     expect(mockEnqueue).toHaveBeenCalledWith({
       taskType: "connector_sync",
       payload: { connectorId },

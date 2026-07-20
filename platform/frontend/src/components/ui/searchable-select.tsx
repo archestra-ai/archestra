@@ -11,21 +11,28 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+interface SearchableSelectItem {
+  value: string;
+  label: string;
+  description?: string;
+  searchText?: string;
+  content?: React.ReactNode;
+  selectedContent?: React.ReactNode;
+  disabled?: boolean;
+  checked?: boolean;
+}
+
 interface SearchableSelectProps {
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
-  items: Array<{
-    value: string;
-    label: string;
-    description?: string;
-    searchText?: string;
-    content?: React.ReactNode;
-    selectedContent?: React.ReactNode;
-    disabled?: boolean;
-    checked?: boolean;
-  }>;
+  items: Array<SearchableSelectItem>;
+  /**
+   * Rendered above the search results and never filtered out — for standing
+   * choices like "Unassigned" that must stay reachable while searching.
+   */
+  pinnedItems?: Array<SearchableSelectItem>;
   className?: string;
   disabled?: boolean;
   allowCustom?: boolean;
@@ -47,6 +54,7 @@ export function SearchableSelect({
   placeholder = "Select...",
   searchPlaceholder = "Search...",
   items,
+  pinnedItems,
   className,
   disabled = false,
   allowCustom = false,
@@ -75,7 +83,47 @@ export function SearchableSelect({
     );
   }, [items, searchQuery]);
 
-  const selectedItem = items.find((item) => item.value === value);
+  const selectedItem = [...(pinnedItems ?? []), ...items].find(
+    (item) => item.value === value,
+  );
+
+  const renderOption = (item: SearchableSelectItem) => (
+    <button
+      type="button"
+      key={item.value}
+      disabled={item.disabled}
+      aria-disabled={item.disabled}
+      onClick={() => {
+        if (item.disabled) {
+          return;
+        }
+        onValueChange(item.value);
+        setOpen(false);
+        setSearchQuery("");
+      }}
+      className={cn(
+        "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+        value === item.value && "bg-accent/50",
+        item.disabled &&
+          "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
+      )}
+    >
+      <span className="min-w-0 flex-1">
+        {item.content ?? item.label}
+        {item.description && (
+          <span className="block text-xs text-muted-foreground truncate">
+            {item.description}
+          </span>
+        )}
+      </span>
+      <Check
+        className={cn(
+          "ml-2 h-4 w-4 shrink-0",
+          value === item.value || item.checked ? "opacity-100" : "opacity-0",
+        )}
+      />
+    </button>
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (allowCustom && e.key === "Enter" && searchQuery && open) {
@@ -149,6 +197,7 @@ export function SearchableSelect({
           )}
           onWheelCapture={(event) => event.stopPropagation()}
         >
+          {(pinnedItems ?? []).map(renderOption)}
           {filteredItems.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               {allowCustom && searchQuery ? (
@@ -164,45 +213,7 @@ export function SearchableSelect({
               )}
             </div>
           ) : (
-            filteredItems.map((item) => (
-              <button
-                type="button"
-                key={item.value}
-                disabled={item.disabled}
-                aria-disabled={item.disabled}
-                onClick={() => {
-                  if (item.disabled) {
-                    return;
-                  }
-                  onValueChange(item.value);
-                  setOpen(false);
-                  setSearchQuery("");
-                }}
-                className={cn(
-                  "relative flex w-full cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
-                  value === item.value && "bg-accent/50",
-                  item.disabled &&
-                    "cursor-not-allowed opacity-60 hover:bg-transparent hover:text-inherit",
-                )}
-              >
-                <span className="min-w-0 flex-1">
-                  {item.content ?? item.label}
-                  {item.description && (
-                    <span className="block text-xs text-muted-foreground truncate">
-                      {item.description}
-                    </span>
-                  )}
-                </span>
-                <Check
-                  className={cn(
-                    "ml-2 h-4 w-4 shrink-0",
-                    value === item.value || item.checked
-                      ? "opacity-100"
-                      : "opacity-0",
-                  )}
-                />
-              </button>
-            ))
+            filteredItems.map(renderOption)
           )}
         </div>
       </PopoverContent>

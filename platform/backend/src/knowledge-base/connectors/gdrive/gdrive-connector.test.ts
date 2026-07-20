@@ -353,6 +353,40 @@ describe("GoogleDriveConnector", () => {
       ).toBe(true);
     });
 
+    it("skips a Google-native type with no export mapping instead of downloading it", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      // A Google Form whose NAME looks like a text file: extension matching
+      // must not route it to the raw download path — alt=media always 403s
+      // (fileNotDownloadable) for Docs-Editors files, which counted as an
+      // item error on every pass.
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("form-1", "survey.txt", {
+              mimeType: "application/vnd.google-apps.form",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped?.map((s) => s.name)).toEqual(["survey.txt"]);
+      expect(mockFilesGet).not.toHaveBeenCalled();
+      expect(mockFilesExport).not.toHaveBeenCalled();
+    });
+
     it("recognizes supported files by mimeType when the name has no extension", async () => {
       resetMocks();
       const connector = new GoogleDriveConnector();

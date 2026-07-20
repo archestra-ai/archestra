@@ -145,15 +145,21 @@ describe("parseWebhookNotification", () => {
     ).toBeNull();
   });
 
-  test("ignores group messages that don't address the bot", async () => {
+  test("forwards unaddressed group messages so the agent decides whether to reply", async () => {
+    // Only deliverable with BotFather privacy mode off (or the bot as group
+    // admin) — Telegram filters these otherwise. The manager's group framing
+    // gives the agent the no-reply sentinel for messages not meant for it.
     const provider = makeProvider();
-    expect(await provider.parseWebhookNotification(groupUpdate())).toBeNull();
-    // A bare command may target another bot in the group
-    expect(
-      await provider.parseWebhookNotification(
-        groupUpdate({ text: "/weather" }),
-      ),
-    ).toBeNull();
+    const message = await provider.parseWebhookNotification(groupUpdate());
+    expect(message).toMatchObject({
+      channelId: "-100123",
+      text: "hello",
+      metadata: { conversationType: "groupChat", botMentioned: false },
+    });
+  });
+
+  test("drops group commands aimed at another bot", async () => {
+    const provider = makeProvider();
     expect(
       await provider.parseWebhookNotification(
         groupUpdate({ text: "/weather@some_other_bot" }),

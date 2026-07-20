@@ -40,7 +40,7 @@ export async function handleConnectorSync(
   // budget bounds reaper-driven resumes, so chunking and reaping can't between
   // them drive a connector into an unbounded run loop.
   if (result.status === "partial") {
-    if (await withinResumeBudget(connectorId)) {
+    if (await withinResumeBudget({ connectorId, runType: "content" })) {
       await taskQueueService.enqueue({
         taskType: "connector_sync",
         payload: { connectorId },

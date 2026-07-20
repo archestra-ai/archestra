@@ -36,6 +36,15 @@ export const ArchestraInternalErrorCode = {
    * and the chat mapper surfaces it as the retryable EmptyResponse card.
    */
   UpstreamEmptyResponse: "upstream_empty_response",
+  /**
+   * An upstream provider began a response but stopped making progress until
+   * Archestra's inactivity deadline elapsed. Transient and safe to retry.
+   */
+  UpstreamTimeout: "upstream_timeout",
+  /**
+   * The upstream provider declared a transient overload (HTTP 503/529).
+   */
+  ProviderOverloaded: "provider_overloaded",
 } as const;
 
 export type ArchestraInternalErrorCode =

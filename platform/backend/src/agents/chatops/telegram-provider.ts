@@ -142,15 +142,12 @@ class TelegramProvider implements ChatOpsProvider {
       message.reply_to_message?.from?.id != null &&
       message.reply_to_message.from.id === this.botId;
 
-    // Groups: only act when addressed — mention, reply to the bot, or a
-    // /command@thisbot. Telegram delivers every group /command to every bot,
-    // so a bare unknown command may be meant for another bot and is ignored.
-    if (
-      isGroup &&
-      !botMentioned &&
-      !isReplyToBot &&
-      !this.isCommandAddressedToBot(rawText)
-    ) {
+    // Groups: with BotFather's privacy mode on (the default) Telegram itself
+    // delivers only /commands and replies to the bot. When it's off — or the
+    // bot is a group admin — every message arrives; forward them all and let
+    // the agent's group framing decide when to stay silent, like MS Teams
+    // group chats. Only commands aimed at a different bot are dropped.
+    if (isGroup && this.isCommandForAnotherBot(rawText)) {
       return null;
     }
 
@@ -833,10 +830,10 @@ class TelegramProvider implements ChatOpsProvider {
     }
   }
 
-  private isCommandAddressedToBot(text: string): boolean {
-    if (!this.botUsername) return false;
+  private isCommandForAnotherBot(text: string): boolean {
     const match = /^\/\w+@(\w+)/.exec(text);
-    return match?.[1]?.toLowerCase() === this.botUsername.toLowerCase();
+    if (!match) return false;
+    return match[1].toLowerCase() !== this.botUsername?.toLowerCase();
   }
 
   private isBotMentioned(message: TelegramMessage): boolean {

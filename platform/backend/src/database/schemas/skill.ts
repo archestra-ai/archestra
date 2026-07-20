@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { SkillSourceType } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import environmentsTable from "./environment";
 import usersTable from "./user";
 
 /**
@@ -43,6 +44,17 @@ const skillsTable = pgTable(
       .$type<ResourceVisibilityScope>()
       .notNull()
       .default("personal"),
+    /**
+     * Environment the skill belongs to; `null` is the org Default environment.
+     * Agents only see skills in their own environment (strict match, mirroring
+     * tool/connector isolation), except `built_in` skills which are visible
+     * everywhere. ON DELETE SET NULL — deleting an environment falls the skill
+     * back to the Default environment, same as agents.
+     */
+    environmentId: uuid("environment_id").references(
+      () => environmentsTable.id,
+      { onDelete: "set null" },
+    ),
     /** Short identifier surfaced in the skill catalog. */
     name: text("name").notNull(),
     /** One-line summary the model uses to decide when to activate. */
@@ -65,6 +77,12 @@ const skillsTable = pgTable(
      * from the source agent's tools on conversion; round-trips through SKILL.md.
      */
     allowedTools: text("allowed_tools"),
+    /**
+     * Optional `agent` frontmatter field: the name of the agent the skill runs
+     * in. When set, activation delegates the skill (instructions + task) to
+     * that agent instead of loading the instructions into the caller's context.
+     */
+    agentName: text("agent_name"),
     /**
      * When true, the SKILL.md body is rendered through Handlebars (with the
      * activating user's context) at activation, like an agent system prompt.
@@ -95,6 +113,7 @@ const skillsTable = pgTable(
   (table) => [
     index("skills_organization_id_idx").on(table.organizationId),
     index("skills_scope_idx").on(table.scope),
+    index("skills_environment_id_idx").on(table.environmentId),
     // Name uniqueness mirrors visibility: a name only needs to be unique among
     // those who can see the skill. Personal skills are visible to their author
     // alone, so they are unique per (org, author); team/org skills are shared,

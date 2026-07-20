@@ -2,9 +2,7 @@
 
 import {
   AlertTriangle,
-  Check,
   ChevronDown,
-  Copy,
   ExternalLink,
   Eye,
   EyeOff,
@@ -13,8 +11,11 @@ import {
 import Link from "next/link";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { CopyableCode } from "@/components/copyable-code";
+import {
+  SECRET_PLACEHOLDER_TOKEN,
+  SecretCopyButton,
+} from "@/components/secret-copy-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -131,7 +132,7 @@ export function McpClientInstructions({
             <McpBody
               client={client}
               mcpUrl={mcpUrl}
-              token="archestra_TOKEN"
+              token={SECRET_PLACEHOLDER_TOKEN}
               serverName={serverName}
               gatewayId={gatewayId}
               isQuick={isQuick}
@@ -151,7 +152,7 @@ export function McpClientInstructions({
         <McpBody
           client={client}
           mcpUrl={mcpUrl}
-          token="archestra_TOKEN"
+          token={SECRET_PLACEHOLDER_TOKEN}
           serverName={serverName}
           gatewayId={gatewayId}
           isQuick={isQuick}
@@ -360,11 +361,13 @@ function GenericAuthRow({
   });
   const tokens = tokensData?.tokens ?? [];
 
-  // Mirror the original defaulting logic: personal > org > first team token.
+  // Mirror the original defaulting logic: personal > org > first team token
+  // that can actually authenticate against this gateway.
   const orgToken = tokens.find((t) => t.isOrganizationToken);
+  const firstUsableToken = tokens.find((t) => t.worksWithProfile !== false);
   const defaultTokenId: string | null = userToken
     ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? tokens[0]?.id ?? null);
+    : (orgToken?.id ?? firstUsableToken?.id ?? null);
   const [selectedId, setSelectedId] = useState<string | null>(defaultTokenId);
   useEffect(() => {
     if (selectedId === null && defaultTokenId) setSelectedId(defaultTokenId);
@@ -429,29 +432,14 @@ function GenericAuthRow({
 
   const hasAnyToken = !!userToken || tokens.length > 0;
   const headerValue = bare ? previewValue : `Bearer ${previewValue}`;
-  const [copied, setCopied] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
-  const handleCopy = async () => {
-    if (isCopying) return;
-    setIsCopying(true);
-    try {
-      // The on-screen value is masked once a token is selected, so resolve
-      // the real token for the clipboard instead of copying the mask.
-      const value =
-        exposedValue ??
-        (isPersonal || selectedTeamToken
-          ? await fetchTokenValue()
-          : placeholder);
-      if (!value) return; // fetch failed; the mutation already surfaced a toast
-      await navigator.clipboard.writeText(bare ? value : `Bearer ${value}`);
-      setCopied(true);
-      toast.success("Copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Failed to copy token");
-    } finally {
-      setIsCopying(false);
-    }
+  // The on-screen value is masked once a token is selected, so putting the
+  // real token on the clipboard is an explicit menu choice (SecretCopyButton).
+  const canResolveToken = isPersonal || !!selectedTeamToken;
+  const getSecretText = async (): Promise<string | null> => {
+    const value = exposedValue ?? (await fetchTokenValue());
+    if (!value) return null; // fetch failed; the mutation already surfaced a toast
+    return bare ? value : `Bearer ${value}`;
   };
 
   const teamTokens = tokens.filter((t) => !t.isOrganizationToken);
@@ -462,7 +450,7 @@ function GenericAuthRow({
       <div className="text-xs text-muted-foreground">
         No tokens available — provision one from{" "}
         <Link
-          href="/settings/account?tab=tokens"
+          href="/settings/account?highlight=personal-token"
           className="underline hover:text-foreground"
         >
           your account
@@ -491,21 +479,13 @@ function GenericAuthRow({
               <Eye className="size-3.5" strokeWidth={2} />
             )}
           </button>
-          <button
-            type="button"
-            onClick={handleCopy}
-            disabled={isLoading || isCopying}
-            aria-label="Copy to clipboard"
-            className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
-          >
-            {isCopying ? (
-              <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
-            ) : copied ? (
-              <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
-            ) : (
-              <Copy className="size-3.5" strokeWidth={2} />
-            )}
-          </button>
+          <SecretCopyButton
+            variant="terminal"
+            getSecretText={canResolveToken ? getSecretText : null}
+            placeholderText={bare ? placeholder : `Bearer ${placeholder}`}
+            disabled={isLoading}
+            onBusyChange={setIsCopying}
+          />
           {/* Switching tokens mid-fetch would copy the old token while the
               row already shows the new one, so lock the switcher too. */}
           <DropdownMenuTrigger asChild>
@@ -541,7 +521,12 @@ function GenericAuthRow({
             key={t.id}
             active={selectedId === t.id}
             label={t.team?.name ? `Team Token (${t.team.name})` : t.name}
-            description="To share with your teammates"
+            description={
+              t.worksWithProfile === false
+                ? "This team can't access this gateway"
+                : "To share with your teammates"
+            }
+            disabled={t.worksWithProfile === false}
             onSelect={() => {
               setSelectedId(t.id);
               setExposedValue(null);
@@ -569,16 +554,19 @@ function TokenOption({
   active,
   label,
   description,
+  disabled,
   onSelect,
 }: {
   active: boolean;
   label: string;
   description: string;
+  disabled?: boolean;
   onSelect: () => void;
 }) {
   return (
     <DropdownMenuItem
       onSelect={onSelect}
+      disabled={disabled}
       className={cn("flex flex-col items-start gap-0.5", active && "bg-accent")}
     >
       <span>{label}</span>

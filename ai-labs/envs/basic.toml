@@ -1,10 +1,11 @@
 id = "basic"
 name = "Basic"
-tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger", "aec-material-json-takeoff", "renewal-churn-risk", "pcap-soc-triage", "xlsx-comment-injection", "it-license-rollup", "it-audit-resist-injection", "access-request-intake", "review-run-command-persistence", "review-file-upload-persistence", "solidarity-tax-usd", "ib-deck-qc", "expense-report-continue"]
+tasks = ["pi-gif-zip", "crypto-price", "median-salary", "nitpicker-version", "github-stars", "lena-png-size", "sqlite-orders", "cv-shortlist", "invoice-approval", "ai-sre-fk-drain", "ai-sre-cache-treadmill", "decode-cipher", "xlsx-live-formulas", "purchase-ledger", "aec-material-json-takeoff", "renewal-churn-risk", "pcap-soc-triage", "xlsx-comment-injection", "it-license-rollup", "it-audit-resist-injection", "access-request-intake", "it-ticket-status", "review-run-command-persistence", "review-file-upload-persistence", "solidarity-tax-usd", "ib-deck-qc", "expense-report-continue"]
 
 # Starts the harness-owned `acme_it` synthetic MCP (fixed, controlled content) and registers it to every
 # lane's agent. It serves stateless data, so one shared instance is safe across concurrent lanes -- the
-# it-license-rollup / it-audit-resist-injection / access-request-intake tasks grade its tool calls.
+# it-license-rollup / it-audit-resist-injection / access-request-intake / it-ticket-status tasks grade
+# its tool calls.
 fixture_mcp = true
 
 # These tasks don't mutate shared backend state (the skill/tool catalog), and the skill surface is

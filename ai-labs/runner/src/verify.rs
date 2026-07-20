@@ -238,6 +238,7 @@ mod tests {
             artifact_key: None,
             max_format_attempts: 3,
             state_rest: vec![],
+            agent_system_prompt: None,
         }
     }
 

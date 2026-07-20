@@ -83,10 +83,10 @@ export function TelegramSetupDialog({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            To let the bot see regular messages in group chats, disable Group
-            Privacy for it in BotFather (Bot Settings → Group Privacy), then
-            re-add the bot to the group. With privacy on, it only receives
-            @mentions, replies, and commands.
+            For group chats, disable Group Privacy for the bot in BotFather (Bot
+            Settings → Group Privacy), then remove and re-add the bot to the
+            group. With privacy on, Telegram delivers only /commands and replies
+            to the bot — not @mentions.
           </p>
           <div className="flex justify-end">
             <Button

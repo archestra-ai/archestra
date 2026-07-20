@@ -35,6 +35,10 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import {
+  type SamplingParam,
+  withSamplingParamFallback,
+} from "./sampling-param-fallback";
 
 // ToolCompressionStats imported from @/types
 
@@ -97,6 +101,9 @@ const eventStreamCodec = new EventStreamCodec(toUtf8, fromUtf8);
 const PADDING_ALPHABET =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const BEDROCK_MAX_TOOL_NAME_LENGTH = 64;
+// Bedrock constrains toolSpec names to ^[a-zA-Z0-9_-]{1,64}$. Anything outside
+// that set collapses to a single underscore.
+const BEDROCK_INVALID_TOOL_NAME_CHARS = /[^a-zA-Z0-9_-]+/g;
 const TOOL_NAME_HASH_LENGTH = 8;
 const TOOL_NAME_HASH_SEPARATOR = "_";
 const BEDROCK_DOCUMENT_NAME_FALLBACK = "Document";
@@ -159,12 +166,21 @@ type ToolNameMapping = {
 };
 
 /**
- * Nova models fail with "Model produced invalid sequence as part of ToolUse" when
- * tool names contain hyphens. Bedrock also rejects names longer than 64 chars.
- * Encode only the provider-facing names and keep mappings to restore originals.
+ * Bedrock rejects tool names that fall outside ^[a-zA-Z0-9_-]{1,64}$, and Nova
+ * models additionally fail with "Model produced invalid sequence as part of
+ * ToolUse" when tool names contain hyphens. Clients reach the proxy with names
+ * Bedrock will not accept (dots, spaces, non-ASCII), so sanitize the character
+ * set before the Nova and length rules.
+ *
+ * Encode only the provider-facing names and keep mappings to restore originals,
+ * so the client still sees the name it sent. Sanitizing can map two distinct
+ * originals onto one encoded name; `getUniqueProviderToolName` disambiguates.
  */
 function encodeToolName(name: string, options: { isNova: boolean }): string {
-  const normalizedName = options.isNova ? name.replaceAll("-", "_") : name;
+  const sanitizedName = name.replace(BEDROCK_INVALID_TOOL_NAME_CHARS, "_");
+  const normalizedName = options.isNova
+    ? sanitizedName.replaceAll("-", "_")
+    : sanitizedName;
   return truncateToolName(normalizedName, name);
 }
 
@@ -1661,6 +1677,41 @@ export function getCommandInput(request: BedrockRequest): BedrockCommandInput {
 }
 
 // =============================================================================
+// HELPER: Sampling-parameter fallback
+// =============================================================================
+
+// Maps the canonical sampling-param names to Bedrock's `inferenceConfig` keys
+// (Bedrock uses camelCase `topP`).
+const BEDROCK_INFERENCE_KEY: Record<SamplingParam, "temperature" | "topP"> = {
+  temperature: "temperature",
+  top_p: "topP",
+};
+
+/**
+ * Return a copy of the command input with the rejected sampling params removed
+ * from `inferenceConfig`, dropping `inferenceConfig` entirely once it's empty.
+ * Returns null when none were set. Passed to the shared
+ * {@link withSamplingParamFallback}.
+ */
+function stripBedrockSamplingParams(
+  commandInput: BedrockCommandInput,
+  rejected: SamplingParam[],
+): BedrockCommandInput | null {
+  const inferenceConfig = commandInput.inferenceConfig;
+  if (!inferenceConfig) return null;
+  const keys = rejected
+    .map((p) => BEDROCK_INFERENCE_KEY[p])
+    .filter((k) => inferenceConfig[k] !== undefined);
+  if (keys.length === 0) return null;
+  const next = { ...inferenceConfig };
+  for (const k of keys) delete next[k];
+  return {
+    ...commandInput,
+    inferenceConfig: Object.keys(next).length > 0 ? next : undefined,
+  };
+}
+
+// =============================================================================
 // ADAPTER FACTORY
 // =============================================================================
 
@@ -1673,6 +1724,10 @@ export const bedrockAdapterFactory: LLMProvider<
 > = {
   provider: "bedrock",
   interactionType: "bedrock:converse",
+  // Bedrock's custom SigV4 client (BedrockClient) can't self-instrument the
+  // request-duration metric the way fetch/Gemini transports do, so the LLM
+  // proxy handler records `llm_request_duration_seconds` on its behalf.
+  recordRequestDurationInHandler: true,
 
   createRequestAdapter(
     request: BedrockRequest,
@@ -1764,11 +1819,14 @@ export const bedrockAdapterFactory: LLMProvider<
     const { commandInput, toolNameMapping } =
       buildBedrockCommandContext(request);
 
-    // Use fetch-based client.converse()
-    const response = await bedrockClient.converse(
-      request.modelId,
-      commandInput,
-    );
+    // Use fetch-based client.converse(), retrying without sampling params the
+    // model rejects (e.g. "`temperature` is deprecated for this model.").
+    const response = await withSamplingParamFallback({
+      input: commandInput,
+      strip: stripBedrockSamplingParams,
+      logContext: { provider: "bedrock", modelId: commandInput.modelId },
+      run: (input) => bedrockClient.converse(request.modelId, input),
+    });
 
     // Convert response to our internal format with decoded tool names
     const outputContent: Array<
@@ -1834,8 +1892,15 @@ export const bedrockAdapterFactory: LLMProvider<
     const bedrockClient = client as BedrockClient;
     const { commandInput } = buildBedrockCommandContext(request);
 
-    // Use fetch-based client.converseStream() - returns events with __rawBytes already set
-    return bedrockClient.converseStream(request.modelId, commandInput);
+    // Use fetch-based client.converseStream() - returns events with __rawBytes
+    // already set. Retry without sampling params the model rejects (e.g.
+    // "`temperature` is deprecated for this model.").
+    return withSamplingParamFallback({
+      input: commandInput,
+      strip: stripBedrockSamplingParams,
+      logContext: { provider: "bedrock", modelId: commandInput.modelId },
+      run: (input) => bedrockClient.converseStream(request.modelId, input),
+    });
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

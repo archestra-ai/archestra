@@ -43,6 +43,9 @@ export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 // ===== Connector Sync Status =====
 
 export const ConnectorSyncStatusSchema = z.enum([
+  // A sync is enqueued but no worker has claimed it yet. Only connector
+  // last-status stamps carry this; run rows are created already "running".
+  "queued",
   "running",
   "success",
   "completed_with_errors",
@@ -54,11 +57,29 @@ export const ConnectorSyncStatusSchema = z.enum([
 ]);
 export type ConnectorSyncStatus = z.infer<typeof ConnectorSyncStatusSchema>;
 
+// ===== Connector Run Type (runtime-isolated job families) =====
+
+/**
+ * Which job family a `connector_runs` row belongs to. `content` is the existing
+ * ingestion sync; `permission` is the runtime-isolated permission-sync pass.
+ * The two families single-flight independently (composite lease index) so a
+ * content run and a permission run for the same connector can run concurrently.
+ */
+export const ConnectorRunTypeSchema = z.enum(["content", "permission"]);
+export type ConnectorRunType = z.infer<typeof ConnectorRunTypeSchema>;
+
 // ===== Connector Credentials =====
 
 export const ConnectorCredentialsSchema = z.object({
   email: z.string().optional(),
   apiToken: z.string(),
+  // Atlassian Cloud organization admin API key for the admin/Directory APIs
+  // (managed-account email resolution during permission sync). A separate
+  // field because the two Atlassian API families accept different credential
+  // kinds: product REST APIs take a user API token in basic auth and reject
+  // org-admin API keys (observed live: every product call 401s), while the
+  // admin APIs take an org-admin API key as Bearer and reject user tokens.
+  adminApiKey: z.string().optional(),
   // resolved GitHub App metadata (paired with the App private key in apiToken)
   // when a connector authenticates via a github_app_configs reference
   githubApp: z
@@ -550,6 +571,22 @@ export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 
 // ===== Sync Types =====
 
+/**
+ * The audience of a single document as extracted from the source system, used
+ * by the permission-sync pass to build the per-document ACL:
+ * - `users` — upstream principals resolved to emails (→ `user_email:` tokens)
+ * - `groups` — upstream group ids (→ namespaced `group:<source>_<id>` tokens)
+ * - `isPublic` — visible to everyone in the org (→ `org:*`)
+ *
+ * Empty permissions (no users, no groups, not public) ⇒ empty ACL ⇒ fail-closed
+ * (only admins, who bypass the ACL, can retrieve the document).
+ */
+export interface DocumentPermissions {
+  users?: string[];
+  groups?: string[];
+  isPublic?: boolean;
+}
+
 export interface ConnectorDocument {
   id: string;
   title: string;
@@ -558,11 +595,7 @@ export interface ConnectorDocument {
   metadata: Record<string, unknown>;
   updatedAt?: Date;
   /** Access control permissions extracted from the source system */
-  permissions?: {
-    users?: string[];
-    groups?: string[];
-    isPublic?: boolean;
-  };
+  permissions?: DocumentPermissions;
   /**
    * Optional inline media (image) data. When present, the pipeline will embed
    * this as a multimodal chunk in addition to the text content.
@@ -594,6 +627,202 @@ export interface ConnectorSyncBatch {
   skipped?: ConnectorItemSkipped[];
   checkpoint: ConnectorCheckpoint;
   hasMore: boolean;
+}
+
+// ===== Permission Sync Types =====
+
+/** A lean reference to one already-ingested document (content-sync output). */
+export interface IngestedDocumentRef {
+  sourceId: string;
+  metadata: Record<string, unknown> | null;
+}
+
+/**
+ * Keyset-paginated read-back of a connector's already-ingested documents,
+ * injected into the permission-sync hooks by the pass. Container-scoped
+ * connectors (GitHub: repo → its docs) use this to tag every document in a
+ * container with the container's once-resolved audience — a deliberate,
+ * documented read of content-sync output, O(page) memory. Per-item connectors
+ * (Jira/Confluence) that re-enumerate upstream can ignore it.
+ */
+export type ReadIngestedDocuments = (args: {
+  /** JSONB equality filter on `kb_documents.metadata` (e.g. `{ repo: "o/r" }`). */
+  metadataFilter?: Record<string, string>;
+  /** Keyset cursor: return only rows with id > afterId (ascending by id). */
+  afterId?: string | null;
+  limit: number;
+}) => Promise<{ documents: IngestedDocumentRef[]; nextAfterId: string | null }>;
+
+/** Shared input for the permission-sync extraction hooks (§1 of the plan). */
+export interface PermissionSyncParams {
+  config: Record<string, unknown>;
+  credentials: ConnectorCredentials;
+  /**
+   * Opaque resume cursor from a prior interrupted run of the same generation,
+   * or null on a fresh enumeration. Connectors treat it as their own
+   * stable-ordered position marker (e.g. last page id / issue key / repo).
+   */
+  cursor: string | null;
+  /** Read-back of already-ingested docs (see ReadIngestedDocuments). */
+  readIngestedDocuments: ReadIngestedDocuments;
+  /**
+   * Admin mapping lookup (see `ResolveMappedEmail`), injected by the pass.
+   */
+  resolveMappedEmail?: ResolveMappedEmail;
+  /**
+   * Delta-pass scoping: when set, `syncPermissionSnapshot` enumerates ONLY
+   * these top-level containers (the probe's dirty set). Absent on full passes.
+   */
+  scope?: { containerKeys: string[] };
+  /**
+   * True only on a MANUAL pass ("Sync Permissions Now"): cross-pass identity
+   * caches are bypassed on read and rewritten, so an upstream email/profile
+   * change (e.g. a member making their GitHub email public) is picked up
+   * immediately rather than waiting out the cache TTL.
+   *
+   * Deliberately not every full pass. Resolving an identity is one rate-limited
+   * upstream request per account, and a connector without a delta mode runs
+   * every pass as a full one — so keying this off the mode meant its identity
+   * cache never served a single read, and every pass re-fetched every member's
+   * profile. Scheduled passes read the caches, whose 24h TTL bounds identity
+   * staleness to what a daily full reconcile bounded it to anyway.
+   */
+  refreshIdentities?: boolean;
+}
+
+/**
+ * Upstream account id → the email access control should materialize for it,
+ * per the admin's manual member mapping (Permissions tab), or null when the
+ * account is unmapped. Injected by the pass (preloaded, synchronous, no IO).
+ * Connectors consult it FIRST in their principal-email resolution — the
+ * mapping takes precedence over upstream email matching — so a DIRECT grant
+ * (role actor, user grant, reporter/assignee) to an account whose upstream
+ * email is hidden materializes as the mapped user's email instead of being
+ * silently dropped.
+ */
+export type ResolveMappedEmail = (externalAccountId: string) => string | null;
+
+/**
+ * Opaque per-connector permission-sync probe state (audit-log cursors, config
+ * fingerprints, last full-reconcile timestamp). Written and interpreted only
+ * by the connector's own probe hook + the pass scheduler.
+ */
+export const PermissionSyncStateSchema = z.record(z.string(), z.unknown());
+export type PermissionSyncState = z.infer<typeof PermissionSyncStateSchema>;
+
+/**
+ * Result of a delta-pass change probe (`probePermissionChanges`): what — if
+ * anything — drifted upstream since `state` was recorded. `nextState` is
+ * persisted by the pass ONLY on success, so an interrupted pass re-probes
+ * from the same cursors (changes are never lost, at worst re-observed).
+ *
+ * Probes scope DOCUMENT re-enumeration only. Container audiences and group
+ * memberships are re-verified directly on every delta pass (see
+ * `refreshContainerAudiences` / `syncGroups`), never inferred from a probe:
+ * inference from audit events proved lossy in production — records ingest
+ * minutes late and slide out of cursor windows, and event wording is
+ * asymmetric (a Jira project-access grant is audited as "Project roles
+ * changed", the matching revocation as "User removed from project"). A
+ * missed revocation stays fail-OPEN until the daily full reconcile, which is
+ * the one direction this system must never err in.
+ */
+export interface PermissionProbeResult {
+  /** Top-level container keys whose document assignments must be re-enumerated. */
+  dirtyContainerKeys: string[];
+  /**
+   * The probe cannot scope the change — promote to a full reconcile. Reserved
+   * for document→container ASSIGNMENT drift invisible to content-modified
+   * windows (e.g. a Confluence restriction edit, which moves pages between
+   * containers without bumping lastmodified) and for the first cursor-less
+   * probe.
+   */
+  fullRequired: boolean;
+  /** Next probe cursors/fingerprints to persist on success. */
+  nextState: PermissionSyncState;
+}
+
+/**
+ * One yield of `syncPermissionSnapshot` — a permission pass's single upstream
+ * enumeration, interleaving CONTAINER audiences and per-DOCUMENT assignments.
+ *
+ * A container is the audience-sharing unit: top-level (`space:DEV`,
+ * `project:ENG`, `repo:org/name`) or an exception nested under one, keyed
+ * `<parent>/<child>` (`space:DEV/page:12345`, `project:ENG/level:10001`) so
+ * per-container document scans can range over a top-level prefix. A document
+ * assignment binds one document (`sourceId` MUST byte-match content-sync's
+ * `kb_documents.sourceId`) to its container; `exceptionUsers` are principals
+ * granted ON TOP of the container audience (e.g. a Jira issue's
+ * reporter/assignee when the scheme grants them browse).
+ *
+ * Ordering contract:
+ * - Yields are grouped by top-level container, and top-level container keys
+ *   ascend in string order (the resume cursor is monotonic).
+ * - `cursor` on every yield is the CURRENT top-level container key: a cursor
+ *   change tells the pass the previous container's enumeration is complete,
+ *   unlocking its fail-close set-diff.
+ * - A container's yield precedes the document assignments that reference it.
+ * - On resume, top-level containers with keys strictly below `params.cursor`
+ *   are skipped; the cursor container is re-enumerated (idempotent).
+ *
+ * `fingerprint`, when cheaply available (audience hash, upstream ETag), is
+ * stored on the container row for delta-pass change probes.
+ */
+export type PermissionSnapshotYield =
+  | {
+      kind: "container";
+      containerKey: string;
+      permissions: DocumentPermissions;
+      fingerprint?: string | null;
+      /**
+       * The connector could NOT read this container's permissions upstream, so
+       * `permissions` is the fail-closed empty audience rather than an observed
+       * one. Set it whenever the audience is empty because a lookup failed —
+       * never when upstream genuinely grants nobody. An empty audience hides
+       * every document in the container, and the two causes are
+       * indistinguishable from the outside, so the pass counts these into
+       * `containerAudienceFailures` and an admin can tell "nobody has access"
+       * from "we could not find out who has access".
+       */
+      audienceResolutionFailed?: boolean;
+      cursor: string;
+    }
+  | {
+      kind: "document";
+      sourceId: string;
+      containerKey: string;
+      exceptionUsers?: string[];
+      cursor: string;
+    };
+
+/**
+ * One upstream group member. EVERY member is yielded, whether or not the
+ * upstream exposes their email — `email` is null when hidden (the member is
+ * then recorded fail-closed and surfaced to admins as unresolvable, instead of
+ * silently dropped).
+ */
+export interface GroupMemberYield {
+  /** Stable upstream principal id (Jira/Confluence accountId, GitHub login). */
+  accountId: string;
+  displayName: string | null;
+  email: string | null;
+  /**
+   * Upstream account classification as the source reports it (Atlassian:
+   * "atlassian" | "app" | "customer"). Null when the source has no notion of
+   * it. "app" members are add-on/bot accounts that never resolve to a user —
+   * admin stats separate them from genuinely unresolvable humans.
+   */
+  accountType?: string | null;
+}
+
+/**
+ * One upstream group expanded to its members, yielded by `syncGroups`.
+ * `groupId` MUST byte-match the id encoded in the document's
+ * `group:<source>_<groupId>` token — the groupId data-contract.
+ */
+export interface GroupMembershipYield {
+  groupId: string;
+  members: GroupMemberYield[];
+  cursor?: string;
 }
 
 // ===== Internal helpers =====
@@ -675,4 +904,83 @@ export interface Connector {
      */
     embeddingInputModalities?: ModelInputModality[];
   }): AsyncGenerator<ConnectorSyncBatch>;
+
+  // ===== Permission sync (optional; default-off, see BaseConnector) =====
+
+  /**
+   * Whether this connector implements the permission-sync hooks below. Default
+   * `false`; overridden `true` by connectors that populate document audiences.
+   * Adding permission sync to a connector = set this flag + implement the two
+   * generators. Nothing else in the core changes.
+   */
+  supportsPermissionSync: boolean;
+
+  /**
+   * Yield the pass's permission snapshot — container audiences interleaved
+   * with per-document container assignments — WITHOUT re-downloading content.
+   * Audiences are resolved once per container (repo / space / project) and
+   * upstream requests are O(containers + corpus pages), never O(documents).
+   * See `PermissionSnapshotYield` for the ordering contract.
+   */
+  syncPermissionSnapshot?(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<PermissionSnapshotYield>;
+
+  /**
+   * Yield each upstream group expanded to its member emails (instance/org-wide).
+   */
+  syncGroups?(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<GroupMembershipYield>;
+
+  /**
+   * Cheap change probe driving DELTA passes: given the cursors/fingerprints
+   * recorded by the previous pass, report what drifted upstream (a handful of
+   * requests — audit-log windows, delta queries — never a corpus scan). A
+   * connector without this hook runs every pass as a full reconcile. A first
+   * probe (null state) must return `fullRequired`.
+   */
+  probePermissionChanges?(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    state: PermissionSyncState | null;
+  }): Promise<PermissionProbeResult>;
+
+  /**
+   * Re-resolve the audiences of already-known containers (the pass feeds the
+   * stored container keys) WITHOUT enumerating documents — O(containers)
+   * upstream requests, run on EVERY delta pass so upstream grants and
+   * revocations land on the next pass unconditionally. Required for delta
+   * passes: a connector with a probe but without this hook runs full every
+   * time. A key the connector cannot (or must not) refresh without an
+   * assignment reconcile is simply not yielded: its stored row stays
+   * untouched for the periodic full reconcile (fail-closed in the safe
+   * direction).
+   */
+  refreshContainerAudiences?(params: {
+    config: Record<string, unknown>;
+    credentials: ConnectorCredentials;
+    containerKeys: string[];
+    resolveMappedEmail?: ResolveMappedEmail;
+  }): AsyncGenerator<{
+    containerKey: string;
+    permissions: DocumentPermissions;
+    fingerprint?: string | null;
+    /** See `PermissionSnapshotYield` — an empty audience the connector could not read, not one upstream withheld. */
+    audienceResolutionFailed?: boolean;
+  }>;
+
+  /**
+   * Pure metadata→scope mapping for local adoption during DELTA passes: the
+   * top-level container scope key (`project:ENG`, `space:DOCS`,
+   * `repo:org/name`) whose enumeration covers a stored document, or null when
+   * the metadata cannot place it. The probe sees only UPSTREAM drift, so a
+   * document that is locally new but upstream old (crawl backfill, resumed
+   * initial sync) never dirties a container; the pass uses this mapping to
+   * pull unassigned documents' containers into the delta scope. Scoping only —
+   * assignment still comes from the authoritative `syncPermissionSnapshot`
+   * enumeration, so a stale metadata value can delay adoption but never
+   * over-grant.
+   */
+  scopeKeyForDocument?(metadata: Record<string, unknown>): string | null;
 }

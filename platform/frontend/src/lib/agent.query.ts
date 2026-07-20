@@ -67,12 +67,17 @@ export function useProfiles(
   });
 }
 
+type CloneAgentArgs = {
+  id: string;
+} & NonNullable<archestraApiTypes.CloneAgentData["body"]>;
+
 export function useCloneAgent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, ...body }: CloneAgentArgs) => {
       const { data: responseData, error } = await cloneAgent({
         path: { id },
+        body,
       });
       if (error) {
         handleApiError(error);

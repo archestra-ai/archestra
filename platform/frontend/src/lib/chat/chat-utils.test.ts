@@ -2,7 +2,6 @@ import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
   applyFeedbackToMessages,
-  applyTextEditToMessages,
   chatDraftStorageKey,
   conversationStorageKeys,
   getChatExternalAgentId,
@@ -249,6 +248,65 @@ describe("mergePersistedMessageMetadata", () => {
       source: "live",
       [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
     });
+  });
+
+  // Regression: during rapid queue drain the persisted snapshot trails the live
+  // thread, so the just-sent user turn (and its streaming reply) are not in it
+  // yet. The merge must keep every live message — it feeds setMessages, so
+  // dropping the unpersisted tail here would erase the in-flight user bubble
+  // from the thread until a reload.
+  it("preserves the in-flight tail when the live thread is longer than persisted", () => {
+    const liveMessages = [
+      {
+        id: "live-user-1",
+        role: "user",
+        parts: [{ type: "text", text: "first" }],
+      },
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "reply" }],
+      },
+      // in-flight turn the backend has not persisted yet
+      {
+        id: "live-user-2",
+        role: "user",
+        parts: [{ type: "text", text: "second" }],
+      },
+      {
+        id: "live-assistant-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "streaming…" }],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-user-1",
+        role: "user",
+        parts: [{ type: "text", text: "first" }],
+      },
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "reply" }],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages.map((message) => message.id)).toEqual([
+      "live-user-1",
+      "live-assistant-1",
+      "live-user-2",
+      "live-assistant-2",
+    ]);
+    // the unpersisted in-flight user turn keeps its text
+    expect(mergedMessages[2]?.parts).toEqual([
+      { type: "text", text: "second" },
+    ]);
   });
 
   it("returns the original array when no metadata changes are needed", () => {
@@ -585,59 +643,6 @@ describe("resolveCanonicalMessageId", () => {
         canonicalMessages: undefined,
       }),
     ).toBeNull();
-  });
-});
-
-describe("applyTextEditToMessages", () => {
-  it("replaces only the targeted text part and keeps other messages untouched", () => {
-    const messages = [
-      {
-        id: "user-1",
-        role: "user",
-        parts: [
-          { type: "file", url: "blob:a", mediaType: "image/png" },
-          { type: "text", text: "old text" },
-        ],
-      },
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [{ type: "text", text: "answer" }],
-      },
-    ] as UIMessage[];
-
-    const updated = applyTextEditToMessages({
-      messages,
-      messageId: "user-1",
-      partIndex: 1,
-      text: "new text",
-    });
-
-    expect(updated[0]?.parts[1]).toMatchObject({
-      type: "text",
-      text: "new text",
-    });
-    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
-    expect(updated[1]).toBe(messages[1]);
-  });
-
-  it("does not touch a part whose index matches but is not text", () => {
-    const messages = [
-      {
-        id: "user-1",
-        role: "user",
-        parts: [{ type: "file", url: "blob:a", mediaType: "image/png" }],
-      },
-    ] as UIMessage[];
-
-    const updated = applyTextEditToMessages({
-      messages,
-      messageId: "user-1",
-      partIndex: 0,
-      text: "new text",
-    });
-
-    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
   });
 });
 

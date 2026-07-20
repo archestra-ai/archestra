@@ -22,6 +22,7 @@ import {
   AppToolModel,
   AppVersionModel,
   McpServerModel,
+  UserModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -29,6 +30,7 @@ import {
   type ToolAssignmentError,
 } from "@/services/agent-tool-assignment";
 import {
+  assertCallerMayAuthorApp,
   assertCallerMayModifyApp,
   callerIsAppAdmin,
   resolveOrgTeams,
@@ -50,7 +52,9 @@ import {
   type AppListItem,
   AppListItemSchema,
   AppRenderDiagnosticEntrySchema,
+  AppScopeSchema,
   AppTemplateSchema,
+  type AppViewerRole,
   CreateAppSchema,
   CredentialResolutionModeSchema,
   constructResponseSchema,
@@ -63,6 +67,15 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { externalAppLabel } from "@/utils/external-app-label";
+
+// A comma-joined id list on the query string ("a,b,c" → ["a","b","c"]), for
+// the admin owner sub-filter on the list route. Mirrors the Projects list.
+const CommaSeparatedIds = z.preprocess(
+  (value) =>
+    typeof value === "string" ? value.split(",").filter(Boolean) : value,
+  z.array(z.string()),
+);
 
 // REST bodies extend the shared create/update schemas with team assignments,
 // which only the REST surface needs for team-scoped apps.
@@ -103,9 +116,16 @@ const OpenExternalAppInChatResponseSchema = OpenAppInChatResponseSchema.extend({
 });
 
 // The single-app GET resolves the app's team assignments so the detail page can
-// render team-name badges and seed the visibility editor.
+// render team-name badges and seed the visibility editor, plus the caller's
+// viewerRole so the settings surface can show a "Viewing as administrator"
+// banner when an admin opens an app they only see through oversight.
 const AppWithTeamsSchema = SelectAppSchema.extend({
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
+  viewerRole: z.enum(["owner", "shared", "admin"]),
+  // The author's display name, so an admin viewing an app they only see through
+  // oversight can be shown "Viewing as administrator · <name>". Null when the
+  // author row is gone or nameless.
+  authorName: z.string().nullable(),
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -118,6 +138,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Apps"],
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
+          // Visibility filter; absence = "All". Mirrors the Projects list.
+          scope: AppScopeSchema.optional(),
+          // Admin-only owner sub-filter for personal apps (silently ignored for
+          // non-admins): authorIds keeps only these authors, excludeAuthorIds
+          // drops them. Used by the "Other users" / user-picker toolbar.
+          authorIds: CommaSeparatedIds.optional(),
+          excludeAuthorIds: CommaSeparatedIds.optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(AppListItemSchema),
@@ -129,10 +156,24 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // and external UI-providing installed MCP servers. Both are access-filtered
       // by their own model; we merge, sort, and paginate over the combined set.
       // Cardinality is small (tens), so fetching all-then-slicing is fine.
+      const isAppAdmin = await callerIsAppAdmin(user.id, organizationId);
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId,
         userId: user.id,
+        isAppAdmin,
       });
+      // Apps the caller reaches WITHOUT the admin bypass. Distinguishes a
+      // genuinely-accessible app ("shared") from one seen only through oversight
+      // ("admin"), so the card can label the latter and the "All" view can hide
+      // it. For a non-admin this is just the accessible set (no extra query).
+      const nonAdminAccessibleIds = new Set(
+        isAppAdmin
+          ? await AppAccessModel.getUserAccessibleAppIds({
+              organizationId,
+              userId: user.id,
+            })
+          : accessibleAppIds,
+      );
       const ownedFilters = {
         organizationId,
         accessibleAppIds,
@@ -151,47 +192,112 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         limit: ownedCount,
         offset: 0,
       });
-      const [teamsByApp, ownedPins, externalPins] = await Promise.all([
-        AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
-        // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
-        // the client can group pinned-first, like the Projects page.
-        AppPinModel.getPinnedAtForApps({
-          userId: user.id,
-          appIds: owned.map((app) => app.id),
-        }),
-        AppPinModel.getPinnedAtForExternalApps({
-          userId: user.id,
-          refs: external.map((catalogApp) => ({
-            mcpServerId: catalogApp.mcpServerId,
-            resourceUri: catalogApp.resourceUri,
-          })),
-        }),
-      ]);
+      // Resolve author display names for personal apps only — the card shows an
+      // "Owned by <author>" badge when an app admin views someone else's
+      // personal app, so other scopes don't need the lookup.
+      const personalAuthorIds = [
+        ...new Set(
+          owned
+            .filter((app) => app.scope === "personal" && app.authorId !== null)
+            .map((app) => app.authorId as string),
+        ),
+      ];
+      const [teamsByApp, authorNames, ownedPins, externalPins] =
+        await Promise.all([
+          AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
+          UserModel.getNamesByIds(personalAuthorIds),
+          // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
+          // the client can group pinned-first, like the Projects page.
+          AppPinModel.getPinnedAtForApps({
+            userId: user.id,
+            appIds: owned.map((app) => app.id),
+          }),
+          AppPinModel.getPinnedAtForExternalApps({
+            userId: user.id,
+            refs: external.map((catalogApp) => ({
+              mcpServerId: catalogApp.mcpServerId,
+              resourceUri: catalogApp.resourceUri,
+              toolName: catalogApp.toolName,
+            })),
+          }),
+        ]);
 
-      const items: AppListItem[] = [
-        ...owned.map((app) => ({
+      // Each owned app's relationship to the caller: authored by them (owner),
+      // reached through its scope (shared), or seen only via app:admin oversight
+      // (admin). Drives the "Owned by <name>" badge and the "All"/owner filters.
+      const viewerRoleOf = (app: App): AppViewerRole =>
+        app.authorId === user.id
+          ? "owner"
+          : nonAdminAccessibleIds.has(app.id)
+            ? "shared"
+            : "admin";
+
+      // The owner sub-filter is admin-only; drop it for everyone else so a
+      // member can't probe authorship by hand-crafting the query.
+      const authorInclude =
+        isAppAdmin && query.authorIds?.length
+          ? new Set(query.authorIds)
+          : undefined;
+      const authorExclude =
+        isAppAdmin && query.excludeAuthorIds?.length
+          ? new Set(query.excludeAuthorIds)
+          : undefined;
+      const authorFilterActive =
+        authorInclude !== undefined || authorExclude !== undefined;
+
+      const ownedItems = owned
+        .map((app) => ({
           source: "owned" as const,
           id: app.id,
           name: app.name,
           description: app.description,
           scope: app.scope,
           authorId: app.authorId,
+          authorName:
+            app.authorId !== null
+              ? (authorNames.get(app.authorId) ?? null)
+              : null,
+          viewerRole: viewerRoleOf(app),
           latestVersion: app.latestVersion,
           teams: teamsByApp.get(app.id) ?? [],
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
           pinnedAt: ownedPins.get(app.id) ?? null,
-        })),
-        ...external.map((catalogApp) => ({
+        }))
+        .filter((item) => {
+          if (query.scope !== undefined && item.scope !== query.scope)
+            return false;
+          // "All" (no scope) hides oversight-only apps; they surface under
+          // Personal → Other users, exactly like the Projects list.
+          if (query.scope === undefined && item.viewerRole === "admin")
+            return false;
+          if (
+            authorInclude &&
+            !(item.authorId !== null && authorInclude.has(item.authorId))
+          )
+            return false;
+          if (
+            authorExclude &&
+            item.authorId !== null &&
+            authorExclude.has(item.authorId)
+          )
+            return false;
+          return true;
+        });
+
+      const externalItems = external
+        .map((catalogApp) => ({
           source: "external" as const,
           catalogId: catalogApp.catalogId,
           mcpServerId: catalogApp.mcpServerId,
           scope: catalogApp.scope,
-          // "Server / Tool" as the title (short tool name, never the slug
-          // prefix); the tool's own description as the subtitle.
-          name: `${catalogApp.serverName} / ${catalogApp.toolName}`,
+          // The server name as the title, suffixed with "/ <tool>" (short
+          // tool name, never the slug prefix) only when the server exposes
+          // several UI tools; the tool's own description as the subtitle.
+          name: externalAppLabel(catalogApp),
           description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
+          toolName: catalogApp.toolName,
           // The server's registry icon (emoji or data URL) so the card can
           // show which server the app comes from.
           icon: catalogApp.serverIcon,
@@ -203,10 +309,21 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
               AppPinModel.externalPinKey({
                 mcpServerId: catalogApp.mcpServerId,
                 resourceUri: catalogApp.resourceUri,
+                toolName: catalogApp.toolName,
               }),
             ) ?? null,
-        })),
-      ];
+        }))
+        .filter((item) => {
+          if (query.scope !== undefined && item.scope !== query.scope)
+            return false;
+          // The owner sub-filter targets owned personal apps; external installs
+          // have no comparable author and none are oversight-only, so drop them
+          // whenever an author filter is active rather than mis-attributing them.
+          if (authorFilterActive) return false;
+          return true;
+        });
+
+      const items: AppListItem[] = [...ownedItems, ...externalItems];
       items.sort((a, b) => a.name.localeCompare(b.name));
 
       return reply.send({
@@ -252,7 +369,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(getAppTemplates());
+      return reply.send(await getAppTemplates());
     },
   );
 
@@ -288,7 +405,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         environmentId: body.environmentId ?? null,
       });
-      const { html, seededFromTemplate } = resolveCreateAppHtml({
+      const { html, seededFromTemplate } = await resolveCreateAppHtml({
         html: body.html,
         name: body.name,
       });
@@ -462,21 +579,30 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.PinExternalApp,
         description:
           "Pin an external (MCP-server) UI app for the current user, identified " +
-          "like open-in-chat by install + resource. Personal — does not affect " +
-          "other members.",
+          "by install + resource + tool (several tools of one server can share " +
+          "a UI resource, so the tool name pins one tile, not the group). " +
+          "Personal — does not affect other members.",
         tags: ["Apps"],
         params: z.object({ mcpServerId: UuidIdSchema }),
-        body: z.object({ resourceUri: z.string().min(1) }),
+        body: z.object({
+          resourceUri: z.string().min(1),
+          toolName: z.string().min(1),
+        }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
     },
-    async ({ params: { mcpServerId }, body: { resourceUri }, user }, reply) => {
+    async (
+      { params: { mcpServerId }, body: { resourceUri, toolName }, user },
+      reply,
+    ) => {
       // Same gate as external open-in-chat: the install must be accessible and
-      // actually expose this UI resource (404s otherwise, no existence leak).
+      // actually expose this UI resource for this tool (404s otherwise, no
+      // existence leak).
       const uiResource = await McpServerModel.findInstalledUiResourceForCaller({
         userId: user.id,
         mcpServerId,
         resourceUri,
+        toolName,
       });
       if (!uiResource) {
         throw new ApiError(404, "No runnable app found for this install.");
@@ -485,6 +611,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         mcpServerId,
         resourceUri,
+        toolName,
       });
       return reply.send({ ok: true as const });
     },
@@ -498,22 +625,26 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Remove the current user's pin on an external app. Idempotent; " +
           "intentionally no access check, so a stale pin on an install the " +
-          "user lost access to can still be cleared. `resourceUri` rides the " +
-          "query string (DELETE carries no body).",
+          "user lost access to can still be cleared. `resourceUri` and " +
+          "`toolName` ride the query string (DELETE carries no body).",
         tags: ["Apps"],
         params: z.object({ mcpServerId: UuidIdSchema }),
-        querystring: z.object({ resourceUri: z.string().min(1) }),
+        querystring: z.object({
+          resourceUri: z.string().min(1),
+          toolName: z.string().min(1),
+        }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
     },
     async (
-      { params: { mcpServerId }, query: { resourceUri }, user },
+      { params: { mcpServerId }, query: { resourceUri, toolName }, user },
       reply,
     ) => {
       await AppPinModel.unpinExternal({
         userId: user.id,
         mcpServerId,
         resourceUri,
+        toolName,
       });
       return reply.send({ ok: true as const });
     },
@@ -537,7 +668,23 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       const teamsByApp = await AppAccessModel.getTeamDetailsForApps([app.id]);
-      return reply.send({ ...app, teams: teamsByApp.get(app.id) ?? [] });
+      const viewerRole = await resolveViewerRole({
+        app,
+        userId: user.id,
+        organizationId,
+      });
+      const authorName =
+        app.authorId !== null
+          ? ((await UserModel.getNamesByIds([app.authorId])).get(
+              app.authorId,
+            ) ?? null)
+          : null;
+      return reply.send({
+        ...app,
+        teams: teamsByApp.get(app.id) ?? [],
+        viewerRole,
+        authorName,
+      });
     },
   );
 
@@ -582,6 +729,17 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorId: app.authorId,
         resourceTeamIds,
       });
+      // Changing the html is editing the app itself, not its settings — hold it
+      // to the stricter chat-authoring gate so an admin who only sees the app
+      // through oversight can retitle/re-scope it but not rewrite its content.
+      if (body.html !== undefined) {
+        await assertCallerMayAuthorApp({
+          userId: user.id,
+          organizationId,
+          app: { id: app.id, scope: app.scope, authorId: app.authorId },
+          resourceTeamIds,
+        });
+      }
       // Authorize the destination whenever the team set or scope changes — a
       // team admin must not redirect an app to teams they don't administer, even
       // with the scope unchanged.
@@ -959,6 +1117,31 @@ async function loadViewableApp(params: {
     throw new ApiError(404, `No app found with id ${params.appId}.`);
   }
   return app;
+}
+
+/**
+ * The caller's relationship to an app they can already view: their own (owner),
+ * reached through its scope (shared), or seen only via app:admin oversight
+ * (admin). The single-app analogue of the list route's viewerRole labelling.
+ */
+async function resolveViewerRole(params: {
+  app: App;
+  userId: string;
+  organizationId: string;
+}): Promise<AppViewerRole> {
+  if (params.app.authorId === params.userId) return "owner";
+  const reachableWithoutAdmin = await AppAccessModel.userHasAppAccess({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    app: {
+      id: params.app.id,
+      organizationId: params.app.organizationId,
+      scope: params.app.scope,
+      authorId: params.app.authorId,
+    },
+    isAppAdmin: false,
+  });
+  return reachableWithoutAdmin ? "shared" : "admin";
 }
 
 /** Load + scope-modify-authorize an app for a tool assignment change. */

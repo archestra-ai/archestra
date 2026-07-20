@@ -1,7 +1,6 @@
 import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
-  providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -15,6 +14,11 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import {
+  credentialRequiresPerUserScope,
+  perUserCredentialLabel,
+} from "@/services/openai-codex-credentials";
 import {
   ApiError,
   constructResponseSchema,
@@ -505,6 +509,24 @@ async function validateProviderApiKeys(params: {
     mappings.map((mapping) => mapping.providerApiKeyId),
   );
   const apiKeysById = new Map(apiKeys.map((apiKey) => [apiKey.id, apiKey]));
+  // Resolve secrets so a ChatGPT-subscription (Codex) key — encoded in the
+  // secret, not the provider — gets the same per-user governance as the
+  // per-user-credential providers below.
+  const secretsById = new Map(
+    await Promise.all(
+      apiKeys.map(
+        async (key) =>
+          [
+            key.id,
+            key.secretId
+              ? ((await getSecretValueForLlmProviderApiKey(key.secretId)) as
+                  | string
+                  | undefined)
+              : undefined,
+          ] as const,
+      ),
+    ),
+  );
 
   for (const mapping of mappings) {
     if (providers.has(mapping.provider)) {
@@ -531,17 +553,27 @@ async function validateProviderApiKeys(params: {
     // key when it is the user's OWN personal key in their OWN personal virtual
     // key, and never bundled with other providers (a shared model-router key
     // would expose one user's token to everyone routing through it).
-    if (providerRequiresPerUserCredential(mapping.provider)) {
+    const secret = secretsById.get(mapping.providerApiKeyId);
+    if (
+      credentialRequiresPerUserScope({
+        provider: mapping.provider,
+        apiKey: secret,
+      })
+    ) {
+      const label = perUserCredentialLabel({
+        provider: mapping.provider,
+        apiKey: secret,
+      });
       if (scope !== "personal" || mappings.length > 1) {
         throw new ApiError(
           400,
-          `${mapping.provider} is per-user: it can only be wrapped in your own personal virtual key on its own, not in a shared or multi-provider (model-router) key.`,
+          `${label} is per-user: it can only be wrapped in your own personal virtual key on its own, not in a shared or multi-provider (model-router) key.`,
         );
       }
       if (apiKey.scope !== "personal" || apiKey.userId !== userId) {
         throw new ApiError(
           403,
-          `You can only map your own personal ${mapping.provider} key.`,
+          `You can only map your own personal ${label} key.`,
         );
       }
     }

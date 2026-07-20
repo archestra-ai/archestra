@@ -13,6 +13,7 @@ import * as React from "react";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -146,7 +147,7 @@ function SidebarProvider({
             } as React.CSSProperties
           }
           className={cn(
-            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
+            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-app-viewport w-full",
             className,
           )}
           {...props}
@@ -269,48 +270,51 @@ function SidebarTrigger({
   /** Small red onboarding nudge dot (unseen nav items behind this toggle). */
   showDot?: boolean;
 }) {
-  const { toggleSidebar, state } = useSidebar();
+  const { toggleSidebar, state, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
   const isMac =
     typeof navigator !== "undefined" &&
     navigator.userAgent.toLowerCase().includes("mac");
   const modLabel = isMac ? "⌘" : "Ctrl";
 
+  const button = (
+    <Button
+      data-sidebar="trigger"
+      data-slot="sidebar-trigger"
+      variant="ghost"
+      size="icon"
+      className={cn("relative size-7", className)}
+      onClick={(event) => {
+        onClick?.(event);
+        toggleSidebar();
+      }}
+      {...props}
+    >
+      <PanelLeftIcon />
+      <OnboardingDot visible={showDot} className="absolute right-0.5 top-0.5" />
+      <span className="sr-only">Toggle Sidebar</span>
+    </Button>
+  );
+
+  // No keyboard-shortcut tooltip on mobile: there's no ⌘+B on a phone, and a
+  // tap-triggered tooltip has no hover-out, so it would just stick open.
+  if (isMobile) return button;
+
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          data-sidebar="trigger"
-          data-slot="sidebar-trigger"
-          variant="ghost"
-          size="icon"
-          className={cn("relative size-7", className)}
-          onClick={(event) => {
-            onClick?.(event);
-            toggleSidebar();
-          }}
-          {...props}
-        >
-          <PanelLeftIcon />
-          <OnboardingDot
-            visible={showDot}
-            className="absolute right-0.5 top-0.5"
-          />
-          <span className="sr-only">Toggle Sidebar</span>
-        </Button>
-      </TooltipTrigger>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
       <TooltipContent side="right">
         {isCollapsed ? (
-          <span>
+          <span className="flex items-center gap-1.5">
             Toggle Sidebar{" "}
-            <kbd className="ml-1 rounded border bg-muted px-1 py-0.5 text-[11px] font-mono">
+            <Kbd>
               {modLabel} + {SHORTCUT_SIDEBAR.label}
-            </kbd>
+            </Kbd>
           </span>
         ) : (
-          <span className="text-[11px] font-mono">
+          <Kbd>
             {modLabel} + {SHORTCUT_SIDEBAR.label}
-          </span>
+          </Kbd>
         )}
       </TooltipContent>
     </Tooltip>
@@ -353,9 +357,16 @@ function SidebarCircleToggle({
           className={cn(
             "group/circle-toggle hidden md:flex items-center justify-center",
             "fixed top-1/2 z-30 h-10 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
-            "bg-background border cursor-pointer",
-            "transition-[left,background-color] duration-200 ease-in-out",
-            "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1",
+            "border shadow-sm cursor-pointer text-muted-foreground",
+            // Offset fill while collapsed so the expand affordance stands out;
+            // mixed opaquely so the sidebar border doesn't show through, with a
+            // stronger mix on dark themes where a subtle one vanishes on black.
+            // Blend with the background when the sidebar is already open.
+            isCollapsed
+              ? "bg-[color-mix(in_oklab,var(--muted-foreground)_20%,var(--background))] dark:bg-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--background))] text-foreground"
+              : "bg-background",
+            "transition-[left,background-color,color] duration-200 ease-in-out",
+            "hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1",
             className,
           )}
           {...props}
@@ -389,9 +400,9 @@ function SidebarCircleToggle({
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">
-        <span className="text-[11px] font-mono">
+        <Kbd>
           {modLabel} + {SHORTCUT_SIDEBAR.label}
-        </span>
+        </Kbd>
       </TooltipContent>
     </Tooltip>
   );

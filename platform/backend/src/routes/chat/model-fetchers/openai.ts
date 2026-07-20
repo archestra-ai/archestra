@@ -1,4 +1,9 @@
 import config from "@/config";
+import {
+  decodeOpenAiCodexCredential,
+  OPENAI_CODEX_MODELS,
+} from "@/services/openai-codex-credentials";
+import { openAiCodexTokenManager } from "@/services/openai-codex-token";
 import type { OpenAi } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
@@ -54,6 +59,24 @@ export async function fetchOpenAiModels(
   baseUrlOverride?: string | null,
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
+  // "ChatGPT subscription" (Codex) auth mode: the credential is an encoded
+  // ChatGPT OAuth credential, and the Codex backend exposes no /models endpoint.
+  // Validate the credential by redeeming an access token, then return the
+  // maintained Codex model list.
+  const codexCredential = decodeOpenAiCodexCredential(apiKey);
+  if (codexCredential) {
+    // Throws (401) when the refresh token is rejected, so key creation surfaces
+    // a real "reconnect your ChatGPT account" error instead of an empty list.
+    await openAiCodexTokenManager.getAccessToken({
+      refreshToken: codexCredential.refreshToken,
+    });
+    return OPENAI_CODEX_MODELS.map((model) => ({
+      id: model.id,
+      displayName: model.displayName,
+      provider: "openai" as const,
+    }));
+  }
+
   const baseUrl = baseUrlOverride || config.llm.openai.baseUrl;
   const data = await fetchModelsWithBearerAuth<{
     data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];

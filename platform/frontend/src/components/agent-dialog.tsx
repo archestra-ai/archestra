@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ChevronRight,
   Globe,
+  InfoIcon,
   Loader2,
   Plus,
   RotateCcw,
@@ -40,7 +41,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
-import { AgentHooksEditor } from "@/components/agent-hooks-editor";
+import {
+  AgentHooksEditor,
+  type AgentHooksEditorRef,
+} from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -57,6 +61,7 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
+import type { SharedPersonalPin } from "@/components/agent-tools-editor.utils";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -65,6 +70,7 @@ import {
   formatPermissionRequirement,
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
+import { SharePersonalCredentialsDialog } from "@/components/share-personal-credentials-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -136,6 +142,10 @@ import {
   useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
+import {
+  useAgentSubagentExclusions,
+  useUpdateAgentSubagentExclusions,
+} from "@/lib/agent-subagent-exclusions.query";
 import type { AgentToolExclusions } from "@/lib/agent-tool-exclusions.query";
 import {
   useAgentDelegations,
@@ -247,9 +257,17 @@ interface SubagentPillProps {
   agent: Agent;
   isSelected: boolean;
   onToggle: (agentId: string) => void;
+  // "delegate" pills read as an active delegation target (green); "exclude"
+  // pills read as a target removed from the Auto surface (red).
+  tone?: "delegate" | "exclude";
 }
 
-function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
+function SubagentPill({
+  agent,
+  isSelected,
+  onToggle,
+  tone = "delegate",
+}: SubagentPillProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -265,7 +283,12 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
             )}
           >
             {isSelected && (
-              <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full shrink-0",
+                  tone === "exclude" ? "bg-red-500" : "bg-green-500",
+                )}
+              />
             )}
             <Bot className="h-3 w-3 shrink-0" />
             <span className="font-medium truncate">{agent.name}</span>
@@ -324,6 +347,11 @@ interface SubagentsEditorProps {
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
   currentAgentId?: string;
+  placeholder?: string;
+  // The "delegate" role offers a shortcut to create a new agent; the "exclude"
+  // (disabled-subagents) role only narrows an existing set, so it omits it.
+  showCreateAction?: boolean;
+  tone?: "delegate" | "exclude";
 }
 
 function SubagentsEditor({
@@ -331,6 +359,9 @@ function SubagentsEditor({
   selectedAgentIds,
   onSelectionChange,
   currentAgentId,
+  placeholder = "Search agents...",
+  showCreateAction = true,
+  tone = "delegate",
 }: SubagentsEditorProps) {
   // Filter out current agent from available agents
   const filteredAgents = availableAgents.filter((a) => a.id !== currentAgentId);
@@ -361,18 +392,23 @@ function SubagentsEditor({
           agent={agent}
           isSelected={true}
           onToggle={handleToggle}
+          tone={tone}
         />
       ))}
       <AssignmentCombobox
         items={comboboxItems}
         selectedIds={selectedAgentIds}
         onToggle={handleToggle}
-        placeholder="Search agents..."
+        placeholder={placeholder}
         emptyMessage="No agents found."
-        createAction={{
-          label: "Create a New Agent",
-          href: "/agents?create=true",
-        }}
+        createAction={
+          showCreateAction
+            ? {
+                label: "Create a New Agent",
+                href: "/agents?create=true",
+              }
+            : undefined
+        }
       />
     </div>
   );
@@ -411,7 +447,7 @@ function getSuccessMessage(agentType: AgentType, isUpdate: boolean): string {
   return isUpdate ? messages[agentType].update : messages[agentType].create;
 }
 
-const agentTypeDisplayName: Record<string, string> = {
+export const agentTypeDisplayName: Record<string, string> = {
   agent: "agent",
   mcp_gateway: "MCP Gateway",
   llm_proxy: "LLM Proxy",
@@ -442,7 +478,7 @@ function getScopeOptions(agentType: string) {
   ];
 }
 
-function AccessLevelSelector({
+export function AccessLevelSelector({
   scope,
   onScopeChange,
   isAdmin,
@@ -582,7 +618,10 @@ export function AgentDialog({
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
   const shouldLoadIdentityProviders =
-    open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
+    open &&
+    (agentType === "mcp_gateway" ||
+      agentType === "llm_proxy" ||
+      agentType === "agent");
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -596,6 +635,13 @@ export function AgentDialog({
   const syncDelegations = useSyncAgentDelegations();
   const { data: currentDelegations = [], isFetched: delegationsFetched } =
     useAgentDelegations(agentType !== "llm_proxy" ? agent?.id : undefined);
+  const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
+  const {
+    data: currentSubagentExclusions,
+    isFetched: subagentExclusionsFetched,
+  } = useAgentSubagentExclusions(
+    agentType !== "llm_proxy" ? agent?.id : undefined,
+  );
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -664,6 +710,7 @@ export function AgentDialog({
   });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
+  const agentHooksEditorRef = useRef<AgentHooksEditorRef>(null);
   const agentToolExclusionsEditorRef =
     useRef<AgentToolExclusionsEditorRef>(null);
   // Snapshot of the form's pristine values, captured whenever the dialog
@@ -704,6 +751,12 @@ export function AgentDialog({
   const agentEnvironmentName =
     environments.find((env) => env.id === environmentId)?.name ?? null;
   const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
+  // Active tools pinned to a personal connection that would be shared with every
+  // caller once this agent is team/org scope. Reported live by the tools editor.
+  const [sharedPersonalPins, setSharedPersonalPins] = useState<
+    SharedPersonalPin[]
+  >([]);
+  const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
@@ -716,6 +769,12 @@ export function AgentDialog({
   // New agents default to Auto mode (implicit access to all tools); editing an
   // existing agent overwrites this from its stored value.
   const [accessAllTools, setAccessAllTools] = useState(true);
+  // Auto subagent mode: new agents default to Auto (may delegate to any agent
+  // the caller can access); editing overwrites this from the stored value.
+  const [accessAllSubagents, setAccessAllSubagents] = useState(true);
+  // Delegation targets excluded from the Auto surface ("Auto All Except Some").
+  // Inert while in Custom subagent mode. Seeded async from the backend.
+  const [disabledSubagentIds, setDisabledSubagentIds] = useState<string[]>([]);
   // Auto-mode exclusions dirty tracking: { initial, current } normalized
   // payloads reported by the exclusions editor (null until it initializes and
   // after it unmounts when the dialog closes).
@@ -763,7 +822,9 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
-    agentType === "mcp_gateway" || agentType === "llm_proxy";
+    agentType === "mcp_gateway" ||
+    agentType === "llm_proxy" ||
+    agentType === "agent";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
@@ -825,6 +886,7 @@ export function AgentDialog({
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             toolExposureMode: agentData.toolExposureMode ?? "full",
             accessAllTools: agentData.accessAllTools ?? false,
+            accessAllSubagents: agentData.accessAllSubagents ?? false,
           }
         : {
             name: "",
@@ -852,6 +914,7 @@ export function AgentDialog({
             // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
             accessAllTools: true,
+            accessAllSubagents: true,
           };
 
       setName(nextValues.name);
@@ -873,12 +936,18 @@ export function AgentDialog({
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setToolExposureMode(nextValues.toolExposureMode);
       setAccessAllTools(nextValues.accessAllTools);
+      setAccessAllSubagents(nextValues.accessAllSubagents);
+      // Clear cross-agent leftovers; the tools editor re-reports this agent's
+      // pins once its credentials load.
+      setSharedPersonalPins([]);
+      setShowShareConfirm(false);
       setAutoConfigureOnToolDiscovery(nextValues.autoConfigureOnToolDiscovery);
       setDualLlmMaxRounds(nextValues.dualLlmMaxRounds);
       if (!agentData) {
         // Create mode clears delegations here; edit mode syncs them from the
         // loaded agent in a separate effect so refetches don't wipe them.
         setSelectedDelegationTargetIds([]);
+        setDisabledSubagentIds([]);
       }
       initialSnapshotRef.current = buildAgentFormSnapshot(nextValues);
 
@@ -901,6 +970,21 @@ export function AgentDialog({
       );
     }
   }, [open, agentId, currentDelegationIds, delegationsFetched]);
+
+  // Seed the Auto-mode disabled-subagents set once the exclusions load. Kept out
+  // of the agent reset path (same reasoning as delegations above) so a refetch
+  // doesn't wipe pending edits.
+  const currentExcludedSubagentIds = (
+    currentSubagentExclusions?.excludedSubagentIds ?? []
+  ).join(",");
+
+  useEffect(() => {
+    if (open && agentId && subagentExclusionsFetched) {
+      setDisabledSubagentIds(
+        currentExcludedSubagentIds.split(",").filter(Boolean),
+      );
+    }
+  }, [open, agentId, currentExcludedSubagentIds, subagentExclusionsFetched]);
 
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
@@ -1000,12 +1084,13 @@ export function AgentDialog({
     [availableApiKeys, currentLlmProvider, modelsByProvider],
   );
 
-  // Non-admin users must select at least one team for team-scoped resources
+  // A team-scoped agent must have at least one team, otherwise it is
+  // inaccessible to everyone (issue #6624). Applies to admins too.
   const requiresTeamSelection =
-    !isAdmin && scope === "team" && assignedTeamIds.length === 0;
+    scope === "team" && assignedTeamIds.length === 0;
   const hasNoAvailableTeams = !teams || teams.length === 0;
 
-  const handleSave = useCallback(async () => {
+  const performSave = useCallback(async () => {
     const trimmedName = name.trim();
     const trimmedSystemPrompt = systemPrompt.trim();
     const parsedDualLlmMaxRounds = Number.parseInt(dualLlmMaxRounds, 10);
@@ -1015,8 +1100,8 @@ export function AgentDialog({
       return;
     }
 
-    // Non-admin users must select at least one team for team-scoped resources
-    if (!isAdmin && scope === "team" && assignedTeamIds.length === 0) {
+    // A team-scoped agent must have at least one team (issue #6624)
+    if (scope === "team" && assignedTeamIds.length === 0) {
       toast.error("Please select at least one team");
       return;
     }
@@ -1103,6 +1188,7 @@ export function AgentDialog({
               connectorIds: connectorIds,
               toolExposureMode,
               accessAllTools,
+              accessAllSubagents,
             }),
             teams: assignedTeamIds,
             labels: updatedLabels,
@@ -1151,6 +1237,7 @@ export function AgentDialog({
             connectorIds: connectorIds,
             toolExposureMode,
             accessAllTools,
+            accessAllSubagents,
           }),
           teams: assignedTeamIds,
           labels: updatedLabels,
@@ -1175,6 +1262,10 @@ export function AgentDialog({
             await agentToolExclusionsEditorRef.current?.saveChanges({
               agentId: savedAgentId,
             });
+            // Hooks staged before the agent existed.
+            await agentHooksEditorRef.current?.saveChanges({
+              agentId: savedAgentId,
+            });
           } catch (error) {
             await deleteAgent.mutateAsync(savedAgentId);
             toast.error(
@@ -1193,21 +1284,36 @@ export function AgentDialog({
         }
       }
 
-      // Sync delegations (skip for built-in agents)
+      // Sync delegations only when the target set actually changed (skip for
+      // built-in agents). Re-sending the unchanged set on every save produced a
+      // spurious no-op agent.updated audit record.
       if (
         !isBuiltIn &&
         savedAgentId &&
-        selectedDelegationTargetIds.length > 0
+        hasUnsavedChanges(
+          [...currentDelegations.map((d) => d.id)].sort(),
+          [...selectedDelegationTargetIds].sort(),
+        )
       ) {
         await syncDelegations.mutateAsync({
           agentId: savedAgentId,
           targetAgentIds: selectedDelegationTargetIds,
         });
-      } else if (savedAgentId && agent && currentDelegations.length > 0) {
-        // Clear delegations if none selected but there were some before
-        await syncDelegations.mutateAsync({
+      }
+
+      // Persist the Auto-mode disabled-subagents set only when it changed (same
+      // no-op-audit reasoning as delegations). Skipped for built-ins.
+      if (
+        !isBuiltIn &&
+        savedAgentId &&
+        hasUnsavedChanges(
+          [...(currentSubagentExclusions?.excludedSubagentIds ?? [])].sort(),
+          [...disabledSubagentIds].sort(),
+        )
+      ) {
+        await syncSubagentExclusions.mutateAsync({
           agentId: savedAgentId,
-          targetAgentIds: [],
+          exclusions: { excludedSubagentIds: disabledSubagentIds },
         });
       }
 
@@ -1245,12 +1351,14 @@ export function AgentDialog({
     isInternalAgent,
     builtInAgentName,
     showSecurity,
-    isAdmin,
     selectedDelegationTargetIds,
-    currentDelegations.length,
+    currentDelegations,
+    currentSubagentExclusions,
+    disabledSubagentIds,
     updateAgent,
     createAgent,
     syncDelegations,
+    syncSubagentExclusions,
     onCreated,
     onOpenChange,
     supportsIdentityProvider,
@@ -1258,7 +1366,47 @@ export function AgentDialog({
     deleteAgent,
     toolExposureMode,
     accessAllTools,
+    accessAllSubagents,
     supportsEnvironment,
+  ]);
+
+  const handleSave = useCallback(async () => {
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    if (!isAdmin && scope === "team" && assignedTeamIds.length === 0) {
+      toast.error("Please select at least one team");
+      return;
+    }
+    // Scoping a personal agent up to team/org shares any personal static pins
+    // with every caller; confirm (defaulting to resolve-at-call-time) first.
+    // Gated to the actual personal→shared transition (an already-shared agent's
+    // pins were confirmed when set) and to Custom mode (Auto resolves per caller).
+    const isScopingUpFromPersonal =
+      agent?.scope === "personal" && scope !== "personal";
+    if (isScopingUpFromPersonal && !accessAllTools) {
+      // Fail closed while the pin set is still loading — an incomplete "no
+      // personal pins" must not silently ship a shared personal credential.
+      if (agentToolsEditorRef.current?.isCredentialClassificationLoading()) {
+        toast.error("Still loading connections — try saving again.");
+        return;
+      }
+      if (sharedPersonalPins.length > 0) {
+        setShowShareConfirm(true);
+        return;
+      }
+    }
+    await performSave();
+  }, [
+    name,
+    isAdmin,
+    scope,
+    agent,
+    accessAllTools,
+    assignedTeamIds,
+    sharedPersonalPins,
+    performSave,
   ]);
 
   // Detect unsaved edits so any close path (Esc, backdrop, the X button, or the
@@ -1287,6 +1435,7 @@ export function AgentDialog({
     passthroughHeaders,
     toolExposureMode,
     accessAllTools,
+    accessAllSubagents,
   });
   const isDirty =
     !readOnly &&
@@ -1295,6 +1444,12 @@ export function AgentDialog({
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
         [...selectedDelegationTargetIds].sort(),
+      ) ||
+      // Disabled subagents load async, so they're diffed against the fetched
+      // baseline (same pattern as delegations above).
+      hasUnsavedChanges(
+        [...(currentSubagentExclusions?.excludedSubagentIds ?? [])].sort(),
+        [...disabledSubagentIds].sort(),
       ) ||
       // Auto-mode exclusions load async, so they're diffed against the
       // baseline the editor reports (same pattern as delegations above)
@@ -1671,17 +1826,16 @@ export function AgentDialog({
                   </Collapsible>
                 )}
 
-                {/* Section 3: Capabilities (Tools, Subagents, Knowledge Sources) */}
+                {/* Section 3: Tools & Knowledge Sources */}
                 {showToolsAndSubagents && (
                   <div
                     className="rounded-lg border bg-card p-4 space-y-4"
-                    data-testid={E2eTestId.AgentCapabilitiesSection}
+                    data-testid={E2eTestId.AgentToolsSection}
                   >
-                    <h3 className="text-sm font-semibold">Capabilities</h3>
-
-                    {/* Tools & knowledge */}
+                    <h3 className="text-sm font-semibold">
+                      Tools & Knowledge Sources
+                    </h3>
                     <div className="space-y-2">
-                      <Label>Tools & Knowledge Sources</Label>
                       <Tabs
                         value={autoToolsMode ? "auto" : "custom"}
                         onValueChange={(value) => {
@@ -1746,7 +1900,7 @@ export function AgentDialog({
                           !autoToolsMode && "hidden",
                         )}
                       >
-                        <p className="text-xs font-medium text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           Disabled tools
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -1768,7 +1922,7 @@ export function AgentDialog({
                         className={cn("space-y-3", autoToolsMode && "hidden")}
                       >
                         <div className="space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             Tools ({selectedToolsCount})
                           </p>
                           {((!agent && selectedToolsCount > 0) ||
@@ -1805,14 +1959,62 @@ export function AgentDialog({
                             agentEnvironmentId={environmentId ?? null}
                             agentEnvironmentName={agentEnvironmentName}
                             onConflictsChange={setMcpEnvConflicts}
+                            onSharedPersonalPinsChange={setSharedPersonalPins}
                             openComboboxOnMount={openToolsCombobox}
                             includeAppCatalogs={shouldOfferAppCatalogs(
                               agentType,
                             )}
                           />
+                          {agent?.scope === "personal" &&
+                            scope !== "personal" &&
+                            !accessAllTools &&
+                            sharedPersonalPins.length > 0 && (
+                              <Alert variant="warning" className="mt-3">
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertTitle>
+                                  {sharedPersonalPins.length === 1
+                                    ? "1 connection"
+                                    : `${sharedPersonalPins.length} connections`}{" "}
+                                  will be shared with everyone
+                                </AlertTitle>
+                                <AlertDescription>
+                                  <p>
+                                    Every user of this agent will connect as the
+                                    owner shown, no matter who is calling:{" "}
+                                    <span className="font-medium text-foreground">
+                                      {sharedPersonalPins
+                                        .map(
+                                          (pin) =>
+                                            `${pin.mcpName} (${pin.isCurrentUser ? "you" : pin.ownerEmail})`,
+                                        )
+                                        .join(", ")}
+                                    </span>
+                                  </p>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2"
+                                    onClick={() =>
+                                      agentToolsEditorRef.current?.convertPersonalPinsToDynamic(
+                                        Array.from(
+                                          new Set(
+                                            sharedPersonalPins.map(
+                                              (pin) => pin.catalogId,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    Resolve at call time
+                                  </Button>
+                                </AlertDescription>
+                              </Alert>
+                            )}
                         </div>
                         <div className="space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             Knowledge Sources
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -2072,28 +2274,88 @@ export function AgentDialog({
                         />
                       </div>
                     )}
+                  </div>
+                )}
 
-                    {/* Subagents */}
+                {/* Section 4: Subagents */}
+                {showToolsAndSubagents && (
+                  <div className="rounded-lg border bg-card p-4 space-y-4">
+                    <h3 className="text-sm font-semibold">Subagents</h3>
                     <div className="space-y-2">
-                      <Label>
-                        Subagents ({selectedDelegationTargetIds.length})
-                      </Label>
-                      <SubagentsEditor
-                        availableAgents={allInternalAgents}
-                        selectedAgentIds={selectedDelegationTargetIds}
-                        onSelectionChange={setSelectedDelegationTargetIds}
-                        currentAgentId={agent?.id}
-                      />
+                      <Tabs
+                        value={accessAllSubagents ? "auto" : "custom"}
+                        onValueChange={(value) =>
+                          setAccessAllSubagents(value === "auto")
+                        }
+                      >
+                        <TabsList className="grid w-full grid-cols-2">
+                          <TabsTrigger value="auto">Auto</TabsTrigger>
+                          <TabsTrigger value="custom">Custom</TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                      {accessAllSubagents ? (
+                        <div className="space-y-2">
+                          <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
+                            <li className="flex gap-2">
+                              <CheckIcon className="mt-px size-3.5 shrink-0" />
+                              Can delegate to any agent the calling user can
+                              access, in this{" "}
+                              {agentTypeDisplayName[agentType] || "agent"}'s
+                              environment — new agents included automatically
+                            </li>
+                            <li className="flex gap-2">
+                              <CheckIcon className="mt-px size-3.5 shrink-0" />
+                              Disable specific agents below to keep them off the
+                              delegation surface
+                            </li>
+                          </ul>
+                          <div className="space-y-1.5">
+                            <p className="text-sm text-muted-foreground">
+                              Disabled subagents ({disabledSubagentIds.length})
+                            </p>
+                            <SubagentsEditor
+                              availableAgents={allInternalAgents}
+                              selectedAgentIds={disabledSubagentIds}
+                              onSelectionChange={setDisabledSubagentIds}
+                              currentAgentId={agent?.id}
+                              placeholder="Search agents to disable..."
+                              showCreateAction={false}
+                              tone="exclude"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <p className="pt-1 text-xs text-muted-foreground">
+                            Only the subagents you assign below can be delegated
+                            to by this{" "}
+                            {agentTypeDisplayName[agentType] || "agent"}.
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Subagents ({selectedDelegationTargetIds.length})
+                          </p>
+                          <SubagentsEditor
+                            availableAgents={allInternalAgents}
+                            selectedAgentIds={selectedDelegationTargetIds}
+                            onSelectionChange={setSelectedDelegationTargetIds}
+                            currentAgentId={agent?.id}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Hooks (internal agents only, existing agents only; shown when
-                  the agent runtime is available, since hooks run in its sandbox) */}
-                {agentHooksEnabled &&
-                  isInternalAgent &&
-                  !isBuiltIn &&
-                  agent?.id && <AgentHooksEditor agentId={agent.id} />}
+                {/* Hooks (internal agents only; shown when the agent runtime is
+                  available, since hooks run in its sandbox). In create mode the
+                  editor stages hooks locally and persists them via the ref once
+                  the agent exists. */}
+                {agentHooksEnabled && isInternalAgent && !isBuiltIn && (
+                  <AgentHooksEditor
+                    ref={agentHooksEditorRef}
+                    agentId={agent?.id}
+                  />
+                )}
 
                 {/* Section 4: Access & LLM */}
                 {(!isBuiltIn || isInternalAgent) && (
@@ -2117,7 +2379,7 @@ export function AgentDialog({
                         assignedTeamIds={assignedTeamIds}
                         onTeamIdsChange={setAssignedTeamIds}
                         hasNoAvailableTeams={hasNoAvailableTeams}
-                        showTeamRequired={!isAdmin}
+                        showTeamRequired={true}
                       />
                     )}
 
@@ -2209,14 +2471,18 @@ export function AgentDialog({
                               )}
                             </div>
                             {showNoToolsModelNotice && (
-                              <Alert variant="info">
-                                <AlertDescription className="text-sm">
+                              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                <InfoIcon
+                                  className="mt-0.5 size-3 shrink-0"
+                                  aria-hidden="true"
+                                />
+                                <span>
                                   This model doesn&apos;t support tools, so this{" "}
                                   {agentTypeDisplayName[agentType] || "agent"}
                                   &apos;s tools won&apos;t be used in its chats.
                                   Pick a different model to use tools.
-                                </AlertDescription>
-                              </Alert>
+                                </span>
+                              </p>
                             )}
                           </>
                         )}
@@ -2359,14 +2625,17 @@ export function AgentDialog({
                             identityProviders.length > 0 && (
                               <div className="space-y-2">
                                 <Label>
-                                  {agentType === "llm_proxy"
+                                  {agentType === "llm_proxy" ||
+                                  agentType === "agent"
                                     ? "Identity Provider (JWKS)"
                                     : "Identity Provider (Enterprise/JWKS)"}
                                 </Label>
                                 <p className="text-sm text-muted-foreground">
                                   {agentType === "llm_proxy"
                                     ? `Select the OIDC identity provider this LLM Proxy should trust for JWKS JWT authentication. Leave this unset to keep using provider API keys and virtual keys without IdP JWT validation.`
-                                    : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
+                                    : agentType === "agent"
+                                      ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
+                                      : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                                   {mcpAuthDocsUrl ? (
                                     <>
                                       {" "}
@@ -2478,7 +2747,7 @@ export function AgentDialog({
                     updateAgent.isPending ||
                     requiresTeamSelection ||
                     mcpEnvConflicts.length > 0 ||
-                    (!isAdmin && scope === "team" && hasNoAvailableTeams)
+                    (scope === "team" && hasNoAvailableTeams)
                   }
                 >
                   {(isSaving ||
@@ -2497,6 +2766,26 @@ export function AgentDialog({
         open={guard.confirmOpen}
         onKeepEditing={guard.keepEditing}
         onDiscard={guard.discardChanges}
+      />
+      <SharePersonalCredentialsDialog
+        open={showShareConfirm}
+        pins={sharedPersonalPins.map((pin) => ({
+          mcpName: pin.mcpName,
+          ownerEmail: pin.ownerEmail,
+          isCurrentUser: pin.isCurrentUser,
+        }))}
+        onResolveDynamic={() => {
+          setShowShareConfirm(false);
+          agentToolsEditorRef.current?.convertPersonalPinsToDynamic(
+            Array.from(new Set(sharedPersonalPins.map((pin) => pin.catalogId))),
+          );
+          void performSave();
+        }}
+        onShareAsIs={() => {
+          setShowShareConfirm(false);
+          void performSave();
+        }}
+        onCancel={() => setShowShareConfirm(false)}
       />
     </>
   );
@@ -2523,6 +2812,7 @@ type AgentFormFields = {
   passthroughHeaders: string[];
   toolExposureMode: ToolExposureMode;
   accessAllTools: boolean;
+  accessAllSubagents: boolean;
 };
 
 // Normalizes set-like id arrays (order-independent) so reselecting the same

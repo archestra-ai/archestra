@@ -3,6 +3,7 @@
 import { Check, Copy, Github, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   type GithubCopilotDeviceStart,
   usePollGithubCopilotDeviceFlow,
@@ -114,7 +115,7 @@ export function GithubCopilotSignIn({
   // fastest path to a paste.
   const copyCodeAndOpen = async (deviceFlow: GithubCopilotDeviceStart) => {
     try {
-      await navigator.clipboard.writeText(deviceFlow.userCode);
+      await copyToClipboard(deviceFlow.userCode);
       markCopied();
     } catch {
       // clipboard blocked (permissions/focus) — the visible code + copy button
@@ -155,7 +156,7 @@ export function GithubCopilotSignIn({
             aria-label="Copy code"
             onClick={async () => {
               try {
-                await navigator.clipboard.writeText(flow.userCode);
+                await copyToClipboard(flow.userCode);
                 markCopied();
               } catch {
                 // clipboard blocked — code stays visible to copy manually

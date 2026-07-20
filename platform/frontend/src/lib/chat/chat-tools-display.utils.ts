@@ -1,8 +1,6 @@
 import {
   type ArchestraToolShortName,
   extractMcpToolError,
-  TOOL_SWAP_AGENT_SHORT_NAME,
-  TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
@@ -134,11 +132,7 @@ export function isCompactEligible(params: {
   const { part, toolResultPart, toolName, getToolShortName } = params;
 
   const shortName = getToolShortName?.(toolName);
-  if (
-    shortName === TOOL_SWAP_AGENT_SHORT_NAME ||
-    shortName === TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME ||
-    shortName === TOOL_TODO_WRITE_SHORT_NAME
-  ) {
+  if (shortName === TOOL_TODO_WRITE_SHORT_NAME) {
     return false;
   }
 

@@ -14,7 +14,10 @@ interface EditPolicyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   toolName: string;
-  profileId: string;
+  // The agent whose blocked call opened this dialog. Only used by the
+  // name-based fallback lookup below, so it is optional: the tool-guardrails
+  // deep link opens the dialog with a toolId and no agent context.
+  profileId?: string;
   // The blocked tool's row id, when the backend supplied it. Resolves the tool
   // directly (works for All-mode tools with no agent_tools assignment); absent
   // for denials persisted before the id was carried, which fall back to the
@@ -46,7 +49,7 @@ export function EditPolicyDialog({
     pagination: {
       limit: 50,
     },
-    enabled: canUpdateToolPolicy === true && !toolId,
+    enabled: canUpdateToolPolicy === true && !toolId && !!profileId,
   });
 
   const tool =

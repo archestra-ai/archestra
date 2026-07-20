@@ -257,6 +257,38 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
   });
 
+  test("codex openai passthrough writes the X-Archestra-Virtual-Key header into config.toml by default", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId,
+      agentType: "llm_proxy",
+      name: "Main Proxy",
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "codex",
+      baseUrl: "http://localhost:9000/v1",
+      llmProxyId: proxy.id,
+      provider: "openai",
+    });
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode).toBe(200);
+    const script = response.body;
+    // Codex keeps its own OpenAI login (no injected key piped into codex)...
+    expect(script).toContain(
+      "Codex keeps using your own OpenAI API key login.",
+    );
+    expect(script).not.toContain(
+      `printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`,
+    );
+    // ...and the provisioned passthrough key rides in config.toml's http_headers
+    // to attribute the request to the user, exactly like Claude Code passthrough.
+    expect(script).toContain("[model_providers.");
+    expect(script).toMatch(/"X-Archestra-Virtual-Key" = "arch_[0-9a-f]{64}"/);
+  });
+
   test("claude-code bedrock passthrough injects the X-Archestra-Virtual-Key header by default", async ({
     makeAgent,
   }) => {

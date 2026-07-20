@@ -37,6 +37,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
 import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   type ServiceAccountToken,
   useCreateServiceAccountToken,
@@ -272,7 +273,7 @@ export default function ServiceAccountDetailPage({
   const copyCreatedToken = async () => {
     if (!createdToken) return;
 
-    await navigator.clipboard.writeText(createdToken);
+    await copyToClipboard(createdToken);
   };
 
   const closeCreatedTokenDialog = () => setCreatedToken(null);

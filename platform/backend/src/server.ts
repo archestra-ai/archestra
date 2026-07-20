@@ -68,8 +68,10 @@ import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
+import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
 import {
   APP_BASE_CSS_PATH,
   APP_SDK_PATH,
@@ -95,13 +97,13 @@ import {
   OpenAi,
   Openrouter,
   Perplexity,
-  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
   Vllm,
   Xai,
   Zhipuai,
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
+import { msTeamsWebhookRoutes } from "./routes/chatops";
 import { publicConfigRoutes } from "./routes/config";
 import { createOAuthAwareCorsDelegate } from "./routes/oauth-cors";
 import {
@@ -377,6 +379,14 @@ function captureServerException(
   error: unknown,
   extraProperties?: Record<string, unknown>,
 ): void {
+  // Same drop/keep-and-group policy the Sentry filter uses, so the two sinks
+  // agree: expected client/upstream errors are skipped, and availability
+  // incidents (transient DB, secrets-backend outage) get a stable fingerprint.
+  const decision = classifyErrorForTracking(error);
+  if (!decision.report) {
+    return;
+  }
+
   const { distinctId, sessionId } = getPostHogTraceContext(request);
   posthogErrorTrackingService.captureException({
     error,
@@ -391,6 +401,10 @@ function captureServerException(
       // deployment hit the error, used by the PostHog Slack alert template.
       hostname: request.host,
       reqId: request.id,
+      ...(decision.fingerprint && {
+        $exception_fingerprint: decision.fingerprint.join("/"),
+      }),
+      ...decision.tags,
       ...extraProperties,
     },
   });
@@ -441,6 +455,21 @@ export const createFastifyInstance = () =>
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
+    // REST API responses are per-user and must never be cached by
+    // intermediaries. Reverse proxies/CDNs in front of a deployment default to
+    // caching responses that carry no Cache-Control header, which replays one
+    // user's stale GET body after their own writes (e.g. an /api/apps list
+    // that keeps showing pre-pin state until a hard refresh). Routes that
+    // intentionally cache set their own header, which wins.
+    .addHook("onSend", (request, reply, _payload, done) => {
+      if (
+        request.url.startsWith("/api/") &&
+        !reply.hasHeader("cache-control")
+      ) {
+        void reply.header("Cache-Control", "no-store");
+      }
+      done();
+    })
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
     .setErrorHandler<ApiError | Error>(function (error, request, reply) {
       const requestContext = buildRequestErrorContext(request);
@@ -584,7 +613,6 @@ export const createFastifyInstance = () =>
           error_type: "db_unavailable",
           db_error_code: transientDbErrorCode,
           status_code: 503,
-          $exception_fingerprint: `db-transient/${transientDbErrorCode}`,
         });
 
         return reply.status(503).send({
@@ -607,23 +635,14 @@ export const createFastifyInstance = () =>
 
         if (statusCode >= 500) {
           this.log.error(logPayload, "HTTP 50x request error occurred");
-          // 502/504 report an upstream's failure (a user-configured provider
-          // or external server), not a crash of ours — log them, but keep
-          // them out of exception tracking.
-          if (statusCode !== 502 && statusCode !== 504) {
-            captureServerException(request, error, {
-              error_type: "api_error",
-              status_code: statusCode,
-              ...(internalCode && { internal_code: internalCode }),
-              // A secrets-backend outage fails every route that reads
-              // secrets — group by the root condition, not per endpoint.
-              ...(internalCode ===
-                SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE && {
-                $exception_fingerprint:
-                  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
-              }),
-            });
-          }
+          // Capture is centrally filtered and grouped by
+          // classifyErrorForTracking: 502/504 upstream failures are dropped as
+          // noise, and a secrets-backend outage is grouped by root cause.
+          captureServerException(request, error, {
+            error_type: "api_error",
+            status_code: statusCode,
+            ...(internalCode && { internal_code: internalCode }),
+          });
         } else if (statusCode >= 400) {
           this.log.info(logPayload, "HTTP 40x request error occurred");
         } else {
@@ -779,6 +798,43 @@ const startMetricsServer = async () => {
   );
 };
 
+// ============ Public-endpoints listener ============
+
+/**
+ * Optional dedicated Fastify listener (ARCHESTRA_PUBLIC_ENDPOINTS_PORT) that
+ * aliases the publicly-exposable endpoints on their own port. Currently that
+ * is the MS Teams incoming webhook; other endpoints that must be reachable
+ * from the Internet may join it later.
+ *
+ * It registers the exact same route handler as the main server, and the main
+ * API port keeps serving the endpoint in every configuration. The dedicated
+ * port exists so a firewall can expose only the endpoints that must be
+ * publicly reachable without exposing the whole API.
+ *
+ * As on the main port, the webhook authenticates in-route (Bot Framework JWT
+ * validation), so the auth plugin is not registered here.
+ */
+let publicEndpointsServerInstance: FastifyInstanceWithZod | null = null;
+
+const startPublicEndpointsServer = async () => {
+  const { publicEndpointsPort } = config.api;
+  if (!publicEndpointsPort) {
+    return;
+  }
+
+  const server = createFastifyInstance();
+  publicEndpointsServerInstance = server;
+
+  server.get(HEALTH_PATH, () => ({ status: "ok" }));
+
+  await server.register(msTeamsWebhookRoutes);
+
+  await server.listen({ port: publicEndpointsPort, host });
+  server.log.info(
+    `Public-endpoints listener started on port ${publicEndpointsPort} (aliasing the main API port's MS Teams webhook endpoint)`,
+  );
+};
+
 // ============ MCP Sandbox Server ============
 
 /**
@@ -839,12 +895,27 @@ const extAppsSdk = loadExtAppsSdk();
  */
 const loadArchestraAppSdk = (): string | null => {
   // co-located with the sandbox proxy HTML in the backend static dir
-  const sdkPath = path.join(
-    path.dirname(config.mcpSandbox.filePath),
-    "archestra-app-sdk.js",
-  );
+  const staticDir = path.dirname(config.mcpSandbox.filePath);
+  const sdkPath = path.join(staticDir, "archestra-app-sdk.js");
   try {
-    return readFileSync(sdkPath, "utf-8");
+    const base = readFileSync(sdkPath, "utf-8");
+    // The session recorder/replay driver is a separate appended module so the
+    // recording feature stays a deletable unit — deployments with recording
+    // disabled never deliver the capture code to apps at all.
+    if (!config.hackathonRecorder.enabled) return base;
+    const recordingPath = path.join(
+      staticDir,
+      "archestra-app-recording-sdk.js",
+    );
+    try {
+      return `${base}\n${readFileSync(recordingPath, "utf-8")}`;
+    } catch (err) {
+      logger.warn(
+        { err, recordingPath },
+        "Archestra app-recording SDK not found — apps will render without session capture",
+      );
+      return base;
+    }
   } catch (err) {
     logger.warn(
       { err, sdkPath },
@@ -916,8 +987,19 @@ const registerSandboxRoute = (
     if (config.mcpSandbox.domain) {
       frameAncestorsList.push(`*.${config.mcpSandbox.domain}`);
     }
+    // The offline video renderer loads the replay page from this deployment's
+    // own frontend, which then frames the sandbox exactly as a person's browser
+    // does. It normally reaches it at the configured frontend origin, already
+    // listed above; a deployment that points the renderer somewhere internal
+    // instead needs that address named too, or the sandbox refuses to load
+    // inside the render and the replay films an empty app pane.
+    if (config.hackathonRecorder.enabled) {
+      frameAncestorsList.push(...config.hackathonRecorder.renderFrameAncestors);
+    }
     const frameAncestors =
-      frameAncestorsList.length > 0 ? frameAncestorsList.join(" ") : "*";
+      frameAncestorsList.length > 0
+        ? [...new Set(frameAncestorsList)].join(" ")
+        : "*";
     void reply.header(
       "Content-Security-Policy",
       `frame-ancestors ${frameAncestors}`,
@@ -1309,9 +1391,18 @@ const startWebServer = async () => {
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
 
+    // Optional dedicated listener aliasing the MS Teams webhook on its own
+    // port (see startPublicEndpointsServer).
+    await startPublicEndpointsServer();
+
     // Start WebSocket server using the same HTTP server
     websocketService.start(fastify.server);
     fastify.log.info("WebSocket service started");
+
+    // Fetch the browser that renders session videos, if this deployment turned
+    // the recorder on. Deliberately not awaited: it is a large download and
+    // nothing else needs it to serve traffic.
+    warmRenderRuntime();
 
     registerWebServerShutdown(fastify, {
       emailRenewalIntervalId,
@@ -1378,6 +1469,11 @@ function registerWebServerShutdown(
       if (metricsServerInstance) {
         await metricsServerInstance.close();
         fastify.log.info("Metrics server closed");
+      }
+
+      if (publicEndpointsServerInstance) {
+        await publicEndpointsServerInstance.close();
+        fastify.log.info("Public-endpoints listener closed");
       }
 
       await fastify.close();
@@ -1585,9 +1681,22 @@ const startWorker = async () => {
 // This handler logs those leaks and keeps the server alive.
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "Unhandled promise rejection");
+  // Apply the shared tracking policy on this non-request capture path too, so a
+  // rejected transient-DB query groups by root cause and expected client/
+  // upstream errors are skipped, matching the request-error handler.
+  const decision = classifyErrorForTracking(reason);
+  if (!decision.report) {
+    return;
+  }
   posthogErrorTrackingService.captureException({
     error: reason,
-    properties: { error_type: "unhandled_rejection" },
+    properties: {
+      ...(decision.fingerprint && {
+        $exception_fingerprint: decision.fingerprint.join("/"),
+      }),
+      ...decision.tags,
+      error_type: "unhandled_rejection",
+    },
   });
 });
 

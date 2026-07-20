@@ -1,5 +1,5 @@
 import config from "@/config";
-import { OrganizationModel } from "@/models";
+import { InstanceUsageModel, OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { OrganizationAnalyticsState } from "@/types";
 import { instanceAnalyticsService } from "./instance-analytics";
@@ -81,6 +81,19 @@ describe("instanceAnalyticsService", () => {
           app_version: "1.2.3",
           instance_id: state.analyticsInstanceId,
           source: "backend",
+          user_count: 0,
+          team_count: 0,
+          agent_count: 0,
+          profile_count: 0,
+          mcp_gateway_count: 0,
+          llm_proxy_count: 0,
+          llm_provider_count: 0,
+          virtual_api_key_count: 0,
+          mcp_server_count: 0,
+          conversation_count: 0,
+          skill_count: 0,
+          app_count: 0,
+          knowledge_base_count: 0,
         },
       }),
     ]);
@@ -149,6 +162,50 @@ describe("instanceAnalyticsService", () => {
       instanceAnalyticsService.stop();
       vi.useRealTimers();
     }
+  });
+
+  test("reports current entity counts in the heartbeat", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    await makeUser();
+    await makeAgent({
+      organizationId: organization.id,
+      agentType: "mcp_gateway",
+    });
+
+    await instanceAnalyticsService.start();
+
+    const heartbeat = capturedBodies().find(
+      (body) => body.event === "instance_heartbeat",
+    );
+    expect(heartbeat?.properties).toMatchObject({
+      user_count: 1,
+      mcp_gateway_count: 1,
+      team_count: 0,
+    });
+  });
+
+  test("still sends the heartbeat when counting entities fails", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    vi.spyOn(InstanceUsageModel, "getEntityCounts").mockRejectedValue(
+      new Error("counting broke"),
+    );
+
+    await instanceAnalyticsService.start();
+
+    expect(capturedEventNames()).toEqual([
+      "instance_started",
+      "instance_heartbeat",
+    ]);
+    const heartbeat = capturedBodies().find(
+      (body) => body.event === "instance_heartbeat",
+    );
+    expect(heartbeat?.properties).not.toHaveProperty("user_count");
   });
 
   test("does nothing when analytics is disabled", async () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { APP_RECORDING_RENDER_ROUTE } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
@@ -79,6 +80,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
   const isSpecialAuth = isSpecialAuthPage(pathname);
+  const isRecordingRender = pathname?.startsWith(APP_RECORDING_RENDER_ROUTE);
 
   // Track mount state to avoid hydration errors with isRefetching
   useEffect(() => {
@@ -111,6 +113,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   useEffect(() => {
     if (isAuthInitializing || isAuthRefetching || isPublicConfigLoading) {
       // If auth or public-config check is pending, don't do anything
+      return;
+    } else if (isRecordingRender) {
+      // The offline video renderer drives this page with no session at all —
+      // it is a sink for a bundle pushed in over automation, not something a
+      // person browses to. Without this it is sent to sign-in before the
+      // render branch below can render anything, and an export produces a
+      // video of the login screen. It only survives locally because dev
+      // auto-login happens to mint a session first.
       return;
     } else if (isSpecialAuth) {
       // Special auth pages (like /auth/two-factor) can be accessed regardless of login state
@@ -156,6 +166,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     isLoggedIn,
     router,
     isSpecialAuth,
+    isRecordingRender,
     pathname,
     searchParams,
     devAutoLoginEnabled,
@@ -171,6 +182,13 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   } else if (isAuthPage && isLoggedIn) {
     // During redirects, show nothing to avoid flash
     return null;
+  } else if (isRecordingRender) {
+    // The offline video renderer drives a browser that holds no session, so
+    // this page cannot sit behind the gate. It is safe outside it because it
+    // is a pure sink: it reads nothing and renders nothing until the renderer
+    // pushes a bundle into it over the automation channel, so an anonymous
+    // visitor gets an empty page rather than anyone's recording.
+    return <>{children}</>;
   } else if (!isAuthPage && !isLoggedIn) {
     return null;
   }

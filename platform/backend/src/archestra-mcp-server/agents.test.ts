@@ -51,6 +51,23 @@ describe("agent tool execution", () => {
     expect((result.content[0] as any).text).toContain("New Test Agent");
   });
 
+  test("create_agent attributes the calling user as author for org-scoped agents", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,
+      { name: "Org Scoped Agent", scope: "org" },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+
+    const created = await AgentModel.findById(
+      extractCreatedId(result),
+      mockContext.userId,
+      true,
+    );
+    expect(created?.scope).toBe("org");
+    expect(created?.authorId).toBe(mockContext.userId);
+  });
+
   test("create_agent persists toolExposureMode", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_agent`,

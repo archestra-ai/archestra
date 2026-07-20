@@ -92,18 +92,38 @@ export default defineConfig({
      * - beforeEach: truncates tables (fast) instead of recreating DB
      */
 
-    // Use threads pool - faster than forks for Node.js tests
-    pool: "threads",
+    // Forks (child processes), not threads. PGlite is a WASM module; running
+    // it across worker threads sharing one process-global V8 JIT-page registry
+    // intermittently aborts the whole process with a fatal
+    // "Check failed: jit_page.has_value()" (and its sibling on unregister).
+    // Forks give each worker its own V8, so the registry can't be raced. This
+    // is Vitest's default pool, recommended for native modules that misbehave
+    // across threads (https://vitest.dev/config/pool); pinned explicitly so a
+    // switch back to threads for speed can't silently reintroduce the crash.
+    pool: "forks",
 
     // Auto-restore vi.stubGlobal/vi.stubEnv after every test. Without this, a
     // stub left behind by one test file poisons later files sharing the worker.
     unstubGlobals: true,
     unstubEnvs: true,
 
-    // Vitest defaults to one worker per core, which pins the whole machine
-    // during a full-suite run. Locally, leave a couple of cores free for the
-    // human; CI runners keep the default (all cores).
-    ...(isCI ? {} : { maxWorkers: Math.max(4, os.availableParallelism() - 2) }),
+    // Bound the fork count by BOTH cores and memory. CPU half: 50% of cores
+    // locally (leaves the other half for the human); CI runs all cores because
+    // the memory cap below is the real limit there. Memory half: with the forks
+    // pool each worker loads the full module graph + its own PGlite (WASM)
+    // independently — up to ~3 GB RSS per fork, not shared like the threads
+    // pool's single address space — so cap at ~5 GB/fork or a shard OOM-kills
+    // the runner (cgroup OOM aborts a worker abruptly, not with a clean Vitest
+    // error). Yields 12 forks on the 16-vCPU / 64-GB CI runner, and half-cores
+    // (memory permitting) locally. The memory cap trusts os.totalmem() to report
+    // real available RAM — valid on the bare-VM CI runner, but it would
+    // over-report (and stop protecting) inside a cgroup-limited container.
+    maxWorkers: Math.min(
+      isCI
+        ? os.availableParallelism()
+        : Math.max(1, Math.floor(os.availableParallelism() * 0.5)),
+      Math.max(1, Math.floor(os.totalmem() / (5 * 1024 ** 3))),
+    ),
 
     // Increase concurrency on CI for faster test execution
     maxConcurrency: isCI ? 12 : 6,

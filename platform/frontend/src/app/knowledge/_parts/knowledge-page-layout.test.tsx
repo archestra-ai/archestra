@@ -12,6 +12,8 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 
+vi.mock("@/lib/config/config.query");
+
 vi.mock("next/navigation");
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -19,6 +21,7 @@ import {
   useHasPermissions,
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
+import { useSmallTeamTier } from "@/lib/config/config.query";
 import { KnowledgePageLayout } from "./knowledge-page-layout";
 
 function renderLayout(isPending = false) {
@@ -126,6 +129,44 @@ describe("KnowledgePageLayout", () => {
         name: /Create Knowledge Base/,
       });
       expect(createButton).not.toBeDisabled();
+    });
+  });
+
+  describe("small team tier banner", () => {
+    it("renders the tier banner in the shared layout so every tab shows it", () => {
+      vi.mocked(useSmallTeamTier).mockReturnValue({
+        communicate: true,
+        smallTeam: true,
+        envFlag: false,
+        userCount: 5,
+        threshold: 30,
+      } as ReturnType<typeof useSmallTeamTier>);
+      renderLayout();
+
+      expect(
+        screen.getByText(/within the free tier for teams under 30 users/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("tabs", () => {
+    it("renders Connectors and Knowledge Bases tabs linking to their routes", () => {
+      renderLayout();
+
+      for (const link of screen.getAllByRole("link", { name: "Connectors" })) {
+        expect(link).toHaveAttribute("href", "/knowledge/connectors");
+      }
+      for (const link of screen.getAllByRole("link", {
+        name: "Knowledge Bases",
+      })) {
+        expect(link).toHaveAttribute("href", "/knowledge/knowledge-bases");
+      }
+      expect(
+        screen.getAllByRole("link", { name: "Connectors" }).length,
+      ).toBeGreaterThan(0);
+      expect(
+        screen.getAllByRole("link", { name: "Knowledge Bases" }).length,
+      ).toBeGreaterThan(0);
     });
   });
 

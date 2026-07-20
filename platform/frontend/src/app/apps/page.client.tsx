@@ -18,9 +18,9 @@ import {
 } from "@/components/ui/select";
 import { useApps } from "@/lib/app.query";
 import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
-import { useSession } from "@/lib/auth/auth.query";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
+import { AppsScopeFilter } from "./_parts/apps-scope-filter";
 
 const PAGE_SIZE = 100;
 
@@ -31,35 +31,45 @@ export default function AppsPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams.get("search") ?? "";
-  const filter = searchParams.get("filter") ?? "all";
   const kind = searchParams.get("kind") ?? "all";
+  // Scope/owner filtering is server-side (mirroring the Projects list) so an
+  // app admin's "Personal → Other users" view can reach apps that aren't in the
+  // default page. The scope filter component owns these URL params.
+  const scope = searchParams.get("scope") ?? undefined;
+  const authorIdsParam = searchParams.get("authorIds");
+  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
 
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
   const { data, isPending, isLoadingError, refetch } = useApps(
     {
       limit: PAGE_SIZE,
       offset: 0,
       search: search || undefined,
+      scope: (scope as "personal" | "team" | "org" | undefined) ?? undefined,
+      authorIds: authorIdsParam ? authorIdsParam.split(",") : undefined,
+      excludeAuthorIds: excludeAuthorIdsParam
+        ? excludeAuthorIdsParam.split(",")
+        : undefined,
     },
     { toastOnError: false },
   );
   const [createOpen, setCreateOpen] = useState(false);
 
-  // Pinned-first grouping applies on top of the scope filter, mirroring the
-  // Projects page: a "Pinned" section above, everything else below.
+  // Only the "kind" split (owned vs external) is client-side now; scope/owner
+  // filtering happens on the server. Pinned-first grouping applies on top,
+  // mirroring the Projects page: a "Pinned" section above, everything else below.
   const filtered = useMemo(
     () =>
       sortAppsPinnedFirst(
-        (data?.data ?? []).filter(
-          (app) =>
-            matchesKind(app, kind) && matchesFilter(app, filter, currentUserId),
-        ),
+        (data?.data ?? []).filter((app) => matchesKind(app, kind)),
       ),
-    [data, kind, filter, currentUserId],
+    [data, kind],
   );
   const pinnedApps = filtered.filter((app) => app.pinnedAt);
   const unpinnedApps = filtered.filter((app) => !app.pinnedAt);
+  // Below "Pinned", owned and external apps are separate sections: apps you
+  // authored here vs UIs that came with installed MCP servers.
+  const ownedApps = unpinnedApps.filter((app) => app.source === "owned");
+  const externalApps = unpinnedApps.filter((app) => app.source === "external");
 
   const setParam = (name: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -89,22 +99,6 @@ export default function AppsPage() {
           className="relative mr-1 w-[280px]"
         />
         <Select
-          value={filter}
-          onValueChange={(value) =>
-            setParam("filter", value === "all" ? null : value)
-          }
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent position="popper" side="bottom" align="start">
-            <SelectItem value="all">All apps</SelectItem>
-            <SelectItem value="personal">Personal</SelectItem>
-            <SelectItem value="team">Team</SelectItem>
-            <SelectItem value="org">Organization</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
           value={kind}
           onValueChange={(value) =>
             setParam("kind", value === "all" ? null : value)
@@ -119,6 +113,7 @@ export default function AppsPage() {
             <SelectItem value="external">MCP Server Apps</SelectItem>
           </SelectContent>
         </Select>
+        <AppsScopeFilter />
       </div>
 
       <LoadingWrapper isPending={isPending && !data}>
@@ -141,12 +136,11 @@ export default function AppsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {pinnedApps.length > 0 && (
-              <AppSection title="Pinned" apps={pinnedApps} />
-            )}
+            <AppSection title="Pinned" apps={pinnedApps} />
+            <AppSection title="Apps" apps={ownedApps} />
             <AppSection
-              title={pinnedApps.length > 0 ? "All apps" : undefined}
-              apps={unpinnedApps}
+              title="Apps from installed MCP servers"
+              apps={externalApps}
             />
           </div>
         )}
@@ -157,18 +151,17 @@ export default function AppsPage() {
   );
 }
 
-// Mirrors the Projects page's ProjectSection: an optional uppercase header over
-// the card grid, used to split "Pinned" from the rest.
-function AppSection({ title, apps }: { title?: string; apps: AppListItem[] }) {
+// Mirrors the Projects page's ProjectSection: an uppercase header over the
+// card grid. Renders nothing when the group is empty, so only sections with
+// cards appear.
+function AppSection({ title, apps }: { title: string; apps: AppListItem[] }) {
   if (apps.length === 0) return null;
 
   return (
     <section className="space-y-3">
-      {title ? (
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h2>
-      ) : null}
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h2>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {apps.map((app) => (
           <AppCard
@@ -195,22 +188,5 @@ function AppSection({ title, apps }: { title?: string; apps: AppListItem[] }) {
 export function matchesKind(app: AppListItem, kind: string): boolean {
   if (kind === "owned") return app.source === "owned";
   if (kind === "external") return app.source === "external";
-  return true;
-}
-
-function matchesFilter(
-  app: AppListItem,
-  filter: string,
-  currentUserId: string | undefined,
-): boolean {
-  if (filter === "all") return true;
-  if (filter === "personal")
-    return app.source === "owned"
-      ? app.scope === "personal" &&
-          !!currentUserId &&
-          app.authorId === currentUserId
-      : app.scope === "personal";
-  if (filter === "team") return app.scope === "team";
-  if (filter === "org") return app.scope === "org";
   return true;
 }

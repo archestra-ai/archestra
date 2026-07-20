@@ -5,6 +5,7 @@ export { default as agentRoutes } from "./agent";
 export { default as agentToolRoutes } from "./agent-tool";
 export { default as apiKeyRoutes } from "./api-key";
 export { default as appRoutes } from "./app/app.routes";
+export { default as appRecordingRoutes } from "./app-recording/app-recording.routes";
 export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-proxy";
 export { default as auditLogRoutes } from "./audit-log";
 export { default as authRoutes } from "./auth";
@@ -42,6 +43,7 @@ export { default as microsoft365CopilotAuthRoutes } from "./microsoft-365-copilo
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";
 export { default as onboardingRoutes } from "./onboarding/onboarding.routes";
+export { default as openaiCodexAuthRoutes } from "./openai-codex-auth/openai-codex-auth.routes";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";

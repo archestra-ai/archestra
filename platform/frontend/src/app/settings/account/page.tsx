@@ -4,7 +4,6 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ChangePasswordDialog } from "@/app/settings/account/_components/change-password-dialog";
-import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
 import { SessionsCard } from "@/app/settings/account/_components/sessions-card";
 import { TwoFactorCard } from "@/app/settings/account/_components/two-factor-card";
 import { useSetSettingsAction } from "@/app/settings/layout";
@@ -54,7 +53,6 @@ function AccountSettingsContent() {
         <RolePermissionsCard />
         <PersonalTokenCard />
         {organization?.showTwoFactor && <TwoFactorCard />}
-        <LightDarkToggle />
         <SessionsCard />
       </SettingsSectionStack>
       {showChangePasswordButton && (

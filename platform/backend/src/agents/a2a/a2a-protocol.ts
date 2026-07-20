@@ -144,3 +144,36 @@ export const A2AProtocolSendMessageResponseSchema = z.object({
 export type A2AProtocolSendMessageResponse = z.infer<
   typeof A2AProtocolSendMessageResponseSchema
 >;
+
+// --- A2A Streaming (SendStreamingMessage) ---
+
+/**
+ * Incremental task-state change emitted over a streaming response. `final: true`
+ * marks the last event of the stream. Mirrors the A2A protocol's
+ * TaskStatusUpdateEvent (the `status.message` carries the partial or final
+ * agent message for that update).
+ */
+const A2AProtocolTaskStatusUpdateEventSchema = z.object({
+  taskId: z.string(),
+  contextId: z.string().optional(),
+  status: A2AProtocolTaskStatusSchema,
+  final: z.boolean(),
+  metadata: z.any().optional(),
+});
+
+/**
+ * A single event in a SendStreamingMessage stream. Exactly one field is set per
+ * event: `statusUpdate` for incremental working/terminal state (carrying partial
+ * text), `message` for a complete agent message, or `task` for a full task (e.g.
+ * an approval-required task at the end of the stream). Field naming mirrors the
+ * non-streaming SendMessage response (`message`/`task`) so clients parse both
+ * shapes the same way.
+ */
+const A2AProtocolStreamResponseSchema = z.object({
+  statusUpdate: A2AProtocolTaskStatusUpdateEventSchema.optional(),
+  message: A2AProtocolMessageSchema.optional(),
+  task: A2AProtocolTaskSchema.optional(),
+});
+export type A2AProtocolStreamResponse = z.infer<
+  typeof A2AProtocolStreamResponseSchema
+>;

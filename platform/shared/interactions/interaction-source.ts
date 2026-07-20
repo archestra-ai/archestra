@@ -21,6 +21,7 @@ export const InteractionSourceSchema = z.enum([
   "knowledge:reranker",
   "knowledge:query-expansion",
   "app:llm_complete",
+  "app:recording_enhancement",
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
@@ -50,6 +51,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "knowledge:reranker": { label: "Knowledge - Reranker" },
   "knowledge:query-expansion": { label: "Knowledge - Query Expansion" },
   "app:llm_complete": { label: "App LLM Completion" },
+  "app:recording_enhancement": { label: "App Recording Enhancement" },
 };
 
 /**

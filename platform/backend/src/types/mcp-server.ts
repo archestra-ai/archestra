@@ -47,6 +47,18 @@ export const SelectMcpServerSchema = createSelectSchema(
     })
     .nullable()
     .optional(),
+  /**
+   * Agents (profiles / MCP gateways) with tools explicitly assigned from this
+   * server — statically pinned to it, or unpinned on a tool of its catalog.
+   */
+  assignedAgents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
 });
@@ -64,6 +76,9 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    // Frozen K8s deployment identity — computed by McpServerModel.create /
+    // the startup adopt pass, never accepted from input.
+    deploymentName: true,
     // Server-owned OAuth refresh-failure state, written only by the refresh
     // subsystem (routes/oauth.ts) — a freshly installed server has never
     // attempted a refresh, and accepting these from install input would let
@@ -79,6 +94,8 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   .omit({
     serverType: true, // serverType should not be updated after creation
     scope: true, // scope is install-time only; to change scope, uninstall + reinstall
+    // Frozen at creation/adopt time — renames must never touch it
+    deploymentName: true,
   })
   .extend({
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),

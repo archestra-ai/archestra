@@ -20,6 +20,7 @@ import {
   AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   ConnectDialog,
   ConnectDialogSection,
@@ -37,10 +38,9 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
-  useCloneAgent,
   useDeleteProfile,
   useExportAgent,
-  useProfiles,
+  useProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
@@ -201,20 +201,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const viewDialog = useAgentDialogUrlParam("view");
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
-  const cloneAgent = useCloneAgent();
-
-  const handleClone = useCallback(
-    async (agentId: string) => {
-      try {
-        const cloned = await cloneAgent.mutateAsync(agentId);
-        if (cloned) {
-          // Open edit dialog for the cloned agent so user can rename immediately
-          editDialog.open(cloned as AgentData);
-        }
-      } catch (_error) {}
-    },
-    [cloneAgent, editDialog.open],
-  );
+  const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
@@ -321,7 +308,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
-            scope={agent.scope}
             builtIn={agent.builtIn ?? undefined}
             description={agent.description}
             labels={agent.labels}
@@ -329,24 +315,21 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         );
       },
     },
-    ...(isAgentAdmin
-      ? [
-          {
-            id: "team",
-            header: "Accessible to",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: AgentData } }) => (
-              <ResourceVisibilityBadge
-                scope={row.original.scope}
-                teams={row.original.teams}
-                authorId={row.original.authorId}
-                authorName={row.original.authorName}
-                currentUserId={currentUserId}
-              />
-            ),
-          } satisfies ColumnDef<AgentData>,
-        ]
-      : []),
+    {
+      id: "team",
+      header: "Accessible to",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",
@@ -383,7 +366,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 },
               });
             }}
-            onClone={handleClone}
+            onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
@@ -516,8 +499,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="agent"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                // Land the user on "how do I use this?" instead of a closed
+                // dialog: open the connect dialog for the new agent.
+                setConnectingAgent({ ...created, agentType: "agent" });
               }}
             />
 
@@ -564,6 +550,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 if (!open) setConvertingAgent(null);
               }}
             />
+
+            <CloneAgentDialog
+              agent={cloningAgent}
+              onOpenChange={(open) => {
+                if (!open) setCloningAgent(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the cloned agent so user can rename immediately
+                editDialog.open(cloned as AgentData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>
@@ -573,9 +570,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
 function AgentConnectionColumns({ agentId }: { agentId: string }) {
   const appName = useAppName();
-  // Fetch agent data for A2A connection instructions
-  const { data: profiles, isPending } = useProfiles();
-  const agent = profiles?.find((p) => p.id === agentId);
+  // Fetch by id so a just-created agent resolves without waiting for the
+  // paginated list cache to refresh.
+  const { data: agent, isPending } = useProfile(agentId);
 
   if (isPending || !agent) {
     return (
@@ -611,12 +608,7 @@ function ConnectAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <ConnectDialog
-      agent={agent}
-      open={open}
-      onOpenChange={onOpenChange}
-      docsPage="platform-agents"
-    >
+    <ConnectDialog agent={agent} open={open} onOpenChange={onOpenChange}>
       <AgentConnectionColumns agentId={agent.id} />
     </ConnectDialog>
   );

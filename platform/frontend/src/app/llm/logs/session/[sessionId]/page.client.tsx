@@ -1,15 +1,15 @@
 "use client";
 
 import {
-  CLAUDE_CLIENT_LABEL,
+  clientForExternalAgentIds,
   DynamicInteraction,
-  isClaudeClientAgentId,
 } from "@archestra/shared";
 import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use } from "react";
 import { BilledCost } from "@/components/billed-cost";
+import { ClientSourceBadge } from "@/components/client-source-badge";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { SourceBadge } from "@/components/source-badge";
@@ -107,13 +107,11 @@ export default function SessionDetailPage({
   const totalToonCostSavings = sessionData?.totalToonCostSavings;
 
   // Session metadata from API
-  // Badge label for Claude clients; null for non-client agent ids. Derived from
-  // the client-attribution column (external_agent_id).
-  const claudeSourceLabel = (sessionData?.externalAgentIds ?? []).some(
-    isClaudeClientAgentId,
-  )
-    ? CLAUDE_CLIENT_LABEL
-    : null;
+  // Badge for known clients (Claude, Codex); null for non-client agent ids.
+  // Derived from the client-attribution column (external_agent_id).
+  const clientSource = clientForExternalAgentIds(
+    sessionData?.externalAgentIds ?? [],
+  );
   const profileName = sessionData?.profileName;
   const userNames = sessionData?.userNames ?? [];
 
@@ -193,14 +191,7 @@ export default function SessionDetailPage({
         title={sessionTitle || "Session"}
         badges={
           <>
-            {claudeSourceLabel && (
-              <Badge
-                variant="secondary"
-                className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300"
-              >
-                {claudeSourceLabel}
-              </Badge>
-            )}
+            {clientSource && <ClientSourceBadge client={clientSource} />}
             <SourceBadge source={sessionData?.source} />
             {profileName && (
               <Badge variant="secondary" className="text-xs">

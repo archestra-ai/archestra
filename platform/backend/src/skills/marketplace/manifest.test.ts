@@ -95,6 +95,30 @@ describe("resolveMarketplaceSkills", () => {
     expect(skill.slug).toBe("skill-abcdef12");
   });
 
+  test("caps slugs at 64 characters and trims a trailing hyphen at the cut", () => {
+    const [long] = resolveMarketplaceSkills([
+      makeSkill({ name: "x".repeat(80) }),
+    ]);
+    expect(long.slug).toBe("x".repeat(64));
+
+    // the cut lands on the separator hyphen, which must not survive
+    const [cutOnHyphen] = resolveMarketplaceSkills([
+      makeSkill({ name: `${"a".repeat(63)} b` }),
+    ]);
+    expect(cutOnHyphen.slug).toBe("a".repeat(63));
+  });
+
+  test("collision suffixes stay within the 64-char cap", () => {
+    const resolved = resolveMarketplaceSkills([
+      makeSkill({ id: "a", name: "x".repeat(70) }),
+      makeSkill({ id: "b", name: "x".repeat(70) }),
+    ]);
+    expect(resolved.map((s) => s.slug)).toEqual([
+      "x".repeat(64),
+      `${"x".repeat(62)}-2`,
+    ]);
+  });
+
   test("preserves input order", () => {
     const skills = [
       makeSkill({ id: "b", name: "Beta" }),

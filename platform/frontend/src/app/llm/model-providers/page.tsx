@@ -98,6 +98,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
+  openaiAuthMethod: "api-key",
 };
 
 export default function ApiKeysPage() {
@@ -187,6 +188,11 @@ export default function ApiKeysPage() {
         awsAccessKeyId: null,
         awsSecretAccessKey: null,
         awsSessionToken: null,
+        // Open on the auth-mode tab that matches the stored credential: ChatGPT
+        // Subscription keys land on the subscription tab, plain keys on API Key.
+        openaiAuthMethod: selectedApiKey.isChatgptSubscription
+          ? "chatgpt-subscription"
+          : "api-key",
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);
@@ -674,7 +680,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">Virtual API keys</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/llm/credentials/virtual-keys?providerApiKeyId=${encodedApiKeyId}`}
+              href={`/credentials/virtual-keys?providerApiKeyId=${encodedApiKeyId}`}
             >
               View all
             </Link>
@@ -707,7 +713,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">OAuth clients</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/llm/credentials/oauth-clients?providerApiKeyId=${encodedApiKeyId}`}
+              href={`/credentials/oauth-clients?providerApiKeyId=${encodedApiKeyId}`}
             >
               View all
             </Link>

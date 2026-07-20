@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentScope, archestraApiTypes } from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import type { ReactNode } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import { LabelTags } from "@/components/label-tags";
@@ -12,20 +12,18 @@ const MAX_NAME_LENGTH = 20;
 
 export function AgentNameCell({
   name,
-  scope,
   builtIn = false,
   description,
   labels,
   extraBadges,
 }: {
   name: string;
-  scope: AgentScope;
   builtIn?: boolean;
   description?: string | null;
   labels?: AgentLabels;
   extraBadges?: ReactNode;
 }) {
-  const hasMetadata = !!extraBadges || !!labels?.length || builtIn || !!scope;
+  const hasMetadata = !!extraBadges || !!labels?.length || builtIn;
   const displayName = truncateName(name);
 
   return (
@@ -37,7 +35,7 @@ export function AgentNameCell({
           </span>
           {hasMetadata && (
             <>
-              <AgentBadge type={builtIn ? "builtIn" : scope} />
+              {builtIn && <AgentBadge type="builtIn" />}
               {extraBadges}
               {labels && labels.length > 0 && <LabelTags labels={labels} />}
             </>

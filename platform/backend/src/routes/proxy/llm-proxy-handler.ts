@@ -184,14 +184,16 @@ function getProviderMessagesCount(messages: unknown): number | null {
 /**
  * The subset of a proxied request body we read for session-id and client-app
  * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
- * → `system`/`metadata`; `extractSessionInfo` → `metadata`/`user`), so one
- * shared view keeps the cast in a single place.
+ * → `system`/`metadata`; `detectCodexClientId` → `client_metadata`;
+ * `extractSessionInfo` → `metadata`/`user`/`client_metadata`), so one shared
+ * view keeps the cast in a single place.
  */
 type RequestBodyForExtraction =
   | {
       system?: unknown;
       metadata?: { user_id?: string | null };
       user?: string | null;
+      client_metadata?: unknown;
     }
   | undefined;
 
@@ -222,7 +224,10 @@ export async function handleLLMProxy<
   const bodyForExtraction = body as RequestBodyForExtraction;
   // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
   // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
-  // app from the request and record it (Claude clients → "anthropic_claude").
+  // app from the request and record it (Claude clients → "anthropic_claude"
+  // from the request body; Codex clients → "openai_codex" from the
+  // client_metadata body shape or the originator/User-Agent headers the Codex
+  // CLI stamps on every request).
   // `detectedClaudeClientId` is the auto-discovery result from the request BODY
   // (the Anthropic billing-header / Claude metadata signal). It is kept separate
   // from `externalAgentId` because billing-mode detection must key on this
@@ -231,7 +236,11 @@ export async function handleLLMProxy<
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction);
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
-    detectedClaudeClientId;
+    detectedClaudeClientId ??
+    utils.headers.clientApp.detectCodexClientId(
+      headersForExtraction,
+      bodyForExtraction,
+    );
   const isClaudeClientRequest = detectedClaudeClientId !== undefined;
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
@@ -255,11 +264,14 @@ export async function handleLLMProxy<
   let oauthUserId: string | undefined;
   let regularVirtualKeyUserId: string | undefined;
 
+  // Session extraction reuses the resolved client attribution above to gate
+  // the Codex-specific signals, so client identification lives in one place.
   const { sessionId, sessionSource } =
-    utils.headers.sessionId.extractSessionInfo(
-      headersForExtraction,
-      bodyForExtraction,
-    );
+    utils.headers.sessionId.extractSessionInfo({
+      headers: headersForExtraction,
+      body: bodyForExtraction,
+      externalAgentId,
+    });
 
   // Extract interaction source (chat, chatops, email, etc.)
   // Internal callers set X-Archestra-Source; external API requests default to "api".
@@ -597,6 +609,19 @@ export async function handleLLMProxy<
     oauthUserId,
     regularVirtualKeyUserId,
   ]);
+
+  // Fall back to the personal standard virtual key's owner for user attribution.
+  // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
+  // X-Archestra-User-Id header — already set `userId` above, so this only fills
+  // the gap when a personal virtual key is the sole identity signal. That is the
+  // virtual-key connection mode: the connect flow mints a personal virtual key
+  // whose author is the acting user (Codex ChatGPT subscription, Claude Code
+  // virtual key). Consistency with any other authenticated identity was just
+  // asserted, so this can never disagree with them.
+  if (!userId && regularVirtualKeyUserId) {
+    userId = regularVirtualKeyUserId;
+    resolvedUser = await UserModel.getById(userId);
+  }
 
   if (!authMethod) {
     authMethod = passthroughVirtualKeyId
@@ -946,9 +971,14 @@ export async function handleLLMProxy<
       perKeyBaseUrl || providerBaseUrlHeader || provider.getBaseUrl();
 
     // Create client with observability (each provider handles metrics internally)
+    const abortSignal =
+      providerName === "microsoft-365-copilot"
+        ? createDownstreamAbortSignal({ request, reply })
+        : undefined;
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
       agent: resolvedAgent,
+      abortSignal,
       source,
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
@@ -1138,6 +1168,10 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+  // Providers whose transport can't self-instrument duration (Bedrock) rely on
+  // us to record llm_request_duration_seconds. Guard against a second (error-path)
+  // observation once the stream has been established.
+  let requestDurationRecorded = false;
   const streamedEventIndices = new Set<number>();
   // Once a blocking tool is encountered, buffer all subsequent tool call chunks
   // to prevent streaming data for tools that appear after a blocked tool.
@@ -1173,6 +1207,22 @@ async function handleStreaming<
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
         const stream = await provider.executeStream(client, request);
+
+        // Record request duration at stream establishment for providers whose
+        // transport can't self-instrument it (Bedrock). This mirrors
+        // getObservableFetch/getObservableGenAI, which observe duration when the
+        // response/stream is established rather than when it finishes streaming.
+        if (provider.recordRequestDurationInHandler) {
+          metrics.llm.reportRequestDuration(
+            providerName,
+            agent,
+            actualModel,
+            (Date.now() - streamStartTime) / 1000,
+            "200",
+            source,
+          );
+          requestDurationRecorded = true;
+        }
 
         // Process chunks
         // Per-tool buffer/stream decisions: only "Allow always" tools stream immediately.
@@ -1437,6 +1487,22 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
+    // If the stream never established (e.g. a provider 400 rejecting the
+    // request), record the duration here for providers we instrument in the
+    // handler. A mid-stream error is not double-recorded: establishment already
+    // set the flag, matching the "duration = time to establishment" semantics.
+    if (provider.recordRequestDurationInHandler && !requestDurationRecorded) {
+      metrics.llm.reportRequestDuration(
+        providerName,
+        agent,
+        actualModel,
+        (Date.now() - streamStartTime) / 1000,
+        extractDurationStatusCode(error),
+        source,
+      );
+      requestDurationRecorded = true;
+    }
+
     // The finally-block persist below is gated on usage, so a stream that
     // fails before any usage arrives (e.g. a provider 400 rejecting the
     // request) would otherwise leave no trace in LLM logs / session history.
@@ -1635,6 +1701,7 @@ async function handleNonStreaming<
   } = ctx;
 
   const providerName = provider.provider;
+  const requestStartTime = Date.now();
 
   logger.debug(
     { model: actualModel },
@@ -1663,7 +1730,35 @@ async function handleNonStreaming<
     parentContext,
     user: toSpanUserInfo(resolvedUser),
     callback: async (llmSpan) => {
-      const result = await provider.execute(client, request);
+      // Record request duration for providers we instrument in the handler
+      // (Bedrock). getObservableFetch covers the fetch-based providers, so those
+      // must not double-report here — the flag gates that.
+      let result: TResponse;
+      try {
+        result = await provider.execute(client, request);
+      } catch (error) {
+        if (provider.recordRequestDurationInHandler) {
+          metrics.llm.reportRequestDuration(
+            providerName,
+            agent,
+            actualModel,
+            (Date.now() - requestStartTime) / 1000,
+            extractDurationStatusCode(error),
+            source,
+          );
+        }
+        throw error;
+      }
+      if (provider.recordRequestDurationInHandler) {
+        metrics.llm.reportRequestDuration(
+          providerName,
+          agent,
+          actualModel,
+          (Date.now() - requestStartTime) / 1000,
+          "200",
+          source,
+        );
+      }
       const adapter = provider.createResponseAdapter(result);
 
       // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
@@ -1953,6 +2048,44 @@ function normalizeVirtualKeyCandidate(
   return apiKey.replace(/^Bearer[:\s]+/i, "");
 }
 
+/**
+ * Turns a premature proxy-client disconnect into an AbortSignal that the
+ * Microsoft Graph adapter forwards to conversation and chat requests. Normal
+ * response closure does not abort, and listeners remove each other on either
+ * terminal path.
+ */
+function createDownstreamAbortSignal(params: {
+  request: FastifyRequest;
+  reply: FastifyReply;
+}): AbortSignal {
+  const { request, reply } = params;
+  const controller = new AbortController();
+
+  const cleanup = () => {
+    request.raw.removeListener("aborted", onRequestAborted);
+    reply.raw.removeListener("close", onReplyClosed);
+  };
+  const onRequestAborted = () => {
+    cleanup();
+    controller.abort();
+  };
+  const onReplyClosed = () => {
+    cleanup();
+    if (!reply.raw.writableEnded) {
+      controller.abort();
+    }
+  };
+
+  if (request.raw.aborted || reply.raw.destroyed) {
+    controller.abort();
+  } else {
+    request.raw.once("aborted", onRequestAborted);
+    reply.raw.once("close", onReplyClosed);
+  }
+
+  return controller.signal;
+}
+
 function shouldUseKeylessProviderApiKey(params: {
   row: Awaited<ReturnType<typeof LlmProviderApiKeyModel.findById>>;
   providerName: string;
@@ -1994,4 +2127,15 @@ function headerNamePeek(
     result[k] = typeof v === "string" && v.length > 0 ? v[0] : "";
   }
   return result;
+}
+
+/**
+ * Derive a status_code label for the request-duration metric from a thrown
+ * provider error. Bedrock's client attaches `statusCode` to its errors; when
+ * absent (network failure before a response) we fall back to "0", matching how
+ * getObservableFetch labels network errors.
+ */
+function extractDurationStatusCode(error: unknown): string {
+  const statusCode = (error as { statusCode?: number } | null)?.statusCode;
+  return typeof statusCode === "number" ? String(statusCode) : "0";
 }

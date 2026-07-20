@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { type UseFormReturn, useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,7 @@ import { useTeams } from "@/lib/teams/team.query";
 import {
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
+  type LlmProviderApiKeyResponse,
 } from "./llm-provider-api-key-form";
 
 const DEFAULTS: LlmProviderApiKeyFormValues = {
@@ -29,6 +30,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   isPrimary: false,
   billingMode: "metered",
   bedrockAuthMethod: "api-key",
+  openaiAuthMethod: "api-key",
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
@@ -39,20 +41,44 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
 // (`form.setValue("provider", ...)`) without wrestling the Radix combobox.
 let form: UseFormReturn<LlmProviderApiKeyFormValues>;
 
-function Harness() {
-  form = useForm<LlmProviderApiKeyFormValues>({ defaultValues: DEFAULTS });
+function Harness({
+  existingKeys,
+  existingKey,
+  defaults,
+}: {
+  existingKeys?: LlmProviderApiKeyResponse[];
+  existingKey?: LlmProviderApiKeyResponse;
+  defaults?: Partial<LlmProviderApiKeyFormValues>;
+}) {
+  form = useForm<LlmProviderApiKeyFormValues>({
+    defaultValues: { ...DEFAULTS, ...defaults },
+  });
   return (
-    <LlmProviderApiKeyForm form={form} mode="full" showConsoleLink={false} />
+    <LlmProviderApiKeyForm
+      form={form}
+      mode="full"
+      showConsoleLink={false}
+      existingKeys={existingKeys}
+      existingKey={existingKey}
+    />
   );
 }
 
-function renderForm() {
+function renderForm(options?: {
+  existingKeys?: LlmProviderApiKeyResponse[];
+  existingKey?: LlmProviderApiKeyResponse;
+  defaults?: Partial<LlmProviderApiKeyFormValues>;
+}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <Harness />
+      <Harness
+        existingKeys={options?.existingKeys}
+        existingKey={options?.existingKey}
+        defaults={options?.defaults}
+      />
     </QueryClientProvider>,
   );
 }
@@ -128,6 +154,130 @@ describe("LlmProviderApiKeyForm", () => {
     await waitFor(() => {
       expect(form.getValues("bedrockAuthMethod")).toBe("api-key");
     });
+  });
+
+  it("suffixes the auto-filled name when the provider default is taken", async () => {
+    // Two reconnects of a sign-in provider (e.g. Microsoft 365 Copilot) must
+    // not mint a third identically-named key — the auto-fill counts up past
+    // every taken default.
+    renderForm({
+      existingKeys: [
+        {
+          provider: "microsoft-365-copilot",
+          name: "Microsoft 365 Copilot",
+        } as LlmProviderApiKeyResponse,
+        {
+          provider: "microsoft-365-copilot",
+          name: "Microsoft 365 Copilot (2)",
+        } as LlmProviderApiKeyResponse,
+      ],
+    });
+
+    // The default provider (openai) has no name collision.
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("OpenAI");
+    });
+
+    act(() => {
+      form.setValue("provider", "microsoft-365-copilot");
+    });
+
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("Microsoft 365 Copilot (3)");
+    });
+  });
+
+  it("retitles the auto-filled name to match the OpenAI credential type", async () => {
+    // Selecting the ChatGPT Subscription tab must rename the auto-filled key
+    // from "OpenAI", so it is not saved under the wrong, confusing name.
+    renderForm();
+
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("OpenAI");
+    });
+
+    act(() => {
+      form.setValue("openaiAuthMethod", "chatgpt-subscription");
+    });
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("ChatGPT Subscription");
+    });
+
+    // Switching back to the API-key tab restores the plain provider default.
+    act(() => {
+      form.setValue("openaiAuthMethod", "api-key");
+    });
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("OpenAI");
+    });
+  });
+
+  it("shows the connected card when editing an existing ChatGPT-subscription key", async () => {
+    // Editing a key whose stored credential is already a ChatGPT subscription
+    // must surface the "connected" card (mirroring Copilot), not silently look
+    // like a fresh, unconnected sign-in.
+    const existingKey = {
+      id: "key-1",
+      organizationId: "org-1",
+      name: "ChatGPT Subscription",
+      provider: "openai",
+      secretId: "secret-1",
+      scope: "personal",
+      userId: "user-1",
+      teamId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+      extraHeaders: null,
+      isSystem: false,
+      isPrimary: false,
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+      isChatgptSubscription: true,
+    } as LlmProviderApiKeyResponse;
+
+    renderForm({
+      existingKey,
+      defaults: { openaiAuthMethod: "chatgpt-subscription" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("ChatGPT account connected")).toBeInTheDocument();
+    });
+  });
+
+  it("does not show the connected card when editing a plain OpenAI key on the subscription tab", async () => {
+    // A plain API key being converted to a subscription is not yet connected —
+    // the sign-in prompt must show, no false "connected" card.
+    const existingKey = {
+      id: "key-2",
+      organizationId: "org-1",
+      name: "OpenAI",
+      provider: "openai",
+      secretId: "secret-2",
+      scope: "personal",
+      userId: "user-1",
+      teamId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+      extraHeaders: null,
+      isSystem: false,
+      isPrimary: false,
+      createdAt: "2026-07-16T00:00:00.000Z",
+      updatedAt: "2026-07-16T00:00:00.000Z",
+      isChatgptSubscription: false,
+    } as LlmProviderApiKeyResponse;
+
+    renderForm({
+      existingKey,
+      defaults: { openaiAuthMethod: "chatgpt-subscription" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Sign in with ChatGPT/i)).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("ChatGPT account connected"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the credential when the provider is unchanged", async () => {

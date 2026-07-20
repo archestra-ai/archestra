@@ -35,7 +35,12 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 });
 
 // Mock shared module
-vi.mock("@archestra/shared", () => ({
+// Partial: the gate reads real shared constants (the render route it lets
+// through) alongside the permissions map this suite substitutes. Replacing the
+// whole module drops every other export, so it breaks the moment the component
+// imports one more of them.
+vi.mock("@archestra/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared")>()),
   requiredPagePermissionsMap: {
     "/protected": { "organization:read": ["read"] },
     "/admin": { "organization:write": ["write"] },

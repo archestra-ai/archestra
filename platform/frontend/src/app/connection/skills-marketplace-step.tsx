@@ -114,6 +114,7 @@ function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
         totalSkills={totalSkills ?? 0}
         revealed={revealed}
         onReveal={setRevealed}
+        onRevoked={() => setRevealed(null)}
       />
     );
   }
@@ -197,6 +198,7 @@ function ExistingLinkPanel({
   totalSkills,
   revealed,
   onReveal,
+  onRevoked,
 }: {
   client: ConnectClient;
   /** May be null in the brief window between create-mutation and list refetch. */
@@ -204,6 +206,7 @@ function ExistingLinkPanel({
   totalSkills: number;
   revealed: RevealedClone | null;
   onReveal: (revealed: RevealedClone) => void;
+  onRevoked: () => void;
 }) {
   const revokeShare = useRevokeSkillShareLink();
   const rotateShare = useRotateSkillShareLink();
@@ -232,7 +235,10 @@ function ExistingLinkPanel({
     if (!link) return;
     await revokeShare.mutateAsync(link.id);
     setConfirmRevoke(false);
-  }, [revokeShare, link]);
+    // drop the revealed clone URL so the parent falls back to the create
+    // panel once the list refetch confirms no active link remains.
+    onRevoked();
+  }, [revokeShare, link, onRevoked]);
 
   const linkSkillCount = link?.skills.length ?? totalSkills;
   const stale = link !== null && linkSkillCount !== totalSkills;
@@ -259,8 +265,8 @@ function ExistingLinkPanel({
 
       <SecurityNote />
 
-      <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-        {link && (
+      {link && (
+        <div className="flex flex-wrap items-center gap-2 border-t pt-4">
           <Button
             type="button"
             variant="outline"
@@ -275,42 +281,42 @@ function ExistingLinkPanel({
                 ? "Refresh link"
                 : "Refresh to reveal URL"}
           </Button>
-        )}
-        {link && !confirmRevoke ? (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setConfirmRevoke(true)}
-            className="text-destructive hover:text-destructive"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Revoke
-          </Button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              Revoke and block all existing clones?
-            </span>
+          {!confirmRevoke ? (
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setConfirmRevoke(false)}
-              disabled={revokeShare.isPending}
+              onClick={() => setConfirmRevoke(true)}
+              className="text-destructive hover:text-destructive"
             >
-              Cancel
+              <Trash2 className="mr-2 h-4 w-4" />
+              Revoke
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleRevoke}
-              disabled={revokeShare.isPending}
-              data-testid="skills-marketplace-confirm-revoke"
-            >
-              {revokeShare.isPending ? "Revoking…" : "Confirm revoke"}
-            </Button>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Revoke and block all existing clones?
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setConfirmRevoke(false)}
+                disabled={revokeShare.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleRevoke}
+                disabled={revokeShare.isPending}
+                data-testid="skills-marketplace-confirm-revoke"
+              >
+                {revokeShare.isPending ? "Revoking…" : "Confirm revoke"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -507,23 +513,33 @@ export interface ConnectSkill {
  * step's per-skill picker. Soft-fails to an empty list (with the API-error
  * toast) so a skills outage degrades to "no skills ride along" instead of
  * blocking command generation.
+ *
+ * `forAgentId` narrows the set to skills visible from that agent's
+ * environment — the connect command passes the selected LLM proxy so only
+ * skills the connection can actually reach are offered.
  */
-export function useAllSkills(params?: { enabled?: boolean }) {
+export function useAllSkills(params?: {
+  enabled?: boolean;
+  forAgentId?: string | null;
+}) {
+  const forAgentId = params?.forAgentId ?? null;
   return useQuery({
-    queryKey: ["skills", "connect-all"],
-    queryFn: fetchAllSkills,
+    queryKey: ["skills", "connect-all", forAgentId],
+    queryFn: () => fetchAllSkills(forAgentId),
     enabled: params?.enabled,
   });
 }
 
 /** Fetch every skill page by page; on error, toast and return what we have. */
-async function fetchAllSkills(): Promise<ConnectSkill[]> {
+async function fetchAllSkills(
+  forAgentId: string | null = null,
+): Promise<ConnectSkill[]> {
   const skills: ConnectSkill[] = [];
   const limit = 100;
   let offset = 0;
   while (true) {
     const { data, error } = await archestraApiSdk.getSkills({
-      query: { limit, offset },
+      query: { limit, offset, forAgentId: forAgentId ?? undefined },
     });
     if (error) {
       handleApiError(error);

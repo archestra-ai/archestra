@@ -465,6 +465,66 @@ class AgentToolModel {
     return [...new Set(results.map((r) => r.toolId))];
   }
 
+  /**
+   * Get the distinct agents that have tools explicitly assigned from each of
+   * the given MCP servers, in one query to avoid N+1.
+   *
+   * An assignment counts toward a server when it is statically pinned to that
+   * server (`agent_tools.mcp_server_id`), or when it is unpinned (dynamic
+   * credential resolution) and the tool belongs to the server's catalog — a
+   * dynamic assignment can resolve to any install of the catalog at call time.
+   */
+  static async getAssignedAgentDetailsForMcpServers(
+    mcpServerIds: string[],
+  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
+    const agentsMap = new Map<string, Array<{ id: string; name: string }>>();
+    for (const mcpServerId of mcpServerIds) {
+      agentsMap.set(mcpServerId, []);
+    }
+    if (mcpServerIds.length === 0) {
+      return agentsMap;
+    }
+
+    const assignments = await db
+      .selectDistinct({
+        mcpServerId: schema.mcpServersTable.id,
+        agentId: schema.agentsTable.id,
+        agentName: schema.agentsTable.name,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      .innerJoin(
+        schema.mcpServersTable,
+        or(
+          eq(schema.agentToolsTable.mcpServerId, schema.mcpServersTable.id),
+          and(
+            isNull(schema.agentToolsTable.mcpServerId),
+            eq(schema.toolsTable.catalogId, schema.mcpServersTable.catalogId),
+          ),
+        ),
+      )
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, mcpServerIds),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name), asc(schema.agentsTable.id));
+
+    for (const { mcpServerId, agentId, agentName } of assignments) {
+      agentsMap.get(mcpServerId)?.push({ id: agentId, name: agentName });
+    }
+
+    return agentsMap;
+  }
+
   static async getToolsForAgent(agentId: string) {
     const results = await db
       .select({ tool: schema.toolsTable })

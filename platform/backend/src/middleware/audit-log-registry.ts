@@ -146,6 +146,17 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
 
+  // Syncing/removing delegation targets mutates the agent's subagent surface.
+  // Registered explicitly so the POST sync isn't dropped as a walk-up (which
+  // falls to unknown.created with a null resourceType) and the single-target
+  // DELETE inherits agent.updated instead of deriving agent.deleted.
+  "/api/agents/:agentId/delegations": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+
   "/api/agent-tools/:id": {
     resourceType: "agentTool",
     fetchById: (id, orgId) => AgentToolModel.findByIdForAudit(id, orgId),
@@ -302,6 +313,32 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
   "/api/connectors/:id": {
     resourceType: "connector",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  // Member overrides change who a connector's grants resolve to. Explicit
+  // entries pin both mutations to connector.updated — a walk-up to
+  // /api/connectors/:id would otherwise log the mapping DELETE as
+  // connector.deleted.
+  "/api/connectors/:id/member-overrides": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  "/api/connectors/:id/member-overrides/:externalAccountId": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  // Recomputes who can read every document the connector has ingested, so the
+  // operator who forced the pass is an audit-relevant fact. Registered
+  // explicitly: a POST resolved by walk-up is dropped, and the parent's
+  // create semantics would be wrong anyway — nothing is created.
+  "/api/connectors/:id/permission-sync": {
+    resourceType: "connector",
+    action: "connector.permission_sync_triggered",
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
   },

@@ -2,7 +2,8 @@
 
 import { archestraApiSdk } from "@archestra/shared";
 import { Key } from "lucide-react";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
 import { PlatformTokenCard } from "@/components/tokens/platform-token-card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,17 @@ export function PersonalTokenCard() {
   const { data: token, isLoading, error } = useUserToken();
   const rotateMutation = useRotateUserToken();
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const highlight = searchParams.get("highlight");
+  const tokenExists = !!token;
+
+  // Deep link from connection instructions ("Manage your personal token"):
+  // ?highlight=personal-token opens the token dialog once the token loads.
+  useEffect(() => {
+    if (highlight === "personal-token" && tokenExists) {
+      setTokenDialogOpen(true);
+    }
+  }, [highlight, tokenExists]);
 
   return (
     <>

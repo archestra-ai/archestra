@@ -24,6 +24,7 @@ function makeSkill(
     license: null,
     compatibility: null,
     allowedTools: null,
+    agentName: null,
     templated: false,
     metadata: {},
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -229,11 +230,15 @@ describe("MarketplaceMaterializer", () => {
       "utf8",
     );
     const parsed = parseSkillManifest(raw);
-    expect(parsed.name).toBe("PDF Helper");
+    expect(parsed.name).toBe("pdf-helper");
     expect(parsed.description).toBe("Helps with PDFs");
     expect(parsed.license).toBe("MIT");
     expect(parsed.compatibility).toBe("claude>=1.0");
-    expect(parsed.metadata).toEqual({ author: "Acme", version: "2.0" });
+    expect(parsed.metadata).toEqual({
+      displayName: "PDF Helper",
+      author: "Acme",
+      version: "2.0",
+    });
     expect(parsed.content).toBe("# PDF Helper\n\nDoes the thing.");
   });
 
@@ -265,7 +270,7 @@ describe("MarketplaceMaterializer", () => {
       ),
       "utf8",
     );
-    expect(skillMd).toContain("name: PDF Helper");
+    expect(skillMd).toContain("name: pdf-helper");
     expect(skillMd).not.toContain("attacker-controlled content");
   });
 
@@ -297,7 +302,7 @@ describe("MarketplaceMaterializer", () => {
       ),
       "utf8",
     );
-    expect(skillMd).toContain("name: PDF Helper");
+    expect(skillMd).toContain("name: pdf-helper");
     await expect(
       fs.access(
         path.join(

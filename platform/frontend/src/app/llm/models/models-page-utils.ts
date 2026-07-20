@@ -2,7 +2,10 @@ import { compareModelsForDisplay } from "@archestra/shared";
 
 export type ModelsPageModelTypeFilter = "all" | "chat" | "embedding";
 
-export type ModelsPageAvailableApiKey = readonly [string, { provider: string }];
+export type ModelsPageAvailableApiKey = {
+  readonly id: string;
+  readonly provider: string;
+};
 
 export const OBSERVED_MODEL_SOURCE_LABEL = "Observed in requests";
 export const OBSERVED_MODEL_SOURCE_DESCRIPTION =
@@ -24,11 +27,13 @@ export function canFilterFreeModelsForApiKey(params: {
   const { availableApiKeys, apiKeyFilter } = params;
 
   if (apiKeyFilter === "all") {
-    return availableApiKeys.some(([, key]) => key.provider === "openrouter");
+    return availableApiKeys.some((key) => key.provider === "openrouter");
   }
 
-  const selectedApiKey = availableApiKeys.find(([id]) => id === apiKeyFilter);
-  return selectedApiKey?.[1].provider === "openrouter";
+  const selectedApiKey = availableApiKeys.find(
+    (key) => key.id === apiKeyFilter,
+  );
+  return selectedApiKey?.provider === "openrouter";
 }
 
 export function filterModelsForPage<

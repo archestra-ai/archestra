@@ -21,7 +21,6 @@ import {
   generateId,
   generateObject,
   generateText,
-  hasToolCall,
   InvalidToolInputError,
   jsonSchema,
   type ModelMessage,
@@ -35,7 +34,6 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
@@ -58,6 +56,7 @@ import {
   createSubagentToolStreamBridge,
 } from "@/clients/subagent-tool-stream";
 import {
+  recordUnavailableToolCallStep,
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
@@ -99,6 +98,10 @@ import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
+import {
+  type OpenedApp,
+  resolveOpenedApp,
+} from "@/services/apps/opened-app-context";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -164,11 +167,15 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
+import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
   detectSandboxCommand,
   runSandboxCommandTurn,
 } from "./sandbox-command-turn";
-import { repairHarmonyToolName } from "./tool-call-repair";
+import {
+  repairHarmonyToolName,
+  repairMalformedToolInput,
+} from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 import { sendGatedUiMessageStreamResponse } from "./ui-stream-response";
 
@@ -620,6 +627,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 })
             : Promise.resolve(undefined);
 
+        // When an app is open in the chat, the client reports it on the turn's
+        // last user message; we restate that app in the system prompt so the
+        // model keeps treating the conversation as being about it. The client
+        // hint is untrusted — `resolveOpenedApp` re-runs the caller's access
+        // check, so a forged id only surfaces an app they could already see.
+        // Same posture as the project instructions above: concurrent, and
+        // best-effort — a resolve failure (or an app since deleted or made
+        // inaccessible) drops the injection rather than breaking the chat.
+        const openedAppRef = readOpenedAppRef(messages as ChatMessage[]);
+        const openedAppPromise: Promise<OpenedApp | undefined> = openedAppRef
+          ? resolveOpenedApp({
+              openedApp: openedAppRef,
+              userId: user.id,
+              organizationId,
+            }).catch((error) => {
+              logger.warn(
+                { error, conversationId },
+                "Failed to load the chat's open app, proceeding without its context",
+              );
+              return undefined;
+            })
+          : Promise.resolve(undefined);
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -632,20 +662,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          projectInstructionsPromise.then((projectInstructions) =>
-            buildChatContext({
-              conversationId,
-              agentId,
-              agent,
-              user: { id: user.id, email: user.email, name: user.name },
-              organizationId,
-              hookSessionContext,
-              projectInstructions,
-              hookRunCollector,
-              elicitation: chatMcpElicitation,
-              subagentToolStream,
-              abortSignal: chatAbortController.signal,
-            }),
+          Promise.all([projectInstructionsPromise, openedAppPromise]).then(
+            ([projectInstructions, openedApp]) =>
+              buildChatContext({
+                conversationId,
+                agentId,
+                agent,
+                user: { id: user.id, email: user.email, name: user.name },
+                organizationId,
+                hookSessionContext,
+                projectInstructions,
+                openedApp,
+                hookRunCollector,
+                elicitation: chatMcpElicitation,
+                subagentToolStream,
+                abortSignal: chatAbortController.signal,
+              }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),
@@ -835,6 +867,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     writer.write({
                       type: "data-heartbeat",
                       data: { timestamp: Date.now() },
+                      transient: true,
                     });
                   } catch {
                     clearInterval(heartbeatInterval);
@@ -914,6 +947,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // stays hardcoded — its models don't declare capabilities and
                 // it has built-in web search instead of tool calling
                 // (https://docs.perplexity.ai/api-reference/chat-completions-post).
+                // Perplexity's tool calling (2026) exists only on its separate
+                // Agent API (/responses/create, a Responses-style wire format),
+                // not the chat-completions surface we proxy.
                 const supportsToolCalling =
                   provider !== "perplexity" &&
                   modelRow?.supportsToolCalling !== false;
@@ -1036,6 +1072,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     }
 
                     if (InvalidToolInputError.isInstance(error)) {
+                      // Cheap, deterministic first: models often tack a stray
+                      // token (an extra closing brace, trailing prose) onto
+                      // otherwise-valid tool JSON. Recover the first complete
+                      // JSON value with no extra model round-trip, and only fall
+                      // back to the model re-ask below when that can't safely
+                      // repair it.
+                      const deterministicInput = repairMalformedToolInput(
+                        toolCall.input,
+                      );
+                      if (deterministicInput !== null) {
+                        logger.info(
+                          { conversationId, toolName: toolCall.toolName },
+                          "Repaired malformed tool-call arguments without a model re-ask",
+                        );
+                        return { ...toolCall, input: deterministicInput };
+                      }
+
                       try {
                         const schema = await inputSchema({
                           toolName: toolCall.toolName,
@@ -1091,10 +1144,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // discarded retry attempts (empty/abortive) that the probe
                   // drains before a result is committed, so their usage never
                   // reaches the client.
-                  onStepFinish: ({ usage, finishReason }) => {
+                  onStepFinish: (step) => {
+                    const { usage, finishReason } = step;
                     if (!hasCommittedResult) {
                       return;
                     }
+                    // Feeds the repeat ceiling in stopWhen the one call shape it
+                    // cannot otherwise see: a tool outside the tool list never
+                    // reaches an execute wrapper, so nothing fingerprints it.
+                    recordUnavailableToolCallStep(repeatTracker, step);
                     // Fires for the truncated step before the tracker's flush,
                     // so this holds the finishReason the tracker keys off.
                     lastFinishReason = finishReason;
@@ -2729,6 +2787,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
+      // Microsoft 365 Copilot can't run utility generations: the Graph Chat
+      // API has a fixed product persona and takes our system prompt only as
+      // riding-along additional context, which it routinely ignores — instead
+      // of a title it answers the message (a greeting, emoji included, became
+      // the stored title). Skip so the client keeps its first-user-message
+      // fallback.
+      if (titleLlm.provider === "microsoft-365-copilot") {
+        logger.info(
+          { conversationId: id },
+          "Skipping title generation - Microsoft 365 Copilot does not follow title instructions",
+        );
+        return reply.send(conversation);
+      }
+
       // Generate title using the extracted function
       const generatedTitle = await generateConversationTitle({
         ...titleLlm,
@@ -2763,7 +2835,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (!updatedConversation) {
-        throw new ApiError(500, "Failed to update conversation with title");
+        // No row matched id + user + org, even though findById succeeded at the
+        // start of this handler — the conversation was deleted during the async
+        // title generation (a slow LLM call). That's a benign race, not a server
+        // fault: title generation is best-effort, so fall through gracefully like
+        // the other skip branches above instead of raising a 500.
+        logger.info(
+          { conversationId: id },
+          "Skipping title update - conversation no longer exists (deleted during generation)",
+        );
+        return reply.send(conversation);
       }
 
       return reply.send(updatedConversation);
@@ -3153,19 +3234,8 @@ export function resolveTitleUserInput(
 export function buildChatStopConditions(repeatTracker: ToolCallRepeatTracker) {
   return [
     stepCountIs(MAX_AGENT_STEPS),
-    hasToolCall(getChatStopToolNames().swapAgentToolName),
-    hasToolCall(getChatStopToolNames().swapToDefaultAgentToolName),
     repeatCeilingStopCondition(repeatTracker),
   ];
-}
-
-export function getChatStopToolNames() {
-  return {
-    swapAgentToolName: archestraMcpBranding.getToolName("swap_agent"),
-    swapToDefaultAgentToolName: archestraMcpBranding.getToolName(
-      "swap_to_default_agent",
-    ),
-  };
 }
 
 /**
@@ -3504,8 +3574,8 @@ function getMessagesNotYetPersisted(params: {
 
     // Persisted messages are re-keyed to DB UUIDs when conversations reload, but
     // in-flight useChat requests can still carry the original temporary content
-    // ids. Track both forms so follow-up turns after swap_agent do not get
-    // dropped just because the incoming thread is shorter than the DB thread.
+    // ids. Track both forms so follow-up turns do not get dropped just because
+    // the incoming thread is shorter than the DB thread.
     const contentId = getMessageContentId(message.content);
 
     if (contentId && contentId.length > 0) {

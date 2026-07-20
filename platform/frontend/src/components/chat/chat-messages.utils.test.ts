@@ -4,6 +4,7 @@ import {
   SUBAGENT_TOOL_CALL_PART_TYPE,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
+import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
   collectSubagentToolCalls,
@@ -14,8 +15,20 @@ import {
   hasTextPart,
   identifyCompactToolGroups,
   isBlankAssistantTextPart,
+  isBlankReasoningPart,
   mcpToolLabel,
+  openedAppMetadataFromApps,
 } from "./chat-messages.utils";
+
+function panelApp(overrides: Partial<PanelApp>): PanelApp {
+  return {
+    toolCallId: "call-1",
+    label: "App",
+    uiResourceUri: "ui://archestra-app/app-1",
+    createdAt: 0,
+    ...overrides,
+  };
+}
 
 const getToolShortName = (toolName: string) =>
   getArchestraToolShortName(toolName, { includeDefaultPrefix: true });
@@ -1242,5 +1255,65 @@ describe("isBlankAssistantTextPart", () => {
         "assistant",
       ),
     ).toBe(false);
+  });
+});
+
+describe("isBlankReasoningPart", () => {
+  const reasoningPart = (text?: string) => ({ type: "reasoning", text });
+
+  it.each([
+    "",
+    " ",
+    "   ",
+    "\n\n",
+    "\t",
+    "\n  \t ",
+  ])("suppresses a reasoning part with no readable text %j", (text) => {
+    expect(isBlankReasoningPart(reasoningPart(text))).toBe(true);
+  });
+
+  it("suppresses a reasoning part with undefined text (redacted thinking)", () => {
+    expect(isBlankReasoningPart(reasoningPart(undefined))).toBe(true);
+  });
+
+  it("keeps a reasoning part that has real content", () => {
+    expect(isBlankReasoningPart(reasoningPart("  because X  "))).toBe(false);
+  });
+
+  it("ignores non-reasoning parts", () => {
+    expect(isBlankReasoningPart({ type: "text", text: "" })).toBe(false);
+  });
+});
+
+describe("openedAppMetadataFromApps", () => {
+  it("reports an owned app by its id", () => {
+    expect(openedAppMetadataFromApps([panelApp({ appId: "app-1" })])).toEqual({
+      appId: "app-1",
+    });
+  });
+
+  it("reports an external app by its mcp server id", () => {
+    expect(
+      openedAppMetadataFromApps([
+        panelApp({ appId: null, mcpServerId: "server-1" }),
+      ]),
+    ).toEqual({ appMcpServerId: "server-1" });
+  });
+
+  it("reports the most recent render — the app the panel shows by default", () => {
+    expect(
+      openedAppMetadataFromApps([
+        panelApp({ toolCallId: "c1", appId: "app-first" }),
+        panelApp({ toolCallId: "c2", appId: null, mcpServerId: "server-last" }),
+      ]),
+    ).toEqual({ appMcpServerId: "server-last" });
+  });
+
+  it("reports nothing when no app is identifiable", () => {
+    expect(openedAppMetadataFromApps([])).toBeUndefined();
+    // An external app rendered organically carries neither id.
+    expect(
+      openedAppMetadataFromApps([panelApp({ appId: null, mcpServerId: null })]),
+    ).toBeUndefined();
   });
 });

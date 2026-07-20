@@ -59,24 +59,12 @@ export function RightSidePanel({
   initialNavigateUrl,
   onInitialNavigateComplete,
 }: RightSidePanelProps) {
-  const { apps, setPortalTarget, setSettingsOpen } = useApps();
-  const portalDivRef = useRef<HTMLDivElement | null>(null);
+  const { setSettingsOpen } = useApps();
 
   let resolvedTab: RightPanelTab = activeTab;
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
   // The Runs tab only exists for scheduled-run chats; fall back otherwise.
   if (resolvedTab === "runs" && !scheduledRun) resolvedTab = "files";
-
-  // Activate the portal target only while the Apps tab is showing — when the
-  // user switches to artifact/browser or closes the panel, the app falls back
-  // to inline rendering in the chat.
-  useEffect(() => {
-    const shouldHostApp = isOpen && resolvedTab === "apps";
-    setPortalTarget(shouldHostApp ? portalDivRef.current : null);
-    return () => {
-      setPortalTarget(null);
-    };
-  }, [isOpen, resolvedTab, setPortalTarget]);
 
   // Collapsing the panel drops the owned-app settings form so it reopens on the
   // live app, not the form. The tab strip (in the header) now drives collapse,
@@ -127,25 +115,46 @@ export function RightSidePanel({
         )}
         {/* Apps tab content: renders the open app directly (no portal). The
             app-switcher lives in the hosted card's header (see McpAppCard). */}
-        {resolvedTab === "apps" && (
-          <div className="flex flex-col h-full">
-            <div ref={portalDivRef} className="flex-1 min-h-0 relative">
-              {apps.length === 0 ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-6">
-                  <AppWindow className="h-6 w-6 mb-2 opacity-50" />
-                  <p className="font-medium">No Apps in this chat</p>
-                  <p className="mt-1">
-                    Apps from tool calls in this conversation will appear here.
-                  </p>
-                </div>
-              ) : (
-                <PanelAppHost agentId={agentId} />
-              )}
-            </div>
-          </div>
-        )}
+        {resolvedTab === "apps" && <AppsPanelContent agentId={agentId} />}
       </div>
     </ResizableRightPanel>
+  );
+}
+
+/**
+ * The Apps tab content: the hosted app (or the no-apps empty state). Shared by
+ * the desktop right panel and the chat page's inline mobile panel. While
+ * mounted it registers as the apps portal target, which collapses inline app
+ * renders in the chat and switches pill clicks to select-the-hosted-app mode —
+ * so mount it only while the Apps tab is actually showing.
+ */
+export function AppsPanelContent({ agentId }: { agentId?: string }) {
+  const { apps, setPortalTarget } = useApps();
+  const portalDivRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setPortalTarget(portalDivRef.current);
+    return () => {
+      setPortalTarget(null);
+    };
+  }, [setPortalTarget]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div ref={portalDivRef} className="flex-1 min-h-0 relative">
+        {apps.length === 0 ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-6">
+            <AppWindow className="h-6 w-6 mb-2 opacity-50" />
+            <p className="font-medium">No Apps in this chat</p>
+            <p className="mt-1">
+              Apps from tool calls in this conversation will appear here.
+            </p>
+          </div>
+        ) : (
+          <PanelAppHost agentId={agentId} />
+        )}
+      </div>
+    </div>
   );
 }
 

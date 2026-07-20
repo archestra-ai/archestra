@@ -643,6 +643,7 @@ async function makeMcpServer(
       | "scope"
       | "localInstallationStatus"
       | "oauthRefreshError"
+      | "deploymentName"
     >
   > = {},
 ) {
@@ -700,6 +701,8 @@ async function makeInternalMcpCatalog(
       | "teams"
       | "clonedFrom"
       | "environmentId"
+      | "multitenant"
+      | "deploymentSpecYaml"
     >
   > & {
     organizationId?: string;
@@ -1230,9 +1233,12 @@ async function makeConnectorRun(
       | "status"
       | "startedAt"
       | "documentsProcessed"
+      | "documentsIngested"
+      | "stats"
       | "leaseOwner"
       | "leaseExpiresAt"
       | "leaseEpoch"
+      | "runType"
     >
   > = {},
 ): Promise<ConnectorRun> {

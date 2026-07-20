@@ -3,12 +3,14 @@ title: Telegram
 category: Agents
 order: 6
 description: Connect Archestra agents to Telegram chats and groups
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-13
 ---
 
 Archestra connects to Telegram through a bot. Messages sent to the bot — in direct messages or group chats — are routed to the configured agent, and responses appear back in the chat.
 
 Telegram uses long polling: Archestra makes outbound requests to the Telegram API, so no public URL, webhook, or ngrok tunnel is needed. The only credential is a bot token.
+
+![The Telegram channel page with setup completed and a linked account](/docs/automated_screenshots/platform-telegram_setup.webp)
 
 ## Setup
 
@@ -16,6 +18,8 @@ The integration is off by default and hidden. Set `ARCHESTRA_CHATOPS_TELEGRAM_EN
 
 1. In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`, and pick a display name and username. BotFather replies with a bot token.
 2. Paste the token into the Telegram setup on the Messaging Channels page (or set it via environment variables, see [Deployment](/docs/platform-deployment#telegram)).
+
+![The Telegram setup dialog asking for the bot token](/docs/automated_screenshots/platform-telegram_setup-dialog.webp)
 
 Archestra validates the token and starts polling immediately.
 
@@ -25,6 +29,8 @@ Telegram does not expose email addresses, so the bot cannot match users to their
 
 - From the Telegram channel page: click **Link Telegram account**, then tap **Start** in the Telegram chat that opens.
 - From Telegram: send `/start` to the bot and open the sign-in link it replies with.
+
+![The sign-in page the bot's link opens](/docs/automated_screenshots/platform-telegram_link-account.webp)
 
 Both paths use a one-shot code, valid for 15 minutes. The signed-in web session provides the identity and the Telegram chat proves ownership, so neither side can be spoofed.
 
@@ -38,15 +44,18 @@ Every message in a DM gets a reply. On first contact the bot asks which agent sh
 
 ### Group chats
 
-Add the bot to a group. It replies when addressed:
+Add the bot to a group. The bot's Group Privacy setting in BotFather decides what it hears:
 
-- `@botname` mention
-- a reply to one of its messages
-- a `/command`
+- **Privacy on** (Telegram's default): the bot only receives `/commands` and replies to its own messages — plain `@botname` mentions never reach it.
+- **Privacy off** (or the bot is a group admin): the bot hears every message. The agent joins the conversation — it answers mentions and replies always, answers other messages when they're for it, and stays silent when people are clearly talking to each other.
 
-By default Telegram's privacy mode means the bot only receives these messages anyway. To let an agent observe all group messages (and decide when to chime in), disable Group Privacy for the bot in BotFather, then remove and re-add the bot to the group — Telegram caches the setting.
+For group use, disable Group Privacy, then remove and re-add the bot to the group — Telegram caches the setting per membership.
 
 In supergroups with Topics enabled, each forum topic is a separate conversation for the agent.
+
+Each chat the bot participates in shows up on the channel page, where you assign the agent that answers there.
+
+![DM and group chats with their default agents on the Telegram channel page](/docs/automated_screenshots/platform-telegram_channels.webp)
 
 ### Commands
 
@@ -83,8 +92,8 @@ Photos and documents sent to the bot are downloaded and passed to the agent, sub
 - Check the integration is enabled and the token is valid (the status shows "configured")
 - Make sure your Telegram account is linked — send `/start` to the bot to check
 
-**Bot not responding in a group**
-- Address it explicitly (@mention, reply, or command), or disable Group Privacy in BotFather and re-add the bot to the group
+**Bot not responding to @mentions in a group**
+- Group Privacy is on (the default): Telegram only delivers `/commands` and replies to the bot's messages. Send `/select-agent` to confirm the bot is alive, then disable Group Privacy in BotFather and remove and re-add the bot to the group
 
 **"This Telegram account isn't linked" reply**
 - Send `/start` to the bot and follow the sign-in link it replies with

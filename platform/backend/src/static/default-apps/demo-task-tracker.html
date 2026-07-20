@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo Task Tracker</title>
+  <style>
+    :root { --tt-fade: 700ms; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; }
+
+    /* ---------- Intro loader ---------- */
+    #intro {
+      position: fixed; inset: 0; z-index: 1000;
+      background: #000; color: #fff;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 2rem;
+      font-family: var(--font-sans, system-ui, sans-serif);
+      transition: opacity var(--tt-fade) ease;
+    }
+    #intro.hide { opacity: 0; pointer-events: none; }
+    #intro .intro-logo { width: 72px; height: 72px; border-radius: 16px; margin-bottom: 1.75rem; opacity: 0; animation: introIn 900ms ease forwards; }
+    #intro .lines { max-width: 34rem; display: flex; flex-direction: column; gap: 1.1rem; }
+    #intro .line { opacity: 0; font-size: 1.15rem; line-height: 1.5; animation: introIn 900ms ease forwards; }
+    #intro .line.title { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; }
+    #intro .line.muted { color: #b9b9b9; font-size: 1.02rem; }
+    #intro .skip {
+      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+      background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 999px; padding: 0.5rem 1.4rem; font-size: 0.9rem; cursor: pointer;
+      opacity: 0; animation: skipIn 900ms ease forwards; animation-delay: 900ms;
+      transition: background 150ms ease, border-color 150ms ease;
+      font-family: inherit;
+    }
+    #intro .skip:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.6); }
+    @keyframes introIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    /* Skip keeps its horizontal centering (translateX(-50%)) inside the animated transform. */
+    @keyframes skipIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+    /* ---------- App ---------- */
+    #app { opacity: 0; transition: opacity var(--tt-fade) ease; max-width: 620px; margin: 0 auto; padding: 3rem 1.5rem 4rem; font-family: var(--font-sans, system-ui, sans-serif); }
+    #app.show { opacity: 1; }
+
+    .hero { text-align: center; margin-bottom: 2rem; }
+    .hero .badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--color-text-secondary); border: 1px solid var(--color-border-primary, #e2e2e2);
+      padding: 0.25rem 0.7rem; border-radius: 999px; margin-bottom: 0.9rem;
+    }
+    .hero .badge svg { width: 13px; height: 13px; }
+    .hero h1 { margin: 0 0 0.4rem; font-size: 1.9rem; letter-spacing: -0.02em; }
+    .hero p { margin: 0; color: var(--color-text-secondary); font-size: 0.95rem; }
+
+    .panel {
+      border: 1px solid var(--color-border-primary, #e6e6e6);
+      border-radius: 16px; padding: 1.1rem; margin-bottom: 1.5rem;
+      background: var(--color-background-secondary, rgba(127,127,127,0.05));
+    }
+    .add-row { display: flex; gap: 0.6rem; }
+    .add-row .arch-input, .add-row input { flex: 1; height: 44px; font-size: 1rem; }
+    .add-row .arch-btn, .add-row button { height: 44px; padding: 0 1.3rem; font-weight: 600; white-space: nowrap; }
+
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.9rem; gap: 0.75rem; }
+    .stats { font-size: 0.85rem; color: var(--color-text-secondary); }
+    .progress { flex: 1; height: 6px; border-radius: 999px; background: var(--color-border-primary, #e6e6e6); overflow: hidden; max-width: 180px; }
+    .progress > span { display: block; height: 100%; width: 0; background: var(--color-accent, #4f7cff); transition: width 300ms ease; }
+
+    ul.tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+    li.task {
+      display: flex; align-items: center; gap: 0.85rem; padding: 0.85rem 1rem;
+      border: 1px solid var(--color-border-primary, #e6e6e6); border-radius: 12px;
+      background: var(--color-background-primary, #fff);
+      transition: transform 120ms ease, box-shadow 120ms ease, opacity 200ms ease;
+      animation: taskIn 240ms ease;
+    }
+    @keyframes taskIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    li.task:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.07); }
+    li.task .check { flex: none; width: 20px; height: 20px; cursor: pointer; accent-color: var(--color-accent, #4f7cff); }
+    li.task .label { flex: 1; text-align: left; word-break: break-word; font-size: 0.98rem; }
+    li.task.done { opacity: 0.65; }
+    li.task.done .label { text-decoration: line-through; color: var(--color-text-secondary); }
+    li.task .meta { font-size: 0.72rem; color: var(--color-text-secondary); flex: none; }
+    li.task .del { flex: none; background: transparent; border: 0; color: var(--color-text-secondary); cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.15rem 0.45rem; border-radius: 8px; }
+    li.task .del:hover { color: #e5484d; background: rgba(229,72,77,0.12); }
+
+    .empty { text-align: center; color: var(--color-text-secondary); padding: 2.5rem 0; font-size: 0.95rem; }
+    .empty .big { font-size: 1.8rem; display: block; margin-bottom: 0.5rem; opacity: 0.5; }
+
+    #toast {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(150%);
+      background: #e5484d; color: #fff; padding: 0.7rem 1.2rem; border-radius: 10px;
+      font-size: 0.9rem; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 500;
+      transition: transform 260ms ease; max-width: 90vw; text-align: center;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ---------- Diagnostics panel ---------- */
+    #diag {
+      margin-top: 1.5rem; border: 1px solid #e5484d; border-radius: 12px;
+      background: rgba(229,72,77,0.06); overflow: hidden;
+    }
+    #diag[hidden] { display: none; }
+    #diag .diag-head {
+      display: flex; align-items: center; gap: 0.5rem; padding: 0.8rem 1rem;
+      font-weight: 600; color: #e5484d; font-size: 0.9rem;
+    }
+    #diag .diag-head svg { width: 16px; height: 16px; flex: none; }
+    #diag .diag-body { padding: 0 1rem 1rem; }
+    #diag pre {
+      margin: 0; padding: 0.8rem; background: #0e0e0e; color: #f2f2f2;
+      border-radius: 8px; font-family: var(--font-mono, ui-monospace, monospace);
+      font-size: 0.78rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+      max-height: 340px; overflow: auto;
+    }
+    #diag .diag-actions { margin-top: 0.7rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    #diag .diag-actions button {
+      font-size: 0.82rem; padding: 0.4rem 0.9rem; border-radius: 8px;
+      border: 1px solid var(--color-border-primary, #ccc); background: transparent;
+      cursor: pointer; color: var(--color-text-primary, inherit); font-family: inherit;
+    }
+    #diag .diag-actions button:hover { background: rgba(127,127,127,0.12); }
+  </style>
+</head>
+<body>
+  <!-- Intro loader -->
+  <div id="intro">
+    <svg class="intro-logo" viewBox="0 0 994 953" xmlns="http://www.w3.org/2000/svg">
+      <rect width="993.958" height="952.543" rx="204.92" fill="#111"/>
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M390.871 664.818C427.68 664.818 460.629 641.985 473.553 607.519L565.238 363.026C586.887 305.296 544.211 243.715 482.556 243.715C445.747 243.715 412.798 266.548 399.874 301.014L308.189 545.507C286.54 603.237 329.216 664.818 390.871 664.818Z" fill="white"/>
+      <ellipse cx="638.487" cy="577.095" rx="87.7298" ry="81.1501" fill="white"/>
+    </svg>
+    <div class="lines">
+      <div class="line title" style="animation-delay:150ms">Demo Task Tracker</div>
+      <div class="line" style="animation-delay:400ms">Built as a mini app in Archestra.</div>
+      <div class="line muted" style="animation-delay:650ms">It uses Archestra's data layer for persistent storage.</div>
+      <div class="line muted" style="animation-delay:900ms">Share it with colleagues and use it together!</div>
+      <div class="line muted" style="animation-delay:1150ms">Try creating apps yourself.</div>
+    </div>
+    <button class="skip" type="button" id="skipBtn">Skip &rarr;</button>
+  </div>
+
+  <!-- App -->
+  <main id="app">
+    <div class="hero">
+      <span class="badge">
+        <svg viewBox="0 0 994 953" xmlns="http://www.w3.org/2000/svg"><rect width="993.958" height="952.543" rx="204.92" fill="currentColor"/></svg>
+        Archestra mini app
+      </span>
+      <h1>Task Tracker</h1>
+      <p>A shared list saved in Archestra&rsquo;s data layer &mdash; everyone sees the same tasks.</p>
+    </div>
+
+    <div class="panel">
+      <div class="add-row">
+        <input id="taskInput" class="arch-input" type="text" placeholder="What needs doing?" autocomplete="off" />
+        <button id="addBtn" class="arch-btn arch-btn--primary" type="button">Add task</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <span class="stats" id="statLine">Loading&hellip;</span>
+      <div class="progress"><span id="progressBar"></span></div>
+    </div>
+
+    <ul class="tasks" id="taskList"></ul>
+    <div class="empty" id="emptyState" hidden><span class="big">&#10003;</span>No tasks yet &mdash; add your first one above.</div>
+  </main>
+
+  <div id="toast"></div>
+
+  <section id="diag" hidden>
+    <div class="diag-head">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Storage diagnostics
+    </div>
+    <div class="diag-body">
+      <pre id="diagLog"></pre>
+      <div class="diag-actions">
+        <button type="button" id="diagRetry">Retry connection</button>
+        <button type="button" id="diagCopy">Copy details</button>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      // ----- Intro loader (bound immediately, no SDK dependency) -----
+      const intro = document.getElementById('intro');
+      const app = document.getElementById('app');
+      let dismissed = false;
+      function dismissIntro() {
+        if (dismissed) return;
+        dismissed = true;
+        intro.classList.add('hide');
+        app.classList.add('show');
+        setTimeout(() => { intro.style.display = 'none'; }, 750);
+        const input = document.getElementById('taskInput');
+        if (input) input.focus();
+      }
+      document.getElementById('skipBtn').addEventListener('click', dismissIntro);
+      setTimeout(dismissIntro, 5200);
+
+      // ----- Elements -----
+      const listEl = document.getElementById('taskList');
+      const emptyEl = document.getElementById('emptyState');
+      const statEl = document.getElementById('statLine');
+      const barEl = document.getElementById('progressBar');
+      const input = document.getElementById('taskInput');
+      const addBtn = document.getElementById('addBtn');
+      const toastEl = document.getElementById('toast');
+
+      let store = null, me = { id: 'anon', name: 'Someone' }, ready = false;
+      let toastTimer;
+
+      // ----- Diagnostics: surface the FULL traceback of any storage failure in-app -----
+      const diagEl = document.getElementById('diag');
+      const diagLog = document.getElementById('diagLog');
+      const diagLines = [];
+      function fmtErr(err) {
+        if (err == null) return String(err);
+        if (typeof err === 'string') return err;
+        const parts = [];
+        if (err.name || err.message) parts.push((err.name || 'Error') + ': ' + (err.message || ''));
+        if (err.code) parts.push('code: ' + err.code);
+        if (err.url) parts.push('url: ' + err.url);
+        if (err.stack) parts.push('\n' + err.stack);
+        try {
+          const extra = {};
+          for (const k of Object.keys(err)) { if (!['name','message','stack','code','url'].includes(k)) extra[k] = err[k]; }
+          if (Object.keys(extra).length) parts.push('detail: ' + JSON.stringify(extra));
+        } catch (_) {}
+        if (!parts.length) { try { return JSON.stringify(err); } catch (_) { return String(err); } }
+        return parts.join('\n');
+      }
+      function diag(label, err) {
+        const stamp = new Date().toISOString();
+        const block = '[' + stamp + '] ' + label + (err !== undefined ? '\n' + fmtErr(err) : '');
+        diagLines.push(block);
+        diagLog.textContent = diagLines.join('\n\n');
+        diagEl.hidden = false;
+        console.error(label, err);
+      }
+      window.addEventListener('error', e => diag('Uncaught error', e.error || e.message));
+      window.addEventListener('unhandledrejection', e => diag('Unhandled promise rejection', e.reason));
+
+      document.getElementById('diagRetry').addEventListener('click', () => { diag('Retrying storage connection\u2026'); connectStorage(); });
+      document.getElementById('diagCopy').addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(diagLog.textContent); toast('Diagnostics copied.'); }
+        catch (_) { toast('Copy failed \u2014 select the text manually.'); }
+      });
+      function toast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3200);
+      }
+      function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+      }
+
+      async function loadTasks() {
+        const entries = await store.list();
+        return entries
+          .filter(e => e.key.startsWith('task:') && e.value && typeof e.value === 'object')
+          .map(e => ({ key: e.key, revision: e.revision, ...e.value }))
+          .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      }
+
+      function render(tasks) {
+        listEl.innerHTML = '';
+        if (!tasks.length) {
+          emptyEl.hidden = false;
+          statEl.textContent = 'No tasks';
+          barEl.style.width = '0%';
+          return;
+        }
+        emptyEl.hidden = true;
+        const done = tasks.filter(t => t.done).length;
+        statEl.textContent = done + ' of ' + tasks.length + ' done';
+        barEl.style.width = Math.round((done / tasks.length) * 100) + '%';
+        for (const t of tasks) {
+          const li = document.createElement('li');
+          li.className = 'task' + (t.done ? ' done' : '');
+          li.innerHTML =
+            '<input type="checkbox" class="check"' + (t.done ? ' checked' : '') + ' />' +
+            '<span class="label">' + esc(t.text) + '</span>' +
+            '<span class="meta">' + esc(t.by || '') + '</span>' +
+            '<button class="del" type="button" aria-label="Delete">&times;</button>';
+          li.querySelector('.check').addEventListener('change', () => toggleTask(t));
+          li.querySelector('.del').addEventListener('click', () => deleteTask(t));
+          listEl.appendChild(li);
+        }
+      }
+
+      async function refresh() {
+        if (!ready) return;
+        try { render(await loadTasks()); }
+        catch (e) { toast('Could not load tasks.'); diag('store.list() failed while loading tasks', e); }
+      }
+
+      async function addTask() {
+        const text = input.value.trim();
+        if (!text) { input.focus(); return; }
+        if (!ready) { toast('Still connecting to storage&hellip; try again in a moment.'); return; }
+        input.value = '';
+        addBtn.disabled = true;
+        const key = 'task:' + crypto.randomUUID();
+        try {
+          await store.set(key, { text, done: false, by: me.name, createdAt: Date.now() });
+          await refresh();
+        } catch (e) {
+          input.value = text;
+          toast('Could not save the task. Please try again.');
+          diag('store.set() failed while adding task "' + text + '"', e);
+        } finally {
+          addBtn.disabled = false;
+          input.focus();
+        }
+      }
+
+      async function toggleTask(t) {
+        try {
+          await store.set(t.key, { text: t.text, done: !t.done, by: t.by, createdAt: t.createdAt }, { ifRevision: t.revision });
+        } catch (e) { diag('store.set() failed while toggling task ' + t.key, e); }
+        await refresh();
+      }
+
+      async function deleteTask(t) {
+        try { await store.delete(t.key); } catch (e) { toast('Could not delete the task.'); diag('store.delete() failed for ' + t.key, e); }
+        await refresh();
+      }
+
+      // Bind interaction handlers IMMEDIATELY so clicks never no-op while the SDK loads.
+      addBtn.addEventListener('click', addTask);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+
+      // Connect to storage once the SDK is ready. Each step is checked and logged
+      // so a failure shows exactly where it broke, with the full traceback.
+      let pollTimer = null;
+
+      // Per the SDK contract window.archestra is present SYNCHRONOUSLY and you
+      // await archestra.ready. We still poll briefly as a safety net for hosts that
+      // attach it a tick late, and we report a full snapshot so a genuine absence is diagnosable.
+      function sdkSnapshot() {
+        try {
+          const a = window.archestra;
+          return 'typeof window.archestra=' + (typeof a) +
+            '; truthy=' + (!!a) +
+            (a ? '; keys=[' + Object.keys(a).join(', ') + ']; hasReady=' + ('ready' in a) : '') +
+            '; inIframe=' + (window.top !== window.self) +
+            '; readyState=' + document.readyState;
+        } catch (e) { return 'snapshot error: ' + (e && e.message); }
+      }
+
+      function waitForSdk(timeoutMs) {
+        return new Promise((resolve, reject) => {
+          if (window.archestra) return resolve(window.archestra);
+          const started = Date.now();
+          const iv = setInterval(() => {
+            if (window.archestra) { clearInterval(iv); resolve(window.archestra); }
+            else if (Date.now() - started > timeoutMs) {
+              clearInterval(iv);
+              reject(new Error('window.archestra was not injected within ' + timeoutMs + 'ms.\nSnapshot: ' + sdkSnapshot()));
+            }
+          }, 50);
+        });
+      }
+
+      async function connectStorage() {
+        try {
+          diag('Locating the Archestra SDK\u2026 ' + sdkSnapshot());
+          const sdk = await waitForSdk(15000);
+          diag('SDK object found; awaiting sdk.ready\u2026 (ready is a ' + (typeof sdk.ready) + ')');
+          await sdk.ready;
+          me = sdk.user || me;
+          diag('SDK ready. Viewer: ' + (me && me.name ? me.name + ' (' + me.id + ')' : 'unknown') +
+            '. storage=' + (typeof sdk.storage) + ', shared=' + (sdk.storage ? typeof sdk.storage.shared : 'n/a'));
+          if (!sdk.storage || !sdk.storage.shared) {
+            throw new Error('sdk.storage.shared is unavailable. SDK keys: [' + Object.keys(sdk).join(', ') + ']');
+          }
+          store = sdk.storage.shared;
+          const probe = await store.list();
+          diag('Connected to shared storage. list() returned ' + (Array.isArray(probe) ? probe.length + ' entries.' : 'a non-array value: ' + JSON.stringify(probe)));
+          ready = true;
+          diagEl.hidden = true;
+          diagLines.length = 0;
+          statEl.textContent = 'Loading\u2026';
+          await refresh();
+          if (!pollTimer) pollTimer = setInterval(refresh, 5000);
+        } catch (e) {
+          ready = false;
+          statEl.textContent = 'Storage unavailable';
+          toast('Could not connect to Archestra storage \u2014 see diagnostics below.');
+          diag('Storage connection failed', e);
+        }
+      }
+
+      // Start after full load so a late-attached SDK is already present.
+      if (document.readyState === 'complete') connectStorage();
+      else window.addEventListener('load', connectStorage);
+    })();
+  </script>
+</body>
+</html>

@@ -365,6 +365,8 @@ class OrganizationModel {
       onboardingComplete: org.onboardingComplete,
       compressionScope: org.compressionScope,
       convertToolResultsToToon: org.convertToolResultsToToon,
+      onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
+      onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,

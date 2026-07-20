@@ -23,6 +23,15 @@ export const ALL_ARCHESTRA_TOKEN_PREFIXES = [
   ...LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 ] as const;
 
+/**
+ * Constraints enforced by the Better Auth api-key plugin on API key creation.
+ * Pinned explicitly in the backend plugin config and mirrored in the frontend
+ * create-API-key form validation so limits and error copy cannot drift.
+ */
+export const API_KEY_MIN_EXPIRATION_DAYS = 1;
+export const API_KEY_MAX_EXPIRATION_DAYS = 365;
+export const API_KEY_MAX_NAME_LENGTH = 32;
+
 export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
 export const DEFAULT_ADMIN_PASSWORD = "password";
 
@@ -97,6 +106,15 @@ export const MCP_OAUTH_CLIENT_CREDENTIALS_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
  * Format: {mcpServerName}__{toolName}
  */
 export const MCP_SERVER_TOOL_NAME_SEPARATOR = "__";
+
+/**
+ * The one placeholder through which an MCP server's mutable display name can
+ * reach a custom K8s deployment spec (`deploymentSpecYaml`). A catalog rename
+ * flags installs of such catalogs `reinstallRequired` instead of being a pure
+ * DB cascade. Must match the `${archestra.*}` placeholder syntax in the
+ * backend's k8s-yaml-generator (pinned by a backend test).
+ */
+export const SERVER_NAME_PLACEHOLDER = "${archestra.server_name}";
 
 export const WEBSITE_URL = "https://archestra.ai";
 export const GITHUB_REPO_URL = "https://github.com/archestra-ai/archestra";

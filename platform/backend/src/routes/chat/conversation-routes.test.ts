@@ -68,6 +68,58 @@ describe("chat conversation and message routes", () => {
     });
   });
 
+  test("hides an app-opened chat from the list until the user writes into it", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    // What opening an app seeds (services/apps/app-chat-conversation.ts): an
+    // `app_open` conversation whose only message is the assistant render.
+    const draft = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "Archestra PM",
+      origin: "app_open",
+    });
+    await MessageModel.create({
+      conversationId: draft.id,
+      role: "assistant",
+      content: { id: uuidv7(), role: "assistant", parts: [] },
+    });
+
+    const listIds = async (search?: string) => {
+      const res = await app.inject({
+        method: "GET",
+        url: search
+          ? `/api/chat/conversations?search=${encodeURIComponent(search)}`
+          : "/api/chat/conversations",
+      });
+      expect(res.statusCode).toBe(200);
+      return (res.json() as Array<{ id: string }>).map((c) => c.id);
+    };
+
+    // Only viewed, never written into → not a saved chat: absent from the
+    // sidebar list and from search (its title would otherwise match).
+    expect(await listIds()).not.toContain(draft.id);
+    expect(await listIds("Archestra PM")).not.toContain(draft.id);
+
+    // The first user-written message is the "keep it" signal.
+    await MessageModel.create({
+      conversationId: draft.id,
+      role: "user",
+      content: {
+        id: uuidv7(),
+        role: "user",
+        parts: [{ type: "text", text: "add a ticket" }],
+      },
+    });
+    expect(await listIds()).toContain(draft.id);
+  });
+
   test("pins and unpins a conversation", async ({ makeAgent }) => {
     const agent = await makeAgent({
       organizationId,

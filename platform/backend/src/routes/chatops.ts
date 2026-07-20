@@ -16,11 +16,11 @@ import {
   isSsoConfigured,
 } from "@/agents/chatops/auto-provision";
 import {
-  clearChannelThreadActive,
   isChannelThreadActive,
   isThreadMuteCommand,
   markChannelThreadActive,
   mightBeAddressedMuteCommand,
+  muteChannelThread,
   resolveChannelGateAction,
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -91,7 +91,14 @@ const captureSlackRawBody = async (
  */
 const slackWebhookDedup = new EventDedupMap();
 
-const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+/**
+ * MS Teams incoming webhook, split out into its own plugin so the optional
+ * public-endpoints listener (ARCHESTRA_PUBLIC_ENDPOINTS_PORT) can serve this
+ * endpoint without the rest of the chatops routes (Slack webhooks, management
+ * APIs). It is also registered by chatopsRoutes below, so the main API port
+ * always serves it too.
+ */
+export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * MS Teams webhook endpoint
    *
@@ -631,6 +638,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
+};
+
+const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(msTeamsWebhookRoutes);
 
   /**
    * Slack webhook endpoint
@@ -2086,7 +2097,7 @@ async function muteTeamsThreadAndNotify(
   context: TurnContext,
   activation: { provider: "ms-teams"; channelId: string; threadId: string },
 ): Promise<void> {
-  if (await clearChannelThreadActive(activation)) {
+  if (await muteChannelThread(activation)) {
     await context.sendActivity(buildThreadMutedNotice());
   }
 }

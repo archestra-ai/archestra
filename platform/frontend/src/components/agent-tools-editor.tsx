@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -39,13 +40,20 @@ import {
   useCatalogTools,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
+import {
+  useMcpServers,
+  useMcpServersGroupedByCatalog,
+} from "@/lib/mcp/mcp-server.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
   computeMcpEnvConflicts,
+  computeSharedPersonalPins,
+  getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
   isCatalogInEnvironment,
+  type SharedPersonalPin,
+  shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
@@ -93,6 +101,14 @@ export interface AgentToolsEditorRef {
   }) => Promise<void>;
   /** Unselect every MCP catalog flagged as not belonging to the agent's environment. */
   removeIncompatibleTools: () => void;
+  /** Switch the named catalogs' credential from a personal static pin to resolve-at-call-time. */
+  convertPersonalPinsToDynamic: (catalogIds: string[]) => void;
+  /**
+   * True while the catalog, assigned-tool, or credential queries are still
+   * loading, so the personal-pin set is incomplete. The save guard fails closed
+   * on this rather than treating an incomplete "no personal pins" as safe.
+   */
+  isCredentialClassificationLoading: () => boolean;
 }
 
 interface AgentToolsEditorProps {
@@ -125,6 +141,12 @@ interface AgentToolsEditorProps {
    * setter) to avoid effect loops.
    */
   onConflictsChange?: (conflicts: McpEnvConflict[]) => void;
+  /**
+   * Reports the active tools currently pinned to a still-resolvable personal
+   * connection — the pins that would be shared if the agent is team/org scope.
+   * Pass a referentially-stable callback (e.g. a `useState` setter).
+   */
+  onSharedPersonalPinsChange?: (pins: SharedPersonalPin[]) => void;
   /** "pills" (default): compact pills + dropdown combobox. "cards": inline grid of MCP server cards. */
   layout?: "pills" | "cards";
   /** When true, the "Add MCP server" combobox starts open. */
@@ -152,6 +174,7 @@ export const AgentToolsEditor = forwardRef<
     agentEnvironmentId,
     agentEnvironmentName,
     onConflictsChange,
+    onSharedPersonalPinsChange,
     layout = "pills",
     openComboboxOnMount,
     includeAppCatalogs,
@@ -169,6 +192,7 @@ export const AgentToolsEditor = forwardRef<
       agentEnvironmentId={agentEnvironmentId}
       agentEnvironmentName={agentEnvironmentName}
       onConflictsChange={onConflictsChange}
+      onSharedPersonalPinsChange={onSharedPersonalPinsChange}
       layout={layout}
       openComboboxOnMount={openComboboxOnMount}
       includeAppCatalogs={includeAppCatalogs}
@@ -191,6 +215,7 @@ const AgentToolsEditorContent = forwardRef<
     agentEnvironmentId = null,
     agentEnvironmentName,
     onConflictsChange,
+    onSharedPersonalPinsChange,
     layout = "pills",
     openComboboxOnMount,
     includeAppCatalogs = false,
@@ -198,6 +223,8 @@ const AgentToolsEditorContent = forwardRef<
   ref,
 ) {
   const { catalogName } = useArchestraMcpIdentity();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
@@ -213,6 +240,24 @@ const AgentToolsEditorContent = forwardRef<
     assignmentScope,
     assignmentTeamIds,
   });
+  // Unfiltered accessible installs, used to classify a pin's scope/owner. Not
+  // the scope-filtered `allCredentials` above: that answers "what can be picked
+  // for this scope" and drops a personal pin whose owner isn't in the target
+  // group — but such a pin still persists on the agent and gets shared, so it
+  // must still be classified (and warned about). Scope-independent, so it does
+  // not refetch on a scope flip.
+  const { data: accessibleServers = [], isLoading: credentialsLoading } =
+    useMcpServers();
+  const accessibleServersByCatalog = useMemo(() => {
+    const map = new Map<string, typeof accessibleServers>();
+    for (const server of accessibleServers) {
+      if (!server.catalogId) continue;
+      const list = map.get(server.catalogId) ?? [];
+      list.push(server);
+      map.set(server.catalogId, list);
+    }
+    return map;
+  }, [accessibleServers]);
 
   // Fetch tool counts for all catalog items to enable sorting
   const toolCountQueries = useQueries({
@@ -239,7 +284,8 @@ const AgentToolsEditorContent = forwardRef<
   // Fetch assigned tools for this resource (only when editing an existing one).
   // Use the resource-scoped endpoint so MCP gateway members do not need the
   // broader tool-policy table permission just to edit their gateway tools.
-  const { data: assignedToolsData = [] } = useProfileToolsWithIds(agentId);
+  const { data: assignedToolsData = [], isLoading: assignedToolsLoading } =
+    useProfileToolsWithIds(agentId);
 
   // Group assigned tools by catalogId
   const assignedToolsByCatalog = useMemo(() => {
@@ -283,6 +329,14 @@ const AgentToolsEditorContent = forwardRef<
 
   // State counter to force re-renders when pendingChangesRef updates
   const [pendingVersion, setPendingVersion] = useState(0);
+
+  // Per-catalog remount counter. A bulk credential conversion writes
+  // pendingChangesRef directly, but each pill owns its credential selection in
+  // mount-time state; bumping a catalog's epoch remounts its pill so it re-seeds
+  // from the freshly-written pending change instead of showing the stale pin.
+  const [credentialEpoch, setCredentialEpoch] = useState<
+    Record<string, number>
+  >({});
 
   // Track which catalog pill should auto-open its popover after being added
   const [autoOpenCatalogId, setAutoOpenCatalogId] = useState<string | null>(
@@ -407,6 +461,73 @@ const AgentToolsEditorContent = forwardRef<
     lastReportedSelectionKeyRef.current = key;
     onSelectedToolIdsChange(effectiveSelectedToolIds);
   }, [effectiveSelectedToolIds, onSelectedToolIdsChange]);
+
+  // Each active catalog's effective credential: the pending edit when the user
+  // touched it, else the saved assignment. `pinnedServerId` is the static pin
+  // (null when it resolves at call time).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingVersion triggers re-computation when pendingChangesRef updates
+  const pinnedCatalogs = useMemo(() => {
+    return catalogItems.flatMap((catalog) => {
+      const pending = pendingChangesRef.current.get(catalog.id);
+      const assigned = assignedToolsByCatalog.get(catalog.id) ?? [];
+      const selectedCount = pending
+        ? pending.selectedToolIds.size
+        : assigned.length;
+      if (selectedCount === 0) return [];
+      const effectiveCred = pending
+        ? pending.credentialSourceId
+        : assigned[0]?.credentialResolutionMode === "static"
+          ? (assigned[0]?.mcpServerId ?? null)
+          : DYNAMIC_CREDENTIAL_VALUE;
+      const pinnedServerId =
+        effectiveCred && effectiveCred !== DYNAMIC_CREDENTIAL_VALUE
+          ? effectiveCred
+          : null;
+      return [
+        {
+          catalogId: catalog.id,
+          pinnedServerId,
+          resolvableServers: accessibleServersByCatalog.get(catalog.id) ?? [],
+        },
+      ];
+    });
+  }, [
+    catalogItems,
+    assignedToolsByCatalog,
+    accessibleServersByCatalog,
+    pendingVersion,
+  ]);
+
+  // The pins the dialog warns about when the agent is (being made) team/org
+  // scope: a static pin whose server is a `personal` install. A pin the user
+  // already switched back to resolve-at-call-time drops out because its
+  // effective credential is no longer a server id.
+  const sharedPersonalPins = useMemo(
+    () => computeSharedPersonalPins(pinnedCatalogs, currentUserId),
+    [pinnedCatalogs, currentUserId],
+  );
+
+  // Until the catalog, assigned-tool, and credential queries have all settled,
+  // the pin set and its scopes are incomplete — a still-loading assigned-tools
+  // query hides a pin, a still-loading credential query hides its scope. The
+  // save guard fails closed on this rather than treat an incomplete "no
+  // personal pins" as safe to share.
+  const credentialClassificationLoading =
+    isPending || assignedToolsLoading || credentialsLoading;
+
+  const lastReportedPinsKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onSharedPersonalPinsChange) return;
+    const key = sharedPersonalPins
+      .map(
+        (p) => `${p.catalogId}:${p.mcpName}:${p.ownerEmail}:${p.isCurrentUser}`,
+      )
+      .sort()
+      .join("|");
+    if (lastReportedPinsKeyRef.current === key) return;
+    lastReportedPinsKeyRef.current = key;
+    onSharedPersonalPinsChange(sharedPersonalPins);
+  }, [sharedPersonalPins, onSharedPersonalPinsChange]);
 
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({
@@ -550,6 +671,38 @@ const AgentToolsEditorContent = forwardRef<
         });
       }
     },
+    convertPersonalPinsToDynamic: (catalogIds) => {
+      for (const catalogId of catalogIds) {
+        const catalog = catalogItems.find((c) => c.id === catalogId);
+        if (!catalog) continue;
+        const pending = pendingChangesRef.current.get(catalogId);
+        // Keep the tools; only swap the credential to resolve-at-call-time. An
+        // untouched pin has no pending entry, so seed the selection from the
+        // saved assignment or saveChanges would skip the catalog entirely.
+        const selectedToolIds = pending
+          ? pending.selectedToolIds
+          : new Set(
+              (assignedToolsByCatalog.get(catalogId) ?? []).map(
+                (at) => at.tool.id,
+              ),
+            );
+        registerPendingChanges(catalogId, {
+          selectedToolIds,
+          credentialSourceId: DYNAMIC_CREDENTIAL_VALUE,
+          catalogItem: catalog,
+          selectAll: false,
+          isActive: pending?.isActive ?? true,
+        });
+      }
+      setCredentialEpoch((prev) => {
+        const next = { ...prev };
+        for (const catalogId of catalogIds) {
+          next[catalogId] = (next[catalogId] ?? 0) + 1;
+        }
+        return next;
+      });
+    },
+    isCredentialClassificationLoading: () => credentialClassificationLoading,
   }));
 
   // Compute which catalog IDs are "selected" (have tools assigned or pending)
@@ -661,13 +814,16 @@ const AgentToolsEditorContent = forwardRef<
         ? pending.selectedToolIds.size
         : (assignedToolsByCatalog.get(catalog.id)?.length ?? 0);
       const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
-      const hasNoTools = totalCount === 0;
-      const hasNoCredentials =
-        !isCredentialLessCatalogType(catalog.serverType) &&
-        !allCredentials?.[catalog.id]?.length;
-      const isEnvIncompatible =
-        environmentScopingEnabled && !isEnvCompatible(catalog);
-      const isDisabled = hasNoTools || hasNoCredentials || isEnvIncompatible;
+      const hasResolvableInstall =
+        isCredentialLessCatalogType(catalog.serverType) ||
+        !!allCredentials?.[catalog.id]?.length;
+      const gate = getCatalogAssignmentGate({
+        hasDiscoveredTools: totalCount > 0,
+        hasResolvableInstall,
+        isEnvIncompatible:
+          environmentScopingEnabled && !isEnvCompatible(catalog),
+        environmentName: agentEnvironmentName,
+      });
       const displayName =
         catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name;
       return {
@@ -682,23 +838,15 @@ const AgentToolsEditorContent = forwardRef<
             size={16}
           />
         ),
-        badge: isDisabled
+        badge: gate.disabled
           ? undefined
-          : assignedCount > 0
-            ? `${assignedCount}/${totalCount}`
-            : `${totalCount} tools`,
-        disabled: isDisabled,
-        disabledReason: isEnvIncompatible
-          ? `Not in ${
-              agentEnvironmentName
-                ? `the "${agentEnvironmentName}" environment`
-                : "the Default environment"
-            }`
-          : hasNoTools
-            ? "Not installed"
-            : hasNoCredentials
-              ? "Not installed"
-              : undefined,
+          : gate.unavailable
+            ? "Not connected"
+            : assignedCount > 0
+              ? `${assignedCount}/${totalCount}`
+              : `${totalCount} tools`,
+        disabled: gate.disabled,
+        disabledReason: gate.disabledReason,
       };
     });
   }, [
@@ -745,11 +893,15 @@ const AgentToolsEditorContent = forwardRef<
             ? pending.selectedToolIds.size
             : (assignedToolsByCatalog.get(catalog.id)?.length ?? 0);
           const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
-          const hasNoTools = totalCount === 0;
-          const hasNoCredentials =
-            !isCredentialLessCatalogType(catalog.serverType) &&
-            !allCredentials?.[catalog.id]?.length;
-          const isDisabled = hasNoTools || hasNoCredentials;
+          // The cards layout is not environment-scoped (McpServerCard has no
+          // reason slot), so tool discovery is the only assignability gate here.
+          const gate = getCatalogAssignmentGate({
+            hasDiscoveredTools: totalCount > 0,
+            hasResolvableInstall:
+              isCredentialLessCatalogType(catalog.serverType) ||
+              !!allCredentials?.[catalog.id]?.length,
+            isEnvIncompatible: false,
+          });
 
           return (
             <McpServerCard
@@ -761,7 +913,8 @@ const AgentToolsEditorContent = forwardRef<
                   : catalog.name
               }
               isSelected={isSelected}
-              isDisabled={isDisabled}
+              isDisabled={gate.disabled}
+              unavailable={gate.unavailable}
               assignedCount={assignedCount}
               totalCount={totalCount}
               onToggle={() => handleCatalogToggle(catalog.id)}
@@ -777,7 +930,7 @@ const AgentToolsEditorContent = forwardRef<
       <div className="flex flex-wrap gap-2">
         {selectedCatalogs.map((catalog) => (
           <McpServerPill
-            key={catalog.id}
+            key={`${catalog.id}:${credentialEpoch[catalog.id] ?? 0}`}
             catalogItem={catalog}
             displayName={
               catalog.id === ARCHESTRA_MCP_CATALOG_ID
@@ -819,6 +972,7 @@ function McpServerCard({
   displayName,
   isSelected,
   isDisabled,
+  unavailable,
   assignedCount,
   totalCount,
   onToggle,
@@ -827,6 +981,7 @@ function McpServerCard({
   displayName: string;
   isSelected: boolean;
   isDisabled: boolean;
+  unavailable: boolean;
   assignedCount: number;
   totalCount: number;
   onToggle: () => void;
@@ -848,9 +1003,11 @@ function McpServerCard({
       <span className="text-[10px] text-muted-foreground">
         {isDisabled
           ? "Not installed"
-          : isSelected
-            ? `${assignedCount}/${totalCount} tools`
-            : `${totalCount} tools`}
+          : unavailable
+            ? "Not connected"
+            : isSelected
+              ? `${assignedCount}/${totalCount} tools`
+              : `${totalCount} tools`}
       </span>
     </button>
   );
@@ -955,25 +1112,19 @@ function McpServerPill({
   }, [currentAssignedToolIdsKey]);
 
   useEffect(() => {
-    // Wait until credentials load so a valid static pin isn't reset to
-    // dynamic while the list is still empty.
-    if (!credentials) {
-      return;
-    }
-
-    if (selectedCredential === DYNAMIC_CREDENTIAL_VALUE) {
-      return;
-    }
-
     if (
-      selectedCredential &&
-      mcpServers.some((server) => server.id === selectedCredential)
+      shouldResetCredentialPin({
+        credentialsLoaded: !!credentials,
+        selectionIsDynamic: selectedCredential === DYNAMIC_CREDENTIAL_VALUE,
+        pinnedServerId:
+          selectedCredential && selectedCredential !== DYNAMIC_CREDENTIAL_VALUE
+            ? selectedCredential
+            : null,
+        resolvableServerIds: mcpServers.map((server) => server.id),
+      })
     ) {
-      return;
+      setSelectedCredential(DYNAMIC_CREDENTIAL_VALUE);
     }
-
-    // Unset or stale selection — fall back to resolve-at-call-time.
-    setSelectedCredential(DYNAMIC_CREDENTIAL_VALUE);
   }, [credentials, mcpServers, selectedCredential]);
 
   // Auto-select all tools when selectAll flag is set and tools finish loading.
@@ -1013,15 +1164,6 @@ function McpServerPill({
     return false;
   }, [selectedToolIds, currentAssignedToolIds]);
 
-  // Don't show MCP server if no credentials are available (except for builtin
-  // servers and in-process Apps, which need neither an install nor credentials)
-  if (
-    !isCredentialLessCatalogType(catalogItem.serverType) &&
-    mcpServers.length === 0
-  ) {
-    return null;
-  }
-
   const assignedCount = assignedTools.length;
   const totalCount = allTools.length;
   const displayedCount = hasPendingChanges
@@ -1029,13 +1171,14 @@ function McpServerPill({
     : assignedCount;
   const isEmpty = displayedCount === 0;
 
-  // Show credential selector for non-builtin, non-App, non-Playwright servers
-  // that have credentials available
+  // Show the connection selector for non-builtin, non-App, non-Playwright
+  // servers. It always offers resolve-at-call-time, so a server with no
+  // connection that resolves for the caller still shows it — that is how the
+  // dynamic per-caller resolution (and any pinned-but-unavailable connection)
+  // stays visible for an assignment made without a local install.
   const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
   const showCredentialSelector =
-    !isCredentialLessCatalogType(catalogItem.serverType) &&
-    !isPlaywright &&
-    mcpServers.length > 0;
+    !isCredentialLessCatalogType(catalogItem.serverType) && !isPlaywright;
   return (
     <McpServerPillShell
       icon={
@@ -1063,11 +1206,6 @@ function McpServerPill({
       {showCredentialSelector && (
         <div className="p-4 border-b space-y-2 shrink-0">
           <Label className="text-sm font-medium">Connect on behalf of</Label>
-          <p className="text-xs text-muted-foreground">
-            By default, credentials resolve at call time per the server's
-            default credential setting. Pin a specific connection to always use
-            it for these tools instead.
-          </p>
           <TokenSelect
             catalogId={catalogItem.id}
             assignmentScope={assignmentScope}

@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 interface CopyableCodeProps {
@@ -29,7 +30,7 @@ export function CopyableCode({
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(value);
+    await copyToClipboard(value);
     setCopied(true);
     toast.success(toastMessage);
     setTimeout(() => setCopied(false), 2000);

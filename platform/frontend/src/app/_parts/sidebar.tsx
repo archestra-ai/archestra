@@ -20,6 +20,7 @@ import {
   FolderKanban,
   Github,
   Inbox,
+  KeyRound,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -88,11 +89,31 @@ interface NavItem {
   dotKey?: NavDotKey;
   /** Chip label shown when `beta` is set; defaults to "New". */
   badgeLabel?: string;
+  /**
+   * Pages whose permissions gate this item, for items whose `url` isn't in
+   * `requiredPagePermissionsMap` (e.g. a landing page that redirects between
+   * differently-gated tabs). Visible when ANY of them is permitted; without
+   * this, gating falls back to `url`.
+   */
+  permissionUrls?: string[];
 }
 
 interface NavGroup {
   label: string;
   items: NavItem[];
+}
+
+function isNavItemPermitted(
+  item: NavItem,
+  permissionMap: Record<string, boolean>,
+): boolean {
+  if (item.permissionUrls) {
+    // No `?? true` fallback here: these URLs are asserted to be in
+    // requiredPagePermissionsMap, so a typo should hide the item, not
+    // silently show it to everyone.
+    return item.permissionUrls.some((url) => permissionMap[url] === true);
+  }
+  return permissionMap[item.url] ?? true;
 }
 
 type SidebarMode = "chats" | "studio";
@@ -141,14 +162,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
   ) {
     return "chats";
   }
-  const studioPrefixes = [
-    "/agents",
-    "/scheduled-tasks",
-    "/mcp",
-    "/llm",
-    "/knowledge",
-    "/audit",
-  ];
+  const studioPrefixes = ["/agents", "/mcp", "/llm", "/knowledge", "/audit"];
   if (
     studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {
@@ -281,14 +295,6 @@ const contentNavGroups: NavGroup[] = [
         icon: Waypoints,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/gateways"),
-        subItems: [
-          {
-            title: "Credentials",
-            url: "/mcp/credentials/oauth-clients",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/credentials"),
-          },
-        ],
       },
     ],
   },
@@ -300,14 +306,6 @@ const contentNavGroups: NavGroup[] = [
         url: "/llm/proxies",
         icon: Network,
         customIsActive: (pathname: string) => pathname === "/llm/proxies",
-        subItems: [
-          {
-            title: "Credentials",
-            url: "/llm/credentials/virtual-keys",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/credentials"),
-          },
-        ],
       },
       {
         title: "Model Providers",
@@ -317,6 +315,17 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/model-providers") ||
           pathname.startsWith("/llm/models"),
         dotKey: "nav:model-providers",
+      },
+      {
+        title: "Client Credentials",
+        url: "/credentials",
+        icon: KeyRound,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/credentials"),
+        permissionUrls: [
+          "/credentials/virtual-keys",
+          "/credentials/oauth-clients",
+        ],
       },
       {
         title: "Costs & Limits",
@@ -330,19 +339,9 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "Knowledge",
-        url: "/knowledge/knowledge-bases",
+        url: "/knowledge/connectors",
         icon: Database,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/knowledge") &&
-          !pathname.startsWith("/knowledge/connectors"),
-        subItems: [
-          {
-            title: "Connectors",
-            url: "/knowledge/connectors",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/knowledge/connectors"),
-          },
-        ],
+        customIsActive: (pathname: string) => pathname.startsWith("/knowledge"),
       },
       {
         title: "Logs",
@@ -444,8 +443,8 @@ const NavPrimary = ({
     </SidebarMenuItem>
   );
 
-  const permittedHeaderItems = items.filter(
-    (item) => permissionMap[item.url] ?? true,
+  const permittedHeaderItems = items.filter((item) =>
+    isNavItemPermitted(item, permissionMap),
   );
   // In Studio mode the header items don't include New Chat, and when collapsed
   // the Chats/Studio toggle is hidden — so surface a collapsed-only New Chat in
@@ -492,8 +491,8 @@ const NavPrimary = ({
           </SidebarMenuButton>
         </SidebarMenuItem>
         {groups.map((group) => {
-          const permittedItems = group.items.filter(
-            (item) => permissionMap[item.url] ?? true,
+          const permittedItems = group.items.filter((item) =>
+            isNavItemPermitted(item, permissionMap),
           );
           if (permittedItems.length === 0) return null;
           return (
@@ -527,8 +526,8 @@ const NavSecondary = ({
   starCount: string;
   className?: string;
 }) => {
-  const permittedItems = items.filter(
-    (item) => permissionMap[item.url] ?? true,
+  const permittedItems = items.filter((item) =>
+    isNavItemPermitted(item, permissionMap),
   );
 
   return (

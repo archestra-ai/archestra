@@ -13,7 +13,10 @@ import type z from "zod";
 import config from "@/config";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import {
+  constructLegacyMcpDeploymentName,
+  constructLegacyMultitenantMcpDeploymentName,
   ensureStringIsRfc1123Compliant,
+  isK8sConflictError,
   isK8sNotFoundError,
   sanitizeLabelValue,
   sanitizeMetadataLabels,
@@ -36,7 +39,10 @@ import {
   buildManagedCiliumNetworkPolicy,
   buildManagedGkeFqdnNetworkPolicy,
   buildManagedNetworkPolicy,
+  buildUnrestrictedFloorAwsApplicationNetworkPolicy,
+  buildUnrestrictedFloorPolicy,
   constructManagedNetworkPolicyName,
+  isAwsApplicationNetworkPolicyProvider,
   shouldManageK8sNetworkPolicy,
   shouldUseAwsApplicationNetworkPolicy,
   shouldUseCiliumNetworkPolicy,
@@ -187,14 +193,6 @@ async function fetchPlatformPodSpec(
     platformPodSpecCache = { fetched: true, spec: null };
     return null;
   }
-}
-
-function isK8sConflictError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  return (
-    ("statusCode" in error && error.statusCode === 409) ||
-    ("code" in error && error.code === 409)
-  );
 }
 
 function resetPlatformPodSpecCache(): void {
@@ -361,25 +359,36 @@ export default class K8sDeployment {
   }
 
   /**
-   * Constructs a valid Kubernetes deployment name for an MCP server.
+   * Returns the Kubernetes deployment name for an MCP server.
    *
-   * Multi-tenant catalogs share one deployment per catalog (named after the
-   * catalog so all caller mcp_server rows alias the same pod). Single-tenant
-   * (default) gets one deployment per mcp_server row.
+   * Deployment identity is FROZEN: the stored `deploymentName` (written once
+   * at creation, or adopted from the live cluster by the startup adopt pass)
+   * always wins, so a rename never re-derives — and never orphans — the
+   * running deployment. The name-derived recompute is a transitional
+   * fallback for rows not frozen yet (e.g. K8s runtime disabled, so the
+   * adopt pass never ran).
+   *
+   * Multi-tenant catalogs share one deployment per catalog (frozen on the
+   * catalog row so all caller mcp_server rows alias the same pod).
+   * Single-tenant (default) gets one deployment per mcp_server row.
    */
   static constructDeploymentName(
     mcpServer: McpServer,
     catalogItem?: InternalMcpCatalog | null,
   ): string {
     if (catalogItem?.multitenant && mcpServer.catalogId) {
-      const slugified = ensureStringIsRfc1123Compliant(catalogItem.name);
-      return `mcp-mt-${mcpServer.catalogId.slice(0, 8)}-${slugified}`.substring(
-        0,
-        253,
+      return (
+        catalogItem.deploymentName ??
+        constructLegacyMultitenantMcpDeploymentName(
+          mcpServer.catalogId,
+          catalogItem.name,
+        )
       );
     }
-    const slugified = ensureStringIsRfc1123Compliant(mcpServer.name);
-    return `mcp-${slugified}`.substring(0, 253);
+    if (mcpServer.deploymentName) {
+      return mcpServer.deploymentName;
+    }
+    return constructLegacyMcpDeploymentName(mcpServer.name);
   }
 
   /**
@@ -419,7 +428,7 @@ export default class K8sDeployment {
     const policyName = this.getK8sNetworkPolicyName();
 
     if (!shouldManageK8sNetworkPolicy(this.effectiveNetworkPolicy)) {
-      await this.deleteK8sNetworkPolicy();
+      await this.applyUnrestrictedFloorNetworkPolicy(policyName);
       return;
     }
 
@@ -504,12 +513,105 @@ export default class K8sDeployment {
     policyName: string,
     effectivePolicy: EffectiveNetworkPolicy,
   ): Promise<void> {
-    const k8sNetworkingApi = this.requireK8sNetworkingApi();
-    const networkPolicy = buildManagedNetworkPolicy({
-      name: policyName,
-      podSelectorLabels: this.getSystemLabels(),
-      effectivePolicy,
+    await this.upsertKubernetesNetworkPolicy(
+      policyName,
+      buildManagedNetworkPolicy({
+        name: policyName,
+        podSelectorLabels: this.getPodSelectorLabels(),
+        effectivePolicy,
+      }),
+    );
+  }
+
+  /**
+   * Apply the always-on SSRF floor for `unrestricted`/built-in pods: allow DNS +
+   * public egress with private/link-local/metadata ranges blocked. Emitted as an
+   * `ApplicationNetworkPolicy` on AWS VPC CNI (where a plain `NetworkPolicy` is
+   * accepted but not enforced), otherwise a plain `NetworkPolicy`. Deletes the
+   * non-selected policy kinds so relaxing from a restricted Cilium/GKE/AWS policy
+   * removes the stale object.
+   */
+  private async applyUnrestrictedFloorNetworkPolicy(
+    policyName: string,
+  ): Promise<void> {
+    const labels = {
+      app: "mcp-server",
+      "app.kubernetes.io/managed-by": "archestra",
+      "archestra.io/resource": "mcp-network-policy",
+      "archestra.io/network-policy-source":
+        this.effectiveNetworkPolicy?.source ?? "built_in",
+    };
+
+    // Both floor variants take the resolved resolver IP(s): the AWS ANP floor
+    // depends on it entirely (it cannot express a selector peer), while the plain
+    // NetworkPolicy floor uses a selector-based DNS rule and adds these only as a
+    // supplementary allow for non-kube-dns resolvers (NodeLocal DNSCache, custom
+    // DNS). Cached per client, so this lookup is cheap on the common path.
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
+      this.k8sApi,
+    );
+
+    if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
+      if (clusterDnsIps.length === 0) {
+        // Only the AWS ANP floor degrades here — it falls back to allowing :53 to
+        // any IP. The plain floor still resolves via its selector-based rule.
+        logger.warn(
+          {
+            mcpServerId: this.mcpServer.id,
+            networkPolicyName: policyName,
+            namespace: this.namespace,
+          },
+          "Cluster DNS service IP could not be resolved; unrestricted floor will allow DNS egress to any IP",
+        );
+      }
+
+      await this.upsertManagedCustomPolicy({
+        resource: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
+        policyName,
+        body: buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+          name: policyName,
+          podSelectorLabels: this.getPodSelectorLabels(),
+          labels,
+          clusterDnsIps,
+        }),
+      });
+      await Promise.all([
+        this.deleteKubernetesNetworkPolicy(policyName),
+        this.deleteCiliumNetworkPolicy(policyName),
+        this.deleteGkeFqdnNetworkPolicy(policyName),
+      ]);
+      await this.cleanupStaleManagedNetworkPolicies({
+        desiredPolicyName: policyName,
+        desiredCustomPolicy: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
+      });
+      return;
+    }
+
+    await this.upsertKubernetesNetworkPolicy(
+      policyName,
+      buildUnrestrictedFloorPolicy({
+        name: policyName,
+        podSelectorLabels: this.getPodSelectorLabels(),
+        labels,
+        clusterDnsIps,
+      }),
+    );
+    await Promise.all([
+      this.deleteCiliumNetworkPolicy(policyName),
+      this.deleteGkeFqdnNetworkPolicy(policyName),
+      this.deleteAwsApplicationNetworkPolicy(policyName),
+    ]);
+    await this.cleanupStaleManagedNetworkPolicies({
+      desiredPolicyName: policyName,
+      keepKubernetesPolicy: true,
     });
+  }
+
+  private async upsertKubernetesNetworkPolicy(
+    policyName: string,
+    networkPolicy: k8s.V1NetworkPolicy,
+  ): Promise<void> {
+    const k8sNetworkingApi = this.requireK8sNetworkingApi();
 
     try {
       try {
@@ -566,7 +668,7 @@ export default class K8sDeployment {
       policyName,
       body: buildManagedCiliumNetworkPolicy({
         name: policyName,
-        podSelectorLabels: this.getSystemLabels(),
+        podSelectorLabels: this.getPodSelectorLabels(),
         effectivePolicy,
       }),
     });
@@ -581,7 +683,7 @@ export default class K8sDeployment {
       policyName,
       body: buildManagedGkeFqdnNetworkPolicy({
         name: policyName,
-        podSelectorLabels: this.getSystemLabels(),
+        podSelectorLabels: this.getPodSelectorLabels(),
         effectivePolicy,
       }),
     });
@@ -610,7 +712,7 @@ export default class K8sDeployment {
       policyName,
       body: buildManagedAwsApplicationNetworkPolicy({
         name: policyName,
-        podSelectorLabels: this.getSystemLabels(),
+        podSelectorLabels: this.getPodSelectorLabels(),
         effectivePolicy,
         clusterDnsIps,
       }),
@@ -620,10 +722,11 @@ export default class K8sDeployment {
   /**
    * Create or update a managed custom policy object.
    *
-   * Updates use a JSON merge patch instead of a PUT: custom resources reject
-   * a PUT without metadata.resourceVersion (so policies created by older
-   * releases would never be corrected in place), and a merge patch also
-   * preserves controller-owned metadata such as finalizers.
+   * Updates read the live object and PUT a full replace (carrying its
+   * resourceVersion, required by CRDs, and any controller-owned finalizers)
+   * rather than a JSON merge patch: merge patch recurses into nested objects and
+   * cannot delete a key absent from the body, so a stale selector label from an
+   * older release would survive and keep the policy from selecting its pod.
    */
   private async upsertManagedCustomPolicy(params: {
     resource: ManagedCustomPolicyResource;
@@ -655,17 +758,43 @@ export default class K8sDeployment {
           throw createError;
         }
 
-        await k8sCustomObjectsApi.patchNamespacedCustomObject(
-          {
+        // Full replace, not merge-patch: a JSON Merge Patch recurses into
+        // podSelector.matchLabels and cannot delete a key absent from the body,
+        // so a stale selector label (e.g. a pre-fix mcp-server-name) would survive
+        // and keep the policy from selecting its pod. A blind PUT is rejected
+        // without a resourceVersion, so read the live object and carry its
+        // resourceVersion (and any controller-owned finalizers) into the body.
+        // Retry the read-modify-write on a 409: the policy's own CRD controller
+        // (AWS VPC CNI, Cilium operator) can bump resourceVersion by writing
+        // finalizers/status between the GET and the PUT.
+        for (let attempt = 1; ; attempt++) {
+          const existing = await k8sCustomObjectsApi.getNamespacedCustomObject({
             group,
             version,
             namespace: this.namespace,
             plural,
             name: params.policyName,
-            body: params.body,
-          },
-          setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
-        );
+          });
+          try {
+            await k8sCustomObjectsApi.replaceNamespacedCustomObject({
+              group,
+              version,
+              namespace: this.namespace,
+              plural,
+              name: params.policyName,
+              body: bodyWithPreservedMetadata(params.body, existing),
+            });
+            break;
+          } catch (replaceError: unknown) {
+            if (
+              isK8sConflictError(replaceError) &&
+              attempt < CUSTOM_POLICY_REPLACE_MAX_ATTEMPTS
+            ) {
+              continue;
+            }
+            throw replaceError;
+          }
+        }
         logger.info(
           {
             mcpServerId: this.mcpServer.id,
@@ -1072,7 +1201,7 @@ export default class K8sDeployment {
   }): boolean {
     if (!params.policyName) return false;
     if (!hasManagedNetworkPolicyLabels(params.metadataLabels)) return false;
-    if (!policyTargetsPodLabels(params.spec, this.getSystemLabels())) {
+    if (!policyTargetsPodLabels(params.spec, this.getPodSelectorLabels())) {
       return false;
     }
     return !params.keepPolicy || params.policyName !== params.desiredPolicyName;
@@ -1489,6 +1618,22 @@ export default class K8sDeployment {
   }
 
   /**
+   * Labels the per-pod NetworkPolicy (and Service) selector keys on: `app` plus
+   * the catalog-stable `mcp-server-id` (see getPodSelectorServerId). It excludes
+   * `mcp-server-name`: for a multitenant catalog the shared pod is labeled with
+   * one install's name while the policy may be reconciled by another install, so
+   * an AND-semantics selector keyed on the name would match zero pods — the pod
+   * then falls through to the namespace deny-all baseline and gets no egress
+   * (DNS included). `mcp-server-id` alone uniquely identifies the server.
+   */
+  private getPodSelectorLabels(): Record<string, string> {
+    return sanitizeMetadataLabels({
+      app: "mcp-server",
+      "mcp-server-id": this.getPodSelectorServerId(),
+    });
+  }
+
+  /**
    * The identity stamped into the `mcp-server-id` pod label + selector (and the
    * matching Service selector / pod lookups).
    *
@@ -1692,8 +1837,15 @@ export default class K8sDeployment {
       },
       spec: {
         replicas: MCP_ORCHESTRATOR_DEFAULTS.replicas,
+        // Selector keys on `app` + stable `mcp-server-id` only. Selectors are
+        // immutable, so the mutable `mcp-server-name` label must not be part
+        // of pod identity (it would block any in-place update after a
+        // rename). Deployment metadata and pod-template labels keep the full
+        // set — a selector may match a subset of the pod labels. Existing
+        // deployments with the old 3-label selector are left as-is (reconcile
+        // compares only `mcp-server-id`) and converge on natural recreate.
         selector: {
-          matchLabels: labels,
+          matchLabels: this.getPodSelectorLabels(),
         },
         template: {
           metadata: podTemplateMetadata,
@@ -1790,6 +1942,7 @@ export default class K8sDeployment {
       serverId: this.mcpServer.id,
       serverName: this.mcpServer.name,
       labels,
+      selectorLabels: this.getPodSelectorLabels(),
     });
 
     if (!deployment) {
@@ -2271,6 +2424,13 @@ export default class K8sDeployment {
     resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): Promise<void> {
     try {
+      // Load the catalog item up front so every path below derives the pod
+      // selector from the correct id — the drift check and the reconcile branches'
+      // policy apply both key on catalogItem.multitenant (getPodSelectorServerId),
+      // and would otherwise select a multitenant pod's per-install id and leave it
+      // under the deny-all baseline. getCatalogItem caches, so later calls reuse it.
+      await this.getCatalogItem();
+
       /**
        * MIGRATION STEP:
        * Check if there's a bare pod with the same name.
@@ -2355,9 +2515,10 @@ export default class K8sDeployment {
             await this.assignHttpPortIfNeeded(pod);
           }
 
-          // Ensure HTTP configuration is set up
-          await this.ensureHttpServerConfigured();
+          // Reconcile the egress policy before HTTP config, so a slow or failing
+          // Service setup can't skip (re)applying the pod's policy.
           await this.applyK8sNetworkPolicy();
+          await this.ensureHttpServerConfigured();
 
           logger.info(`Deployment ${this.deploymentName} is already running`);
           return;
@@ -2390,9 +2551,12 @@ export default class K8sDeployment {
           }
         }
 
+        // Reconcile the egress policy before HTTP config, so a slow or failing
+        // Service setup can't leave an already-created (still not-ready) pod under
+        // the deny-all baseline alone.
+        await this.applyK8sNetworkPolicy();
         // Even if pending/failed, ensure HTTP configuration (Service + URL) is set up
         await this.ensureHttpServerConfigured();
-        await this.applyK8sNetworkPolicy();
         return;
       } catch (error: unknown) {
         // Deployment doesn't exist, we'll create it below
@@ -2442,24 +2606,47 @@ export default class K8sDeployment {
       const platformNodeSelector = getCachedPlatformNodeSelector();
       const platformTolerations = getCachedPlatformTolerations();
 
-      await this.k8sAppsApi.createNamespacedDeployment({
-        namespace: this.namespace,
-        body: this.generateDeploymentSpec(
-          dockerImage,
-          normalizedLocalConfig,
-          needsHttp,
-          httpPort,
-          platformNodeSelector,
-          platformTolerations,
-          resolvedImagePullSecretNames,
-        ),
-      });
+      // Create the pod's egress policy before the pod itself, so the pod is
+      // confined the instant it starts. A pod that starts before its policy lands
+      // is selected only by the namespace deny-all baseline — no DNS, no egress —
+      // long enough to fail startup name resolution/connectivity and crashloop.
+      // The policy selects the pod by label, so creating it first is inert until
+      // the pod appears, then takes effect immediately.
+      await this.applyK8sNetworkPolicy();
 
-      logger.info(`Deployment ${this.deploymentName} created`);
+      try {
+        await this.k8sAppsApi.createNamespacedDeployment({
+          namespace: this.namespace,
+          body: this.generateDeploymentSpec(
+            dockerImage,
+            normalizedLocalConfig,
+            needsHttp,
+            httpPort,
+            platformNodeSelector,
+            platformTolerations,
+            resolvedImagePullSecretNames,
+          ),
+        });
+        logger.info(`Deployment ${this.deploymentName} created`);
+      } catch (createError) {
+        // A concurrent reconcile (e.g. another orchestrator replica that also saw
+        // the deployment absent) may have created it between our 404 read and this
+        // call. Re-enter the reconcile so the now-existing deployment is re-read and
+        // validated — a matching one reconciles normally, a stale per-install
+        // selector is self-healed via delete+recreate — rather than assuming the
+        // concurrently-created workload is correct and leaving its Service without
+        // endpoints.
+        if (!isK8sConflictError(createError)) {
+          throw createError;
+        }
+        logger.info(
+          `Deployment ${this.deploymentName} was created concurrently; re-reconciling`,
+        );
+        return this.startOrCreateDeployment(resolvedImagePullSecretNames);
+      }
 
       // Ensure HTTP configuration is set up
       await this.ensureHttpServerConfigured();
-      await this.applyK8sNetworkPolicy();
 
       // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
       // State is "pending" until waitForDeploymentReady confirms the deployment has available replicas
@@ -3852,6 +4039,39 @@ function listCustomObjectItems(response: unknown): Array<{
       spec?: unknown;
     } => Boolean(item) && typeof item === "object",
   );
+}
+
+// Bounded optimistic-concurrency retries for the custom-policy read-modify-write
+// replace: a CRD controller can bump resourceVersion between the GET and the PUT.
+const CUSTOM_POLICY_REPLACE_MAX_ATTEMPTS = 4;
+
+/**
+ * Carry the live object's resourceVersion (a CRD replace/PUT is rejected 422
+ * without it) and any controller-owned finalizers into the replacement body, so
+ * a full replace satisfies optimistic concurrency and doesn't strip finalizers.
+ */
+function bodyWithPreservedMetadata(
+  body: Record<string, unknown>,
+  existing: unknown,
+): Record<string, unknown> {
+  const existingMetadata =
+    existing && typeof existing === "object" && "metadata" in existing
+      ? ((existing as { metadata?: unknown }).metadata as
+          | { resourceVersion?: string; finalizers?: string[] }
+          | undefined)
+      : undefined;
+  const bodyMetadata =
+    (body.metadata as Record<string, unknown> | undefined) ?? {};
+  return {
+    ...body,
+    metadata: {
+      ...bodyMetadata,
+      resourceVersion: existingMetadata?.resourceVersion,
+      ...(existingMetadata?.finalizers
+        ? { finalizers: existingMetadata.finalizers }
+        : {}),
+    },
+  };
 }
 
 function policyTargetsPodLabels(

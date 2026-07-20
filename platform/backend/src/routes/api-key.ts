@@ -1,4 +1,9 @@
-import { RouteId } from "@archestra/shared";
+import {
+  API_KEY_MAX_EXPIRATION_DAYS,
+  API_KEY_MAX_NAME_LENGTH,
+  API_KEY_MIN_EXPIRATION_DAYS,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { auth as betterAuth } from "@/auth/better-auth";
 import ApiKeyModel from "@/models/api-key";
@@ -119,6 +124,18 @@ export default apiKeyRoutes;
 
 // === Internal helpers
 
+/**
+ * Better Auth api-key validation error codes mapped to user-facing messages.
+ * Codes not listed here keep the generic fallback so arbitrary upstream
+ * internals are never exposed.
+ */
+const KNOWN_VALIDATION_ERROR_MESSAGES: Record<string, string> = {
+  EXPIRES_IN_IS_TOO_SMALL: `Expiration must be at least ${API_KEY_MIN_EXPIRATION_DAYS} day from now`,
+  EXPIRES_IN_IS_TOO_LARGE: `Expiration cannot be more than ${API_KEY_MAX_EXPIRATION_DAYS} days from now`,
+  INVALID_NAME_LENGTH: `Name must be at most ${API_KEY_MAX_NAME_LENGTH} characters`,
+  NAME_REQUIRED: "API key name is required",
+};
+
 function toApiError(
   error: unknown,
   params: { fallbackStatusCode: number; fallbackMessage: string },
@@ -128,13 +145,21 @@ function toApiError(
   }
 
   const statusCode = getStatusCode(error, params.fallbackStatusCode);
-  const message = getApiKeyErrorMessage(statusCode, params.fallbackMessage);
-
-  if (error instanceof Error) {
-    return new ApiError(statusCode, message);
-  }
+  const message =
+    getKnownValidationErrorMessage(error) ??
+    getApiKeyErrorMessage(statusCode, params.fallbackMessage);
 
   return new ApiError(statusCode, message);
+}
+
+function getKnownValidationErrorMessage(error: unknown): string | null {
+  const body = (error as { body?: { code?: unknown } }).body;
+  const code = body?.code;
+  if (typeof code !== "string") {
+    return null;
+  }
+
+  return KNOWN_VALIDATION_ERROR_MESSAGES[code] ?? null;
 }
 
 function getStatusCode(error: unknown, fallbackStatusCode: number): number {

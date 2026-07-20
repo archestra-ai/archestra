@@ -2,6 +2,7 @@ import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError, type UIMessage } from "ai";
 import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
 import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
 import type { StageResult } from "./a2a/stage-attachments";
@@ -268,6 +269,30 @@ describe("buildUserContent", () => {
 
     // No filename, but the unreadable attachment is still surfaced (not dropped).
     expect(note).not.toBe("");
+  });
+
+  test("defaults a missing content type instead of crashing the classifier", async () => {
+    // An attachment can reach buildUserContent without a content type if an
+    // upstream ingestion path's `as string` cast is ever exercised with an
+    // undefined value. It must be normalized to a safe default rather than throw
+    // on the `image/` prefix check (or produce a `data:undefined;...` URL).
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: undefined as unknown as string,
+        contentBase64: "QUJD",
+        name: "mystery.bin",
+      },
+    ];
+
+    const { content } = await buildUserContent(
+      "Inspect",
+      attachments,
+      // Make the defaulted octet-stream readable so the normalized attachment is
+      // kept and its resolved mediaType is observable.
+      geminiOpts(new Set(["application/octet-stream"])),
+    );
+
+    expect(fileMediaTypes(content)).toContain("application/octet-stream");
   });
 
   test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", async () => {
@@ -615,6 +640,66 @@ describe("executeA2AMessage current turn assembly", () => {
 
     const config = mockStreamText.mock.calls[0]?.[0];
     expect(config.messages).toEqual(history);
+  });
+
+  test("stops the run once the model repeatedly calls a tool outside the tool list", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeStreamMocks();
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "do the thing",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    // This file stubs stepCountIs out, so the step-count condition is not a
+    // real function here; only the run's own conditions are evaluated.
+    const runIsStopped = () =>
+      (config.stopWhen as unknown[])
+        .filter((c): c is (arg: unknown) => boolean => typeof c === "function")
+        .some((cond) => cond({ steps: [] }));
+
+    // Headless runs have the same blind spot as chat: a tool outside the tool
+    // list never reaches an execute wrapper, so nothing counts it. Drives this
+    // config's own onStepFinish and stopWhen, so it fails if they are ever
+    // handed different trackers — which leaves the ceiling silently inert.
+    const unavailableStep = (attempt: number) => ({
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      finishReason: "tool-calls",
+      toolCalls: [
+        {
+          type: "tool-call",
+          toolCallId: `call-${attempt}`,
+          toolName: "ghost_tool",
+          input: { attempt },
+          dynamic: true,
+          invalid: true,
+          error: new NoSuchToolError({
+            toolName: "ghost_tool",
+            availableTools: ["real_tool"],
+          }),
+        },
+      ],
+    });
+
+    for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
+      await config.onStepFinish(unavailableStep(i));
+      expect(runIsStopped()).toBe(false);
+    }
+
+    await config.onStepFinish(unavailableStep(99));
+    expect(runIsStopped()).toBe(true);
   });
 
   test("caps output tokens at the model's real ceiling, clamped by the operator ceiling", async ({

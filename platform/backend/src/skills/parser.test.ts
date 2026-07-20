@@ -25,8 +25,37 @@ describe("parseSkillManifest", () => {
     expect(parsed.license).toBe("MIT");
     expect(parsed.compatibility).toBeNull();
     expect(parsed.allowedTools).toBeNull();
+    expect(parsed.agentName).toBeNull();
     expect(parsed.content).toBe("# PDF Processing\nUse pdftotext.");
     expect(parsed.metadata).toEqual({});
+  });
+
+  test("parses the `agent` field into agentName", () => {
+    const raw = [
+      "---",
+      "name: deep-research",
+      "description: Multi-step research.",
+      "agent: Research Bot",
+      "---",
+      "",
+      "Research deeply.",
+    ].join("\n");
+
+    expect(parseSkillManifest(raw).agentName).toBe("Research Bot");
+  });
+
+  test("treats a blank `agent` field as absent", () => {
+    const raw = [
+      "---",
+      "name: deep-research",
+      "description: Multi-step research.",
+      'agent: "  "',
+      "---",
+      "",
+      "Research deeply.",
+    ].join("\n");
+
+    expect(parseSkillManifest(raw).agentName).toBeNull();
   });
 
   test("parses a manifest that starts with a UTF-8 BOM", () => {

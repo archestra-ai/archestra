@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,7 +26,7 @@ Editing the HTML forks a new immutable version, and the head version is served w
 
 Run or author an app at `/a/:id` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
 
-The `/apps` gallery lists everything the viewer can reach as one grid: apps you own and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). A single server may expose several UIs, so each `ui://` resource is its own card, titled `<MCP server> / <tool>` (the server's display name, e.g. *Archestra PM / show_board*). An owned card opens in a new chat, with **Open in new tab** and **Delete** in its overflow menu; an external card opens its standalone runtime, with **Open in new tab** and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
+The `/apps` gallery lists everything the viewer can reach in two sections: apps you own, and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). Each `ui://` resource is its own card, titled by the server's display name (*Task Tracker*); when one server exposes several UIs, the title carries the tool — *Task Tracker / show_board*. A card opens the app in a new chat. That chat stays out of your conversation list until you write into it. An owned card carries **Open in new tab** and **Delete** in its overflow menu; an external card carries **Open in new tab** (the standalone runtime) and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
 
 While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 
@@ -97,4 +97,4 @@ A shared (team or org) app is author-written HTML executing in a viewer's browse
 
 ## Templates
 
-A single `default` starter seeds a new app's HTML when no explicit HTML is given on create: a themed empty state that centers the app's name, a prompt-only call to action, and a short list of what an app can build on (assigned MCP tools, the per-user and shared data store, built-in AI). It leans on the injected baseline stylesheet, so it looks themed with no full theme of its own. Resolution is server-side — `POST /api/apps` (with an optional `templateId`) or `scaffold_app` seeds the starter's HTML as version 1, substituting the app's name (the id is kept as provenance). Explicit HTML always wins over the template.
+A single `default` starter seeds a new app's HTML when no explicit HTML is given on create: a themed empty state that centers the app's name, a prompt-only call to action, and a short list of what an app can build on (assigned MCP tools, the per-user and shared data store, built-in AI). It leans on the injected baseline stylesheet, so it looks themed with no full theme of its own. Resolution is server-side — `POST /api/apps` (with an optional `templateId`) or `scaffold_app` seeds the starter's HTML as version 1, substituting the app's name (the id is kept as provenance). The starter's mark follows your branding: when the organization has a logo configured in appearance settings, new apps seed with that logo instead of the Archestra mark. Explicit HTML always wins over the template.

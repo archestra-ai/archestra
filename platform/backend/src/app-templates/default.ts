@@ -3,13 +3,16 @@ import type { AppTemplate } from "@/types";
 // The one opinionated starter for owned MCP Apps. Pure UI: the platform injects
 // the baseline stylesheet (theme variables, themed element defaults — all
 // light/dark aware) at render time, so this document carries no full theme. It
-// is an empty state: the Archestra mark, the app's name and a prompt-to-build
+// is an empty state: a logo mark, the app's name and a prompt-to-build
 // call to action, and three cards naming the platform capabilities an app gets
 // out of the box — so the user knows what to ask for. The `{{APP_NAME}}` token
-// is replaced (HTML-escaped) with the real app name when the app is created
-// (resolveCreateAppHtml). The inline SVGs and click handler keep it
-// self-contained — no network, so it renders under the app sandbox CSP. The SDK
-// contract a model needs to build the app up lives in the build-app skill.
+// is replaced (HTML-escaped) with the real app name and the `{{APP_LOGO}}`
+// token with the logo block — the organization's white-label logo when one is
+// configured, else the Archestra mark below — when the app is created
+// (resolveCreateAppHtml). The inline SVGs / data-URI images and click handler
+// keep it self-contained — no network, so it renders under the app sandbox CSP.
+// The SDK contract a model needs to build the app up lives in the build-app
+// skill.
 const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,8 +40,16 @@ const html = `<!DOCTYPE html>
       display: block; width: 80px; height: 80px; border-radius: 16px;
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
     }
-    .logo.press svg { animation: logo-press 0.11s ease-out; }
-    .logo.spin svg { animation: logo-spin 0.5s ease; }
+    /* A white-label logo is an arbitrary image (often a transparent PNG or a
+       wide wordmark), so it gets proportional sizing and no card treatment. */
+    .logo img { display: block; height: 80px; width: auto; max-width: 240px; object-fit: contain; }
+    .logo .logo-dark { display: none; }
+    @media (prefers-color-scheme: dark) {
+      .logo .logo-light { display: none; }
+      .logo .logo-dark { display: block; }
+    }
+    .logo.press svg, .logo.press img { animation: logo-press 0.11s ease-out; }
+    .logo.spin svg, .logo.spin img { animation: logo-spin 0.5s ease; }
     /* A mechanical key press: a quick depress, then spring back. */
     @keyframes logo-press {
       0%   { transform: translateY(0)    scale(1); }
@@ -77,13 +88,7 @@ const html = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <button type="button" class="logo" aria-label="Archestra">
-    <svg width="80" height="80" viewBox="0 0 994 953" xmlns="http://www.w3.org/2000/svg">
-      <rect width="993.958" height="952.543" rx="204.92" fill="black"/>
-      <path fill-rule="evenodd" clip-rule="evenodd" d="M390.871 664.818C427.68 664.818 460.629 641.985 473.553 607.519L565.238 363.026C586.887 305.296 544.211 243.715 482.556 243.715C445.747 243.715 412.798 266.548 399.874 301.014L308.189 545.507C286.54 603.237 329.216 664.818 390.871 664.818Z" fill="white"/>
-      <ellipse cx="638.487" cy="577.095" rx="87.7298" ry="81.1501" fill="white"/>
-    </svg>
-  </button>
+  {{APP_LOGO}}
   <div class="content">
     <div class="intro">
       <h1>{{APP_NAME}}</h1>
@@ -126,12 +131,23 @@ const html = `<!DOCTYPE html>
   </div>
   <!-- Easter egg: logo presses on click, spins every fifth one. This is starter
        decoration only — remove this script (and the .logo press/spin styles) on
-       the first real edit. -->
+       the first real edit. The null guard covers the logo-less seed (an
+       organization logo too large to inline). -->
   <script>
-    const logo=document.querySelector(".logo");let clicks=0,spinning=false;logo.addEventListener("click",()=>{if(spinning)return;const move=++clicks%5===0?"spin":"press";if(move==="spin")spinning=true;logo.classList.remove("press","spin");void logo.offsetWidth;logo.classList.add(move)});logo.addEventListener("animationend",e=>{logo.classList.remove("press","spin");if(e.animationName==="logo-spin")spinning=false});
+    const logo=document.querySelector(".logo");let clicks=0,spinning=false;logo?.addEventListener("click",()=>{if(spinning)return;const move=++clicks%5===0?"spin":"press";if(move==="spin")spinning=true;logo.classList.remove("press","spin");void logo.offsetWidth;logo.classList.add(move)});logo?.addEventListener("animationend",e=>{logo.classList.remove("press","spin");if(e.animationName==="logo-spin")spinning=false});
   </script>
 </body>
 </html>`;
+
+// The default mark for the `{{APP_LOGO}}` slot, used when the organization has
+// no white-label logo configured.
+export const defaultTemplateLogoHtml = `<button type="button" class="logo" aria-label="Archestra">
+    <svg width="80" height="80" viewBox="0 0 994 953" xmlns="http://www.w3.org/2000/svg">
+      <rect width="993.958" height="952.543" rx="204.92" fill="black"/>
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M390.871 664.818C427.68 664.818 460.629 641.985 473.553 607.519L565.238 363.026C586.887 305.296 544.211 243.715 482.556 243.715C445.747 243.715 412.798 266.548 399.874 301.014L308.189 545.507C286.54 603.237 329.216 664.818 390.871 664.818Z" fill="white"/>
+      <ellipse cx="638.487" cy="577.095" rx="87.7298" ry="81.1501" fill="white"/>
+    </svg>
+  </button>`;
 
 export const defaultTemplate: AppTemplate = {
   id: "default",

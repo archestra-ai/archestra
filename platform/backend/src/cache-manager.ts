@@ -47,10 +47,16 @@ export const CacheKey = {
   /** Microsoft 365 Copilot device-flow sign-in rate limiting per user */
   Microsoft365CopilotDeviceAuthRateLimit:
     "microsoft-365-copilot-device-auth-rate-limit",
+  /** ChatGPT/Codex subscription device-flow sign-in rate limiting per user */
+  OpenaiCodexDeviceAuthRateLimit: "openai-codex-device-auth-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
+  /** Per-user group-token resolution for auto-sync-permissions KB connectors */
+  KbGroupTokens: "kb-group-tokens",
+  /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */
+  KbConnectorIdentity: "kb-connector-identity",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
@@ -59,6 +65,10 @@ export const CacheKey = {
   TeamsThreadMuteHint: "teams-thread-mute-hint",
   /** Slack channel threads that already got the one-time "you can mute me" hint */
   SlackThreadMuteHint: "slack-thread-mute-hint",
+  /** Latest mute token per MS Teams channel thread (cross-pod in-flight reply suppression) */
+  TeamsThreadMuteMarker: "teams-thread-mute-marker",
+  /** Latest mute token per Slack channel thread (cross-pod in-flight reply suppression) */
+  SlackThreadMuteMarker: "slack-thread-mute-marker",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */

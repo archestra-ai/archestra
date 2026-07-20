@@ -1,6 +1,7 @@
-import { E2eTestId } from "@archestra/shared";
+import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
 const {
@@ -152,8 +153,14 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     <div>{children}</div>
   ),
   PromptInputSpeechButton: () => <button type="button">Speech</button>,
-  PromptInputSubmit: ({ status }: { status?: string }) => (
-    <button data-testid="prompt-submit" type="submit">
+  PromptInputSubmit: ({
+    status,
+    disabled,
+  }: {
+    status?: string;
+    disabled?: boolean;
+  }) => (
+    <button data-testid="prompt-submit" type="submit" disabled={disabled}>
       Submit {status ?? "unset"}
     </button>
   ),
@@ -205,6 +212,12 @@ vi.mock("@/components/chat/chat-tools-display", () => ({
 
 vi.mock("@/components/chat/model-selector", () => ({
   ModelSelector: () => <div data-testid="model-selector" />,
+}));
+
+// The Apps Hackathon recorder cluster is a self-contained feature with its own
+// tests; stub it here so the composer test needs no QueryClient/config context.
+vi.mock("@/components/app-session-recording/app-recording-controls", () => ({
+  AppRecordingControls: () => null,
 }));
 
 // Mock the Tooltip components to avoid Radix UI complexity
@@ -289,11 +302,12 @@ describe("ArchestraPromptInput", () => {
       isPending: false,
       isLoading: false,
     } as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useFeature).mockImplementation((flag) =>
-      flag === "chatSecretScanEnabled"
-        ? mockFeatureState.chatSecretScanEnabled
-        : undefined,
-    );
+    vi.mocked(useFeature).mockImplementation((flag) => {
+      if (flag === "chatSecretScanEnabled") {
+        return mockFeatureState.chatSecretScanEnabled;
+      }
+      return undefined;
+    });
     mockUseChatPlaceholder.mockReturnValue({
       placeholder: "Animated placeholder",
       isAnimating: true,
@@ -310,6 +324,19 @@ describe("ArchestraPromptInput", () => {
   });
 
   describe("File Upload Button", () => {
+    // The composer renders more than one tooltip now (the submit button carries
+    // a keyboard-shortcut tooltip too), so scope file-upload assertions to the
+    // tooltip whose content matches.
+    const getFileUploadTooltip = (text: string): HTMLElement => {
+      const tooltip = screen
+        .getAllByTestId("tooltip-content")
+        .find((element) => element.textContent?.includes(text));
+      if (!tooltip) {
+        throw new Error(`No tooltip content matching "${text}"`);
+      }
+      return tooltip;
+    };
+
     it("should render enabled file upload button when allowFileUploads is true and model supports files", () => {
       render(
         <ArchestraPromptInput
@@ -366,7 +393,7 @@ describe("ArchestraPromptInput", () => {
       expect(disabledButton).toBeInTheDocument();
 
       // Tooltip should show message about model not supporting files
-      const tooltip = screen.getByTestId("tooltip-content");
+      const tooltip = getFileUploadTooltip("does not support file uploads");
       expect(tooltip).toHaveTextContent(
         "This model does not support file uploads",
       );
@@ -386,9 +413,7 @@ describe("ArchestraPromptInput", () => {
       ).toBeInTheDocument();
       // Enabled state shows the supported-types tooltip rather than the
       // disabled "does not support file uploads" message.
-      expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
-        "Supports:",
-      );
+      expect(getFileUploadTooltip("Supports:")).toHaveTextContent("Supports:");
     });
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
@@ -408,7 +433,7 @@ describe("ArchestraPromptInput", () => {
       );
 
       // Tooltip should show "Enable in settings" link for admins
-      const tooltip = screen.getByTestId("tooltip-content");
+      const tooltip = getFileUploadTooltip("File uploads are disabled");
       expect(tooltip).toHaveTextContent("File uploads are disabled.");
       expect(tooltip).toHaveTextContent("Enable in settings");
       expect(screen.getByRole("link")).toHaveAttribute(
@@ -438,7 +463,9 @@ describe("ArchestraPromptInput", () => {
       );
 
       // Tooltip should show message about admin for non-admins
-      const tooltip = screen.getByTestId("tooltip-content");
+      const tooltip = getFileUploadTooltip(
+        "File uploads are disabled by your administrator",
+      );
       expect(tooltip).toHaveTextContent(
         "File uploads are disabled by your administrator",
       );
@@ -938,6 +965,188 @@ describe("ArchestraPromptInput", () => {
 
       expect(onSubmit).toHaveBeenCalledTimes(1);
       expect(localStorage.getItem(draftKey)).toBeNull();
+    });
+  });
+
+  describe("queue keyboard shortcuts", () => {
+    it("pops the most recently queued message into the composer on ArrowUp when empty", () => {
+      const conversationId = "conv-arrowup-pop";
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, { text: "first queued" });
+      chatMessageQueue.enqueue(conversationId, { text: "second queued" });
+      mockControllerState.value = "";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowUp",
+      });
+
+      // The newest queued message loads into the composer...
+      expect(mockTextInputSetInput).toHaveBeenCalledWith("second queued");
+      // ...and is removed from the queue, leaving the older one behind.
+      expect(chatMessageQueue.get(conversationId).map((m) => m.text)).toEqual([
+        "first queued",
+      ]);
+
+      chatMessageQueue.clear(conversationId);
+    });
+
+    it("prefixes a queued skill command when popping it back", () => {
+      const conversationId = "conv-arrowup-skill";
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, {
+        text: "do the thing",
+        skill: { name: "helper" } as ChatSkillMetadata,
+      });
+      mockControllerState.value = "";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowUp",
+      });
+
+      expect(mockTextInputSetInput).toHaveBeenCalledWith(
+        "/helper do the thing",
+      );
+      chatMessageQueue.clear(conversationId);
+    });
+
+    it("leaves the queue alone on ArrowUp when the composer already has text", () => {
+      const conversationId = "conv-arrowup-nonempty";
+      chatMessageQueue.clear(conversationId);
+      chatMessageQueue.enqueue(conversationId, { text: "queued" });
+      mockControllerState.value = "typing";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId={conversationId}
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "ArrowUp",
+      });
+
+      // ArrowUp is ignored while typing: the queue is untouched and the typed
+      // text is never replaced by a queued message.
+      expect(mockTextInputSetInput).not.toHaveBeenCalledWith("queued");
+      expect(chatMessageQueue.get(conversationId)).toHaveLength(1);
+      chatMessageQueue.clear(conversationId);
+    });
+
+    it("stops the in-flight response on Escape", () => {
+      const onStop = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          onStop={onStop}
+          conversationId="conv-escape-stop"
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "Escape",
+      });
+
+      expect(onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not stop on Escape when no response is in flight", () => {
+      const onStop = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="ready"
+          onStop={onStop}
+          conversationId="conv-escape-idle"
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByTestId(E2eTestId.ChatPromptTextarea), {
+        key: "Escape",
+      });
+
+      expect(onStop).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("context compaction", () => {
+    // The Enter path is routed through the submit button's disabled state (the
+    // textarea refuses to requestSubmit while the button is disabled), so the
+    // button assertions below pin the keyboard contract too.
+    const getSubmitButton = (): HTMLButtonElement => {
+      const button = document.querySelector('button[type="submit"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("submit button not found");
+      }
+      return button;
+    };
+
+    it("keeps the composer usable mid-stream when queueing can absorb the message", () => {
+      const onSubmit = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onSubmit={onSubmit}
+          status="streaming"
+          conversationId="conv-compacting-queue"
+          isContextCompacting
+        />,
+      );
+
+      expect(
+        screen.getByTestId(E2eTestId.ChatPromptTextarea),
+      ).not.toBeDisabled();
+      expect(getSubmitButton()).not.toBeDisabled();
+
+      // A submit during compaction still reaches the consumer (which queues it).
+      mockControllerState.value = "queued while compacting";
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it("locks the composer during compaction when there is no conversation to queue into", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="streaming"
+          isContextCompacting
+        />,
+      );
+
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toBeDisabled();
+      expect(getSubmitButton()).toBeDisabled();
+    });
+
+    it("locks the composer during an idle (manual) compaction", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          status="ready"
+          conversationId="conv-compacting-idle"
+          isContextCompacting
+        />,
+      );
+
+      expect(screen.getByTestId(E2eTestId.ChatPromptTextarea)).toBeDisabled();
+      expect(getSubmitButton()).toBeDisabled();
     });
   });
 });

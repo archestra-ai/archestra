@@ -42,6 +42,7 @@ import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import logger from "@/logging";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -96,6 +97,17 @@ export function createDirectLLMModel({
   }
   if (cfg.apiKeyRequiredMessage && !apiKey) {
     throw new ApiError(400, cfg.apiKeyRequiredMessage);
+  }
+  if (provider === "openai" && isOpenAiCodexCredential(apiKey)) {
+    // ChatGPT-subscription (Codex) credentials only work through the LLM proxy's
+    // openai adapter, which redeems a short-lived Codex access token and targets
+    // the Codex backend. This direct AI-SDK path (built-in subagents, knowledge
+    // base) would send the encoded refresh token to api.openai.com as a bearer —
+    // a credential leak and a guaranteed 401 — so fail closed.
+    throw new ApiError(
+      400,
+      "ChatGPT subscription (Codex) credentials cannot be used on the direct LLM path (built-in subagents, knowledge base). Configure a standard OpenAI API key for these, or pick a different model.",
+    );
   }
   const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;
   const baseURL =
@@ -245,6 +257,7 @@ export async function createLLMModelForAgent(params: {
     source: apiKeySource,
     baseUrl,
     chatApiKeyId,
+    authRequired,
   } = await resolveProviderApiKey({
     organizationId,
     userId,
@@ -289,9 +302,18 @@ export async function createLLMModelForAgent(params: {
     !isAzureWithEntra &&
     !isAnthropicWithWif
   ) {
-    // Per-user providers (GitHub Copilot) need the acting user's own linked
-    // account; surface a typed error so callers can prompt them to connect
-    // rather than showing a generic "configure a key" message.
+    // Per-user credentials need the acting user's own linked account; surface
+    // a typed error so callers can prompt them to connect rather than showing
+    // a generic "configure a key" message. Two per-user cases: resolution
+    // refused a credential-level key (a ChatGPT subscription belonging to
+    // someone else) and said so via authRequired, or the provider itself is
+    // per-user (GitHub/Microsoft Copilot) and the user has no personal key.
+    if (authRequired) {
+      throw new LlmProviderAuthRequiredError(
+        authRequired.provider,
+        authRequired.providerLabel,
+      );
+    }
     if (providerRequiresPerUserCredential(provider)) {
       throw new LlmProviderAuthRequiredError(provider);
     }

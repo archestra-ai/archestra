@@ -97,12 +97,14 @@ import { metrics } from "@/observability";
 import {
   anthropicAdapterFactory,
   azureAdapterFactory,
+  bedrockAdapterFactory,
   geminiAdapterFactory,
   openaiAdapterFactory,
 } from "./adapters";
 import { virtualKeyRateLimiter } from "./llm-proxy-auth";
 import anthropicProxyRoutes from "./routes/anthropic";
 import azureProxyRoutes from "./routes/azure";
+import bedrockProxyRoutes from "./routes/bedrock";
 import geminiProxyRoutes from "./routes/gemini";
 import githubCopilotProxyRoutes from "./routes/github-copilot";
 import openAiProxyRoutes from "./routes/openai";
@@ -314,6 +316,62 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(interaction.passthroughVirtualKeyId).toBe(virtualKey.id);
       expect(interaction.virtualKeyId).toBeNull();
       expect(interaction.authMethod).toBe("passthrough_virtual_key");
+    });
+
+    test("personal standard virtual key attributes the interaction to its owner", async ({
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      // Virtual-key connection mode: the connect flow mints a personal virtual
+      // key whose author is the acting user (Codex ChatGPT subscription, Claude
+      // Code virtual key). The key is the sole identity signal, so its owner
+      // must attribute the request even though no X-Archestra-User-Id header or
+      // passthrough key is present.
+      const owner = await makeUser();
+      const secret = await makeSecret({ secret: { apiKey: "sk-owned-key" } });
+      const providerKey = await makeLlmProviderApiKey(
+        testAgent.organizationId,
+        secret.id,
+        { provider: "openai" },
+      );
+      const { value: virtualKey, virtualKey: virtualKeyRow } =
+        await VirtualApiKeyModel.create({
+          organizationId: testAgent.organizationId,
+          name: "vk-attribution",
+          scope: "personal",
+          authorId: owner.id,
+          providerApiKeys: [
+            { provider: "openai", providerApiKeyId: providerKey.id },
+          ],
+        });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        // Non-loopback: attribution comes from the virtual key, not a localhost bypass.
+        remoteAddress: "203.0.113.5",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${virtualKey}`,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+
+      const [interaction] = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+
+      expect(interaction.userId).toBe(owner.id);
+      expect(interaction.virtualKeyId).toBe(virtualKeyRow.id);
+      expect(interaction.authMethod).toBe("virtual_key");
     });
 
     test.skip("non-streaming request increments token metrics", async () => {
@@ -646,6 +704,116 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
             model: "gemini-2.5-pro",
             agent_id: testAgent.id,
             agent_name: testAgent.name,
+          }),
+          value: expect.any(Number),
+        }),
+      );
+    });
+  });
+
+  // Bedrock uses a custom SigV4 client instead of getObservableFetch, so unlike
+  // fetch-based providers it can't self-instrument llm_request_duration_seconds.
+  // The handler records it on Bedrock's behalf; these tests pin that behavior.
+  // The duration histogram is the only LLM metric carrying a `status_code`
+  // label, which is what distinguishes it from TTFT/tokens-per-second here.
+  describe("Bedrock", () => {
+    const BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0";
+
+    beforeEach(async () => {
+      await app.register(bedrockProxyRoutes);
+
+      vi.spyOn(bedrockAdapterFactory, "createClient").mockReturnValue({
+        converse: async () => ({
+          $metadata: { requestId: "req_bedrock_test" },
+          output: {
+            message: { role: "assistant", content: [{ text: "Hi there" }] },
+          },
+          stopReason: "end_turn",
+          usage: { inputTokens: 12, outputTokens: 10 },
+        }),
+        converseStream: async () =>
+          (async function* () {
+            yield { messageStart: { role: "assistant" } };
+            yield {
+              contentBlockDelta: {
+                contentBlockIndex: 0,
+                delta: { text: "Hi there" },
+              },
+            };
+            yield { contentBlockStop: { contentBlockIndex: 0 } };
+            yield { messageStop: { stopReason: "end_turn" } };
+            yield {
+              metadata: { usage: { inputTokens: 12, outputTokens: 10 } },
+            };
+          })(),
+      } as never);
+
+      await ModelModel.upsert({
+        externalId: `bedrock/${BEDROCK_MODEL}`,
+        provider: "bedrock",
+        modelId: BEDROCK_MODEL,
+        inputModalities: null,
+        outputModalities: null,
+        customPricePerMillionInput: "3.00",
+        customPricePerMillionOutput: "15.00",
+        lastSyncedAt: new Date(),
+      });
+    });
+
+    test("streaming request records the request-duration metric", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/bedrock/${testAgent.id}/converse-stream`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          modelId: BEDROCK_MODEL,
+          messages: [{ role: "user", content: [{ text: "Hello!" }] }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(histogramObserve).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            provider: "bedrock",
+            model: BEDROCK_MODEL,
+            agent_id: testAgent.id,
+            status_code: "200",
+          }),
+          value: expect.any(Number),
+        }),
+      );
+    });
+
+    test("non-streaming request records the request-duration metric", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/bedrock/${testAgent.id}/converse`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          modelId: BEDROCK_MODEL,
+          messages: [{ role: "user", content: [{ text: "Hello!" }] }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(histogramObserve).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            provider: "bedrock",
+            model: BEDROCK_MODEL,
+            agent_id: testAgent.id,
+            status_code: "200",
           }),
           value: expect.any(Number),
         }),

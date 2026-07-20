@@ -15,11 +15,13 @@ import {
   AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -44,6 +46,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -110,6 +113,7 @@ function McpGateways({
     | "toolsCount"
     | "subagentsCount"
     | "team"
+    | "lastUsedAt"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
     | "asc"
@@ -199,6 +203,10 @@ function McpGateways({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(
     searchParams.get("create") === "true",
   );
+  const [postCreateGateway, setPostCreateGateway] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const openToolsFromUrl = searchParams.get("openTools") === "true";
   const navigateToConnection = useCallback(
     (agentId: string) => {
@@ -210,6 +218,9 @@ function McpGateways({
   );
   const editDialog = useAgentDialogUrlParam("edit");
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
+    null,
+  );
+  const [cloningGateway, setCloningGateway] = useState<GatewayData | null>(
     null,
   );
   const restoreGateway = useRestoreProfile();
@@ -283,7 +294,6 @@ function McpGateways({
         return (
           <AgentNameCell
             name={agent.name}
-            scope={agent.scope}
             description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
@@ -350,24 +360,48 @@ function McpGateways({
         return <div>{subagentsCount}</div>;
       },
     },
-    ...(isAdmin
-      ? [
-          {
-            id: "team",
-            header: "Accessible to",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: GatewayData } }) => (
-              <ResourceVisibilityBadge
-                scope={row.original.scope}
-                teams={row.original.teams}
-                authorId={row.original.authorId}
-                authorName={row.original.authorName}
-                currentUserId={currentUserId}
-              />
-            ),
-          } satisfies ColumnDef<GatewayData>,
-        ]
-      : []),
+    {
+      id: "lastUsedAt",
+      accessorKey: "lastUsedAt",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          className="h-auto !p-0 font-medium hover:bg-transparent"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Last used
+          <SortIcon isSorted={column.getIsSorted()} />
+        </Button>
+      ),
+      cell: ({ row }) => {
+        const lastUsedAt = row.original.lastUsedAt;
+        return (
+          <span
+            className="text-sm text-muted-foreground"
+            title={
+              lastUsedAt ? new Date(lastUsedAt).toLocaleString() : undefined
+            }
+          >
+            {formatRelativeTimeFromNow(lastUsedAt ?? null)}
+          </span>
+        );
+      },
+    },
+    {
+      id: "team",
+      header: "Accessible to",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",
@@ -402,6 +436,7 @@ function McpGateways({
                 },
               });
             }}
+            onClone={setCloningGateway}
           />
         );
       },
@@ -554,8 +589,17 @@ function McpGateways({
               onOpenChange={setIsCreateDialogOpen}
               agentType="mcp_gateway"
               defaultIconType="mcp_gateway"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                setPostCreateGateway(created);
+              }}
+            />
+
+            <PostCreateConnectDialog
+              created={postCreateGateway}
+              agentType="mcp_gateway"
+              onOpenChange={(open) => {
+                if (!open) setPostCreateGateway(null);
               }}
             />
 
@@ -583,6 +627,17 @@ function McpGateways({
                 onOpenChange={(open) => !open && setDeletingGatewayId(null)}
               />
             )}
+
+            <CloneAgentDialog
+              agent={cloningGateway}
+              onOpenChange={(open) => {
+                if (!open) setCloningGateway(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the clone so user can rename immediately
+                editDialog.open(cloned as GatewayData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

@@ -229,15 +229,14 @@ mod tests {
 
     fn write_env(tmp: &std::path::Path, id: &str, tasks: &[&str], share_backend: bool, tools: &[&str]) {
         let mut content = format!(
-            r#"id = "{}"
-name = "{}"
-tasks = {:?}
-share_backend = {}
-"#,
-            id, id, tasks, share_backend
+            r#"id = "{id}"
+name = "{id}"
+tasks = {tasks:?}
+share_backend = {share_backend}
+"#
         );
         if !tools.is_empty() {
-            content.push_str(&format!("tools = {:?}\n", tools));
+            content.push_str(&format!("tools = {tools:?}\n"));
         }
         content.push_str("[agent]\nsystem_prompt = \"p\"\n");
         std::fs::write(tmp.join(format!("{id}.toml")), content).unwrap();

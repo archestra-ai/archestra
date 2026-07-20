@@ -141,10 +141,10 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
     for raw in parsed.lane {
         let name = slug(&raw.name);
         if !seen.insert(name.clone()) {
-            return Err(LaneError(format!("{ctx}: duplicate lane name {:?}", name)));
+            return Err(LaneError(format!("{ctx}: duplicate lane name {name:?}")));
         }
         let provider =
-            Provider::from_str(&raw.provider).map_err(|e| LaneError(format!("{ctx}: lane {:?}: {e}", name)))?;
+            Provider::from_str(&raw.provider).map_err(|e| LaneError(format!("{ctx}: lane {name:?}: {e}")))?;
         catalog.push(Lane {
             name,
             provider,

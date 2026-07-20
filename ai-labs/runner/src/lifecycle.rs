@@ -149,9 +149,7 @@ async fn drop_database(db_created: &Arc<Mutex<bool>>, db_name: &str, maint_db_ur
                 )
                 .await;
             let quoted = format!("\"{}\"", db_name.replace('"', "\"\""));
-            let _ = client
-                .batch_execute(&format!("DROP DATABASE IF EXISTS {}", quoted))
-                .await;
+            let _ = client.batch_execute(&format!("DROP DATABASE IF EXISTS {quoted}")).await;
             *db_created.lock().await = false;
         }
         Ok(Err(e)) => {
@@ -364,7 +362,7 @@ impl Instance {
         // — never data corruption, and bounded to a single signal-timing window per run.
         *self.db_created.lock().await = true;
         client
-            .batch_execute(&format!("CREATE DATABASE {}", quoted))
+            .batch_execute(&format!("CREATE DATABASE {quoted}"))
             .await
             .map_err(|e| LifecycleError::Postgres(format!("CREATE DATABASE failed: {e}")))?;
         Ok(())

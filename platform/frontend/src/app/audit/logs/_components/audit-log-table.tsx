@@ -48,6 +48,13 @@ import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 const ACTOR_FILTER_LIMIT = 100;
 const ALL_VALUE = "all";
 
+// TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
+// large string-literal union, failing with a spurious "two unrelated ColumnDef
+// types" error under CI's compiler. The table only displays `action`, so widen
+// it to string for the row/column types; the typed union is still enforced on
+// ACTION_LABEL and the filter.
+type AuditLogRow = Omit<AuditLog, "action"> & { action: string };
+
 function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
   const upArrow = <ChevronUp className="h-3 w-3" />;
   const downArrow = <ChevronDown className="h-3 w-3" />;
@@ -268,7 +275,7 @@ export function AuditLogTable() {
     [],
   );
 
-  const columns = useMemo<ColumnDef<AuditLog>[]>(
+  const columns = useMemo<ColumnDef<AuditLogRow>[]>(
     () => [
       {
         id: "createdAt",
@@ -307,7 +314,9 @@ export function AuditLogTable() {
         header: "Action",
         cell: ({ row }) => (
           <Badge
-            variant={ACTION_BADGE_VARIANT[row.original.action]}
+            variant={
+              ACTION_BADGE_VARIANT[row.original.action as AuditEventName]
+            }
             className="text-xs whitespace-nowrap"
           >
             {formatAction(row.original.action)}
@@ -467,7 +476,7 @@ export function AuditLogTable() {
         />
       </TableFilters>
 
-      <DataTable
+      <DataTable<AuditLogRow, unknown>
         columns={columns}
         data={rows}
         hideSelectedCount
@@ -490,7 +499,7 @@ export function AuditLogTable() {
         emptyMessage="No audit events recorded yet. Administrative actions will appear here as they happen."
         filteredEmptyMessage="No audit events match your filters. Try adjusting your search."
         onClearFilters={clearFilters}
-        onRowClick={openEventDialog}
+        onRowClick={(row) => openEventDialog(row as AuditLog)}
       />
 
       <AuditLogDetailDialog

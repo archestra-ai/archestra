@@ -1299,6 +1299,7 @@ class TeamModel {
       name: team.name,
       description: team.description ?? null,
       organizationId: team.organizationId,
+      convertToolResultsToToon: team.convertToolResultsToToon,
       members: members.map((m) => `${m.name} (${m.email})`).sort(),
       externalGroups: externalGroups.map((g) => g.groupIdentifier).sort(),
       labels: labels.map((l) => `${l.key}:${l.value}`).sort(),

@@ -16,6 +16,7 @@ import type { App, InsertApp } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AppAccessModel from "./app-access";
+import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 
@@ -510,7 +511,13 @@ class AppModel {
         ),
       )
       .limit(1);
-    return row ?? null;
+    if (!row) return null;
+
+    // Tool assignments live in appToolsTable (audited:false, "parent carries the
+    // signal"), so include them here — otherwise assigning/removing a tool via
+    // /api/apps/:appId/tools/:toolId → app.updated would show no diff.
+    const tools = await AppToolModel.getToolsForApp(id);
+    return { ...row, tools: tools.map((t) => t.name).sort() };
   }
 }
 

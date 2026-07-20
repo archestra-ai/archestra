@@ -108,6 +108,35 @@ describe("audit snapshot redaction", () => {
       expect(snapshot).toHaveProperty("provider", "openai");
       expect(snapshot).toHaveProperty("organizationId", org.id);
     });
+
+    test("captures extra-header NAMES only — never header values (may hold tokens)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const [row] = await db
+        .insert(schema.llmProviderApiKeysTable)
+        .values({
+          organizationId: org.id,
+          name: "Header Key",
+          provider: "openai",
+          scope: "org",
+          baseUrl: null,
+          isPrimary: true,
+          extraHeaders: { "X-Org": "acme", Authorization: "Bearer sk-secret" },
+        })
+        .returning();
+
+      const snapshot = await LlmProviderApiKeyModel.findByIdForAudit(
+        row.id,
+        org.id,
+      );
+
+      expect(snapshot?.extraHeaderNames).toEqual(["Authorization", "X-Org"]);
+      expect(snapshot).toHaveProperty("isPrimary", true);
+      // The header VALUES (a bearer token here) must never reach the snapshot.
+      expect(JSON.stringify(snapshot)).not.toContain("sk-secret");
+      expect(JSON.stringify(snapshot)).not.toContain("Bearer");
+    });
   });
 
   describe("ApiKeyModel.findByIdForAudit org isolation", () => {

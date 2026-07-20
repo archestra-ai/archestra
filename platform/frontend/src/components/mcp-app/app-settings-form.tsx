@@ -4,7 +4,7 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
-import { Eye, EyeOff, Globe, User, Users } from "lucide-react";
+import { Globe, User, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
@@ -12,6 +12,13 @@ import { EnvironmentSelector } from "@/components/environment-selector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type VisibilityOption,
@@ -89,22 +96,23 @@ export function AppSettingsForm({
   const canShareTeams = isAppAdmin || isAppTeamAdmin;
   const hasNoTeams = (teams ?? []).length === 0;
 
-  const enabledOptions: VisibilityOption<"disabled" | "enabled">[] = [
+  const enabledOptions = [
     {
-      value: "disabled",
+      value: "disabled" as const,
       label: "Disabled",
       description:
         "You can edit and preview it, but Agents and the MCP Gateway can't reach it",
-      icon: EyeOff,
     },
     {
-      value: "enabled",
+      value: "enabled" as const,
       label: "Enabled",
       description:
         "Reachable from Agents and the MCP Gateway, for everyone in the scope above",
-      icon: Eye,
     },
   ];
+  const selectedEnabledDescription = enabledOptions.find(
+    (option) => option.value === enabledStatus,
+  )?.description;
 
   const options: VisibilityOption<ResourceVisibilityScope>[] = [
     {
@@ -258,12 +266,35 @@ export function AppSettingsForm({
             </div>
           )}
 
-          <VisibilitySelector
-            heading="App status"
-            value={enabledStatus}
-            options={enabledOptions}
-            onValueChange={setEnabledStatus}
-          />
+          <div className="space-y-2">
+            <Label>App status</Label>
+            <Select
+              value={enabledStatus}
+              onValueChange={(next) =>
+                setEnabledStatus(next as "disabled" | "enabled")
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {enabledOptions.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    description={option.description}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedEnabledDescription ? (
+              <p className="text-xs text-muted-foreground">
+                {selectedEnabledDescription}
+              </p>
+            ) : null}
+          </div>
         </VisibilitySelector>
 
         {canUpdate && (

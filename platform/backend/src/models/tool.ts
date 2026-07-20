@@ -106,16 +106,25 @@ class ToolModel {
    * upstream name stays recoverable (see {@link unslugifyName} and
    * `tools.raw_name`).
    */
+  /**
+   * Sanitize a catalog/server display name into the tool-slug prefix
+   * (`slugifyName` lowercases, maps whitespace to `_`, strips `[^a-z0-9_-]`).
+   * Shared with the rename 409 gate so slug-equivalent display names are
+   * rejected before they collide on the global tool-name string.
+   */
+  static sanitizeServerNameForSlug(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_-]/g, "");
+  }
+
   static slugifyName(mcpServerName: string, toolName: string): string {
     // Per-character sanitization (lowercase, whitespace → `_`, strip the rest)
     // is context-free, so sanitizing the two parts separately yields exactly the
     // same string as sanitizing the joined name — but it lets us keep the whole
     // raw-tool-name portion intact when trimming to fit.
-    const sanitize = (value: string): string =>
-      value
-        .toLowerCase()
-        .replace(/\s+/g, "_") // Replace whitespace with underscores
-        .replace(/[^a-z0-9_-]/g, ""); // Remove characters not allowed in tool names
+    const sanitize = ToolModel.sanitizeServerNameForSlug;
     const serverSlug = sanitize(mcpServerName);
     const rawSlug = sanitize(toolName);
     const suffix = `${MCP_SERVER_TOOL_NAME_SEPARATOR}${rawSlug}`;
@@ -2447,6 +2456,69 @@ class ToolModel {
    *
    * @returns Object with created, updated, and unchanged tool arrays for logging
    */
+  /**
+   * Re-slugs every catalog tool's name in place for a catalog rename:
+   * `<oldname>__<tool>` → `<newname>__<tool>`. Rows are UPDATEd (never
+   * delete+create), so tool ids — and with them policies and agent
+   * assignments — are untouched. All inputs live on stored rows (`raw_name`,
+   * with the legacy `unslugifyName` fallback), so no running pod is needed.
+   *
+   * A dedicated tx-aware method rather than `syncToolsForCatalog`: sync is
+   * not transaction-aware and fires side effects (proxy-tool adoption,
+   * deletes), while the rename cascade must be atomic.
+   *
+   * Returns the `{oldName, newName}` pairs so the caller can cascade
+   * name-string-keyed rows (e.g. `limits.toolName`).
+   */
+  static async renameToolPrefixesForCatalog(
+    params: { catalogId: string; newName: string },
+    tx?: Transaction,
+  ): Promise<Array<{ oldName: string; newName: string }>> {
+    const executor = tx ?? db;
+    const catalogTools = await executor
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        rawName: schema.toolsTable.rawName,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          isNull(schema.toolsTable.agentId),
+          eq(schema.toolsTable.catalogId, params.catalogId),
+        ),
+      );
+
+    // Legacy duplicate rows (same raw name under different stale prefixes)
+    // would re-slug to the same target and abort the transaction on the
+    // (catalog_id, name) unique index. First target wins; losers keep their
+    // stale name and are reconciled by the next real tool sync.
+    const takenNames = new Set(catalogTools.map((tool) => tool.name));
+    const pairs: Array<{ oldName: string; newName: string }> = [];
+
+    for (const tool of catalogTools) {
+      const rawName = tool.rawName ?? ToolModel.unslugifyName(tool.name);
+      const newSlug = ToolModel.slugifyName(params.newName, rawName);
+      if (newSlug === tool.name) continue;
+      if (takenNames.has(newSlug)) {
+        logger.warn(
+          { catalogId: params.catalogId, oldName: tool.name, newSlug },
+          "Skipping tool rename — target name already taken by a duplicate row",
+        );
+        continue;
+      }
+      await executor
+        .update(schema.toolsTable)
+        .set({ name: newSlug })
+        .where(eq(schema.toolsTable.id, tool.id));
+      takenNames.delete(tool.name);
+      takenNames.add(newSlug);
+      pairs.push({ oldName: tool.name, newName: newSlug });
+    }
+
+    return pairs;
+  }
+
   static async syncToolsForCatalog(
     tools: Array<{
       name: string;

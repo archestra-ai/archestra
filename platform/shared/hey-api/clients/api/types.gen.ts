@@ -41363,6 +41363,7 @@ export type GetInternalMcpCatalogResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -41706,6 +41707,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -42006,6 +42008,7 @@ export type GetInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -42344,6 +42347,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -42823,6 +42827,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -43038,6 +43043,7 @@ export type ApproveCatalogItemImageResponses = {
         }> | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         multitenant: boolean;
+        deploymentName: string | null;
         dynamicConnectionMcpServerId: string | null;
         serverUrl: string | null;
         docsUrl: string | null;
@@ -51769,6 +51775,7 @@ export type GetMcpServersResponses = {
     200: Array<{
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -51910,6 +51917,7 @@ export type InstallMcpServerResponses = {
     200: {
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -52117,6 +52125,7 @@ export type GetMcpServerResponses = {
     200: {
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -52249,6 +52258,7 @@ export type ReauthenticateMcpServerResponses = {
     200: {
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
@@ -52653,6 +52663,7 @@ export type ReinstallMcpServerResponses = {
     200: {
         id: string;
         name: string;
+        deploymentName: string | null;
         catalogId: string;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;

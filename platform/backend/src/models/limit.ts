@@ -1,5 +1,5 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
@@ -286,6 +286,35 @@ class LimitModel {
     await db.delete(schema.limitsTable).where(eq(schema.limitsTable.id, id));
 
     return true;
+  }
+
+  /**
+   * Exact-string swaps of the name-keyed limit columns after an MCP catalog
+   * rename, so limits keyed to `mcpServerName` / `toolName` keep matching
+   * the renamed server and tools instead of silently going stale.
+   */
+  static async renameNameKeys(
+    params: {
+      serverNamePairs: Array<{ oldName: string; newName: string }>;
+      toolNamePairs: Array<{ oldName: string; newName: string }>;
+    },
+    tx?: Transaction,
+  ): Promise<void> {
+    const executor = tx ?? db;
+    for (const { oldName, newName } of params.serverNamePairs) {
+      if (oldName === newName) continue;
+      await executor
+        .update(schema.limitsTable)
+        .set({ mcpServerName: newName })
+        .where(eq(schema.limitsTable.mcpServerName, oldName));
+    }
+    for (const { oldName, newName } of params.toolNamePairs) {
+      if (oldName === newName) continue;
+      await executor
+        .update(schema.limitsTable)
+        .set({ toolName: newName })
+        .where(eq(schema.limitsTable.toolName, oldName));
+    }
   }
 
   /**

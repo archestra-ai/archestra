@@ -157510,6 +157510,10 @@
                       "multitenant": {
                         "type": "boolean"
                       },
+                      "deploymentName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "dynamicConnectionMcpServerId": {
                         "nullable": true,
                         "type": "string",
@@ -158067,6 +158071,7 @@
                       "authFields",
                       "serverType",
                       "multitenant",
+                      "deploymentName",
                       "dynamicConnectionMcpServerId",
                       "serverUrl",
                       "docsUrl",
@@ -159015,6 +159020,10 @@
                     "multitenant": {
                       "type": "boolean"
                     },
+                    "deploymentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "dynamicConnectionMcpServerId": {
                       "nullable": true,
                       "type": "string",
@@ -159556,6 +159565,7 @@
                     "authFields",
                     "serverType",
                     "multitenant",
+                    "deploymentName",
                     "dynamicConnectionMcpServerId",
                     "serverUrl",
                     "docsUrl",
@@ -159930,6 +159940,10 @@
                     "multitenant": {
                       "type": "boolean"
                     },
+                    "deploymentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "dynamicConnectionMcpServerId": {
                       "nullable": true,
                       "type": "string",
@@ -160471,6 +160485,7 @@
                     "authFields",
                     "serverType",
                     "multitenant",
+                    "deploymentName",
                     "dynamicConnectionMcpServerId",
                     "serverUrl",
                     "docsUrl",
@@ -161411,6 +161426,10 @@
                     "multitenant": {
                       "type": "boolean"
                     },
+                    "deploymentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "dynamicConnectionMcpServerId": {
                       "nullable": true,
                       "type": "string",
@@ -161952,6 +161971,7 @@
                     "authFields",
                     "serverType",
                     "multitenant",
+                    "deploymentName",
                     "dynamicConnectionMcpServerId",
                     "serverUrl",
                     "docsUrl",
@@ -163464,6 +163484,10 @@
                       "multitenant": {
                         "type": "boolean"
                       },
+                      "deploymentName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "dynamicConnectionMcpServerId": {
                         "nullable": true,
                         "type": "string",
@@ -164005,6 +164029,7 @@
                       "authFields",
                       "serverType",
                       "multitenant",
+                      "deploymentName",
                       "dynamicConnectionMcpServerId",
                       "serverUrl",
                       "docsUrl",
@@ -164379,6 +164404,10 @@
                     },
                     "multitenant": {
                       "type": "boolean"
+                    },
+                    "deploymentName": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "dynamicConnectionMcpServerId": {
                       "nullable": true,
@@ -164921,6 +164950,7 @@
                     "authFields",
                     "serverType",
                     "multitenant",
+                    "deploymentName",
                     "dynamicConnectionMcpServerId",
                     "serverUrl",
                     "docsUrl",
@@ -198952,6 +198982,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "deploymentName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "catalogId": {
                         "type": "string",
                         "format": "uuid",
@@ -199158,6 +199192,7 @@
                     "required": [
                       "id",
                       "name",
+                      "deploymentName",
                       "catalogId",
                       "serverType",
                       "secretId",
@@ -199534,6 +199569,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "deploymentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "catalogId": {
                       "type": "string",
                       "format": "uuid",
@@ -199740,6 +199779,7 @@
                   "required": [
                     "id",
                     "name",
+                    "deploymentName",
                     "catalogId",
                     "serverType",
                     "secretId",
@@ -200034,6 +200074,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "deploymentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "catalogId": {
                       "type": "string",
                       "format": "uuid",
@@ -200240,6 +200284,7 @@
                   "required": [
                     "id",
                     "name",
+                    "deploymentName",
                     "catalogId",
                     "serverType",
                     "secretId",
@@ -200843,6 +200888,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "deploymentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "catalogId": {
                       "type": "string",
                       "format": "uuid",
@@ -201049,6 +201098,7 @@
                   "required": [
                     "id",
                     "name",
+                    "deploymentName",
                     "catalogId",
                     "serverType",
                     "secretId",
@@ -202280,6 +202330,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "deploymentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "catalogId": {
                       "type": "string",
                       "format": "uuid",
@@ -202486,6 +202540,7 @@
                   "required": [
                     "id",
                     "name",
+                    "deploymentName",
                     "catalogId",
                     "serverType",
                     "secretId",

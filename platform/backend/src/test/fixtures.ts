@@ -643,6 +643,7 @@ async function makeMcpServer(
       | "scope"
       | "localInstallationStatus"
       | "oauthRefreshError"
+      | "deploymentName"
     >
   > = {},
 ) {
@@ -700,6 +701,8 @@ async function makeInternalMcpCatalog(
       | "teams"
       | "clonedFrom"
       | "environmentId"
+      | "multitenant"
+      | "deploymentSpecYaml"
     >
   > & {
     organizationId?: string;

@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
+import AgentExcludedSubagentModel from "@/models/agent-excluded-subagent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -398,6 +399,34 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("model", "google/gemini-2.5-pro");
     expect(snapshot).toHaveProperty("llmProvider", "gemini");
     expect(snapshot).not.toHaveProperty("llmModel");
+  });
+
+  test("AgentModel.findByIdForAudit captures accessAllSubagents and excluded subagent ids so a subagent-permission change diffs", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const parent = await AgentModel.create({
+      name: "Parent Agent",
+      organizationId: org.id,
+      scope: "org",
+      agentType: "agent",
+      teams: [],
+      knowledgeBaseIds: [],
+    });
+    const excluded = await AgentModel.create({
+      name: "Excluded Subagent",
+      organizationId: org.id,
+      scope: "org",
+      agentType: "agent",
+      teams: [],
+      knowledgeBaseIds: [],
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(parent.id, [excluded.id]);
+
+    const snapshot = await AgentModel.findByIdForAudit(parent.id, org.id);
+
+    expect(snapshot).toHaveProperty("accessAllSubagents");
+    expect(snapshot).toHaveProperty("excludedSubagentIds", [excluded.id]);
   });
 
   test("AgentModel.findByIdForAudit returns null model/provider when the agent has no model configured", async ({

@@ -57,6 +57,7 @@ import type {
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
@@ -3092,6 +3093,7 @@ class AgentModel {
       knowledgeBaseIds,
       connectorIds,
       delegations,
+      excludedSubagentIds,
       modelRows,
       keyRows,
     ] = await Promise.all([
@@ -3101,6 +3103,7 @@ class AgentModel {
       AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
       AgentConnectorAssignmentModel.getConnectorIds(id),
       AgentToolModel.getDelegationTargets(id),
+      AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
       // Resolve the live modelId FK to its human-readable identity so a model
       // change surfaces as a real diff — the legacy llmModel text column is
       // deprecated (never written) and would always read null.
@@ -3140,12 +3143,14 @@ class AgentModel {
       llmProvider: keyRows[0]?.provider ?? null,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
+      accessAllSubagents: row.accessAllSubagents,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),
       teams: teams.map((t) => t.name).sort(),
       labels: labels.sort(),
       delegationTargets,
+      excludedSubagentIds: [...excludedSubagentIds].sort(),
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };

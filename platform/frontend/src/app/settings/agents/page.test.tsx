@@ -207,7 +207,9 @@ describe("AgentSettingsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Reset" }));
 
-    expect(screen.getByText("Select API key first...")).toBeInTheDocument();
+    expect(
+      screen.getByText("Select provider key first..."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 

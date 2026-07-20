@@ -442,7 +442,7 @@ describe("ArchestraPromptInput", () => {
       );
       expect(screen.getByRole("link")).toHaveAttribute(
         "aria-label",
-        "Enable file uploads in agent settings",
+        "Enable file uploads in Chat settings",
       );
     });
 

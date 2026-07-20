@@ -4,7 +4,7 @@ import {
   getApiKeyExpirationError,
   isApiKeyExpirationDateDisabled,
   shouldSkipCreateApiKeySubmit,
-} from "./page.utils";
+} from "./api-keys-card.utils";
 
 const NOW = new Date("2026-07-18T12:00:00Z");
 const HOUR_MS = 60 * 60 * 1000;

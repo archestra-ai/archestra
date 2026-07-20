@@ -395,7 +395,7 @@ class ToolModel {
 
   /**
    * The org-configured default guardrail policies applied to every newly
-   * created tool ("Default Guardrails for MCP Tools" in Agent Settings). Tools
+   * created tool ("Default Guardrails for MCP Tools" in Settings → Security). Tools
    * are org-agnostic shared rows, so this reads the deployment's organization;
    * it falls back to the safe hardcoded defaults only when no organization
    * exists.

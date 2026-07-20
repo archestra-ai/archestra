@@ -9,6 +9,7 @@ import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema, type Transaction } from "@/database";
+import logger from "@/logging";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
@@ -899,12 +900,29 @@ function toApiKeyWithScopeInfo<
  * {@link toApiKeyWithScopeInfo} calls this at most once per key and derives
  * metadata from the returned value — the value itself is never included in a
  * response.
+ *
+ * Callers only use the value for optional metadata (vault reference,
+ * ChatGPT-subscription marker), so an undecryptable secret — e.g. one
+ * encrypted under a previous ARCHESTRA_AUTH_SECRET — degrades to null instead
+ * of throwing; otherwise a single stale secret would break key listing for
+ * everyone.
  */
 function decryptApiKeyValue(secret: SecretValue | null): string | null {
   if (!secret || typeof secret !== "object") return null;
-  const decrypted = isEncryptedSecret(secret)
-    ? decryptSecretValue(secret)
-    : secret;
+  let decrypted: SecretValue;
+  if (isEncryptedSecret(secret)) {
+    try {
+      decrypted = decryptSecretValue(secret);
+    } catch (error) {
+      logger.warn(
+        { error },
+        "Failed to decrypt LLM provider API key secret while deriving key metadata; treating the value as unreadable",
+      );
+      return null;
+    }
+  } else {
+    decrypted = secret;
+  }
   const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
   return typeof apiKeyValue === "string" ? apiKeyValue : null;
 }

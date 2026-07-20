@@ -3,7 +3,9 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
-import { TeamModel } from "@/models";
+import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
+import { TeamLabelModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -70,6 +72,65 @@ describe("team tool execution", () => {
     expect(persisted?.name).toBe("Engineering");
   });
 
+  test("create_team assigns labels at creation time", async () => {
+    const result = await executeArchestraTool(
+      toolName("create_team"),
+      {
+        name: "Platform",
+        labels: [
+          { key: "cost-center", value: "cc-123" },
+          { key: "environment", value: "production" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const team = (result.structuredContent as any).team;
+    expect(team.labels).toEqual([
+      { key: "cost-center", value: "cc-123" },
+      { key: "environment", value: "production" },
+    ]);
+    expect((result.content[0] as any).text).toContain(
+      "Labels: cost-center: cc-123, environment: production",
+    );
+
+    const persisted = await TeamLabelModel.getLabelsForTeam(team.id);
+    expect(persisted.map(({ key, value }) => ({ key, value }))).toEqual([
+      { key: "cost-center", value: "cc-123" },
+      { key: "environment", value: "production" },
+    ]);
+  });
+
+  test("create_team keeps one value per label key", async () => {
+    const result = await executeArchestraTool(
+      toolName("create_team"),
+      {
+        name: "Deduped",
+        labels: [
+          { key: "environment", value: "staging" },
+          { key: "environment", value: "production" },
+        ],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).team.labels).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+  });
+
+  test("create_team rejects labels with reserved characters", async () => {
+    const result = await executeArchestraTool(
+      toolName("create_team"),
+      { name: "Bad Labels", labels: [{ key: "a:b", value: "ok" }] },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Validation error in archestra__create_team",
+    );
+  });
+
   // === get_team ===
 
   test("get_team requires an id or name", async () => {
@@ -95,6 +156,27 @@ describe("team tool execution", () => {
     );
     expect(result.isError).toBe(false);
     expect((result.structuredContent as any).team.name).toBe("Support");
+  });
+
+  test("get_team includes the team's labels", async ({ makeTeam }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Labeled",
+    });
+    await TeamLabelModel.syncTeamLabels(team.id, [
+      { key: "environment", value: "production" },
+    ]);
+    const result = await executeArchestraTool(
+      toolName("get_team"),
+      { id: team.id },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).team.labels).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+    expect((result.content[0] as any).text).toContain(
+      "Labels: environment: production",
+    );
   });
 
   test("get_team fetches by name", async ({ makeTeam }) => {
@@ -163,6 +245,29 @@ describe("team tool execution", () => {
     const teams = (filtered.structuredContent as any).teams;
     expect(teams).toHaveLength(1);
     expect(teams[0].name).toBe("Alpha");
+  });
+
+  test("list_teams includes each team's labels", async ({ makeTeam }) => {
+    const labeled = await makeTeam(organizationId, adminUserId, {
+      name: "Labeled",
+    });
+    await makeTeam(organizationId, adminUserId, { name: "Unlabeled" });
+    await TeamLabelModel.syncTeamLabels(labeled.id, [
+      { key: "cost-center", value: "cc-123" },
+    ]);
+
+    const result = await executeArchestraTool(
+      toolName("list_teams"),
+      {},
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const teams = (result.structuredContent as any).teams;
+    const byName = Object.fromEntries(
+      teams.map((team: any) => [team.name, team.labels]),
+    );
+    expect(byName.Labeled).toEqual([{ key: "cost-center", value: "cc-123" }]);
+    expect(byName.Unlabeled).toEqual([]);
   });
 
   test("list_teams only returns teams from the caller's organization", async ({
@@ -234,6 +339,62 @@ describe("team tool execution", () => {
     expect(result.isError).toBe(false);
     const persisted = await TeamModel.findById(team.id);
     expect(persisted?.description).toBeNull();
+  });
+
+  test("edit_team replaces labels when provided", async ({ makeTeam }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Relabel Me",
+    });
+    await TeamLabelModel.syncTeamLabels(team.id, [
+      { key: "environment", value: "staging" },
+      { key: "cost-center", value: "cc-old" },
+    ]);
+
+    const result = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: team.id, labels: [{ key: "environment", value: "production" }] },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).team.labels).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+
+    const persisted = await TeamLabelModel.getLabelsForTeam(team.id);
+    expect(persisted.map(({ key, value }) => ({ key, value }))).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+  });
+
+  test("edit_team clears labels with an empty array and keeps them when omitted", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Sticky Labels",
+    });
+    await TeamLabelModel.syncTeamLabels(team.id, [
+      { key: "environment", value: "production" },
+    ]);
+
+    // A rename that omits labels must not touch them.
+    const renamed = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: team.id, name: "Renamed" },
+      mockContext,
+    );
+    expect(renamed.isError).toBe(false);
+    expect((renamed.structuredContent as any).team.labels).toEqual([
+      { key: "environment", value: "production" },
+    ]);
+
+    const cleared = await executeArchestraTool(
+      toolName("edit_team"),
+      { id: team.id, labels: [] },
+      mockContext,
+    );
+    expect(cleared.isError).toBe(false);
+    expect((cleared.structuredContent as any).team.labels).toEqual([]);
+    expect(await TeamLabelModel.getLabelsForTeam(team.id)).toEqual([]);
   });
 
   test("edit_team returns error for nonexistent team", async () => {
@@ -489,6 +650,179 @@ describe("team tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("do not have permission");
+  });
+
+  // === external groups (SSO team sync) ===
+
+  test("list_team_external_groups returns the team's mappings", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Synced",
+    });
+    await TeamModel.addExternalGroup(team.id, "okta-engineering");
+
+    const result = await executeArchestraTool(
+      toolName("list_team_external_groups"),
+      { team_id: team.id },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const groups = (result.structuredContent as any).externalGroups;
+    expect(groups).toHaveLength(1);
+    expect(groups[0].groupIdentifier).toBe("okta-engineering");
+    expect(groups[0].teamId).toBe(team.id);
+    expect((result.content[0] as any).text).toContain("okta-engineering");
+  });
+
+  test("add_team_external_group maps a group and normalizes the identifier to lowercase", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Sync Me",
+    });
+    const result = await executeArchestraTool(
+      toolName("add_team_external_group"),
+      { team_id: team.id, group_identifier: "CN=Admins,OU=Groups" },
+      mockContext,
+    );
+    expect(result.isError).toBe(false);
+    const group = (result.structuredContent as any).externalGroup;
+    expect(group.groupIdentifier).toBe("cn=admins,ou=groups");
+
+    const persisted = await TeamModel.getExternalGroups(team.id);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].groupIdentifier).toBe("cn=admins,ou=groups");
+  });
+
+  test("add_team_external_group rejects a duplicate mapping case-insensitively", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Dup Sync",
+    });
+    await TeamModel.addExternalGroup(team.id, "okta-engineering");
+
+    const result = await executeArchestraTool(
+      toolName("add_team_external_group"),
+      { team_id: team.id, group_identifier: "Okta-Engineering" },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "already mapped to this team",
+    );
+  });
+
+  test("remove_team_external_group requires a group_id or group_identifier", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const result = await executeArchestraTool(
+      toolName("remove_team_external_group"),
+      { team_id: team.id },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Provide either a group_id or a group_identifier",
+    );
+  });
+
+  test("remove_team_external_group removes by mapping id and by identifier", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Unsync",
+    });
+    const first = await TeamModel.addExternalGroup(team.id, "okta-first");
+    await TeamModel.addExternalGroup(team.id, "okta-second");
+
+    const byId = await executeArchestraTool(
+      toolName("remove_team_external_group"),
+      { team_id: team.id, group_id: first.id },
+      mockContext,
+    );
+    expect(byId.isError).toBe(false);
+
+    // Identifiers are matched case-insensitively on removal too.
+    const byIdentifier = await executeArchestraTool(
+      toolName("remove_team_external_group"),
+      { team_id: team.id, group_identifier: "Okta-Second" },
+      mockContext,
+    );
+    expect(byIdentifier.isError).toBe(false);
+    expect(await TeamModel.getExternalGroups(team.id)).toHaveLength(0);
+
+    const missing = await executeArchestraTool(
+      toolName("remove_team_external_group"),
+      { team_id: team.id, group_identifier: "okta-first" },
+      mockContext,
+    );
+    expect(missing.isError).toBe(true);
+    expect((missing.content[0] as any).text).toContain(
+      "External group mapping not found",
+    );
+  });
+
+  test("external group tools are blocked without an enterprise license", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId);
+    const originalCore = config.enterpriseFeatures.core;
+    Object.defineProperty(config.enterpriseFeatures, "core", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+    enterpriseTier.setUserCountForTesting(9999);
+    try {
+      const result = await executeArchestraTool(
+        toolName("add_team_external_group"),
+        { team_id: team.id, group_identifier: "okta-engineering" },
+        mockContext,
+      );
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Team Sync is an enterprise feature",
+      );
+    } finally {
+      Object.defineProperty(config.enterpriseFeatures, "core", {
+        value: originalCore,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(0);
+    }
+  });
+
+  test("a plain team member cannot manage external group sync", async ({
+    makeTeam,
+    makeUser,
+    makeMember,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, adminUserId, {
+      name: "Locked Sync",
+    });
+    const plainUser = await makeUser({ email: "plain-sync@test.com" });
+    await makeMember(plainUser.id, organizationId, { role: "member" });
+    await makeTeamMember(team.id, plainUser.id, { role: "member" });
+    const memberContext: ArchestraContext = {
+      agent: { id: testAgent.id, name: testAgent.name },
+      userId: plainUser.id,
+      organizationId,
+    };
+
+    const result = await executeArchestraTool(
+      toolName("add_team_external_group"),
+      { team_id: team.id, group_identifier: "okta-engineering" },
+      memberContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "manage this team's external group sync",
+    );
   });
 
   // === Team-admin management (org member who is admin of a specific team) ===

@@ -130,7 +130,10 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
       if (!app) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(
+          403,
+          "You don't have access to this MCP App, or it doesn't exist.",
+        );
       }
 
       // Gate tools/call on the per-app allowlist + the tool's app visibility.

@@ -101,6 +101,9 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   add_team_member: ToolGroup.Teams,
   update_team_member_role: ToolGroup.Teams,
   remove_team_member: ToolGroup.Teams,
+  list_team_external_groups: ToolGroup.Teams,
+  add_team_external_group: ToolGroup.Teams,
+  remove_team_external_group: ToolGroup.Teams,
 
   create_limit: ToolGroup.Limits,
   get_limits: ToolGroup.Limits,

@@ -7,15 +7,14 @@ export function useSettingsTabs() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const { data: secretsType } = useSecretsType();
   return [
-    { label: "Your Account", href: "/settings/account" },
-    ...(permissionMap?.["/settings/api-keys"]
-      ? [{ label: "API Keys", href: "/settings/api-keys" }]
+    ...(permissionMap?.["/settings/organization"]
+      ? [{ label: "Organization", href: "/settings/organization" }]
       : []),
     ...(permissionMap?.["/settings/service-accounts"]
       ? [{ label: "Service Accounts", href: "/settings/service-accounts" }]
       : []),
     ...(permissionMap?.["/settings/agents"]
-      ? [{ label: "Agents", href: "/settings/agents" }]
+      ? [{ label: "Chat", href: "/settings/agents" }]
       : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
@@ -25,6 +24,9 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/skills"]
       ? [{ label: "Skills", href: "/settings/skills" }]
+      : []),
+    ...(permissionMap?.["/settings/security"]
+      ? [{ label: "Security", href: "/settings/security" }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]
@@ -52,9 +54,6 @@ export function useSettingsTabs() {
       : []),
     ...(secretsType?.type === "Vault" && permissionMap?.["/settings/secrets"]
       ? [{ label: "Secrets", href: "/settings/secrets" }]
-      : []),
-    ...(permissionMap?.["/settings/organization"]
-      ? [{ label: "Organization", href: "/settings/organization" }]
       : []),
   ];
 }

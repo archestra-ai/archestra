@@ -13,7 +13,9 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -38,6 +40,7 @@ import { RoleSelect } from "@/components/ui/role-select";
 import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   type ServiceAccountToken,
   useCreateServiceAccountToken,
@@ -92,17 +95,21 @@ export default function ServiceAccountDetailPage({
   const [isDisabled, setIsDisabled] = useState(false);
   const [isTokenDialogOpen, setIsTokenDialogOpen] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [keyToDelete, setKeyToDelete] = useState<ServiceAccountToken | null>(
+    null,
+  );
 
   const form = useForm<ServiceAccountFormValues>({
     defaultValues: { name: "" },
   });
+  const apiDocsUrl = getFrontendDocsUrl("platform-api-reference");
   const tokenForm = useForm<TokenFormValues>({
     defaultValues: DEFAULT_TOKEN_FORM_VALUES,
   });
 
   const openTokenDialog = useCallback(() => {
     tokenForm.reset({
-      name: serviceAccount ? `${serviceAccount.name} token` : "",
+      name: serviceAccount ? `${serviceAccount.name} key` : "",
       expiresAt: null,
     });
     setIsTokenDialogOpen(true);
@@ -116,7 +123,7 @@ export default function ServiceAccountDetailPage({
         onClick={openTokenDialog}
       >
         <Plus className="h-4 w-4" />
-        Add token
+        Create API Key
       </PermissionButton>,
     );
 
@@ -149,7 +156,7 @@ export default function ServiceAccountDetailPage({
       },
       {
         accessorKey: "tokenStart",
-        header: "Token prefix",
+        header: "Key",
         cell: ({ row }) => (
           <code className="text-xs">{row.original.tokenStart}...</code>
         ),
@@ -194,8 +201,8 @@ export default function ServiceAccountDetailPage({
                         <PowerOff className="h-4 w-4" />
                       ),
                       label: row.original.disabled
-                        ? "Activate token"
-                        : "Deactivate token",
+                        ? "Activate API key"
+                        : "Deactivate API key",
                       onClick: () =>
                         updateTokenMutation.mutate({
                           id: serviceAccountId,
@@ -205,12 +212,8 @@ export default function ServiceAccountDetailPage({
                     },
                     {
                       icon: <Trash2 className="h-4 w-4" />,
-                      label: "Delete token",
-                      onClick: () =>
-                        deleteTokenMutation.mutate({
-                          id: serviceAccountId,
-                          tokenId: row.original.id,
-                        }),
+                      label: "Delete API key",
+                      onClick: () => setKeyToDelete(row.original),
                       variant: "destructive" as const,
                     },
                   ]}
@@ -220,13 +223,17 @@ export default function ServiceAccountDetailPage({
           ]
         : []),
     ],
-    [
-      canUpdateServiceAccounts,
-      deleteTokenMutation,
-      serviceAccountId,
-      updateTokenMutation,
-    ],
+    [canUpdateServiceAccounts, serviceAccountId, updateTokenMutation],
   );
+
+  const handleDeleteKey = async () => {
+    if (!keyToDelete) return;
+    await deleteTokenMutation.mutateAsync({
+      id: serviceAccountId,
+      tokenId: keyToDelete.id,
+    });
+    setKeyToDelete(null);
+  };
 
   const handleSave = async () => {
     if (!serviceAccount || !watchedName.trim()) return;
@@ -341,7 +348,8 @@ export default function ServiceAccountDetailPage({
                   Disable service account
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Disabled service accounts cannot authenticate with any token.
+                  Disabled service accounts cannot authenticate with any of
+                  their API keys.
                 </p>
               </div>
               <Switch
@@ -354,11 +362,28 @@ export default function ServiceAccountDetailPage({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold">Tokens</h3>
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold">API Keys</h3>
+              <p className="text-sm text-muted-foreground">
+                Keys that let scripts and integrations call the{" "}
+                {apiDocsUrl ? (
+                  <ExternalDocsLink
+                    href={apiDocsUrl}
+                    className="text-inherit underline underline-offset-4"
+                    showIcon={false}
+                  >
+                    platform API
+                  </ExternalDocsLink>
+                ) : (
+                  "platform API"
+                )}{" "}
+                as this service account.
+              </p>
+            </div>
             <DataTable
               columns={columns}
               data={serviceAccount.tokens}
-              emptyMessage="No tokens yet"
+              emptyMessage="No API keys yet"
             />
           </div>
 
@@ -383,6 +408,16 @@ export default function ServiceAccountDetailPage({
             onCopy={copyCreatedToken}
             onClose={closeCreatedTokenDialog}
           />
+          <DeleteConfirmDialog
+            open={!!keyToDelete}
+            onOpenChange={(open) => !open && setKeyToDelete(null)}
+            title="Delete API Key"
+            description="This will immediately revoke access for anything using this key."
+            isPending={deleteTokenMutation.isPending}
+            onConfirm={handleDeleteKey}
+            confirmLabel="Delete"
+            pendingLabel="Deleting..."
+          />
         </SettingsSectionStack>
       )}
     </LoadingWrapper>
@@ -406,7 +441,8 @@ function CreateTokenDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Add service account token"
+      title="Create API key"
+      description="Create an API key that authenticates as this service account."
       size="medium"
     >
       <DialogForm className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
@@ -415,17 +451,17 @@ function CreateTokenDialog({
             <Label htmlFor="service-account-token-name">Display name</Label>
             <Input
               id="service-account-token-name"
-              placeholder="Deployment token"
+              placeholder="Deployment key"
               {...form.register("name", { required: true })}
             />
             <p className="text-xs text-muted-foreground">
-              Name to easily identify the token.
+              Name to easily identify the key.
             </p>
           </div>
           <ExpirationDateTimeField
             value={form.watch("expiresAt")}
             onChange={(value) => form.setValue("expiresAt", value)}
-            noExpirationText="Token will never expire"
+            noExpirationText="Key will never expire"
             formatExpiration={formatExpiration}
           />
         </DialogBody>
@@ -443,7 +479,7 @@ function CreateTokenDialog({
             disabled={isPending || !form.watch("name").trim()}
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Generate token
+            Create
           </Button>
         </DialogStickyFooter>
       </DialogForm>
@@ -466,20 +502,20 @@ function CreatedTokenDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="Service account token created"
+      title="API key created"
       size="medium"
     >
       <DialogBody className="space-y-4">
         <div className="space-y-2">
-          <Label>Token</Label>
+          <Label>API key</Label>
           <p className="text-sm text-muted-foreground">
-            Copy the token now as you will not be able to see it again. Losing a
-            token requires creating a new one.
+            Copy this key now. It will not be shown again after you close this
+            dialog.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               readOnly
-              aria-label="Service account token"
+              aria-label="Service account API key"
               value={token ?? ""}
               className="font-mono text-xs"
             />

@@ -6,24 +6,20 @@ import { PageLayout } from "@/components/page-layout";
 import { useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
-  "/settings/account": {
-    title: "Your Account",
-    description:
-      "Manage your personal profile, sessions, and sign-in settings.",
-  },
-  "/settings/api-keys": {
-    title: "API Keys",
-    description: "Create and manage personal API keys for programmatic access.",
-  },
   "/settings/service-accounts": {
     title: "Service Accounts",
     description:
-      "Create and manage organization service accounts for programmatic access.",
+      "Organization-owned identities for automation. Each service account has a role and its own API keys for the platform API.",
   },
   "/settings/agents": {
-    title: "Agents",
+    title: "Chat",
     description:
-      "Configure default agent behavior and agent-related platform settings.",
+      "Defaults for chats and agents — default model, default agent, and file uploads.",
+  },
+  "/settings/security": {
+    title: "Security",
+    description:
+      "Organization-wide security defaults for tools your agents use.",
   },
   "/settings/github": {
     title: "GitHub",

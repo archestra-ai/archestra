@@ -711,26 +711,25 @@ export default function LimitsPage() {
 
   return (
     <div className="space-y-4">
-      {defaultUserLimits.length > 0 && (
-        <WithPermissions
-          permissions={{ llmLimit: ["read"] }}
-          noPermissionHandle="hide"
-        >
-          <Alert variant="info">
-            <AlertDescription className="block">
-              A default user limit applies to every user. Custom per-user limits
-              override it. Configure it in{" "}
-              <Link
-                href="/settings/llm"
-                className="font-medium underline underline-offset-4"
-              >
-                LLM settings
-              </Link>
-              .
-            </AlertDescription>
-          </Alert>
-        </WithPermissions>
-      )}
+      <WithPermissions
+        permissions={{ llmLimit: ["read"] }}
+        noPermissionHandle="hide"
+      >
+        <Alert variant="info">
+          <AlertDescription className="block">
+            {defaultUserLimits.length > 0
+              ? "A default user limit applies to every user. Custom per-user limits override it. Configure it in "
+              : "No default user limit is set — users are only capped by the custom limits below. Set a default for every user in "}
+            <Link
+              href="/settings/llm"
+              className="font-medium underline underline-offset-4"
+            >
+              LLM settings
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      </WithPermissions>
 
       <div className="flex flex-wrap gap-3">
         <Select

@@ -98,7 +98,9 @@ describe("mcpProxyRoutes POST /api/mcp/:agentId", () => {
 
     expect(response.statusCode).toBe(403);
     const body = response.json();
-    expect(body.error?.message).toBe("Forbidden");
+    expect(body.error?.message).toBe(
+      "You don't have access to this agent, or it doesn't exist.",
+    );
   });
 
   test("rejects tools/call for a tool whose visibility excludes 'app'", async ({

@@ -410,7 +410,8 @@ fn select_envs(
         let unknown_tasks: Vec<_> = names.into_iter().filter(|n| !matched.contains(n)).collect();
         if !unknown_tasks.is_empty() {
             return Err(RunError::Config(format!(
-                "task(s) {unknown_tasks:?} not found in the selected env(s)"
+                "task(s) {:?} not found in the selected env(s)",
+                unknown_tasks
             )));
         }
     }
@@ -1047,7 +1048,8 @@ async fn setup_agent_tools(
         && !failed.is_empty()
     {
         return Err(RunError::Config(format!(
-            "failed to assign tools to the eval agent: {failed:?}"
+            "failed to assign tools to the eval agent: {:?}",
+            failed
         )));
     }
 
@@ -1084,10 +1086,10 @@ fn surface_violations(
         .cloned()
         .collect();
     if !missing.is_empty() {
-        violations.push(format!("missing required tools after assignment: {missing:?}"));
+        violations.push(format!("missing required tools after assignment: {:?}", missing));
     }
     if !present.contains(submit_tool) {
-        violations.push(format!("benchmark tool {submit_tool:?} was not assigned/discovered"));
+        violations.push(format!("benchmark tool {:?} was not assigned/discovered", submit_tool));
     }
     let mutating: HashSet<_> = MUTATING_SKILL_TOOL_SHORT_NAMES
         .iter()
@@ -1100,7 +1102,8 @@ fn surface_violations(
         .collect();
     if !leaked.is_empty() {
         violations.push(format!(
-            "can mutate the skill library via {leaked:?}; refusing a contaminated surface"
+            "can mutate the skill library via {:?}; refusing a contaminated surface",
+            leaked
         ));
     }
     violations
@@ -2736,7 +2739,7 @@ async fn write_report(report: &str, out: Option<&Path>) -> Result<(), RunError> 
             info!("wrote report to {}", path.display());
         }
         None => {
-            println!("{report}");
+            println!("{}", report);
         }
     }
     Ok(())

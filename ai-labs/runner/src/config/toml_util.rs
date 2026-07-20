@@ -25,10 +25,17 @@ pub fn parse_toml_file(path: &std::path::Path) -> TomlResult<TomlTable> {
 }
 
 pub fn parse_toml_text(text: &str, path: &std::path::Path) -> TomlResult<TomlTable> {
-    // toml 1.x: `Value::from_str` parses a single TOML value, not a document;
-    // documents parse via `Table::from_str` (the root is always a table).
-    text.parse::<toml::Table>()
-        .map_err(|e| TomlError::new(format!("{}", path.display()), format!("cannot parse TOML: {e}")))
+    match text.parse::<toml::Value>() {
+        Ok(toml::Value::Table(t)) => Ok(t),
+        Ok(_) => Err(TomlError::new(
+            format!("{}", path.display()),
+            "TOML root must be a table",
+        )),
+        Err(e) => Err(TomlError::new(
+            format!("{}", path.display()),
+            format!("cannot parse TOML: {e}"),
+        )),
+    }
 }
 
 pub fn req_str(value: &TomlTable, key: &str, ctx: &str) -> TomlResult<String> {

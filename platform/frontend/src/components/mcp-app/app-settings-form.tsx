@@ -94,13 +94,14 @@ export function AppSettingsForm({
       value: "disabled",
       label: "Disabled",
       description:
-        "You can edit and preview the app, but it will not be reachable from Agents or MCP Gateway",
+        "You can edit and preview it, but Agents and the MCP Gateway can't reach it",
       icon: EyeOff,
     },
     {
       value: "enabled",
       label: "Enabled",
-      description: "Live for everyone at the visibility scope below",
+      description:
+        "Reachable from Agents and the MCP Gateway, for everyone in the scope above",
       icon: Eye,
     },
   ];

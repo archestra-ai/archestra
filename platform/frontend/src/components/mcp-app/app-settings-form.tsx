@@ -93,7 +93,8 @@ export function AppSettingsForm({
     {
       value: "disabled",
       label: "Disabled",
-      description: "Only you can see and use this app",
+      description:
+        "You can edit and preview the app, but it will not be reachable from Agents or MCP Gateway",
       icon: EyeOff,
     },
     {

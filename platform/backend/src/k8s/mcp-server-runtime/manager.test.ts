@@ -2037,6 +2037,10 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
 });
 
 describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   async function createManagerWithMockK8s(params: {
     mockK8sApi: Record<string, unknown>;
     mockK8sAppsApi: Record<string, unknown>;

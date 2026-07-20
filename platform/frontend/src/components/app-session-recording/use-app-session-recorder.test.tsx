@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import { snapshotConversationTranscript } from "@/lib/app-session-recording/app-recording-transcript";
 import { useFeature } from "@/lib/config/config.query";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
 import {
   type AppSessionRecorder,
@@ -26,6 +27,11 @@ vi.mock("@/lib/organization.query", () => ({
 }));
 vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
   useInvalidateAppRecording: () => vi.fn(),
+}));
+// The recorder is off on small screens; stubbed to a desktop viewport by
+// default (jsdom has no real matchMedia), flipped per test where it matters.
+vi.mock("@/lib/hooks/use-mobile", () => ({
+  useIsMobile: vi.fn(() => false),
 }));
 vi.mock("@/lib/app.query", () => ({
   useApp: () => ({ data: { id: "app", name: "Test App" } }),
@@ -147,6 +153,8 @@ beforeEach(() => {
   vi.mocked(useOrganization).mockReturnValue({
     data: { appsHackathonRecorderEnabled: true },
   } as ReturnType<typeof useOrganization>);
+  // Desktop viewport unless a test says otherwise.
+  vi.mocked(useIsMobile).mockReturnValue(false);
 });
 
 describe("useAppSessionRecorder", () => {
@@ -376,6 +384,21 @@ describe("useAppSessionRecorder", () => {
     } as ReturnType<typeof useOrganization>);
     const surface = renderChatSurface({
       conversationId: freshConversationId("org-off"),
+    });
+    expect(surface.composer.canRecord).toBe(false);
+    act(() => {
+      surface.composer.start();
+    });
+    expect(surface.composer.status).toBe("idle");
+  });
+
+  it("goes fully inert on a mobile-sized screen, whatever the settings say", () => {
+    // Everything else is on — deployment, org toggle — so this isolates the
+    // device gate: the recorder captures a desktop session and has no
+    // small-screen layout, so a phone gets no recorder at all.
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    const surface = renderChatSurface({
+      conversationId: freshConversationId("mobile"),
     });
     expect(surface.composer.canRecord).toBe(false);
     act(() => {

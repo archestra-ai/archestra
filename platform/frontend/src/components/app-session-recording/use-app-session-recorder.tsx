@@ -429,8 +429,9 @@ export function useOwnAppSessionRecorder(params: {
   appId: string | null;
 }): AppSessionRecorderHandle {
   const { conversationId, appId } = params;
-  // Deployment, hackathon date, and the organization's own toggle — an admin
-  // switching it off has to take the recorder with it, not just hide a button.
+  // Deployment, hackathon date, the organization's own toggle, and the device:
+  // an admin switching it off has to take the recorder with it, not just hide a
+  // button, and a phone-sized screen never gets it at all.
   const enabled = useAppsHackathonAvailable();
   const coreRef = useRef<AppRecorderCore | null>(null);
   if (enabled && !coreRef.current) coreRef.current = new AppRecorderCore();

@@ -1,5 +1,6 @@
 import { isAppsHackathonOpen } from "@archestra/shared";
 import { useFeature } from "@/lib/config/config.query";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
 
 /**
@@ -42,7 +43,15 @@ export function useAppsHackathonOffered(): boolean {
 }
 
 /**
- * Whether the recorder should actually run for this user — all three gates.
+ * Whether the recorder should actually run for this user — the three business
+ * gates plus one device gate.
+ *
+ * Off on a phone-sized screen whatever the deployment and organization allow:
+ * the recorder captures a desktop app-building session pixel by pixel and its
+ * composer cluster has no small-screen layout, so there is nothing a mobile
+ * visitor can usefully do with it. The device gate lives HERE and not in
+ * `useAppsHackathonOffered`, so an admin on a phone can still reach the toggle
+ * in settings even though the recorder itself stays hidden for them.
  *
  * Defaults closed while the organization is still loading: showing the control
  * and then taking it away reads as a glitch, where showing it a moment late
@@ -51,5 +60,10 @@ export function useAppsHackathonOffered(): boolean {
 export function useAppsHackathonAvailable(): boolean {
   const offered = useAppsHackathonOffered();
   const { data: organization } = useOrganization();
-  return offered && (organization?.appsHackathonRecorderEnabled ?? false);
+  const isMobile = useIsMobile();
+  return (
+    offered &&
+    !isMobile &&
+    (organization?.appsHackathonRecorderEnabled ?? false)
+  );
 }

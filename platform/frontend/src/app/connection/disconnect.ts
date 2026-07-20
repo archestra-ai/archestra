@@ -1,0 +1,105 @@
+/**
+ * The reverse of the connect flow: how to detach a client from the MCP gateway
+ * and the LLM proxy. Every step is a LOCAL change to the client's own config,
+ * so disconnecting works even when the proxy or the platform is unreachable —
+ * which is the whole point of having a disconnect path.
+ */
+
+export interface DisconnectStep {
+  title: string;
+  /** Plain-text guidance for manual (config-file / GUI) steps. */
+  body?: string;
+  /** A copyable command rendered in a terminal block. */
+  command?: string;
+}
+
+export function getDisconnectSteps(
+  clientId: string,
+  params: { serverName: string; appName: string },
+): DisconnectStep[] {
+  const { serverName, appName } = params;
+
+  switch (clientId) {
+    case "claude-code":
+      return [
+        {
+          title: "Remove the MCP gateway",
+          command: `claude mcp remove ${serverName}`,
+        },
+        {
+          title: "Remove the proxy base URL",
+          body: `Delete the ANTHROPIC_BASE_URL line from the env block in ~/.claude/settings.json — plus CLAUDE_CODE_USE_BEDROCK, AWS_REGION, and ANTHROPIC_BEDROCK_BASE_URL if you set up Bedrock. Restart Claude Code.`,
+        },
+      ];
+    case "cursor":
+      return [
+        {
+          title: "Remove the MCP gateway",
+          body: `Open Cursor Settings → MCP and remove the ${serverName} server, or delete its entry from ~/.cursor/mcp.json.`,
+        },
+        {
+          title: "Revert the proxy",
+          body: `Remove the ${appName} base URL override you added under Cursor's model settings.`,
+        },
+      ];
+    case "codex":
+      return [
+        {
+          title: "Remove the MCP gateway",
+          command: `codex mcp remove ${serverName}`,
+        },
+        {
+          title: "Revert the proxy provider",
+          body: `Remove the ${appName} provider block you added to ~/.codex/config.toml.`,
+        },
+      ];
+    case "copilot-cli":
+      return [
+        {
+          title: "Remove the MCP gateway",
+          command: `copilot mcp remove ${serverName}`,
+        },
+        {
+          title: "Unset the proxy base URL",
+          command: `unset COPILOT_PROVIDER_BASE_URL`,
+        },
+        {
+          title: "Clean your shell profile",
+          body: `Delete the export COPILOT_PROVIDER_BASE_URL line from your shell profile so it does not come back on the next session.`,
+        },
+      ];
+    case "claude-desktop":
+      return [
+        {
+          title: "Remove the MCP gateway",
+          body: `Delete the ${serverName} entry from the mcpServers block in claude_desktop_config.json, then restart Claude Desktop.`,
+        },
+        {
+          title: "Revert the proxy",
+          body: `Remove the ${appName} custom headers and base URL you added for inference.`,
+        },
+      ];
+    case "n8n":
+      return [
+        {
+          title: "Remove the MCP gateway",
+          body: `Delete the ${appName} MCP node and its gateway credential from your n8n workflow.`,
+        },
+        {
+          title: "Revert the proxy",
+          body: `Remove the ${appName} base URL and API key from the n8n LLM credential.`,
+        },
+      ];
+    default:
+      return [
+        {
+          title: "Remove the MCP gateway",
+          body: `Remove the ${serverName} MCP server from your client's configuration.`,
+        },
+        {
+          title: "Revert the proxy",
+          body: `Point the client's model base URL back at the provider's default instead of ${appName}.`,
+        },
+      ];
+  }
+}

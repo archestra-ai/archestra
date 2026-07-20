@@ -9,18 +9,21 @@ import { WizardStep } from "@/components/wizard-step";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel, isScriptClient } from "./connect-command-panel";
 import { ConnectConfigPanel, isConfigClient } from "./connect-config-panel";
 import {
   type ConnectionBaseUrl,
+  deriveMcpServerName,
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
   resolveEffectiveId,
   resolveInitialClientId,
 } from "./connection-flow.utils";
 import { ConnectionUrlStep } from "./connection-url-step";
+import { DisconnectSection } from "./disconnect-section";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import {
@@ -64,6 +67,7 @@ export function ConnectionFlow({
   );
 
   const updateUrlParams = useUpdateUrlParams();
+  const appName = useAppName();
 
   const { data: mcpGateways } = useProfiles({
     filters: {
@@ -337,6 +341,17 @@ export function ConnectionFlow({
           {s.content}
         </WizardStep>
       ))}
+
+      {client && (
+        <DisconnectSection
+          client={client}
+          serverName={deriveMcpServerName({
+            gatewayName: selectedMcp?.name ?? "",
+            appName,
+          })}
+          appName={appName}
+        />
+      )}
     </div>
   );
 }

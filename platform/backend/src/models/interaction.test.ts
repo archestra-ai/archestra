@@ -1352,6 +1352,57 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions user attribution", () => {
+    test("keeps a user name containing a comma as a single entry", async ({
+      makeAdmin,
+      makeUser,
+    }) => {
+      const admin = await makeAdmin();
+      // "Last, First" display names (common for enterprise IdP / MS Teams
+      // accounts) must not be split into multiple names by the aggregation
+      const commaNameUser = await makeUser({ name: "Doe, Jane Q." });
+      const plainNameUser = await makeUser({ name: "John Smith" });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      for (const [index, user] of [commaNameUser, plainNameUser].entries()) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: "comma-user-name-session",
+          userId: user.id,
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: `Request ${index}` }],
+          },
+          response: {
+            id: `r${index}`,
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
+      }
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "comma-user-name-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].userNames).toEqual([
+        "Doe, Jane Q.",
+        "John Smith",
+      ]);
+    });
+  });
+
   describe("getSessions source filtering", () => {
     test("filters sessions by source", async ({ makeAdmin }) => {
       const admin = await makeAdmin();

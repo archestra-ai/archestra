@@ -1096,7 +1096,12 @@ class InteractionModel {
           authenticatedAppNames: sql<
             string[]
           >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}), NULL)`,
-          userNames: sql<string>`STRING_AGG(DISTINCT ${schema.usersTable.name}, ',')`,
+          // ARRAY_AGG (not STRING_AGG) — user names can contain commas
+          // (e.g. "Last, First" display names), so a delimited string can't
+          // be split back apart reliably
+          userNames: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.name} ORDER BY ${schema.usersTable.name}), NULL)`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
         })
@@ -1199,7 +1204,7 @@ class InteractionModel {
         ),
         authMethods: parseInteractionAuthMethods(s.authMethods),
         authenticatedAppNames: s.authenticatedAppNames ?? [],
-        userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
+        userNames: s.userNames ?? [],
         lastInteractionRequest: lastInteraction?.request ?? null,
         lastInteractionType: lastInteraction?.type ?? null,
         conversationTitle: s.conversationTitle,

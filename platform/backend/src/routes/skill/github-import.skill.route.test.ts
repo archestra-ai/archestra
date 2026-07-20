@@ -341,14 +341,7 @@ describe("import sync mode", () => {
     expect(created.githubAppConfigId).toBeNull();
   });
 
-  test("sync: null imports a one-time editable copy", async () => {
-    stubGithub([
-      {
-        owner: "sync-none",
-        repo: "skills",
-        files: { "pdf/SKILL.md": stubSkillManifest("pdf-sync-none") },
-      },
-    ]);
+  test("one-time imports no longer exist: sync cannot be null", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills/github/import",
@@ -358,10 +351,7 @@ describe("import sync mode", () => {
         sync: null,
       },
     });
-    expect(response.statusCode).toBe(200);
-    const [created] = response.json().created;
-    expect(created.githubSyncInterval).toBeNull();
-    expect(created.githubSyncRef).toBeNull();
+    expect(response.statusCode).toBe(400);
   });
 
   test("a ref-less sync import tracks the default branch (null ref)", async () => {
@@ -387,7 +377,7 @@ describe("import sync mode", () => {
     expect(created.githubSyncRef).toBeNull();
   });
 
-  test("rejects sync together with a PAT", async () => {
+  test("rejects a transient token on import (imports are always synced)", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills/github/import",
@@ -395,10 +385,10 @@ describe("import sync mode", () => {
         repoUrl: "https://github.com/sync-pat/skills",
         skillPaths: ["pdf"],
         githubToken: "ghp_secret",
-        sync: { interval: "1d" },
       },
     });
     expect(response.statusCode).toBe(400);
+    expect(JSON.stringify(response.json())).toContain("never stored");
   });
 });
 

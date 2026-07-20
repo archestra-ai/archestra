@@ -68480,11 +68480,11 @@ export type ImportGithubSkillsData = {
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
         /**
-         * Keep the imported skills synced from the repo on this schedule; synced skills are read-only in the app until disconnected. Pass null for a one-time import (editable copy). Defaults to daily sync.
+         * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
          */
         sync?: {
             interval: '15m' | '1h' | '1d';
-        } | null;
+        };
     };
     path?: never;
     query?: never;

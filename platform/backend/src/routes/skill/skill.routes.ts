@@ -1096,23 +1096,21 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             teamIds: z.array(z.string()).optional(),
             sync: z
               .object({ interval: SkillGithubSyncIntervalSchema })
-              .nullable()
               .default({ interval: "1d" })
               .describe(
-                "Keep the imported skills synced from the repo on this " +
-                  "schedule; synced skills are read-only in the app until " +
-                  "disconnected. Pass null for a one-time import (editable " +
-                  "copy). Defaults to daily sync.",
+                "Pull schedule for the imported skills. Every import is " +
+                  "synced from the repo and read-only in the app until " +
+                  "disconnected. Defaults to daily.",
               ),
           })
           .refine(hasSingleGithubAuth, singleGithubAuthError)
-          .refine((body) => !(body.sync && body.githubToken), {
+          .refine((body) => !body.githubToken, {
             message:
-              "A synced skill cannot use a one-time token — it is never " +
-              "stored, so scheduled pulls could not authenticate. Use a " +
-              "saved token or GitHub App configuration (Settings → GitHub), " +
-              "a public repository, or import without sync.",
-            path: ["sync"],
+              "Imports are always kept in sync, and a transient token is " +
+              "never stored, so scheduled pulls could not authenticate. " +
+              "Save the token or use a GitHub App configuration " +
+              "(Settings → GitHub), or import a public repository.",
+            path: ["githubToken"],
           }),
         response: constructResponseSchema(
           z.object({
@@ -1177,15 +1175,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               sourceRef: item.sourceRef,
               sourceCommit: item.sourceCommit,
               scope,
-              // a synced skill records its schedule, tracking ref (null =
-              // default branch), and the stored credential scheduled pulls
-              // reuse (App config or saved PAT).
-              githubSyncInterval: body.sync?.interval ?? null,
-              githubSyncRef: body.sync ? item.requestedRef : null,
-              githubAppConfigId: body.sync
-                ? (body.githubAppConfigId ?? null)
-                : null,
-              githubPatId: body.sync ? (body.githubPatId ?? null) : null,
+              // every import is synced: record the schedule, tracking ref
+              // (null = default branch), and the stored credential scheduled
+              // pulls reuse (App config or saved PAT).
+              githubSyncInterval: body.sync.interval,
+              githubSyncRef: item.requestedRef,
+              githubAppConfigId: body.githubAppConfigId ?? null,
+              githubPatId: body.githubPatId ?? null,
             },
             files: item.files,
             teamIds,

@@ -76,7 +76,7 @@ A skill created from chat is **personal** to its author — sharing it with a te
 
 ![The Add a new skill screen, importing from a GitHub repo, with the skill index searched for ML skills](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 
-Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, paste a token — it is used for the request and never stored.
+Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, use a saved token or GitHub App from **Settings → GitHub**, or paste a token — it is saved there on import.
 
 For anything bigger than a small repo, narrow the scan with the `path` field and supply a GitHub token. Archestra walks the whole tree by default, and anonymous GitHub calls share a 60-requests/hour limit — discovery on a large monorepo is slow without a path and will rate-limit without a token.
 
@@ -86,15 +86,13 @@ The visibility **scope** chosen in the dialog applies to every skill in the batc
 
 Each import records the source (`owner/repo@ref:path`) and the resolved commit SHA, so you can later filter the catalog by repo and see exactly which revision landed.
 
-### Synced or One-Time
+### Sync
 
-**Keep in sync** in the dialog picks the mode for the batch. Synced skills — the default, once a day — are pulled from the repository on the chosen schedule (every 15 minutes, every hour, or once a day) and marked with a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Visibility scope, teams, and environment stay editable. A failed pull keeps the last good content and shows the error in the editor.
+Every import stays synced with the repository. **Keep in sync** in the dialog picks the schedule for the batch — every 15 minutes, every hour, or once a day (the default). Synced skills carry a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Visibility scope, teams, and environment stay editable. A failed pull keeps the last good content and shows the error in the editor.
 
-**Disconnect** in the skill editor breaks the link: the skill keeps its current content, becomes editable, and stops updating. **Sync now** pulls immediately instead of waiting for the schedule.
+**Stop syncing** in the skill editor breaks the link: the skill keeps its current content, becomes editable, and stops updating. **Sync now** pulls immediately instead of waiting for the schedule.
 
-Sync authenticates with a saved personal access token or a GitHub App configuration — both managed under **Settings → GitHub** — or not at all (public repos). A pasted one-time token can only back a one-time import: it is never stored, so scheduled pulls would have nothing to authenticate with.
-
-A one-time import copies the skills once as editable; re-import to pull in upstream changes (duplicates by name are skipped, never overwritten).
+Sync authenticates with a saved personal access token or a GitHub App configuration — both managed under **Settings → GitHub** — or not at all (public repos). A token pasted in the import dialog is saved there on import, so scheduled pulls stay authenticated.
 
 A few behaviors worth knowing:
 

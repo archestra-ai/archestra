@@ -51,7 +51,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useGithubPats } from "@/lib/github-pat.query";
+import { useCreateGithubPat, useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDiscoverGithubSkills,
@@ -109,6 +109,7 @@ export function ImportSkillsDialog({
   const importSkills = useImportGithubSkills();
   const { data: githubAppConfigs = [] } = useGithubAppConfigs();
   const { data: githubPats = [] } = useGithubPats();
+  const createPat = useCreateGithubPat();
   const appName = useAppName();
 
   const [repoUrl, setRepoUrl] = useState(initialRepoUrl);
@@ -126,25 +127,14 @@ export function ImportSkillsDialog({
   // scope applies to every skill selected in this import
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
-  // sync mode applies to every skill selected in this import. "none" = a
-  // one-time editable copy; an interval keeps the skills pulled from the repo
-  // on that schedule and read-only here until disconnected.
-  const [syncInterval, setSyncInterval] = useState<
-    "15m" | "1h" | "1d" | "none"
-  >("1d");
+  // pull schedule for every skill selected in this import: imports are
+  // always synced from the repo and read-only here until disconnected.
+  const [syncInterval, setSyncInterval] = useState<"15m" | "1h" | "1d">("1d");
+  // name under which a newly pasted token is saved (Settings -> GitHub)
+  const [newTokenName, setNewTokenName] = useState("");
   // subpath + authentication live behind this fold; opened automatically when
   // a discover failure looks like a missing-auth problem.
   const [advancedOpen, setAdvancedOpen] = useState(false);
-
-  // A one-time pasted token is never stored, so it cannot back a recurring
-  // sync — scheduled pulls would have nothing to authenticate with. Saved
-  // tokens and App configs can.
-  const patBlocksSync =
-    authMethod === "pat" && !githubPatId && githubToken.trim().length > 0;
-  const effectiveSync =
-    patBlocksSync || syncInterval === "none"
-      ? null
-      : { interval: syncInterval };
 
   // auth methods are mutually exclusive; the backend rejects combinations
   const githubAuthFields =
@@ -187,6 +177,7 @@ export function ImportSkillsDialog({
     setScope("personal");
     setTeamIds([]);
     setSyncInterval("1d");
+    setNewTokenName("");
     setAdvancedOpen(false);
   };
 
@@ -208,6 +199,7 @@ export function ImportSkillsDialog({
     } else {
       setGithubPatId("");
       setGithubToken("");
+      setNewTokenName("");
     }
   };
 
@@ -246,14 +238,33 @@ export function ImportSkillsDialog({
   }, [open]);
 
   const handleImport = async () => {
+    // a pasted token is saved as a stored credential first, so the recurring
+    // sync it backs stays authenticated (transient tokens are never stored)
+    let patId = githubPatId;
+    if (authMethod === "pat" && !patId && githubToken.trim()) {
+      const created = await createPat.mutateAsync({
+        name: newTokenName.trim() || `${repoSlug || "GitHub"} token`,
+        token: githubToken.trim(),
+      });
+      if (!created) return;
+      patId = created.id;
+      setGithubPatId(created.id);
+    }
+
     const result = await importSkills.mutateAsync({
       repoUrl,
       ...(path.trim() && { path: path.trim() }),
-      ...githubAuthFields,
+      ...(authMethod === "github_app"
+        ? githubAppConfigId
+          ? { githubAppConfigId }
+          : {}
+        : patId
+          ? { githubPatId: patId }
+          : {}),
       skillPaths: [...selected],
       scope,
       teamIds: scope === "team" ? teamIds : [],
-      sync: effectiveSync,
+      sync: { interval: syncInterval },
     });
     // only navigate away when something was actually created; if every selected
     // skill was already in the org (created: [], skipped: [...]) the import was
@@ -699,11 +710,10 @@ export function ImportSkillsDialog({
           <div className="space-y-2">
             <Label htmlFor="skill-sync-interval">Keep in sync</Label>
             <Select
-              value={patBlocksSync ? "none" : syncInterval}
+              value={syncInterval}
               onValueChange={(value) =>
                 setSyncInterval(value as typeof syncInterval)
               }
-              disabled={patBlocksSync}
             >
               <SelectTrigger id="skill-sync-interval" className="w-full">
                 <SelectValue />
@@ -712,17 +722,11 @@ export function ImportSkillsDialog({
                 <SelectItem value="15m">Every 15 minutes</SelectItem>
                 <SelectItem value="1h">Every hour</SelectItem>
                 <SelectItem value="1d">Once a day</SelectItem>
-                <SelectItem value="none">
-                  Don’t sync — one-time import
-                </SelectItem>
               </SelectContent>
             </Select>
             <p className="text-sm text-muted-foreground">
-              {patBlocksSync
-                ? "A one-time token can’t stay in sync (it is never stored). Use a saved token, a GitHub App, or a public repository."
-                : syncInterval === "none"
-                  ? `One-time editable copy — later repo changes won’t appear in ${appName}.`
-                  : `Pulled from the repository on this schedule; read-only in ${appName} until disconnected.`}
+              Pulled from the repository on this schedule; read-only in{" "}
+              {appName} until disconnected.
             </p>
           </div>
           <SkillScopeSelector
@@ -764,10 +768,13 @@ export function ImportSkillsDialog({
                   <>
                     {githubPats.length > 0 && (
                       <Select
-                        value={githubPatId || "onetime"}
+                        value={githubPatId || "new"}
                         onValueChange={(value) => {
-                          setGithubPatId(value === "onetime" ? "" : value);
-                          if (value !== "onetime") setGithubToken("");
+                          setGithubPatId(value === "new" ? "" : value);
+                          if (value !== "new") {
+                            setGithubToken("");
+                            setNewTokenName("");
+                          }
                         }}
                       >
                         <SelectTrigger
@@ -782,9 +789,7 @@ export function ImportSkillsDialog({
                               {pat.name}
                             </SelectItem>
                           ))}
-                          <SelectItem value="onetime">
-                            One-time token…
-                          </SelectItem>
+                          <SelectItem value="new">New token…</SelectItem>
                         </SelectContent>
                       </Select>
                     )}
@@ -808,9 +813,26 @@ export function ImportSkillsDialog({
                           onChange={(e) => setGithubToken(e.target.value)}
                           placeholder="ghp_…"
                         />
+                        {githubToken.trim() && (
+                          <Input
+                            value={newTokenName}
+                            onChange={(e) => setNewTokenName(e.target.value)}
+                            placeholder={`Token name — e.g. ${repoSlug || "skills repo"} token`}
+                            aria-label="Token name"
+                            autoComplete="off"
+                            data-1p-ignore
+                            data-lpignore="true"
+                          />
+                        )}
                         <p className="text-sm text-muted-foreground">
-                          Needed for private repositories; used once and never
-                          stored.{" "}
+                          Needed for private repositories. Saved to{" "}
+                          <a
+                            href="/settings/github"
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                          >
+                            Settings → GitHub
+                          </a>{" "}
+                          on import so scheduled syncs stay authenticated.{" "}
                           <a
                             href="https://github.com/settings/personal-access-tokens/new"
                             target="_blank"
@@ -818,13 +840,6 @@ export function ImportSkillsDialog({
                             className="font-medium text-primary underline-offset-4 hover:underline"
                           >
                             Create a token
-                          </a>{" "}
-                          or save one for reuse in{" "}
-                          <a
-                            href="/settings/github"
-                            className="font-medium text-primary underline-offset-4 hover:underline"
-                          >
-                            Settings → GitHub
                           </a>
                           .
                         </p>

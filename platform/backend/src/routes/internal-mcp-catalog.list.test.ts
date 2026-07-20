@@ -169,20 +169,20 @@ describe("GET /api/internal_mcp_catalog", () => {
     expect(backing).toBeDefined();
     // The backing's `open` launch tool exposes a ui:// resource.
     expect(backing.providesUi).toBe(true);
-    // A live (published) app reports appPublished: true.
-    expect(backing.appPublished).toBe(true);
+    // A live (enabled) app reports appEnabled: true.
+    expect(backing.appEnabled).toBe(true);
   });
 
-  test("includeApps hides another author's draft app-backing catalog", async ({
+  test("includeApps hides another author's disabled app-backing catalog", async ({
     makeApp,
     makeUser,
   }) => {
     const otherAuthor = await makeUser();
-    const draft = await makeApp({
+    const disabled = await makeApp({
       organizationId,
       authorId: otherAuthor.id,
       scope: "org",
-      published: false,
+      enabled: false,
     });
 
     const response = await app.inject({
@@ -195,19 +195,19 @@ describe("GET /api/internal_mcp_catalog", () => {
         .json()
         .some(
           (item: { serverType: string; appId?: string | null }) =>
-            item.serverType === "app" && item.appId === draft.id,
+            item.serverType === "app" && item.appId === disabled.id,
         ),
     ).toBe(false);
   });
 
-  test("includeApps still surfaces the caller's own draft app-backing, marked appPublished: false", async ({
+  test("includeApps still surfaces the caller's own disabled app-backing, marked appEnabled: false", async ({
     makeApp,
   }) => {
-    const ownDraft = await makeApp({
+    const ownDisabled = await makeApp({
       organizationId,
       authorId: user.id,
       scope: "org",
-      published: false,
+      enabled: false,
     });
 
     const response = await app.inject({
@@ -219,10 +219,10 @@ describe("GET /api/internal_mcp_catalog", () => {
       .json()
       .find(
         (item: { serverType: string; appId?: string | null }) =>
-          item.serverType === "app" && item.appId === ownDraft.id,
+          item.serverType === "app" && item.appId === ownDisabled.id,
       );
     expect(backing).toBeDefined();
-    expect(backing.appPublished).toBe(false);
+    expect(backing.appEnabled).toBe(false);
   });
 
   test("includeApps is ignored for a caller without app:read", async () => {

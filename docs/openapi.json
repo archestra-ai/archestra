@@ -54486,7 +54486,7 @@
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
                               },
-                              "published": {
+                              "enabled": {
                                 "type": "boolean"
                               },
                               "teams": {
@@ -54522,7 +54522,7 @@
                               "authorName",
                               "viewerRole",
                               "latestVersion",
-                              "published",
+                              "enabled",
                               "teams"
                             ],
                             "additionalProperties": false
@@ -55059,7 +55059,7 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "published": {
+                    "enabled": {
                       "type": "boolean"
                     },
                     "createdAt": {
@@ -55111,7 +55111,7 @@
                     "mcpServerId",
                     "spec",
                     "latestVersion",
-                    "published",
+                    "enabled",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -57848,7 +57848,7 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "published": {
+                    "enabled": {
                       "type": "boolean"
                     },
                     "createdAt": {
@@ -57920,7 +57920,7 @@
                     "mcpServerId",
                     "spec",
                     "latestVersion",
-                    "published",
+                    "enabled",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -58341,7 +58341,7 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "published": {
+                    "enabled": {
                       "type": "boolean"
                     },
                     "createdAt": {
@@ -58388,7 +58388,7 @@
                     "mcpServerId",
                     "spec",
                     "latestVersion",
-                    "published",
+                    "enabled",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -58911,13 +58911,13 @@
         }
       }
     },
-    "/api/apps/{appId}/publish": {
+    "/api/apps/{appId}/enable": {
       "post": {
-        "operationId": "publishApp",
+        "operationId": "enableApp",
         "tags": [
           "Apps"
         ],
-        "description": "Publish a draft app, making it live at its scope.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Enable a disabled app, making it live at its scope.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
         "parameters": [
           {
             "schema": {
@@ -59012,7 +59012,7 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "published": {
+                    "enabled": {
                       "type": "boolean"
                     },
                     "createdAt": {
@@ -59084,7 +59084,7 @@
                     "mcpServerId",
                     "spec",
                     "latestVersion",
-                    "published",
+                    "enabled",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -59336,13 +59336,13 @@
         }
       }
     },
-    "/api/apps/{appId}/unpublish": {
+    "/api/apps/{appId}/disable": {
       "post": {
-        "operationId": "unpublishApp",
+        "operationId": "disableApp",
         "tags": [
           "Apps"
         ],
-        "description": "Unpublish an app, pulling it back to an author-only draft.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Disable an app, pulling it back to an author-only state.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
         "parameters": [
           {
             "schema": {
@@ -59437,7 +59437,7 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
-                    "published": {
+                    "enabled": {
                       "type": "boolean"
                     },
                     "createdAt": {
@@ -59509,7 +59509,7 @@
                     "mcpServerId",
                     "spec",
                     "latestVersion",
-                    "published",
+                    "enabled",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -156551,7 +156551,7 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "appPublished": {
+                      "appEnabled": {
                         "nullable": true,
                         "type": "boolean"
                       },

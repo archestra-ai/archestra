@@ -609,9 +609,9 @@ describe("read_app / edit_app", () => {
       context,
     );
     const appId = structured(orgApp).id as string;
-    // A scaffolded app is a draft (author-only); publish it so the org-scope
+    // A scaffolded app is disabled (author-only); enable it so the org-scope
     // visibility this test exercises actually applies to a non-author member.
-    await AppModel.setPublished(appId, true);
+    await AppModel.setEnabled(appId, true);
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     const memberCtx: ArchestraContext = { ...context, userId: member.id };
@@ -636,7 +636,7 @@ describe("read_app / edit_app", () => {
     expect(edit.isError).toBe(true);
   });
 
-  test("publish_app makes a draft live so its new audience can see it", async ({
+  test("publish_app enables a disabled app so its new audience can see it", async ({
     makeUser,
     makeMember,
   }) => {
@@ -647,7 +647,7 @@ describe("read_app / edit_app", () => {
     );
     const appId = structured(created).id as string;
 
-    // A fresh scaffold is a draft: another member cannot see it yet.
+    // A fresh scaffold is disabled: another member cannot see it yet.
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     const memberCtx: ArchestraContext = { ...context, userId: member.id };
@@ -659,14 +659,14 @@ describe("read_app / edit_app", () => {
       );
     expect((await readAppAs(memberCtx)).isError).toBe(true);
 
-    const published = await executeArchestraTool(
+    const result = await executeArchestraTool(
       getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
       { appId, scope: "org" },
       context,
     );
-    expect(published.isError).toBe(false);
-    // publish_app flips the draft live, not just its scope...
-    expect((await AppModel.findById(appId))?.published).toBe(true);
+    expect(result.isError).toBe(false);
+    // publish_app flips the app enabled, not just its scope...
+    expect((await AppModel.findById(appId))?.enabled).toBe(true);
     // ...so the org audience can now see it.
     expect((await readAppAs(memberCtx)).isError).toBe(false);
   });

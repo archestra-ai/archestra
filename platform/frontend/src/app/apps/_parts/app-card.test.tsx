@@ -108,7 +108,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   authorName: "Ada Lovelace",
   viewerRole: "owner",
   latestVersion: 1,
-  published: true,
+  enabled: true,
   teams: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
@@ -308,15 +308,15 @@ describe("OwnedAppCard", () => {
     expect(screen.getByText("Owned by Grace Hopper")).toBeInTheDocument();
   });
 
-  it("shows a 'Not published' badge for a draft app", () => {
-    render(<AppCard app={{ ...ownedApp, published: false }} />);
+  it("shows a 'Disabled' badge for a disabled app", () => {
+    render(<AppCard app={{ ...ownedApp, enabled: false }} />);
 
-    expect(screen.getByText("Not published")).toBeInTheDocument();
+    expect(screen.getByText("Disabled")).toBeInTheDocument();
   });
 
-  it("hides the 'Not published' badge for a live app", () => {
-    render(<AppCard app={{ ...ownedApp, published: true }} />);
+  it("hides the 'Disabled' badge for a live app", () => {
+    render(<AppCard app={{ ...ownedApp, enabled: true }} />);
 
-    expect(screen.queryByText("Not published")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disabled")).not.toBeInTheDocument();
   });
 });

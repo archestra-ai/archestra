@@ -416,7 +416,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(names).toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
-  test("Auto-tool mode exclusions: an unpublished app's launch tool is withheld from tools/list until published, even for its own author", async ({
+  test("Auto-tool mode exclusions: a disabled app's launch tool is withheld from tools/list until enabled, even for its own author", async ({
     makeAgent,
     makeApp,
     makeMember,
@@ -427,14 +427,14 @@ describe("MCP Gateway (stateless mode)", () => {
     const author = await makeUser();
     await makeMember(author.id, org.id, { role: "admin" });
     // Org-scoped so it is otherwise dynamically discoverable regardless of any
-    // explicit assignment — isolating the draft-exclusion behavior itself.
-    const draftApp = await makeApp({
+    // explicit assignment — isolating the disabled-exclusion behavior itself.
+    const disabledApp = await makeApp({
       organizationId: org.id,
       authorId: author.id,
       scope: "org",
-      published: false,
+      enabled: false,
     });
-    const server = await McpServerModel.findById(draftApp.mcpServerId!);
+    const server = await McpServerModel.findById(disabledApp.mcpServerId!);
     const [launchTool] = await ToolModel.findByCatalogIdWithMeta(
       server!.catalogId,
     );
@@ -469,11 +469,11 @@ describe("MCP Gateway (stateless mode)", () => {
         .result.tools.map((tool: { name: string }) => tool.name);
     }
 
-    // Withheld while draft — even for the app's own author.
+    // Withheld while disabled — even for the app's own author.
     expect(await listToolNames()).not.toContain(launchToolName);
 
-    // Publishing surfaces it, over the same real route, for the same caller.
-    await AppModel.setPublished(draftApp.id, true);
+    // Enabling surfaces it, over the same real route, for the same caller.
+    await AppModel.setEnabled(disabledApp.id, true);
     expect(await listToolNames()).toContain(launchToolName);
   });
 

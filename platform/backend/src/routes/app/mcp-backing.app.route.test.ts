@@ -87,8 +87,8 @@ describe("MCP backing for apps", () => {
     (tool.meta as { _meta?: { ui?: { resourceUri?: string } } })?._meta?.ui
       ?.resourceUri;
 
-  test("a draft app's launch tool is withheld from dynamic discovery until published", async () => {
-    const appId = await createApp("org"); // draft by default
+  test("a disabled app's launch tool is withheld from dynamic discovery until enabled", async () => {
+    const appId = await createApp("org"); // disabled by default
     const uri = getArchestraAppResourceUri(appId);
     const discovered = async () =>
       (
@@ -102,12 +102,12 @@ describe("MCP backing for apps", () => {
       ).some((t) => launchToolResourceUri(t) === uri);
 
     expect(await discovered()).toBe(false);
-    await AppModel.setPublished(appId, true);
+    await AppModel.setEnabled(appId, true);
     expect(await discovered()).toBe(true);
   });
 
-  test("a draft's launch tool stays assigned but hidden from the author's gateway, and reappears on publish", async () => {
-    const appId = await createApp("org"); // draft; auto-assigned to the author's gateway
+  test("a disabled app's launch tool stays assigned but hidden from the author's gateway, and reappears when enabled", async () => {
+    const appId = await createApp("org"); // disabled; auto-assigned to the author's gateway
     const uri = getArchestraAppResourceUri(appId);
     const personalGateway = await AgentModel.ensurePersonalMcpGateway({
       userId: user.id,
@@ -118,22 +118,22 @@ describe("MCP backing for apps", () => {
         (t) => launchToolResourceUri(t) === uri,
       );
 
-    // Assigned at create, but withheld while draft...
+    // Assigned at create, but withheld while disabled...
     expect(await gatewayHasLaunch()).toBe(false);
-    // ...publishing surfaces it without re-assigning (the assignment persisted)...
-    await AppModel.setPublished(appId, true);
+    // ...enabling surfaces it without re-assigning (the assignment persisted)...
+    await AppModel.setEnabled(appId, true);
     expect(await gatewayHasLaunch()).toBe(true);
-    // ...and unpublishing hides it again.
-    await AppModel.setPublished(appId, false);
+    // ...and disabling hides it again.
+    await AppModel.setEnabled(appId, false);
     expect(await gatewayHasLaunch()).toBe(false);
   });
 
-  test("a draft app's launch tool assigned to another app is withheld until published, and reappears on publish", async ({
+  test("a disabled app's launch tool assigned to another app is withheld until enabled, and reappears when enabled", async ({
     makeApp,
     makeAppTool,
   }) => {
     // The source app owns the launch tool being consumed elsewhere.
-    const sourceAppId = await createApp("org"); // draft by default
+    const sourceAppId = await createApp("org"); // disabled by default
     const sourceServer = await McpServerModel.findById(
       (await AppModel.findById(sourceAppId))!.mcpServerId!,
     );
@@ -154,13 +154,13 @@ describe("MCP backing for apps", () => {
         )
       ).length > 0;
 
-    // Withheld while the source app is a draft...
+    // Withheld while the source app is disabled...
     expect(await consumerCanResolve()).toBe(false);
-    // ...surfaces once published (the assignment was never deleted)...
-    await AppModel.setPublished(sourceAppId, true);
+    // ...surfaces once enabled (the assignment was never deleted)...
+    await AppModel.setEnabled(sourceAppId, true);
     expect(await consumerCanResolve()).toBe(true);
-    // ...and is withheld again if the source app is unpublished.
-    await AppModel.setPublished(sourceAppId, false);
+    // ...and is withheld again if the source app is disabled again.
+    await AppModel.setEnabled(sourceAppId, false);
     expect(await consumerCanResolve()).toBe(false);
   });
 

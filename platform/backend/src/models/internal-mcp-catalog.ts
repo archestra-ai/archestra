@@ -152,9 +152,10 @@ class InternalMcpCatalogModel {
       // MCP registry (UI list or the agent-callable registry search).
       listConditions.push(ne(schema.internalMcpCatalogTable.serverType, "app"));
     } else {
-      // A draft app's backing catalog is author-only — never surface someone
-      // else's draft in the capability picker, even to a registry admin (this
-      // overrides the catalog-access admin bypass, matching the Apps-page rule).
+      // A disabled app's backing catalog is author-only — never surface
+      // someone else's disabled app in the capability picker, even to a
+      // registry admin (this overrides the catalog-access admin bypass,
+      // matching the Apps-page rule).
       listConditions.push(
         notExists(
           db
@@ -170,10 +171,10 @@ class InternalMcpCatalogModel {
                   schema.mcpServersTable.catalogId,
                   schema.internalMcpCatalogTable.id,
                 ),
-                eq(schema.appsTable.published, false),
+                eq(schema.appsTable.enabled, false),
                 notDeleted(schema.appsTable),
-                // Keep the caller's own drafts (shown greyed as "Not published");
-                // with no viewer, hide every draft.
+                // Keep the caller's own disabled apps (shown greyed as
+                // "Disabled"); with no viewer, hide every disabled app.
                 userId
                   ? or(
                       ne(schema.appsTable.authorId, userId),

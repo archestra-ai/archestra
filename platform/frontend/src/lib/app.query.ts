@@ -11,8 +11,8 @@ const {
   getAppTools,
   createApp,
   updateApp,
-  publishApp,
-  unpublishApp,
+  enableApp,
+  disableApp,
   deleteApp,
   assignToolToApp,
   unassignToolFromApp,
@@ -320,23 +320,23 @@ export function useUpdateApp() {
   });
 }
 
-// Publish/unpublish an app (the draft lifecycle). Separate from useUpdateApp so
-// the transition has its own toast and its own cache invalidation — a published
-// app newly exposes its launch tool to gateways/agents (and vice versa), so the
-// MCP catalog must refresh alongside the apps list.
-export function useSetAppPublished() {
+// Enable/disable an app. Separate from useUpdateApp so the transition has its
+// own toast and its own cache invalidation — an enabled app newly exposes its
+// launch tool to gateways/agents (and vice versa), so the MCP catalog must
+// refresh alongside the apps list.
+export function useSetAppEnabled() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       appId,
-      published,
+      enabled,
     }: {
       appId: string;
-      published: boolean;
+      enabled: boolean;
     }) => {
-      const { data, error } = await (published
-        ? publishApp({ path: { appId } })
-        : unpublishApp({ path: { appId } }));
+      const { data, error } = await (enabled
+        ? enableApp({ path: { appId } })
+        : disableApp({ path: { appId } }));
       if (error) {
         handleApiError(error);
         return null;
@@ -348,7 +348,7 @@ export function useSetAppPublished() {
       queryClient.invalidateQueries({ queryKey: ["apps"] });
       queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      toast.success(variables.published ? "App published" : "App unpublished");
+      toast.success(variables.enabled ? "App enabled" : "App disabled");
     },
   });
 }

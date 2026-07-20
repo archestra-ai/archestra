@@ -16,7 +16,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   authorName: "Ada Lovelace",
   viewerRole: "owner",
   latestVersion: 1,
-  published: true,
+  enabled: true,
   teams: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",

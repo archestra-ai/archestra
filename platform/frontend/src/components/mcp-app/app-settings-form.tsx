@@ -20,7 +20,7 @@ import {
 import {
   useAppTools,
   useAssignToolToApp,
-  useSetAppPublished,
+  useSetAppEnabled,
   useUnassignToolFromApp,
   useUpdateApp,
 } from "@/lib/app.query";
@@ -58,7 +58,7 @@ export function AppSettingsForm({
   const { data: teams } = useAssignableTeams({ isResourceAdmin: !!isAppAdmin });
 
   const updateApp = useUpdateApp();
-  const setPublished = useSetAppPublished();
+  const setEnabled = useSetAppEnabled();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
   const { data: assignedTools } = useAppTools(app.id);
@@ -70,8 +70,8 @@ export function AppSettingsForm({
   const [environmentId, setEnvironmentId] = useState<string | null>(
     app.environmentId ?? null,
   );
-  const [publishStatus, setPublishStatus] = useState<"draft" | "published">(
-    app.published ? "published" : "draft",
+  const [enabledStatus, setEnabledStatus] = useState<"disabled" | "enabled">(
+    app.enabled ? "enabled" : "disabled",
   );
   const [scope, setScope] = useState<ResourceVisibilityScope>(app.scope);
   const [teamIds, setTeamIds] = useState<string[]>(app.teams.map((t) => t.id));
@@ -89,16 +89,16 @@ export function AppSettingsForm({
   const canShareTeams = isAppAdmin || isAppTeamAdmin;
   const hasNoTeams = (teams ?? []).length === 0;
 
-  const publishOptions: VisibilityOption<"draft" | "published">[] = [
+  const enabledOptions: VisibilityOption<"disabled" | "enabled">[] = [
     {
-      value: "draft",
-      label: "Draft",
+      value: "disabled",
+      label: "Disabled",
       description: "Only you can see and use this app",
       icon: EyeOff,
     },
     {
-      value: "published",
-      label: "Published",
+      value: "enabled",
+      label: "Enabled",
       description: "Live for everyone at the visibility scope below",
       icon: Eye,
     },
@@ -142,7 +142,7 @@ export function AppSettingsForm({
   // Only the mutation drives the button's loading label; data-loading does not.
   const saving =
     updateApp.isPending ||
-    setPublished.isPending ||
+    setEnabled.isPending ||
     assignTool.isPending ||
     unassignTool.isPending;
 
@@ -156,14 +156,14 @@ export function AppSettingsForm({
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (saving || toolsLoading || teamSelectionMissing) return;
-    // Publish/unpublish is a distinct lifecycle transition on the backend (its
+    // Enable/disable is a distinct lifecycle transition on the backend (its
     // own endpoint, authorized against the app's current scope), so a changed
     // selection commits via its own call rather than riding the PATCH body.
-    const published = publishStatus === "published";
-    if (published !== app.published) {
-      const result = await setPublished.mutateAsync({
+    const enabled = enabledStatus === "enabled";
+    if (enabled !== app.enabled) {
+      const result = await setEnabled.mutateAsync({
         appId: app.id,
-        published,
+        enabled,
       });
       if (!result) return;
     }
@@ -230,10 +230,10 @@ export function AppSettingsForm({
         )}
 
         <VisibilitySelector
-          heading="Publish status"
-          value={publishStatus}
-          options={publishOptions}
-          onValueChange={setPublishStatus}
+          heading="App status"
+          value={enabledStatus}
+          options={enabledOptions}
+          onValueChange={setEnabledStatus}
         />
 
         <VisibilitySelector

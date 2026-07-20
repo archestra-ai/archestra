@@ -259,7 +259,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : null,
           viewerRole: viewerRoleOf(app),
           latestVersion: app.latestVersion,
-          published: app.published,
+          enabled: app.enabled,
           teams: teamsByApp.get(app.id) ?? [],
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
@@ -726,7 +726,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: app.id,
             scope: app.scope,
             authorId: app.authorId,
-            published: app.published,
+            enabled: app.enabled,
           },
           resourceTeamIds,
         });
@@ -858,21 +858,21 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  // Publish/unpublish an app — the draft lifecycle. A draft is author-only and
-  // its launch tool is withheld from every gateway/agent surface; publishing
-  // makes it live at its scope, unpublishing pulls it back to author-only. Kept
-  // off the generic PATCH so the transition has its own audit and a stricter,
-  // single-purpose authorization.
-  for (const action of ["publish", "unpublish"] as const) {
-    const publish = action === "publish";
+  // Enable/disable an app — the enabled/disabled lifecycle. A disabled app is
+  // author-only and its launch tool is withheld from every gateway/agent
+  // surface; enabling makes it live at its scope, disabling pulls it back to
+  // author-only. Kept off the generic PATCH so the transition has its own
+  // audit and a stricter, single-purpose authorization.
+  for (const action of ["enable", "disable"] as const) {
+    const enable = action === "enable";
     fastify.post(
       `/api/apps/:appId/${action}`,
       {
         schema: {
-          operationId: publish ? RouteId.PublishApp : RouteId.UnpublishApp,
-          description: publish
-            ? "Publish a draft app, making it live at its scope."
-            : "Unpublish an app, pulling it back to an author-only draft.",
+          operationId: enable ? RouteId.EnableApp : RouteId.DisableApp,
+          description: enable
+            ? "Enable a disabled app, making it live at its scope."
+            : "Disable an app, pulling it back to an author-only state.",
           tags: ["Apps"],
           params: z.object({ appId: UuidIdSchema }),
           response: constructResponseSchema(AppWithTeamsSchema),
@@ -891,13 +891,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorId: app.authorId,
           resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
-        const updated = await AppModel.setPublished(appId, publish);
+        const updated = await AppModel.setEnabled(appId, enable);
         if (!updated) {
           throw new ApiError(404, `No app found with id ${appId}.`);
         }
         logger.info(
-          { appId, userId: user.id, published: publish },
-          publish ? "App published via REST" : "App unpublished via REST",
+          { appId, userId: user.id, enabled: enable },
+          enable ? "App enabled via REST" : "App disabled via REST",
         );
         return reply.send(
           await buildAppDetail({
@@ -1164,8 +1164,8 @@ async function loadViewableApp(params: {
 
 /**
  * Assemble the single-app detail payload — team assignments, the caller's
- * viewerRole, and the author's display name — shared by GET, publish, and
- * unpublish so all three return the same shape.
+ * viewerRole, and the author's display name — shared by GET, enable, and
+ * disable so all three return the same shape.
  */
 async function buildAppDetail(params: {
   app: App;
@@ -1207,7 +1207,7 @@ async function resolveViewerRole(params: {
       organizationId: params.app.organizationId,
       scope: params.app.scope,
       authorId: params.app.authorId,
-      published: params.app.published,
+      enabled: params.app.enabled,
     },
     isAppAdmin: false,
   });

@@ -140,9 +140,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const appCatalogIds = items
         .filter((item) => item.serverType === "app")
         .map((item) => item.id);
-      const [appIdByCatalog, appPublishedByCatalog] = await Promise.all([
+      const [appIdByCatalog, appEnabledByCatalog] = await Promise.all([
         AppModel.getAppIdsByCatalogIds(appCatalogIds),
-        AppModel.getAppPublishedByCatalogIds(appCatalogIds),
+        AppModel.getAppEnabledByCatalogIds(appCatalogIds),
       ]);
       const approvalRequired = await flagImageApprovalRequired(
         items,
@@ -155,7 +155,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(item.serverType === "app"
             ? {
                 appId: appIdByCatalog.get(item.id) ?? null,
-                appPublished: appPublishedByCatalog.get(item.id) ?? null,
+                appEnabled: appEnabledByCatalog.get(item.id) ?? null,
               }
             : {}),
         })),

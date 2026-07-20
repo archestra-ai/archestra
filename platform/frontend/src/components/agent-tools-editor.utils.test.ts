@@ -84,29 +84,29 @@ describe("getCatalogAssignmentGate", () => {
     expect(gate.disabledReason).toBe("Not in the Default environment");
   });
 
-  it("refuses an unpublished (draft) app with a 'Not published' reason", () => {
+  it("refuses a disabled app with a 'Disabled' reason", () => {
     const gate = getCatalogAssignmentGate({
       hasDiscoveredTools: true,
       hasResolvableInstall: true,
       isEnvIncompatible: false,
-      isUnpublishedApp: true,
+      isDisabledApp: true,
     });
 
     expect(gate.disabled).toBe(true);
-    expect(gate.disabledReason).toBe("Not published");
+    expect(gate.disabledReason).toBe("Disabled");
     expect(gate.unavailable).toBe(false);
   });
 
-  it("gates on draft status before environment incompatibility", () => {
+  it("gates on disabled status before environment incompatibility", () => {
     const gate = getCatalogAssignmentGate({
       hasDiscoveredTools: true,
       hasResolvableInstall: true,
       isEnvIncompatible: true,
       environmentName: "Staging",
-      isUnpublishedApp: true,
+      isDisabledApp: true,
     });
 
-    expect(gate.disabledReason).toBe("Not published");
+    expect(gate.disabledReason).toBe("Disabled");
   });
 });
 

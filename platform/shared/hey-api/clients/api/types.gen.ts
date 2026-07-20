@@ -15711,7 +15711,7 @@ export type GetAppsResponses = {
             authorName: string | null;
             viewerRole: 'owner' | 'shared' | 'admin';
             latestVersion: number;
-            published: boolean;
+            enabled: boolean;
             teams: Array<{
                 id: string;
                 name: string;
@@ -15873,7 +15873,7 @@ export type CreateAppResponses = {
             tools: Array<string>;
         } | null;
         latestVersion: number;
-        published: boolean;
+        enabled: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -16789,7 +16789,7 @@ export type GetAppResponses = {
             tools: Array<string>;
         } | null;
         latestVersion: number;
-        published: boolean;
+        enabled: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -16936,7 +16936,7 @@ export type UpdateAppResponses = {
             tools: Array<string>;
         } | null;
         latestVersion: number;
-        published: boolean;
+        enabled: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -16948,16 +16948,16 @@ export type UpdateAppResponses = {
 
 export type UpdateAppResponse = UpdateAppResponses[keyof UpdateAppResponses];
 
-export type PublishAppData = {
+export type EnableAppData = {
     body?: never;
     path: {
         appId: string;
     };
     query?: never;
-    url: '/api/apps/{appId}/publish';
+    url: '/api/apps/{appId}/enable';
 };
 
-export type PublishAppErrors = {
+export type EnableAppErrors = {
     /**
      * Default Response
      */
@@ -17020,9 +17020,9 @@ export type PublishAppErrors = {
     };
 };
 
-export type PublishAppError = PublishAppErrors[keyof PublishAppErrors];
+export type EnableAppError = EnableAppErrors[keyof EnableAppErrors];
 
-export type PublishAppResponses = {
+export type EnableAppResponses = {
     /**
      * Default Response
      */
@@ -17057,7 +17057,7 @@ export type PublishAppResponses = {
             tools: Array<string>;
         } | null;
         latestVersion: number;
-        published: boolean;
+        enabled: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -17072,18 +17072,18 @@ export type PublishAppResponses = {
     };
 };
 
-export type PublishAppResponse = PublishAppResponses[keyof PublishAppResponses];
+export type EnableAppResponse = EnableAppResponses[keyof EnableAppResponses];
 
-export type UnpublishAppData = {
+export type DisableAppData = {
     body?: never;
     path: {
         appId: string;
     };
     query?: never;
-    url: '/api/apps/{appId}/unpublish';
+    url: '/api/apps/{appId}/disable';
 };
 
-export type UnpublishAppErrors = {
+export type DisableAppErrors = {
     /**
      * Default Response
      */
@@ -17146,9 +17146,9 @@ export type UnpublishAppErrors = {
     };
 };
 
-export type UnpublishAppError = UnpublishAppErrors[keyof UnpublishAppErrors];
+export type DisableAppError = DisableAppErrors[keyof DisableAppErrors];
 
-export type UnpublishAppResponses = {
+export type DisableAppResponses = {
     /**
      * Default Response
      */
@@ -17183,7 +17183,7 @@ export type UnpublishAppResponses = {
             tools: Array<string>;
         } | null;
         latestVersion: number;
-        published: boolean;
+        enabled: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -17198,7 +17198,7 @@ export type UnpublishAppResponses = {
     };
 };
 
-export type UnpublishAppResponse = UnpublishAppResponses[keyof UnpublishAppResponses];
+export type DisableAppResponse = DisableAppResponses[keyof DisableAppResponses];
 
 export type GetAppVersionsData = {
     body?: never;
@@ -41069,7 +41069,7 @@ export type GetInternalMcpCatalogResponses = {
         toolCount: number;
         providesUi?: boolean;
         appId?: string | null;
-        appPublished?: boolean | null;
+        appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
     }>;
 };

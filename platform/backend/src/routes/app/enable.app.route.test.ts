@@ -4,10 +4,10 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-// Publish/unpublish lifecycle + the draft "author-only" access rule: an
-// unpublished app is visible to no one but its author, overriding app:admin
-// oversight; publishing makes it live at its scope; unpublishing pulls it back.
-describe("POST /api/apps/:appId/(publish|unpublish)", () => {
+// Enable/disable lifecycle + the disabled "author-only" access rule: a
+// disabled app is visible to no one but its author, overriding app:admin
+// oversight; enabling makes it live at its scope; disabling pulls it back.
+describe("POST /api/apps/:appId/(enable|disable)", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let author: User;
@@ -21,7 +21,7 @@ describe("POST /api/apps/:appId/(publish|unpublish)", () => {
     author = await makeUser();
     otherAdmin = await makeUser();
     // Both are app admins: the point is that admin oversight still does NOT
-    // reveal another author's draft.
+    // reveal another author's disabled app.
     await makeMember(author.id, organizationId, { role: ADMIN_ROLE_NAME });
     await makeMember(otherAdmin.id, organizationId, { role: ADMIN_ROLE_NAME });
     currentUser = author;
@@ -44,64 +44,64 @@ describe("POST /api/apps/:appId/(publish|unpublish)", () => {
   const get = (appId: string) =>
     app.inject({ method: "GET", url: `/api/apps/${appId}` });
 
-  test("a new app is created as a draft", async () => {
+  test("a new app is created disabled", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
       payload: { name: "Fresh", scope: "org" },
     });
     expect(created.statusCode).toBe(200);
-    expect(created.json().published).toBe(false);
+    expect(created.json().enabled).toBe(false);
   });
 
-  test("a draft org app is author-only, hidden even from another app admin", async ({
+  test("a disabled org app is author-only, hidden even from another app admin", async ({
     makeApp,
   }) => {
-    const draft = await makeApp({
+    const disabled = await makeApp({
       organizationId,
       scope: "org",
       authorId: author.id,
-      published: false,
+      enabled: false,
     });
 
     currentUser = author;
-    const asAuthor = await get(draft.id);
+    const asAuthor = await get(disabled.id);
     expect(asAuthor.statusCode).toBe(200);
-    expect(asAuthor.json().published).toBe(false);
+    expect(asAuthor.json().enabled).toBe(false);
 
     currentUser = otherAdmin;
-    expect((await get(draft.id)).statusCode).toBe(404);
+    expect((await get(disabled.id)).statusCode).toBe(404);
   });
 
-  test("publishing makes a draft visible at its scope", async ({ makeApp }) => {
-    const draft = await makeApp({
+  test("enabling makes a disabled app visible at its scope", async ({
+    makeApp,
+  }) => {
+    const disabled = await makeApp({
       organizationId,
       scope: "org",
       authorId: author.id,
-      published: false,
+      enabled: false,
     });
 
     currentUser = author;
-    const published = await app.inject({
+    const enabled = await app.inject({
       method: "POST",
-      url: `/api/apps/${draft.id}/publish`,
+      url: `/api/apps/${disabled.id}/enable`,
     });
-    expect(published.statusCode).toBe(200);
-    expect(published.json().published).toBe(true);
+    expect(enabled.statusCode).toBe(200);
+    expect(enabled.json().enabled).toBe(true);
 
     // The org-scoped app is now visible to another admin.
     currentUser = otherAdmin;
-    expect((await get(draft.id)).statusCode).toBe(200);
+    expect((await get(disabled.id)).statusCode).toBe(200);
   });
 
-  test("unpublishing returns a live app to author-only", async ({
-    makeApp,
-  }) => {
+  test("disabling returns a live app to author-only", async ({ makeApp }) => {
     const live = await makeApp({
       organizationId,
       scope: "org",
       authorId: author.id,
-      published: true,
+      enabled: true,
     });
 
     // Visible to another admin while live.
@@ -109,37 +109,37 @@ describe("POST /api/apps/:appId/(publish|unpublish)", () => {
     expect((await get(live.id)).statusCode).toBe(200);
 
     currentUser = author;
-    const unpublished = await app.inject({
+    const disabled = await app.inject({
       method: "POST",
-      url: `/api/apps/${live.id}/unpublish`,
+      url: `/api/apps/${live.id}/disable`,
     });
-    expect(unpublished.statusCode).toBe(200);
-    expect(unpublished.json().published).toBe(false);
+    expect(disabled.statusCode).toBe(200);
+    expect(disabled.json().enabled).toBe(false);
 
     // ...and hidden from the other admin again.
     currentUser = otherAdmin;
     expect((await get(live.id)).statusCode).toBe(404);
   });
 
-  test("another admin cannot publish an author's draft (cannot even see it)", async ({
+  test("another admin cannot enable an author's disabled app (cannot even see it)", async ({
     makeApp,
   }) => {
-    const draft = await makeApp({
+    const disabled = await makeApp({
       organizationId,
       scope: "org",
       authorId: author.id,
-      published: false,
+      enabled: false,
     });
 
     currentUser = otherAdmin;
     const attempt = await app.inject({
       method: "POST",
-      url: `/api/apps/${draft.id}/publish`,
+      url: `/api/apps/${disabled.id}/enable`,
     });
     expect(attempt.statusCode).toBe(404);
   });
 
-  test("a plain member who can view a live org app but lacks modify rights cannot publish/unpublish it", async ({
+  test("a plain member who can view a live org app but lacks modify rights cannot enable/disable it", async ({
     makeApp,
     makeUser,
     makeMember,
@@ -148,20 +148,20 @@ describe("POST /api/apps/:appId/(publish|unpublish)", () => {
       organizationId,
       scope: "org",
       authorId: author.id,
-      published: true,
+      enabled: true,
     });
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
 
     currentUser = member;
     // Visible (org scope), so this is a real 403 (modify-rights gate), not a
-    // 404 from the draft/view gate.
+    // 404 from the disabled/view gate.
     expect((await get(live.id)).statusCode).toBe(200);
     expect(
       (
         await app.inject({
           method: "POST",
-          url: `/api/apps/${live.id}/unpublish`,
+          url: `/api/apps/${live.id}/disable`,
         })
       ).statusCode,
     ).toBe(403);
@@ -169,32 +169,32 @@ describe("POST /api/apps/:appId/(publish|unpublish)", () => {
       (
         await app.inject({
           method: "POST",
-          url: `/api/apps/${live.id}/publish`,
+          url: `/api/apps/${live.id}/enable`,
         })
       ).statusCode,
     ).toBe(403);
   });
 
-  test("a draft is excluded from another user's app listing", async ({
+  test("a disabled app is excluded from another user's app listing", async ({
     makeApp,
   }) => {
-    const draft = await makeApp({
+    const disabled = await makeApp({
       organizationId,
       scope: "org",
       authorId: author.id,
-      published: false,
+      enabled: false,
     });
 
     currentUser = author;
     const authorList = await app.inject({ method: "GET", url: "/api/apps" });
     expect(
       (authorList.json().data as Array<{ id: string }>).map((a) => a.id),
-    ).toContain(draft.id);
+    ).toContain(disabled.id);
 
     currentUser = otherAdmin;
     const otherList = await app.inject({ method: "GET", url: "/api/apps" });
     expect(
       (otherList.json().data as Array<{ id: string }>).map((a) => a.id),
-    ).not.toContain(draft.id);
+    ).not.toContain(disabled.id);
   });
 });

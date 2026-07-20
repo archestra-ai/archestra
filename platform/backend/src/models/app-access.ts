@@ -18,9 +18,9 @@ class AppAccessModel {
    * and returns every app in the org — mirroring `userHasAppAccess`, so an app
    * admin's list matches what they can already view one-by-one.
    *
-   * A draft (unpublished) app is author-only regardless of its scope, and this
-   * overrides the app:admin bypass — an admin sees every *published* app plus
-   * only their own drafts, never someone else's work-in-progress.
+   * A disabled app is author-only regardless of its scope, and this overrides
+   * the app:admin bypass — an admin sees every *enabled* app plus only their
+   * own disabled ones, never someone else's work-in-progress.
    */
   static async getUserAccessibleAppIds(params: {
     organizationId: string;
@@ -28,14 +28,14 @@ class AppAccessModel {
     isAppAdmin?: boolean;
   }): Promise<string[]> {
     const { organizationId, userId, isAppAdmin } = params;
-    const isPublished = eq(schema.appsTable.published, true);
-    // Visibility of a *published* app: scope-based, with the admin bypass.
-    const publishedVisibility = isAppAdmin
-      ? isPublished
+    const isEnabled = eq(schema.appsTable.enabled, true);
+    // Visibility of an *enabled* app: scope-based, with the admin bypass.
+    const enabledVisibility = isAppAdmin
+      ? isEnabled
       : userId === undefined
-        ? and(isPublished, eq(schema.internalMcpCatalogTable.scope, "org"))
+        ? and(isEnabled, eq(schema.internalMcpCatalogTable.scope, "org"))
         : and(
-            isPublished,
+            isEnabled,
             or(
               eq(schema.internalMcpCatalogTable.scope, "org"),
               and(
@@ -48,17 +48,17 @@ class AppAccessModel {
               ),
             ),
           );
-    // A draft is visible only to its author (no admin/scope path reaches it).
-    const draftVisibility =
+    // A disabled app is visible only to its author (no admin/scope path reaches it).
+    const disabledVisibility =
       userId === undefined
         ? undefined
         : and(
-            eq(schema.appsTable.published, false),
+            eq(schema.appsTable.enabled, false),
             eq(schema.appsTable.authorId, userId),
           );
-    const scopeCondition = draftVisibility
-      ? or(publishedVisibility, draftVisibility)
-      : publishedVisibility;
+    const scopeCondition = disabledVisibility
+      ? or(enabledVisibility, disabledVisibility)
+      : enabledVisibility;
     const rows = await db
       .selectDistinct({ id: schema.appsTable.id })
       .from(schema.appsTable)
@@ -104,8 +104,8 @@ class AppAccessModel {
    * apps are visible org-wide; personal to the author; team to members of a team
    * the backing catalog is assigned to. App admins bypass scope.
    *
-   * A draft (unpublished) app is author-only regardless of scope, and this
-   * overrides the admin bypass — no one but the author may view a draft.
+   * A disabled app is author-only regardless of scope, and this overrides the
+   * admin bypass — no one but the author may view a disabled app.
    */
   static async userHasAppAccess(params: {
     organizationId: string;
@@ -115,13 +115,13 @@ class AppAccessModel {
       organizationId: string;
       scope: ResourceVisibilityScope;
       authorId: string | null;
-      published: boolean;
+      enabled: boolean;
     };
     isAppAdmin: boolean;
   }): Promise<boolean> {
     const { app, organizationId, userId } = params;
     if (app.organizationId !== organizationId) return false;
-    if (!app.published) {
+    if (!app.enabled) {
       return userId !== undefined && app.authorId === userId;
     }
     if (params.isAppAdmin) return true;

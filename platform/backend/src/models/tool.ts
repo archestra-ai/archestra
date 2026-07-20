@@ -98,17 +98,17 @@ function shortSlugHash(value: string): string {
 }
 
 /**
- * Excludes a draft (unpublished) app's `open` launch tool from any consumable
- * tool resolution — gateway listing, dynamic discovery, execution, and app-to-app
- * assignment. A draft is author-only until published, so its launch tool must
- * never surface as a capability to anyone (the author previews it through the
- * app proxy, not the gateway). A tool qualifies when its catalog backs an app
- * with `published = false`; ordinary MCP tools (whose catalog backs no app) are
+ * Excludes a disabled app's `open` launch tool from any consumable tool
+ * resolution — gateway listing, dynamic discovery, execution, and app-to-app
+ * assignment. A disabled app is author-only, so its launch tool must never
+ * surface as a capability to anyone (the author previews it through the app
+ * proxy, not the gateway). A tool qualifies when its catalog backs an app with
+ * `enabled = false`; ordinary MCP tools (whose catalog backs no app) are
  * unaffected. Correlates on `tools.catalog_id`, so every caller must have
- * `toolsTable` in its FROM. Non-destructive: assignments to a since-unpublished
- * app are hidden, not deleted, so re-publishing restores them.
+ * `toolsTable` in its FROM. Non-destructive: assignments to a since-disabled
+ * app are hidden, not deleted, so re-enabling restores them.
  */
-function notDraftAppLaunchTool(): SQL {
+function notDisabledAppLaunchTool(): SQL {
   return notExists(
     db
       .select({ one: sql`1` })
@@ -120,7 +120,7 @@ function notDraftAppLaunchTool(): SQL {
       .where(
         and(
           eq(schema.mcpServersTable.catalogId, schema.toolsTable.catalogId),
-          eq(schema.appsTable.published, false),
+          eq(schema.appsTable.enabled, false),
           notDeleted(schema.appsTable),
         ),
       ),
@@ -778,7 +778,7 @@ class ToolModel {
                   isNotNull(schema.toolsTable.delegateToAgentId),
                 ),
                 toolInEnvironmentPredicate(agentEnvironmentId),
-                notDraftAppLaunchTool(),
+                notDisabledAppLaunchTool(),
               ),
             )
             .orderBy(
@@ -884,7 +884,7 @@ class ToolModel {
           params.requireUiResource
             ? isNotNull(toolUiResourceUriSql())
             : undefined,
-          notDraftAppLaunchTool(),
+          notDisabledAppLaunchTool(),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt), asc(schema.toolsTable.id));
@@ -1954,7 +1954,7 @@ class ToolModel {
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
           toolInEnvironmentPredicate(agentEnvironmentId),
-          notDraftAppLaunchTool(),
+          notDisabledAppLaunchTool(),
         ),
       )
       .orderBy(
@@ -2002,7 +2002,7 @@ class ToolModel {
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
-          notDraftAppLaunchTool(),
+          notDisabledAppLaunchTool(),
         ),
       )
       .orderBy(
@@ -2067,7 +2067,7 @@ class ToolModel {
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
-          notDraftAppLaunchTool(),
+          notDisabledAppLaunchTool(),
         ),
       )
       .orderBy(
@@ -2149,7 +2149,7 @@ class ToolModel {
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),
           ),
-          notDraftAppLaunchTool(),
+          notDisabledAppLaunchTool(),
         ),
       )
       .limit(1);
@@ -2240,7 +2240,7 @@ class ToolModel {
           eq(schema.appToolsTable.appId, appId),
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId),
-          notDraftAppLaunchTool(),
+          notDisabledAppLaunchTool(),
         ),
       )
       .orderBy(
@@ -2285,7 +2285,7 @@ class ToolModel {
           eq(schema.appToolsTable.appId, appId),
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
-          notDraftAppLaunchTool(),
+          notDisabledAppLaunchTool(),
         ),
       )
       .orderBy(

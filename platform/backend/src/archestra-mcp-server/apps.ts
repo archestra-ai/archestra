@@ -1175,7 +1175,7 @@ const registry = defineArchestraTools([
             id: app.id,
             scope: app.scope,
             authorId: app.authorId,
-            published: app.published,
+            enabled: app.enabled,
           },
           resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
@@ -1205,10 +1205,10 @@ const registry = defineArchestraTools([
       await syncAppBacking(updated);
 
       // publish_app is the agent-facing "make this available" verb, so it flips
-      // the app live as well as promoting scope. Without this a scaffolded draft
-      // would stay author-only — invisible to the very audience just granted, and
-      // with its launch tool still withheld from the gateway.
-      await AppModel.setPublished(args.appId, true);
+      // the app enabled as well as promoting scope. Without this a scaffolded
+      // disabled app would stay author-only — invisible to the very audience
+      // just granted, and with its launch tool still withheld from the gateway.
+      await AppModel.setEnabled(args.appId, true);
 
       const runUrl = appRunUrl(updated.id);
       const audience =
@@ -1558,7 +1558,7 @@ async function loadApp(params: {
           id: app.id,
           scope: app.scope,
           authorId: app.authorId,
-          published: app.published,
+          enabled: app.enabled,
         },
         resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });

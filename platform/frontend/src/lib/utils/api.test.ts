@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner");
 
-import { throwOnApiError } from "./api";
+import { getApiErrorMessage, throwOnApiError } from "./api";
 
 describe("throwOnApiError", () => {
   beforeEach(() => {
@@ -51,5 +51,36 @@ describe("throwOnApiError", () => {
         { allowNotFound: true, toastOnError: false },
       ),
     ).toThrow();
+  });
+});
+
+describe("getApiErrorMessage", () => {
+  it("returns the server's descriptive message unchanged", () => {
+    expect(
+      getApiErrorMessage({
+        error: {
+          error: {
+            message: "You don't have permission to upload project files.",
+            type: "api_authorization_error",
+          },
+        },
+      }),
+    ).toBe("You don't have permission to upload project files.");
+  });
+
+  it("never surfaces a bare 'Forbidden' — humanizes it instead", () => {
+    expect(
+      getApiErrorMessage({
+        error: {
+          error: { message: "Forbidden", type: "api_authorization_error" },
+        },
+      }),
+    ).toBe(
+      "You don't have permission to perform this action. Contact your administrator if you need access.",
+    );
+  });
+
+  it("falls back to the generic API message for empty errors", () => {
+    expect(getApiErrorMessage({})).toBe("API request failed");
   });
 });

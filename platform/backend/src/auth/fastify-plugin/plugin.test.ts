@@ -6,7 +6,11 @@ import { vi } from "vitest";
 // database (UserModel / ServiceAccountModel) is NOT mocked — it's real PGlite.
 vi.mock("@/auth");
 vi.mock("@/auth/utils");
-vi.mock("@archestra/shared/access-control", () => ({
+vi.mock("@archestra/shared/access-control", async (importOriginal) => ({
+  // Keep the real buildForbiddenErrorMessage so 403 messages stay realistic.
+  ...(await importOriginal<
+    typeof import("@archestra/shared/access-control")
+  >()),
   requiredEndpointPermissionsMap: {
     createAgent: { agent: ["create"] },
     getAgents: { agent: ["read"] },
@@ -227,7 +231,7 @@ describe("authPlugin integration", () => {
       } as unknown as FastifyRequest;
 
       await expect(authnz.handle(request, mockReply())).rejects.toThrow(
-        "Forbidden",
+        "You don't have permission to create agent",
       );
     });
 
@@ -255,7 +259,7 @@ describe("authPlugin integration", () => {
       } as unknown as FastifyRequest;
 
       await expect(authnz.handle(request, mockReply())).rejects.toThrow(
-        "Forbidden",
+        "not registered for access control",
       );
     });
 

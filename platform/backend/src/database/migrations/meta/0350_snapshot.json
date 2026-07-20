@@ -1,5 +1,5 @@
 {
-  "id": "0abf3ebe-f02b-43e8-87a0-de8e1d184732",
+  "id": "173cafed-acdd-446f-90a3-c203c69bab6d",
   "prevId": "951c6fba-f764-4241-9d05-a01ea6be4ec2",
   "version": "7",
   "dialect": "postgresql",
@@ -5102,6 +5102,46 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.encryption_key_canaries": {
+      "name": "encryption_key_canaries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "encrypted_canary": {
+          "name": "encrypted_canary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.environment_default_user_limits": {
       "name": "environment_default_user_limits",
       "schema": "",
@@ -5747,88 +5787,6 @@
         "github_app_configs_secret_id_secret_id_fk": {
           "name": "github_app_configs_secret_id_secret_id_fk",
           "tableFrom": "github_app_configs",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.github_pats": {
-      "name": "github_pats",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "github_pats_organization_id_idx": {
-          "name": "github_pats_organization_id_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "github_pats_secret_id_secret_id_fk": {
-          "name": "github_pats_secret_id_secret_id_fk",
-          "tableFrom": "github_pats",
           "tableTo": "secret",
           "columnsFrom": [
             "secret_id"
@@ -14645,55 +14603,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "github_sync_interval": {
-          "name": "github_sync_interval",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "github_sync_ref": {
-          "name": "github_sync_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "github_app_config_id": {
-          "name": "github_app_config_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "github_pat_id": {
-          "name": "github_pat_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_synced_at": {
-          "name": "last_synced_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_sync_error": {
-          "name": "last_sync_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "usage_count": {
-          "name": "usage_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -14751,22 +14660,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "skills_github_sync_due_idx": {
-          "name": "skills_github_sync_due_idx",
-          "columns": [
-            {
-              "expression": "last_synced_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"skills\".\"github_sync_interval\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -14842,32 +14735,6 @@
           "tableTo": "environments",
           "columnsFrom": [
             "environment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "skills_github_app_config_id_github_app_configs_id_fk": {
-          "name": "skills_github_app_config_id_github_app_configs_id_fk",
-          "tableFrom": "skills",
-          "tableTo": "github_app_configs",
-          "columnsFrom": [
-            "github_app_config_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "skills_github_pat_id_github_pats_id_fk": {
-          "name": "skills_github_pat_id_github_pats_id_fk",
-          "tableFrom": "skills",
-          "tableTo": "github_pats",
-          "columnsFrom": [
-            "github_pat_id"
           ],
           "columnsTo": [
             "id"

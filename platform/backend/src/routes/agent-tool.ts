@@ -919,7 +919,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!hasRead) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(
+          403,
+          "You don't have permission to view agents. This requires read access to at least one agent type (agents, MCP gateways, or LLM proxies).",
+        );
       }
 
       const [connections, agents] = await Promise.all([

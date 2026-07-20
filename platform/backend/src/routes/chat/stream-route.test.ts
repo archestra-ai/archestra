@@ -6,10 +6,19 @@ import {
 } from "@archestra/shared";
 import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
-import { PROJECT_INSTRUCTIONS_PREFIX } from "@/agents/agent-system-prompt";
+import {
+  PROJECT_FILES_PREFIX,
+  PROJECT_INSTRUCTIONS_PREFIX,
+} from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
-import { MessageModel, ModelModel, ProjectModel, SkillModel } from "@/models";
+import {
+  FileModel,
+  MessageModel,
+  ModelModel,
+  ProjectModel,
+  SkillModel,
+} from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
@@ -829,6 +838,87 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
     expect(systemPrompt).toContain(PROJECT_INSTRUCTIONS_PREFIX);
     expect(systemPrompt).toContain("STREAM-INSTRUCTIONS-MARKER");
+  });
+
+  test("lists the project's shared files in the system prompt for a project chat", async () => {
+    const project = await ProjectModel.create({
+      organizationId,
+      userId: user.id,
+      name: "Files Project",
+      description: null,
+    });
+    // A project file, attached to the project (not to any message) by another
+    // conversation — exactly the file the model previously never heard about.
+    await FileModel.insertRow({
+      organizationId,
+      userId: user.id,
+      projectId: project.id,
+      conversationId: null,
+      filename: "index.html",
+      mimeType: "text/html",
+      sizeBytes: 6,
+      storageProvider: "db",
+      data: Buffer.from("<html>"),
+      objectKey: null,
+    });
+    const projectConversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId,
+      agentId,
+      projectId: project.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: projectConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(PROJECT_FILES_PREFIX);
+    expect(systemPrompt).toContain("`index.html`");
+  });
+
+  test("lists no project files for a project chat whose project has none", async () => {
+    const project = await ProjectModel.create({
+      organizationId,
+      userId: user.id,
+      name: "No Files Project",
+      description: null,
+    });
+    const projectConversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId,
+      agentId,
+      projectId: project.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: projectConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt ?? "").not.toContain(PROJECT_FILES_PREFIX);
   });
 
   test("injects nothing for a project chat whose instructions are empty", async () => {

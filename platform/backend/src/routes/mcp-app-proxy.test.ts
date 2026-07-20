@@ -145,7 +145,9 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error?.message).toBe("Forbidden");
+    expect(response.json().error?.message).toBe(
+      "You don't have access to this MCP App, or it doesn't exist.",
+    );
   });
 
   test("rejects tools/call for a tool not assigned to the app", async ({

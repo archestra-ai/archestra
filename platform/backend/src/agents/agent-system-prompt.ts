@@ -43,6 +43,11 @@ export const PROJECT_INSTRUCTIONS_PREFIX =
  * tests. */
 export const OPENED_APP_PREFIX = "An app is open in this chat:";
 
+/** @public — canonical opener for the project-files block, asserted by the
+ * assembler tests. */
+export const PROJECT_FILES_PREFIX =
+  "This chat's project already has these files attached";
+
 /** @public — canonical instruction text, asserted by the assembler tests. */
 export const TOOL_UI_RESULT_INSTRUCTION =
   "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
@@ -80,6 +85,13 @@ export async function buildAgentSystemPrompt(params: {
    * project's instructions. Absent leaves the prompt unchanged.
    */
   openedApp?: OpenedApp;
+  /**
+   * Filenames of the project's shared files (chat in a project only), newest
+   * first. Injected as a manifest so the model knows these files exist without
+   * having to guess — without it, "build from my html file" gets "you haven't
+   * attached any files". Empty/absent leaves the prompt unchanged.
+   */
+  projectFileNames?: string[];
 }): Promise<string | undefined> {
   const {
     agent,
@@ -91,6 +103,7 @@ export async function buildAgentSystemPrompt(params: {
     hookSessionContext,
     projectInstructions,
     openedApp,
+    projectFileNames,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -129,11 +142,16 @@ export async function buildAgentSystemPrompt(params: {
     ? buildOpenedAppInstruction(openedApp, mcpTools)
     : null;
 
+  const projectFilesPrompt = projectFileNames?.length
+    ? buildProjectFilesInstruction(projectFileNames, mcpTools)
+    : null;
+
   return (
     [
       toolLoadingInstructions,
       renderedPrompt,
       projectInstructionsPrompt,
+      projectFilesPrompt,
       openedAppPrompt,
       skillCatalogPrompt,
       fileHandlingInstruction,
@@ -250,6 +268,58 @@ function buildOpenedAppInstruction(
       : "";
 
   return `${heading}\n\n${framing}\n\nThis app's capabilities are the MCP tools named \`${app.toolNamespace}__*\`. Prefer them over a general-purpose tool or another server's, even when another server looks like a closer keyword match — a task, note, or reminder the user asks for while inside ${app.name} belongs in ${app.name}.${discovery} If it genuinely cannot do what they asked, say so and ask them where the work should go — never quietly do it somewhere else.`;
+}
+
+/**
+ * Most project files to name in the manifest. A project's file set is normally
+ * a handful, so this is a ceiling on a pathological project rather than an
+ * expected truncation — the block is re-injected every turn, so it needs one.
+ * Overflow defers to `search_files`, which pages the full set.
+ */
+const PROJECT_FILES_LIST_MAX = 100;
+
+/**
+ * Manifest of the project's shared files. Without it the model has no way to
+ * know these files exist: they are attached to the project, not to any message,
+ * so neither attachment materialization nor sandbox staging ever mentions them,
+ * and the generic file guidance only says to *search* — which the model won't
+ * do when it believes no files were provided. The result is the model telling a
+ * user who is looking at their files in the panel that nothing was attached.
+ * Listing the filenames up front closes that gap; read/search guidance is only
+ * worded from tools actually present.
+ *
+ * Input is newest-first; the cap keeps the newest files, and the shown slice is
+ * sorted for a byte-stable block across turns.
+ */
+function buildProjectFilesInstruction(
+  fileNames: string[],
+  mcpTools: Record<string, Tool>,
+): string {
+  const shown = fileNames.slice(0, PROJECT_FILES_LIST_MAX).sort();
+  const names = shown.map((name) => `\`${name}\``).join(", ");
+  // A truncated list must never read as the complete one.
+  const overflow = fileNames.length - shown.length;
+  const more = overflow > 0 ? `, and ${overflow} more` : "";
+
+  const searchFiles = archestraMcpBranding.getToolName(
+    TOOL_SEARCH_FILES_SHORT_NAME,
+  );
+  const readFile = archestraMcpBranding.getToolName(TOOL_READ_FILE_SHORT_NAME);
+  const access = [
+    readFile in mcpTools ? `Read one with \`${readFile}\` by filename.` : null,
+    searchFiles in mcpTools
+      ? `\`${searchFiles}\` lists them too, along with any added since.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const heading = `${PROJECT_FILES_PREFIX} (shared with the whole project, visible in the user's Files panel): ${names}${more}.`;
+  const framing = `They are already available — the user does not need to re-attach them to this conversation. When the user refers to a file ("my html file", "the spec", "those css and js files"), match it against this list before saying any file is missing; never claim no files were attached while this list is non-empty.`;
+
+  return access
+    ? `${heading}\n\n${framing} ${access}`
+    : `${heading}\n\n${framing}`;
 }
 
 /**

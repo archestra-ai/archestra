@@ -56,7 +56,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
@@ -666,11 +665,10 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
-        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:hidden">
+        <div className="group-data-[collapsible=icon]:hidden">
           <SidebarPrefetchLink href="/chat" className="block min-w-0">
             <AppLogo />
           </SidebarPrefetchLink>
-          <SidebarTrigger className="shrink-0 text-muted-foreground hover:text-foreground" />
         </div>
         <SidebarPrefetchLink
           href="/chat"
@@ -678,7 +676,6 @@ export function AppSidebar() {
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </SidebarPrefetchLink>
-        <SidebarTrigger className="hidden text-muted-foreground hover:text-foreground group-data-[collapsible=icon]:flex" />
         {isAuthenticated && permissionMap && (
           <SidebarModeToggle
             mode={sidebarMode}

@@ -330,6 +330,9 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // High-volume / best-effort artifact + recording surfaces.
   { kind: "prefix", value: "/api/skill-sandbox/artifacts" },
   { kind: "prefix", value: "/api/app-recordings" },
+  // Agent hook scripts (hookFilesTable is audited:false — child of the audited
+  // agent). Elevating hooks to a first-class audited resource is a follow-up.
+  { kind: "prefix", value: "/api/hooks" },
   // Read-only probes / navigational / suggestion routes — mutate no org state.
   {
     kind: "exact",

@@ -1,6 +1,8 @@
+import config from "@/config";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, test } from "@/test";
 import { SelectLlmProviderApiKeySchema } from "@/types";
+import { _resetCachedKey } from "@/utils/crypto";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 
 describe("LlmProviderApiKeyModel", () => {
@@ -685,6 +687,49 @@ describe("LlmProviderApiKeyModel", () => {
       const plainKey = visible.find((k) => k.name === "Plain OpenAI Key");
       expect(codexKey?.isChatgptSubscription).toBe(true);
       expect(plainKey?.isChatgptSubscription).toBe(false);
+    });
+
+    test("still lists a key whose stored secret cannot be decrypted", async ({
+      makeOrganization,
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const secret = await makeSecret({ secret: { apiKey: "sk-old" } });
+      await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        name: "Key From Before Rotation",
+      });
+
+      // Simulate an auth-secret rotation: the stored secret was encrypted
+      // under the previous ARCHESTRA_AUTH_SECRET and can no longer be
+      // decrypted with the current one.
+      _resetCachedKey();
+      const original = config.auth.secret;
+      config.auth.secret = "rotated-auth-secret-that-cannot-decrypt-old-rows";
+
+      try {
+        const visible = await LlmProviderApiKeyModel.getVisibleKeys(
+          org.id,
+          user.id,
+          [],
+          false,
+        );
+
+        expect(visible).toHaveLength(1);
+        expect(visible[0].name).toBe("Key From Before Rotation");
+        // Metadata derived from the secret value degrades to its defaults.
+        expect(visible[0].isChatgptSubscription).toBe(false);
+        expect(visible[0].vaultSecretPath).toBeNull();
+      } finally {
+        config.auth.secret = original;
+        _resetCachedKey();
+      }
     });
   });
 

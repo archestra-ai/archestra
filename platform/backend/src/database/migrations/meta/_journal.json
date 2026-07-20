@@ -2451,6 +2451,13 @@
       "when": 1784558249010,
       "tag": "0349_apps_enabled_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 350,
+      "version": "7",
+      "when": 1784562948223,
+      "tag": "0350_opposite_nico_minoru",
+      "breakpoints": true
     }
   ]
 }

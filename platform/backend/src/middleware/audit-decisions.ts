@@ -552,6 +552,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "secret material; presence audited via parent resource hasSecret flag",
   },
+  encryptionKeyCanariesTable: {
+    audited: false,
+    reason:
+      "internal startup canary for encryption-key verification; no user-facing writes",
+  },
 
   // =========================================================================
   // User / token material

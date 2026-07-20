@@ -21,6 +21,7 @@ import { describe, expect, test } from "@/test";
 import {
   buildAgentSystemPrompt,
   OPENED_APP_PREFIX,
+  PROJECT_FILES_PREFIX,
   PROJECT_INSTRUCTIONS_PREFIX,
   TOOL_DENIAL_INSTRUCTION,
   TOOL_UI_RESULT_INSTRUCTION,
@@ -423,6 +424,94 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).not.toContain(PROJECT_INSTRUCTIONS_PREFIX);
+  });
+
+  test("lists the project's files with read/search guidance from the tools present", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: withFileTools,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      projectFileNames: ["styles.css", "index.html", "app4.js"],
+    });
+
+    expect(prompt).toContain(PROJECT_FILES_PREFIX);
+    // Sorted for a byte-stable block, regardless of input (newest-first) order.
+    expect(prompt).toContain("`app4.js`, `index.html`, `styles.css`");
+    // The core behavioral fix: the model must not deny files that exist.
+    expect(prompt).toContain(
+      "never claim no files were attached while this list is non-empty",
+    );
+    expect(prompt).toContain(`\`${brand(TOOL_READ_FILE_SHORT_NAME)}\``);
+    expect(prompt).toContain(`\`${searchFilesToolName}\``);
+  });
+
+  test("caps the project-files manifest and never presents it as complete", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: null,
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const fileNames = Array.from(
+      { length: 103 },
+      (_, i) => `file-${String(i).padStart(3, "0")}.txt`,
+    );
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      projectFileNames: fileNames,
+    });
+
+    expect(prompt).toContain(PROJECT_FILES_PREFIX);
+    expect(prompt).toContain(", and 3 more.");
+    // Without the file tools no tool names may be referenced.
+    expect(prompt).not.toContain(searchFilesToolName);
+    expect(prompt).not.toContain(brand(TOOL_READ_FILE_SHORT_NAME));
+  });
+
+  test("omits the project-files manifest when the project has no files", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: withFileTools,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      projectFileNames: [],
+    });
+
+    expect(prompt).not.toContain(PROJECT_FILES_PREFIX);
   });
 
   test("names the open external app, its tool namespace, and how to discover its tools", async ({

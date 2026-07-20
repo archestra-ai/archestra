@@ -204,9 +204,7 @@ const TeamExternalGroupOutputItemSchema = z.object({
   groupIdentifier: z
     .string()
     .describe("The external identity provider group identifier."),
-  createdAt: z
-    .string()
-    .describe("ISO timestamp when the mapping was created."),
+  createdAt: z.string().describe("ISO timestamp when the mapping was created."),
 });
 
 const ListTeamExternalGroupsToolArgsSchema = z

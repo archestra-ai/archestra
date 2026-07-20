@@ -1463,6 +1463,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: { app: ["read"] },
   [RouteId.UpdateApp]: { app: ["update"] },
+  // Publish/unpublish is a lifecycle transition, not a metadata edit; gated like
+  // an update (the handler further requires scope-modify at the app's scope).
+  [RouteId.PublishApp]: { app: ["update"] },
+  [RouteId.UnpublishApp]: { app: ["update"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },

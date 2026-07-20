@@ -93,9 +93,21 @@ export function getCatalogAssignmentGate(params: {
   hasResolvableInstall: boolean;
   isEnvIncompatible: boolean;
   environmentName?: string | null;
+  /** A draft (unpublished) app backing: listed for its author but not assignable. */
+  isUnpublishedApp?: boolean;
 }): { disabled: boolean; disabledReason?: string; unavailable: boolean } {
   const { hasDiscoveredTools, hasResolvableInstall, isEnvIncompatible } =
     params;
+
+  // A draft app cannot be wired into an agent until it is published — surfaced
+  // greyed with "Not published" (only its author ever sees it here).
+  if (params.isUnpublishedApp) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: "Not published",
+    };
+  }
 
   if (isEnvIncompatible) {
     return {

@@ -149,6 +149,41 @@ class AppModel {
     );
   }
 
+  /**
+   * Map backing-catalog ids → the backing app's `published` flag, batched. Lets
+   * the capability picker mark a `serverType:"app"` catalog whose app is still a
+   * draft (author-only, shown greyed as "Not published"). Only catalogs that back
+   * an active app appear in the result.
+   */
+  static async getAppPublishedByCatalogIds(
+    catalogIds: string[],
+  ): Promise<Map<string, boolean>> {
+    if (catalogIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        catalogId: schema.mcpServersTable.catalogId,
+        published: schema.appsTable.published,
+      })
+      .from(schema.appsTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          notDeleted(schema.appsTable),
+        ),
+      );
+    return new Map(
+      rows
+        .filter(
+          (r): r is { catalogId: string; published: boolean } => !!r.catalogId,
+        )
+        .map((r) => [r.catalogId, r.published]),
+    );
+  }
+
   /** A single active app by its backing mcp_server id (the catalog→app link). */
   static async findByMcpServerId(mcpServerId: string): Promise<App | null> {
     const [result] = await appWithCatalogQuery().where(
@@ -267,6 +302,25 @@ class AppModel {
       .update(schema.appsTable)
       .set({ mcpServerId })
       .where(eq(schema.appsTable.id, id));
+  }
+
+  /**
+   * Flip an app's published/draft state — the whole publish/unpublish lifecycle.
+   * A pure boolean on the app row: it never touches assignments or the backing
+   * catalog, so unpublish→republish is non-destructive (a since-hidden launch
+   * tool reappears wherever it was assigned). Returns the updated app, or null if
+   * the app is gone/soft-deleted.
+   */
+  static async setPublished(
+    id: string,
+    published: boolean,
+  ): Promise<App | null> {
+    const [row] = await db
+      .update(schema.appsTable)
+      .set({ published })
+      .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
+      .returning({ id: schema.appsTable.id });
+    return row ? await AppModel.findById(id) : null;
   }
 
   /**

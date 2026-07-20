@@ -11,6 +11,8 @@ const {
   getAppTools,
   createApp,
   updateApp,
+  publishApp,
+  unpublishApp,
   deleteApp,
   assignToolToApp,
   unassignToolFromApp,
@@ -314,6 +316,39 @@ export function useUpdateApp() {
       // which drives the MCP registry card — refresh it too.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("App updated");
+    },
+  });
+}
+
+// Publish/unpublish an app (the draft lifecycle). Separate from useUpdateApp so
+// the transition has its own toast and its own cache invalidation — a published
+// app newly exposes its launch tool to gateways/agents (and vice versa), so the
+// MCP catalog must refresh alongside the apps list.
+export function useSetAppPublished() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      appId,
+      published,
+    }: {
+      appId: string;
+      published: boolean;
+    }) => {
+      const { data, error } = await (published
+        ? publishApp({ path: { appId } })
+        : unpublishApp({ path: { appId } }));
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
+      queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success(variables.published ? "App published" : "App unpublished");
     },
   });
 }

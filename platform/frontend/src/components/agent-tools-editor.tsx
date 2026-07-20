@@ -823,6 +823,8 @@ const AgentToolsEditorContent = forwardRef<
         isEnvIncompatible:
           environmentScopingEnabled && !isEnvCompatible(catalog),
         environmentName: agentEnvironmentName,
+        isUnpublishedApp:
+          catalog.serverType === "app" && catalog.appPublished === false,
       });
       const displayName =
         catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name;
@@ -901,6 +903,8 @@ const AgentToolsEditorContent = forwardRef<
               isCredentialLessCatalogType(catalog.serverType) ||
               !!allCredentials?.[catalog.id]?.length,
             isEnvIncompatible: false,
+            isUnpublishedApp:
+              catalog.serverType === "app" && catalog.appPublished === false,
           });
 
           return (

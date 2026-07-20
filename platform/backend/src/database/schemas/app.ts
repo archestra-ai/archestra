@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -66,6 +67,14 @@ const appsTable = softDeletablePgTable(
      * least version 1 (written on create).
      */
     latestVersion: integer("latest_version").notNull(),
+    /**
+     * Whether the app is live. A draft (`false`) is author-only for viewing and
+     * is not consumable anywhere — its `<name>__open` launch tool is withheld
+     * from every gateway/agent surface until published — so an author can build
+     * privately before exposing it. Orthogonal to `scope` (which lives on the
+     * backing catalog and answers *who* the audience is once published).
+     */
+    published: boolean("published").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

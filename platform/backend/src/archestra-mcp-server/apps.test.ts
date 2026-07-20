@@ -609,6 +609,9 @@ describe("read_app / edit_app", () => {
       context,
     );
     const appId = structured(orgApp).id as string;
+    // A scaffolded app is a draft (author-only); publish it so the org-scope
+    // visibility this test exercises actually applies to a non-author member.
+    await AppModel.setPublished(appId, true);
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     const memberCtx: ArchestraContext = { ...context, userId: member.id };
@@ -631,6 +634,41 @@ describe("read_app / edit_app", () => {
       memberCtx,
     );
     expect(edit.isError).toBe(true);
+  });
+
+  test("publish_app makes a draft live so its new audience can see it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Shareable", scope: "personal" },
+      context,
+    );
+    const appId = structured(created).id as string;
+
+    // A fresh scaffold is a draft: another member cannot see it yet.
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    const memberCtx: ArchestraContext = { ...context, userId: member.id };
+    const readAppAs = (ctx: ArchestraContext) =>
+      executeArchestraTool(
+        getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+        { appId },
+        ctx,
+      );
+    expect((await readAppAs(memberCtx)).isError).toBe(true);
+
+    const published = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
+      { appId, scope: "org" },
+      context,
+    );
+    expect(published.isError).toBe(false);
+    // publish_app flips the draft live, not just its scope...
+    expect((await AppModel.findById(appId))?.published).toBe(true);
+    // ...so the org audience can now see it.
+    expect((await readAppAs(memberCtx)).isError).toBe(false);
   });
 
   test("a single edit forks exactly one version", async () => {

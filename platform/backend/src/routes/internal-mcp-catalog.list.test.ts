@@ -169,6 +169,60 @@ describe("GET /api/internal_mcp_catalog", () => {
     expect(backing).toBeDefined();
     // The backing's `open` launch tool exposes a ui:// resource.
     expect(backing.providesUi).toBe(true);
+    // A live (published) app reports appPublished: true.
+    expect(backing.appPublished).toBe(true);
+  });
+
+  test("includeApps hides another author's draft app-backing catalog", async ({
+    makeApp,
+    makeUser,
+  }) => {
+    const otherAuthor = await makeUser();
+    const draft = await makeApp({
+      organizationId,
+      authorId: otherAuthor.id,
+      scope: "org",
+      published: false,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?includeApps=true",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(
+      response
+        .json()
+        .some(
+          (item: { serverType: string; appId?: string | null }) =>
+            item.serverType === "app" && item.appId === draft.id,
+        ),
+    ).toBe(false);
+  });
+
+  test("includeApps still surfaces the caller's own draft app-backing, marked appPublished: false", async ({
+    makeApp,
+  }) => {
+    const ownDraft = await makeApp({
+      organizationId,
+      authorId: user.id,
+      scope: "org",
+      published: false,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?includeApps=true",
+    });
+    expect(response.statusCode).toBe(200);
+    const backing = response
+      .json()
+      .find(
+        (item: { serverType: string; appId?: string | null }) =>
+          item.serverType === "app" && item.appId === ownDraft.id,
+      );
+    expect(backing).toBeDefined();
+    expect(backing.appPublished).toBe(false);
   });
 
   test("includeApps is ignored for a caller without app:read", async () => {

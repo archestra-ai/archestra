@@ -4,7 +4,7 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
-import { Globe, User, Users } from "lucide-react";
+import { Eye, EyeOff, Globe, User, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
@@ -20,6 +20,7 @@ import {
 import {
   useAppTools,
   useAssignToolToApp,
+  useSetAppPublished,
   useUnassignToolFromApp,
   useUpdateApp,
 } from "@/lib/app.query";
@@ -57,6 +58,7 @@ export function AppSettingsForm({
   const { data: teams } = useAssignableTeams({ isResourceAdmin: !!isAppAdmin });
 
   const updateApp = useUpdateApp();
+  const setPublished = useSetAppPublished();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
   const { data: assignedTools } = useAppTools(app.id);
@@ -67,6 +69,9 @@ export function AppSettingsForm({
 
   const [environmentId, setEnvironmentId] = useState<string | null>(
     app.environmentId ?? null,
+  );
+  const [publishStatus, setPublishStatus] = useState<"draft" | "published">(
+    app.published ? "published" : "draft",
   );
   const [scope, setScope] = useState<ResourceVisibilityScope>(app.scope);
   const [teamIds, setTeamIds] = useState<string[]>(app.teams.map((t) => t.id));
@@ -83,6 +88,21 @@ export function AppSettingsForm({
 
   const canShareTeams = isAppAdmin || isAppTeamAdmin;
   const hasNoTeams = (teams ?? []).length === 0;
+
+  const publishOptions: VisibilityOption<"draft" | "published">[] = [
+    {
+      value: "draft",
+      label: "Draft",
+      description: "Only you can see and use this app",
+      icon: EyeOff,
+    },
+    {
+      value: "published",
+      label: "Published",
+      description: "Live for everyone at the visibility scope below",
+      icon: Eye,
+    },
+  ];
 
   const options: VisibilityOption<ResourceVisibilityScope>[] = [
     {
@@ -121,7 +141,10 @@ export function AppSettingsForm({
   const toolsLoading = !assignedTools;
   // Only the mutation drives the button's loading label; data-loading does not.
   const saving =
-    updateApp.isPending || assignTool.isPending || unassignTool.isPending;
+    updateApp.isPending ||
+    setPublished.isPending ||
+    assignTool.isPending ||
+    unassignTool.isPending;
 
   // Drive the top bar's save button (it lives outside this form).
   useEffect(() => {
@@ -133,6 +156,17 @@ export function AppSettingsForm({
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (saving || toolsLoading || teamSelectionMissing) return;
+    // Publish/unpublish is a distinct lifecycle transition on the backend (its
+    // own endpoint, authorized against the app's current scope), so a changed
+    // selection commits via its own call rather than riding the PATCH body.
+    const published = publishStatus === "published";
+    if (published !== app.published) {
+      const result = await setPublished.mutateAsync({
+        appId: app.id,
+        published,
+      });
+      if (!result) return;
+    }
     // Visibility is editable on its own permissions; identity + environment only
     // when the caller can update the app, so omit those fields otherwise (mirrors
     // the field-limited bodies the old publish popover / rename dialog sent).
@@ -194,6 +228,13 @@ export function AppSettingsForm({
             </div>
           </>
         )}
+
+        <VisibilitySelector
+          heading="Publish status"
+          value={publishStatus}
+          options={publishOptions}
+          onValueChange={setPublishStatus}
+        />
 
         <VisibilitySelector
           heading="Who can use this app"

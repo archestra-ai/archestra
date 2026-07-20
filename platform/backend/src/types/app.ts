@@ -101,6 +101,9 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   // "Owned by <name>" oversight badge and the admin's read-but-don't-chat gate.
   viewerRole: AppViewerRoleSchema,
   latestVersion: z.number().int(),
+  // Whether the app is live. A draft (false) is author-only and appears in the
+  // listing only for its author, who sees a "Not published" badge on the card.
+  published: z.boolean(),
   // Teams the app is shared with (via its backing catalog), for the card's
   // visibility pill. Empty unless the app is team-scoped.
   teams: z.array(z.object({ id: z.string(), name: z.string() })),

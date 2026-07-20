@@ -224,6 +224,11 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
                   scope={app.scope}
                   teamNames={app.teams?.map((team) => team.name)}
                 />
+                {/* A draft is author-only, so this badge only ever shows on the
+                    author's own card. */}
+                {!app.published ? (
+                  <Badge variant="outline">Not published</Badge>
+                ) : null}
                 {/* Between the scope pill and the overflow menu, exactly as the
                     project card places its owner badge. */}
                 {isForeignPersonalApp ? (

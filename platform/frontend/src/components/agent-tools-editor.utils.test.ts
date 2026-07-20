@@ -83,6 +83,31 @@ describe("getCatalogAssignmentGate", () => {
     expect(gate.disabled).toBe(true);
     expect(gate.disabledReason).toBe("Not in the Default environment");
   });
+
+  it("refuses an unpublished (draft) app with a 'Not published' reason", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: true,
+      isEnvIncompatible: false,
+      isUnpublishedApp: true,
+    });
+
+    expect(gate.disabled).toBe(true);
+    expect(gate.disabledReason).toBe("Not published");
+    expect(gate.unavailable).toBe(false);
+  });
+
+  it("gates on draft status before environment incompatibility", () => {
+    const gate = getCatalogAssignmentGate({
+      hasDiscoveredTools: true,
+      hasResolvableInstall: true,
+      isEnvIncompatible: true,
+      environmentName: "Staging",
+      isUnpublishedApp: true,
+    });
+
+    expect(gate.disabledReason).toBe("Not published");
+  });
 });
 
 describe("shouldResetCredentialPin", () => {

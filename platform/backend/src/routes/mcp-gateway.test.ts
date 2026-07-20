@@ -23,7 +23,13 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel, ToolModel, UserTokenModel } from "@/models";
+import {
+  AppModel,
+  McpServerModel,
+  TeamTokenModel,
+  ToolModel,
+  UserTokenModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
 
@@ -408,6 +414,67 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(names).toContain(TOOL_LIST_SKILLS_FULL_NAME);
     expect(names).toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(names).toContain(TOOL_RUN_TOOL_FULL_NAME);
+  });
+
+  test("Auto-tool mode exclusions: an unpublished app's launch tool is withheld from tools/list until published, even for its own author", async ({
+    makeAgent,
+    makeApp,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    await makeMember(author.id, org.id, { role: "admin" });
+    // Org-scoped so it is otherwise dynamically discoverable regardless of any
+    // explicit assignment — isolating the draft-exclusion behavior itself.
+    const draftApp = await makeApp({
+      organizationId: org.id,
+      authorId: author.id,
+      scope: "org",
+      published: false,
+    });
+    const server = await McpServerModel.findById(draftApp.mcpServerId!);
+    const [launchTool] = await ToolModel.findByCatalogIdWithMeta(
+      server!.catalogId,
+    );
+    const launchToolName = launchTool.name;
+
+    // "Agent auto mode": the gateway agent has accessAllTools on, so dynamic
+    // discovery — not just explicit assignment — feeds tools/list. This is the
+    // same code path "MCP Gateway auto mode" drives, so one round trip through
+    // the real /v1/mcp route proves both.
+    const gatewayAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    const token = await UserTokenModel.create(author.id, org.id);
+
+    async function listToolNames(): Promise<string[]> {
+      await initializeMcpSession({
+        app,
+        agentId: gatewayAgent.id,
+        token: token.value,
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${gatewayAgent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name);
+    }
+
+    // Withheld while draft — even for the app's own author.
+    expect(await listToolNames()).not.toContain(launchToolName);
+
+    // Publishing surfaces it, over the same real route, for the same caller.
+    await AppModel.setPublished(draftApp.id, true);
+    expect(await listToolNames()).toContain(launchToolName);
   });
 
   test("returns 401 with WWW-Authenticate header for missing authorization header", async ({

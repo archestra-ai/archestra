@@ -108,6 +108,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   authorName: "Ada Lovelace",
   viewerRole: "owner",
   latestVersion: 1,
+  published: true,
   teams: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
@@ -305,5 +306,17 @@ describe("OwnedAppCard", () => {
 
     expect(screen.getByLabelText("Personal")).toBeInTheDocument();
     expect(screen.getByText("Owned by Grace Hopper")).toBeInTheDocument();
+  });
+
+  it("shows a 'Not published' badge for a draft app", () => {
+    render(<AppCard app={{ ...ownedApp, published: false }} />);
+
+    expect(screen.getByText("Not published")).toBeInTheDocument();
+  });
+
+  it("hides the 'Not published' badge for a live app", () => {
+    render(<AppCard app={{ ...ownedApp, published: true }} />);
+
+    expect(screen.queryByText("Not published")).not.toBeInTheDocument();
   });
 });

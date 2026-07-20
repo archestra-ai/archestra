@@ -81,6 +81,89 @@ describe("MCP backing for apps", () => {
     expect(ui?.csp).toBeUndefined();
   });
 
+  const launchToolResourceUri = (tool: {
+    meta?: unknown;
+  }): string | undefined =>
+    (tool.meta as { _meta?: { ui?: { resourceUri?: string } } })?._meta?.ui
+      ?.resourceUri;
+
+  test("a draft app's launch tool is withheld from dynamic discovery until published", async () => {
+    const appId = await createApp("org"); // draft by default
+    const uri = getArchestraAppResourceUri(appId);
+    const discovered = async () =>
+      (
+        await ToolModel.getMcpToolsAccessibleToUser({
+          userId: user.id,
+          organizationId,
+          isAdmin: true,
+          environmentId: null,
+          requireUiResource: true,
+        })
+      ).some((t) => launchToolResourceUri(t) === uri);
+
+    expect(await discovered()).toBe(false);
+    await AppModel.setPublished(appId, true);
+    expect(await discovered()).toBe(true);
+  });
+
+  test("a draft's launch tool stays assigned but hidden from the author's gateway, and reappears on publish", async () => {
+    const appId = await createApp("org"); // draft; auto-assigned to the author's gateway
+    const uri = getArchestraAppResourceUri(appId);
+    const personalGateway = await AgentModel.ensurePersonalMcpGateway({
+      userId: user.id,
+      organizationId,
+    });
+    const gatewayHasLaunch = async () =>
+      (await ToolModel.getMcpToolsByAgent(personalGateway.id)).some(
+        (t) => launchToolResourceUri(t) === uri,
+      );
+
+    // Assigned at create, but withheld while draft...
+    expect(await gatewayHasLaunch()).toBe(false);
+    // ...publishing surfaces it without re-assigning (the assignment persisted)...
+    await AppModel.setPublished(appId, true);
+    expect(await gatewayHasLaunch()).toBe(true);
+    // ...and unpublishing hides it again.
+    await AppModel.setPublished(appId, false);
+    expect(await gatewayHasLaunch()).toBe(false);
+  });
+
+  test("a draft app's launch tool assigned to another app is withheld until published, and reappears on publish", async ({
+    makeApp,
+    makeAppTool,
+  }) => {
+    // The source app owns the launch tool being consumed elsewhere.
+    const sourceAppId = await createApp("org"); // draft by default
+    const sourceServer = await McpServerModel.findById(
+      (await AppModel.findById(sourceAppId))!.mcpServerId!,
+    );
+    const launchTool = (
+      await ToolModel.findByCatalogIdWithMeta(sourceServer!.catalogId)
+    )[0];
+
+    // A second, unrelated app has the source app's launch tool assigned to it
+    // (app-to-app tool assignment, e.g. one app driving another's UI resource).
+    const consumerApp = await makeApp({ organizationId });
+    await makeAppTool(consumerApp.id, launchTool.id);
+
+    const consumerCanResolve = async () =>
+      (
+        await ToolModel.getMcpToolsAssignedToApp(
+          [launchTool.name],
+          consumerApp.id,
+        )
+      ).length > 0;
+
+    // Withheld while the source app is a draft...
+    expect(await consumerCanResolve()).toBe(false);
+    // ...surfaces once published (the assignment was never deleted)...
+    await AppModel.setPublished(sourceAppId, true);
+    expect(await consumerCanResolve()).toBe(true);
+    // ...and is withheld again if the source app is unpublished.
+    await AppModel.setPublished(sourceAppId, false);
+    expect(await consumerCanResolve()).toBe(false);
+  });
+
   test("two apps get distinct slugified launch-tool names (no gateway collision)", async () => {
     const appAId = await createApp();
     const appBId = await app

@@ -30,6 +30,14 @@ The `/apps` gallery lists everything the viewer can reach in two sections: apps 
 
 While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 
+## Draft and publish
+
+A new app starts as a **draft**. A draft is private to you — only you can open it, no one else, not even an app admin. You build and preview it as usual, but it stays out of the gateway and out of every agent's tools, so nothing can use it before it is ready.
+
+Open **App settings** and set **Publish status** to Published when it is ready. Publishing makes the app live at its visibility scope — the scope answers *who* can use it, publishing answers *whether* it is live. Its `open` tool then becomes available to agents and MCP clients. Set it back to Draft to pull the app back to author-only; agent assignments are kept, so publishing again restores them.
+
+While an app is a draft, it appears greyed as "Not published" in your own agent's custom tool picker and cannot be attached until you publish.
+
 ## External MCP clients
 
 An owned app is also a standalone MCP server at `POST /api/mcp/app/:id`. An external MCP client (for example a desktop MCP host) connects there with a **user (personal) token**, which resolves to a concrete viewer; organization/team tokens are rejected, because an app needs a viewer for its per-user store and RBAC. The connection binds the app from the route, so the client speaks ordinary MCP: `tools/list` exposes the app's assigned tools, its data-store tools, and an `open` tool whose result carries the app's `ui://` resource; `resources/read` returns the app's HTML. Tool calls reuse the connecting token for upstream MCP servers, exactly as in-app calls do — so an app behaves the same whether driven from Archestra or another client.

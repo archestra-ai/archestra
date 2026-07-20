@@ -59,6 +59,20 @@ export const SelectMcpServerSchema = createSelectSchema(
       }),
     )
     .optional(),
+  /**
+   * Auto-mode agents (implicit access to all tools) in this server's
+   * organization. They reach every server without an explicit tool assignment,
+   * so they are listed separately from `assignedAgents` — the same org-wide set
+   * appears on every server.
+   */
+  autoModeAgents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
 });

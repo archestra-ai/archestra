@@ -201735,6 +201735,25 @@
                           "additionalProperties": false
                         }
                       },
+                      "autoModeAgents": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "secretStorageType": {
                         "type": "string",
                         "enum": [
@@ -202322,6 +202341,25 @@
                         "additionalProperties": false
                       }
                     },
+                    "autoModeAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "secretStorageType": {
                       "type": "string",
                       "enum": [
@@ -202809,6 +202847,25 @@
                       "additionalProperties": false
                     },
                     "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "autoModeAgents": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -203623,6 +203680,25 @@
                       "additionalProperties": false
                     },
                     "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "autoModeAgents": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -205065,6 +205141,25 @@
                       "additionalProperties": false
                     },
                     "assignedAgents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "autoModeAgents": {
                       "type": "array",
                       "items": {
                         "type": "object",

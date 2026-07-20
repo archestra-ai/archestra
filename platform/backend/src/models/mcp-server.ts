@@ -27,6 +27,7 @@ import type {
 } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
+import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -274,6 +275,7 @@ class McpServerModel {
   static async findAll(
     userId?: string,
     isMcpServerAdmin?: boolean,
+    organizationId?: string,
   ): Promise<McpServer[]> {
     // Single query with LEFT JOINs for all related data including assigned users,
     // eliminating the consecutive DB query for user details.
@@ -395,14 +397,27 @@ class McpServerModel {
       }
     }
 
+    const servers = Array.from(serversMap.values());
     const assignedAgentsByServer =
       await AgentToolModel.getAssignedAgentDetailsForMcpServers([
         ...serversMap.keys(),
       ]);
+    // Auto-mode agents belong to the viewing org and can reach every server, so
+    // the same set decorates each one. Skipped when the caller omits an org
+    // (e.g. background/admin sweeps that do not render the registry card).
+    let autoModeAgents: Array<{ id: string; name: string }> = [];
+    if (organizationId) {
+      const autoModeAgentsByOrg =
+        await AgentModel.getAutoModeAgentDetailsByOrganizations([
+          organizationId,
+        ]);
+      autoModeAgents = autoModeAgentsByOrg.get(organizationId) ?? [];
+    }
 
-    return Array.from(serversMap.values()).map((server) => ({
+    return servers.map((server) => ({
       ...server,
       assignedAgents: assignedAgentsByServer.get(server.id) ?? [],
+      autoModeAgents,
     }));
   }
 
@@ -877,6 +892,7 @@ class McpServerModel {
     id: string,
     userId?: string,
     isMcpServerAdmin?: boolean,
+    organizationId?: string,
   ): Promise<McpServer | null> {
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
@@ -923,6 +939,14 @@ class McpServerModel {
       McpServerUserModel.getUserDetailsForMcpServer(id),
       AgentToolModel.getAssignedAgentDetailsForMcpServers([id]),
     ]);
+    let autoModeAgents: Array<{ id: string; name: string }> = [];
+    if (organizationId) {
+      const autoModeAgentsByOrg =
+        await AgentModel.getAutoModeAgentDetailsByOrganizations([
+          organizationId,
+        ]);
+      autoModeAgents = autoModeAgentsByOrg.get(organizationId) ?? [];
+    }
 
     // Build teamDetails from the joined team data
     const teamDetails = result.server.teamId
@@ -948,6 +972,7 @@ class McpServerModel {
       teamDetails,
       secretStorageType,
       assignedAgents: assignedAgentsByServer.get(id) ?? [],
+      autoModeAgents,
     };
   }
 

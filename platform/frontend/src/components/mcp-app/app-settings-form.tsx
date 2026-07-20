@@ -230,13 +230,6 @@ export function AppSettingsForm({
         )}
 
         <VisibilitySelector
-          heading="App status"
-          value={enabledStatus}
-          options={enabledOptions}
-          onValueChange={setEnabledStatus}
-        />
-
-        <VisibilitySelector
           heading="Who can use this app"
           value={scope}
           options={options}
@@ -262,6 +255,13 @@ export function AppSettingsForm({
               />
             </div>
           )}
+
+          <VisibilitySelector
+            heading="App status"
+            value={enabledStatus}
+            options={enabledOptions}
+            onValueChange={setEnabledStatus}
+          />
         </VisibilitySelector>
 
         {canUpdate && (

@@ -1,4 +1,5 @@
 import {
+  APPS_HACKATHON_OPENS_AT_MS,
   isAppsHackathonOpen,
   RouteId,
   validateRecordingBundle,
@@ -212,11 +213,15 @@ export default appRecordingRoutes;
 /**
  * 403 unless the Apps Hackathon recorder is available to this caller.
  *
- * Three gates, and a request has to clear all of them: the deployment must
- * offer the feature at all (never true for an activated enterprise licence),
- * the hackathon must still be running, and the caller's organization must not
- * have switched it off. Not 400 for any of them — the request is well formed
- * and there is nothing the caller can change about it.
+ * Gates a request has to clear: the deployment must offer the feature at all
+ * (never true for an activated enterprise licence), the hackathon must be
+ * inside its date window, and the caller's organization must not have switched
+ * it off. Not 400 for any of them — the request is well formed and there is
+ * nothing the caller can change about it.
+ *
+ * The staging override is the one thing that skips the date window (it forces
+ * the feature on there in the first place), so Archestra's own staging can
+ * exercise the recorder before the hackathon opens and after it closes.
  */
 async function assertAppsHackathonAvailable(
   organizationId: string,
@@ -228,11 +233,13 @@ async function assertAppsHackathonAvailable(
     );
   }
   // Read per request rather than captured at boot: a pod that started before
-  // the closing date would otherwise serve the feature indefinitely past it.
-  if (!isAppsHackathonOpen()) {
+  // an edge of the window would otherwise keep answering as it did then.
+  if (!config.hackathonRecorder.overrideActive && !isAppsHackathonOpen()) {
     throw new ApiError(
       403,
-      "The Apps Hackathon has ended, so session recording is no longer available.",
+      Date.now() < APPS_HACKATHON_OPENS_AT_MS
+        ? "The Apps Hackathon has not started yet, so session recording is not available."
+        : "The Apps Hackathon has ended, so session recording is no longer available.",
     );
   }
   const organization = await OrganizationModel.getById(organizationId);

@@ -1692,6 +1692,14 @@ const config = {
         process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
     }),
     /**
+     * The staging override is active. It forces the recorder on for Archestra's
+     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
+     * hackathon date window, so staging can exercise the feature before it
+     * opens and after it closes. Undocumented, same as the override itself.
+     */
+    overrideActive:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
+    /**
      * Escape hatch, not a requirement: the renderer finds or installs its own
      * Chromium (see app-recording-render-runtime). Set this only to pin a
      * specific browser — it must be a FULL Chromium, since Playwright's

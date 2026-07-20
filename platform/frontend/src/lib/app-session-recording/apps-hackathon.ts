@@ -1,7 +1,18 @@
-import { isAppsHackathonOpen } from "@archestra/shared";
+import {
+  APPS_HACKATHON_DATE_RANGE_LABEL,
+  isAppsHackathonOpen,
+} from "@archestra/shared";
 import { useFeature } from "@/lib/config/config.query";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useOrganization } from "@/lib/organization.query";
+
+/**
+ * The hackathon's dates as UI copy. Re-exported from the shared contract (where
+ * it sits beside the gate epochs it must track) so every hackathon surface
+ * pulls its date string, and every other hackathon constant, from this one
+ * module.
+ */
+export { APPS_HACKATHON_DATE_RANGE_LABEL };
 
 /**
  * The Apps Hackathon recorder sits behind three gates, and every surface has
@@ -30,16 +41,22 @@ export const APPS_HACKATHON_SETTING_ANCHOR = "apps-hackathon-recorder";
 export const APPS_HACKATHON_SETTINGS_HREF = `/settings/agents#${APPS_HACKATHON_SETTING_ANCHOR}`;
 
 /**
- * Whether this deployment offers the hackathon at all — the first two gates.
+ * Whether this deployment offers the hackathon at all — the deployment flag
+ * and the date window.
  *
  * This is what decides whether the admin toggle is even worth showing: an
  * organization cannot opt into a feature its deployment does not carry, and
- * once the hackathon is over the whole thing goes away rather than lingering
+ * outside the hackathon window the whole thing goes away rather than lingering
  * as a switch that no longer does anything.
+ *
+ * The staging override bypasses the date window — the same bypass the backend
+ * applies — so Archestra's own staging shows the recorder before the hackathon
+ * opens and after it closes.
  */
 export function useAppsHackathonOffered(): boolean {
   const deploymentEnabled = useFeature("hackathonRecorderEnabled") ?? false;
-  return deploymentEnabled && isAppsHackathonOpen();
+  const overrideActive = useFeature("hackathonRecorderOverrideActive") ?? false;
+  return deploymentEnabled && (overrideActive || isAppsHackathonOpen());
 }
 
 /**

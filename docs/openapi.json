@@ -100334,6 +100334,9 @@
                         },
                         "hackathonRecorderEnabled": {
                           "type": "boolean"
+                        },
+                        "hackathonRecorderOverrideActive": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -100360,7 +100363,8 @@
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
-                        "hackathonRecorderEnabled"
+                        "hackathonRecorderEnabled",
+                        "hackathonRecorderOverrideActive"
                       ],
                       "additionalProperties": false
                     },

@@ -49,6 +49,7 @@ export function makeConfig(
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
       hackathonRecorderEnabled: true,
+      hackathonRecorderOverrideActive: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

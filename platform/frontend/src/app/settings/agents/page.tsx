@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useOrgScopedAgents } from "@/lib/agent.query";
 import {
+  APPS_HACKATHON_DATE_RANGE_LABEL,
   APPS_HACKATHON_REGISTER_URL,
   APPS_HACKATHON_SETTING_ANCHOR,
   useAppsHackathonOffered,
@@ -366,7 +367,8 @@ export default function AgentSettingsPage() {
           description={
             <>
               Show the session recorder control panel in chat composer to
-              participate in Archestra Apps Hackathon July 22-29.{" "}
+              participate in Archestra Apps Hackathon{" "}
+              {APPS_HACKATHON_DATE_RANGE_LABEL}.{" "}
               <a
                 href={APPS_HACKATHON_REGISTER_URL}
                 target="_blank"

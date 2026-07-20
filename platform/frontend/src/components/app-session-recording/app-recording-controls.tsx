@@ -23,6 +23,7 @@ import {
   useLatestAppRecordingKeyForApp,
 } from "@/lib/app-session-recording/app-recording.query";
 import {
+  APPS_HACKATHON_DATE_RANGE_LABEL,
   APPS_HACKATHON_REGISTER_URL,
   APPS_HACKATHON_SETTINGS_HREF,
 } from "@/lib/app-session-recording/apps-hackathon";
@@ -113,7 +114,9 @@ export function AppRecordingControls() {
             align="start"
             className="w-80 space-y-2 text-xs"
           >
-            <p className="font-semibold">The Apps Hackathon runs July 22–29!</p>
+            <p className="font-semibold">
+              The Apps Hackathon runs {APPS_HACKATHON_DATE_RANGE_LABEL}!
+            </p>
             <p className="text-muted-foreground">
               Record how you build your app, demo it, and win prizes.{" "}
               <a

@@ -19,20 +19,37 @@ import { z } from "zod";
 // =============================================================================
 
 /**
- * When the Apps Hackathon closes: 00:00 on 29 July 2026, UK time. July is BST
- * (UTC+1), so that instant is 23:00 UTC on the 28th — spelled in UTC rather
- * than local time so every deployment agrees on it regardless of server zone.
+ * The Apps Hackathon window: 00:00 on 22 July 2026 until 00:00 on 29 July
+ * 2026, UK time. July is BST (UTC+1), so those instants are 23:00 UTC on the
+ * 21st and the 28th — spelled in UTC rather than local time so every
+ * deployment agrees on them regardless of server zone.
  *
- * Past this the recorder hard-disables everywhere, whatever a deployment or an
- * organization still has switched on. It is read at REQUEST time, never
- * captured at boot: a pod started before the date would otherwise keep serving
- * the feature indefinitely.
+ * Outside this window the recorder hard-disables everywhere, whatever a
+ * deployment or an organization still has switched on. The bounds are read at
+ * REQUEST time, never captured at boot: a pod started before the window would
+ * otherwise keep its answer frozen as the clock crosses either edge. The one
+ * exception is the staging override, which bypasses the window entirely (see
+ * the recorder route and useAppsHackathonOffered).
  */
+export const APPS_HACKATHON_OPENS_AT_MS = Date.UTC(2026, 6, 21, 23, 0, 0);
 export const APPS_HACKATHON_CLOSES_AT_MS = Date.UTC(2026, 6, 28, 23, 0, 0);
 
-/** Whether the Apps Hackathon is still running. */
+/**
+ * The window above rendered as human copy for the UI. Kept here, next to the
+ * epochs it describes, so the composer tooltip and the settings block share one
+ * string that cannot drift from each other or lag the gate: whoever moves the
+ * dates edits this in the same place. The label reads a day later than the UTC
+ * epochs because the hackathon's dates are stated in its own timezone (UTC+1:
+ * the 21st 23:00 UTC is already the 22nd there), so it is written out rather
+ * than formatted from the epochs, which would shift per viewer.
+ */
+export const APPS_HACKATHON_DATE_RANGE_LABEL = "July 22–29";
+
+/** Whether the Apps Hackathon is currently running (start reached, end not). */
 export function isAppsHackathonOpen(nowMs: number = Date.now()): boolean {
-  return nowMs < APPS_HACKATHON_CLOSES_AT_MS;
+  return (
+    nowMs >= APPS_HACKATHON_OPENS_AT_MS && nowMs < APPS_HACKATHON_CLOSES_AT_MS
+  );
 }
 
 /** Upper bound on a single recording's timeline (24h in ms). */

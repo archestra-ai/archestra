@@ -28272,6 +28272,7 @@ export type GetConfigResponses = {
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
             hackathonRecorderEnabled: boolean;
+            hackathonRecorderOverrideActive: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;

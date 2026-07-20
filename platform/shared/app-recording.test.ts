@@ -1,11 +1,39 @@
 import { describe, expect, it } from "vitest";
 import {
   APP_RECORDING_REDACTED,
+  APPS_HACKATHON_CLOSES_AT_MS,
+  APPS_HACKATHON_OPENS_AT_MS,
   type AppRecordingBundle,
+  isAppsHackathonOpen,
   redactSensitiveText,
   sanitizeRecordingBundle,
   validateRecordingBundle,
 } from "./app-recording";
+
+describe("isAppsHackathonOpen", () => {
+  it("is closed before the window opens", () => {
+    expect(isAppsHackathonOpen(APPS_HACKATHON_OPENS_AT_MS - 1)).toBe(false);
+  });
+
+  it("is open from the opening instant until the closing instant", () => {
+    expect(isAppsHackathonOpen(APPS_HACKATHON_OPENS_AT_MS)).toBe(true);
+    expect(isAppsHackathonOpen(APPS_HACKATHON_CLOSES_AT_MS - 1)).toBe(true);
+  });
+
+  it("is closed once the window closes", () => {
+    // Half-open: the closing instant itself is already shut.
+    expect(isAppsHackathonOpen(APPS_HACKATHON_CLOSES_AT_MS)).toBe(false);
+  });
+
+  it("spells the window as 22–29 July 2026, 00:00 UK (BST = UTC+1)", () => {
+    expect(new Date(APPS_HACKATHON_OPENS_AT_MS).toISOString()).toBe(
+      "2026-07-21T23:00:00.000Z",
+    );
+    expect(new Date(APPS_HACKATHON_CLOSES_AT_MS).toISOString()).toBe(
+      "2026-07-28T23:00:00.000Z",
+    );
+  });
+});
 
 function bundle(over?: Partial<AppRecordingBundle>): AppRecordingBundle {
   return {

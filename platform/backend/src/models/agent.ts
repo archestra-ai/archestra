@@ -3085,15 +3085,42 @@ class AgentModel {
     // Fetch relational data so audit diffs capture tool/KB/team changes —
     // not just main-table columns.  Each sub-query is lightweight (index
     // lookup by agent_id) and the parallel fetch keeps latency low.
-    const [tools, teams, labels, knowledgeBaseIds, connectorIds, delegations] =
-      await Promise.all([
-        AgentToolModel.getToolsForAgent(id),
-        AgentTeamModel.getTeamDetailsForAgent(id),
-        AgentLabelModel.getLabelsForAgent(id),
-        AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
-        AgentConnectorAssignmentModel.getConnectorIds(id),
-        AgentToolModel.getDelegationTargets(id),
-      ]);
+    const [
+      tools,
+      teams,
+      labels,
+      knowledgeBaseIds,
+      connectorIds,
+      delegations,
+      modelRows,
+      keyRows,
+    ] = await Promise.all([
+      AgentToolModel.getToolsForAgent(id),
+      AgentTeamModel.getTeamDetailsForAgent(id),
+      AgentLabelModel.getLabelsForAgent(id),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
+      AgentConnectorAssignmentModel.getConnectorIds(id),
+      AgentToolModel.getDelegationTargets(id),
+      // Resolve the live modelId FK to its human-readable identity so a model
+      // change surfaces as a real diff — the legacy llmModel text column is
+      // deprecated (never written) and would always read null.
+      row.modelId
+        ? db
+            .select({ externalId: schema.modelsTable.externalId })
+            .from(schema.modelsTable)
+            .where(eq(schema.modelsTable.id, row.modelId))
+            .limit(1)
+        : Promise.resolve([]),
+      // The model and its API key are set as a pair; capture the key's provider
+      // so an LLM-config change is legible without exposing key material.
+      row.llmApiKeyId
+        ? db
+            .select({ provider: schema.llmProviderApiKeysTable.provider })
+            .from(schema.llmProviderApiKeysTable)
+            .where(eq(schema.llmProviderApiKeysTable.id, row.llmApiKeyId))
+            .limit(1)
+        : Promise.resolve([]),
+    ]);
 
     const delegationTargets = [...delegations]
       .sort((a, b) => a.id.localeCompare(b.id))
@@ -3109,7 +3136,8 @@ class AgentModel {
       systemPrompt: row.systemPrompt ?? null,
       slug: row.slug ?? null,
       isDefault: row.isDefault,
-      llmModel: row.llmModel ?? null,
+      model: modelRows[0]?.externalId ?? null,
+      llmProvider: keyRows[0]?.provider ?? null,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       tools: tools.map((t) => t.name).sort(),

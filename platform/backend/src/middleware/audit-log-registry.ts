@@ -146,6 +146,17 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
 
+  // Syncing/removing delegation targets mutates the agent's subagent surface.
+  // Registered explicitly so the POST sync isn't dropped as a walk-up (which
+  // falls to unknown.created with a null resourceType) and the single-target
+  // DELETE inherits agent.updated instead of deriving agent.deleted.
+  "/api/agents/:agentId/delegations": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+
   "/api/agent-tools/:id": {
     resourceType: "agentTool",
     fetchById: (id, orgId) => AgentToolModel.findByIdForAudit(id, orgId),

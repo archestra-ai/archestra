@@ -7,6 +7,7 @@ import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
+import ModelModel from "@/models/model";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
@@ -356,6 +357,65 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("scope", "org");
     expect(Array.isArray(snapshot?.delegationTargets)).toBe(true);
     expect(typeof snapshot?.createdAt).toBe("string");
+  });
+
+  test("AgentModel.findByIdForAudit captures the resolved model and provider, not the dead llmModel column", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const model = await ModelModel.create({
+      externalId: "google/gemini-2.5-pro",
+      provider: "gemini",
+      modelId: "gemini-2.5-pro",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    const [key] = await db
+      .insert(schema.llmProviderApiKeysTable)
+      .values({
+        organizationId: org.id,
+        name: "Gemini Key",
+        provider: "gemini",
+        scope: "org",
+        baseUrl: null,
+      })
+      .returning();
+    const agent = await AgentModel.create({
+      name: "Model Audit Agent",
+      organizationId: org.id,
+      scope: "org",
+      teams: [],
+      knowledgeBaseIds: [],
+      modelId: model.id,
+      llmApiKeyId: key.id,
+    });
+
+    const snapshot = await AgentModel.findByIdForAudit(agent.id, org.id);
+
+    // The audit diff must surface the model that actually changed as a
+    // human-readable identity, plus the LLM provider — the deprecated
+    // llmModel column (always null) must not be in the snapshot.
+    expect(snapshot).toHaveProperty("model", "google/gemini-2.5-pro");
+    expect(snapshot).toHaveProperty("llmProvider", "gemini");
+    expect(snapshot).not.toHaveProperty("llmModel");
+  });
+
+  test("AgentModel.findByIdForAudit returns null model/provider when the agent has no model configured", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await AgentModel.create({
+      name: "No Model Agent",
+      organizationId: org.id,
+      scope: "org",
+      teams: [],
+      knowledgeBaseIds: [],
+    });
+
+    const snapshot = await AgentModel.findByIdForAudit(agent.id, org.id);
+
+    expect(snapshot).toHaveProperty("model", null);
+    expect(snapshot).toHaveProperty("llmProvider", null);
   });
 
   test("AgentModel.findByIdForAudit returns null for wrong org", async ({

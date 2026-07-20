@@ -1284,27 +1284,33 @@ export function AgentDialog({
         }
       }
 
-      // Sync delegations (skip for built-in agents)
+      // Sync delegations only when the target set actually changed (skip for
+      // built-in agents). Re-sending the unchanged set on every save produced a
+      // spurious no-op agent.updated audit record.
       if (
         !isBuiltIn &&
         savedAgentId &&
-        selectedDelegationTargetIds.length > 0
+        hasUnsavedChanges(
+          [...currentDelegations.map((d) => d.id)].sort(),
+          [...selectedDelegationTargetIds].sort(),
+        )
       ) {
         await syncDelegations.mutateAsync({
           agentId: savedAgentId,
           targetAgentIds: selectedDelegationTargetIds,
         });
-      } else if (savedAgentId && agent && currentDelegations.length > 0) {
-        // Clear delegations if none selected but there were some before
-        await syncDelegations.mutateAsync({
-          agentId: savedAgentId,
-          targetAgentIds: [],
-        });
       }
 
-      // Persist the Auto-mode disabled-subagents set (full replace; inert in
-      // Custom mode, so it is safe to always write). Skipped for built-ins.
-      if (!isBuiltIn && savedAgentId) {
+      // Persist the Auto-mode disabled-subagents set only when it changed (same
+      // no-op-audit reasoning as delegations). Skipped for built-ins.
+      if (
+        !isBuiltIn &&
+        savedAgentId &&
+        hasUnsavedChanges(
+          [...(currentSubagentExclusions?.excludedSubagentIds ?? [])].sort(),
+          [...disabledSubagentIds].sort(),
+        )
+      ) {
         await syncSubagentExclusions.mutateAsync({
           agentId: savedAgentId,
           exclusions: { excludedSubagentIds: disabledSubagentIds },
@@ -1346,7 +1352,8 @@ export function AgentDialog({
     builtInAgentName,
     showSecurity,
     selectedDelegationTargetIds,
-    currentDelegations.length,
+    currentDelegations,
+    currentSubagentExclusions,
     disabledSubagentIds,
     updateAgent,
     createAgent,

@@ -142,14 +142,22 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSecuritySettings,
         description:
-          "Update security settings (default tool guardrails, chat file uploads)",
+          "Update security settings (default tool guardrails, chat file uploads, Apps Hackathon recorder)",
         tags: ["Organization"],
         body: UpdateSecuritySettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
+      // A deployment that does not carry the Apps Hackathon must never store
+      // it as switched on — that is what keeps "never for enterprise" a
+      // property of the system rather than of a hidden UI section. Dropped
+      // rather than refused, so an unrelated security save from a stale client
+      // still goes through.
+      const { appsHackathonRecorderEnabled, ...withoutHackathon } = body;
+      const patch = config.hackathonRecorder.enabled ? body : withoutHackathon;
+
+      const organization = await OrganizationModel.patch(organizationId, patch);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

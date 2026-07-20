@@ -368,6 +368,7 @@ class OrganizationModel {
       onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
+      appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
       defaultLlmModel: org.defaultLlmModel ?? null,

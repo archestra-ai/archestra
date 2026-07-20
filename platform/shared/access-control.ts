@@ -388,9 +388,9 @@ export const permissionDescriptions: Record<string, string> = {
   "skillsSettings:read": "View Skills settings (online catalog availability)",
   "skillsSettings:update": "Modify Skills settings",
   "agentSettings:read":
-    "View agent settings (default model, default agent, default tool guardrails, file uploads)",
+    "View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
   "agentSettings:update":
-    "Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
+    "Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other

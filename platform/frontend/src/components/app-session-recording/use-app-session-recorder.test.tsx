@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import { snapshotConversationTranscript } from "@/lib/app-session-recording/app-recording-transcript";
 import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   type AppSessionRecorder,
   type AppSessionRecorderHandle,
@@ -16,6 +17,13 @@ import {
 // in-memory store here, since jsdom has no IndexedDB). Mock the surrounding
 // query/app/session hooks so the surface renders without a QueryClient.
 vi.mock("@/lib/config/config.query");
+// The recorder now composes the deployment flag with the organization's own
+// toggle, so the org query joins the stubbed surroundings.
+vi.mock("@/lib/organization.query", () => ({
+  useOrganization: vi.fn(() => ({
+    data: { appsHackathonRecorderEnabled: true },
+  })),
+}));
 vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
   useInvalidateAppRecording: () => vi.fn(),
 }));
@@ -136,6 +144,9 @@ beforeEach(() => {
   // The recorder self-gates on the deployment flag; these tests exercise an
   // enabled deployment.
   vi.mocked(useFeature).mockReturnValue(true);
+  vi.mocked(useOrganization).mockReturnValue({
+    data: { appsHackathonRecorderEnabled: true },
+  } as ReturnType<typeof useOrganization>);
 });
 
 describe("useAppSessionRecorder", () => {
@@ -354,6 +365,23 @@ describe("useAppSessionRecorder", () => {
     expect(vi.mocked(toast.info)).toHaveBeenCalledWith(
       expect.stringContaining("Recording discarded"),
     );
+  });
+
+  it("goes fully inert when the organization has switched it off", () => {
+    // The admin toggle has to reach the recorder itself, not just the button:
+    // a surface that still records while the setting says it is off would keep
+    // capturing sessions nobody asked it to.
+    vi.mocked(useOrganization).mockReturnValue({
+      data: { appsHackathonRecorderEnabled: false },
+    } as ReturnType<typeof useOrganization>);
+    const surface = renderChatSurface({
+      conversationId: freshConversationId("org-off"),
+    });
+    expect(surface.composer.canRecord).toBe(false);
+    act(() => {
+      surface.composer.start();
+    });
+    expect(surface.composer.status).toBe("idle");
   });
 
   it("goes fully inert when the deployment flag is off", () => {

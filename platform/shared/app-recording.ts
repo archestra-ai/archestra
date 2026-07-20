@@ -18,6 +18,23 @@ import { z } from "zod";
 // nothing else — unknown keys (a vector for smuggling payloads) are rejected.
 // =============================================================================
 
+/**
+ * When the Apps Hackathon closes: 00:00 on 29 July 2026, UK time. July is BST
+ * (UTC+1), so that instant is 23:00 UTC on the 28th — spelled in UTC rather
+ * than local time so every deployment agrees on it regardless of server zone.
+ *
+ * Past this the recorder hard-disables everywhere, whatever a deployment or an
+ * organization still has switched on. It is read at REQUEST time, never
+ * captured at boot: a pod started before the date would otherwise keep serving
+ * the feature indefinitely.
+ */
+export const APPS_HACKATHON_CLOSES_AT_MS = Date.UTC(2026, 6, 28, 23, 0, 0);
+
+/** Whether the Apps Hackathon is still running. */
+export function isAppsHackathonOpen(nowMs: number = Date.now()): boolean {
+  return nowMs < APPS_HACKATHON_CLOSES_AT_MS;
+}
+
 /** Upper bound on a single recording's timeline (24h in ms). */
 const MAX_EVENT_T_MS = 86_400_000;
 

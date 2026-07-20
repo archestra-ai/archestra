@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { APPS_HACKATHON_CLOSES_AT_MS } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
-import { ConversationModel, MessageModel } from "@/models";
+import { ConversationModel, MessageModel, OrganizationModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -211,6 +212,47 @@ describe("POST /api/app-recordings/enhance", () => {
     expect(response.json().error.message).toContain(
       "The hackathon recorder is disabled",
     );
+  });
+
+  test("403s when the organization has switched the recorder off", async () => {
+    // The admin toggle has to take the API with it, not just hide the button:
+    // a control that vanishes while its endpoints keep answering is a feature
+    // that was never really disabled.
+    await OrganizationModel.patch(ctx.organizationId, {
+      appsHackathonRecorderEnabled: false,
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/app-recordings/enhance",
+      payload: { conversationId: randomUUID(), appName: "Demo App" },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "switched off for this organization",
+    );
+  });
+
+  test("403s once the hackathon has closed, however it is configured", async () => {
+    // Read per request rather than captured at boot, so a pod that has been up
+    // since before the closing date stops serving the feature the moment it
+    // passes — with the deployment flag and the organization toggle both still
+    // on, as they are here.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(APPS_HACKATHON_CLOSES_AT_MS);
+    try {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/app-recordings/enhance",
+        payload: { conversationId: randomUUID(), appName: "Demo App" },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        "The Apps Hackathon has ended",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("404s for a conversation the caller does not own", async () => {

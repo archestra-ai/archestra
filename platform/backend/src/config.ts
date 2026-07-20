@@ -1129,20 +1129,35 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 }
 
 /**
- * The hackathon recorder (record/replay/edit app demo sessions): on by default
- * for community deployments, off by default when an enterprise license is
- * activated. An explicit `"true"`/`"false"` on
- * `ARCHESTRA_HACKATHON_RECORDER` always wins.
+ * The hackathon recorder (record/replay/edit app demo sessions).
+ *
+ * On for community deployments unless `ARCHESTRA_HACKATHON_RECORDER=false`
+ * switches it off, and NEVER on for a deployment running an activated
+ * enterprise license: a licensed customer must not be shown a temporary
+ * community promotion, so `ARCHESTRA_HACKATHON_RECORDER=true` does not open
+ * that door — the enterprise branch ignores it entirely.
+ *
+ * `enterpriseOverride` is the one exception, and it is deliberately its own
+ * variable rather than a value of the public one: it exists so Archestra's own
+ * licensed staging can run the hackathon, it is documented nowhere, and
+ * keeping it separate means no customer can reach the enterprise path by
+ * setting the flag they were told about.
+ *
+ * This is the DEPLOYMENT gate only. Two more gates sit above it at request
+ * time — the organization's own toggle, and the hackathon's closing date —
+ * because neither can be decided once at boot. See `appsHackathonAvailable`.
  *
  * @public — exported for testability
  */
-export function parseHackathonRecorderEnabled(
-  envValue: string | undefined,
-  enterpriseLicenseActivated: boolean,
-): boolean {
-  if (envValue === "true") return true;
-  if (envValue === "false") return false;
-  return !enterpriseLicenseActivated;
+export function parseHackathonRecorderEnabled(params: {
+  envValue: string | undefined;
+  enterpriseLicenseActivated: boolean;
+  enterpriseOverride: string | undefined;
+}): boolean {
+  if (params.enterpriseLicenseActivated) {
+    return params.enterpriseOverride === "true";
+  }
+  return params.envValue !== "false";
 }
 
 // the code execution sandbox (run_command / upload_file / download_file, plus
@@ -1667,10 +1682,15 @@ const config = {
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
   },
   hackathonRecorder: {
-    enabled: parseHackathonRecorderEnabled(
-      process.env.ARCHESTRA_HACKATHON_RECORDER,
-      process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
-    ),
+    enabled: parseHackathonRecorderEnabled({
+      envValue: process.env.ARCHESTRA_HACKATHON_RECORDER,
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+      // Undocumented on purpose — see parseHackathonRecorderEnabled. Do not
+      // add this to .env.example or the deployment docs.
+      enterpriseOverride:
+        process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
+    }),
     /**
      * Escape hatch, not a requirement: the renderer finds or installs its own
      * Chromium (see app-recording-render-runtime). Set this only to pin a

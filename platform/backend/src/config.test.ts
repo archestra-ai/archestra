@@ -1982,25 +1982,48 @@ describe("parseAuditLogRetentionDays", () => {
 });
 
 describe("parseHackathonRecorderEnabled", () => {
+  const parse = (
+    envValue: string | undefined,
+    enterpriseLicenseActivated: boolean,
+    enterpriseOverride?: string,
+  ) =>
+    parseHackathonRecorderEnabled({
+      envValue,
+      enterpriseLicenseActivated,
+      enterpriseOverride,
+    });
+
   test("defaults on for community deployments", () => {
-    expect(parseHackathonRecorderEnabled(undefined, false)).toBe(true);
+    expect(parse(undefined, false)).toBe(true);
   });
 
-  test("defaults off when the enterprise license is activated", () => {
-    expect(parseHackathonRecorderEnabled(undefined, true)).toBe(false);
+  test('an explicit "false" switches a community deployment off', () => {
+    expect(parse("false", false)).toBe(false);
   });
 
-  test('an explicit "true" wins over the enterprise default', () => {
-    expect(parseHackathonRecorderEnabled("true", true)).toBe(true);
+  test("an unrecognized value leaves a community deployment on", () => {
+    expect(parse("yes", false)).toBe(true);
   });
 
-  test('an explicit "false" wins over the community default', () => {
-    expect(parseHackathonRecorderEnabled("false", false)).toBe(false);
+  test("stays off when the enterprise license is activated", () => {
+    expect(parse(undefined, true)).toBe(false);
   });
 
-  test("an unrecognized value falls back to the deployment default", () => {
-    expect(parseHackathonRecorderEnabled("yes", false)).toBe(true);
-    expect(parseHackathonRecorderEnabled("yes", true)).toBe(false);
+  test("an enterprise deployment cannot switch it on with the public flag", () => {
+    // The whole point of the enterprise rule: a licensed customer must not be
+    // able to opt into a temporary community promotion, so the documented flag
+    // is not a way in. Only the separate, undocumented override is.
+    expect(parse("true", true)).toBe(false);
+  });
+
+  test("the undocumented override is the only enterprise way in", () => {
+    expect(parse(undefined, true, "true")).toBe(true);
+    expect(parse("false", true, "true")).toBe(true);
+  });
+
+  test("the override does nothing unless it is exactly true", () => {
+    expect(parse(undefined, true, "yes")).toBe(false);
+    expect(parse(undefined, true, "")).toBe(false);
   });
 });
 

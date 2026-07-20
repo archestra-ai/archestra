@@ -1,8 +1,12 @@
-import { RouteId, validateRecordingBundle } from "@archestra/shared";
+import {
+  isAppsHackathonOpen,
+  RouteId,
+  validateRecordingBundle,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import { AgentModel, ConversationModel } from "@/models";
+import { AgentModel, ConversationModel, OrganizationModel } from "@/models";
 import { draftRecordingEnhancement } from "@/services/apps/app-recording-enhancement";
 import {
   cancelRenderJob,
@@ -25,8 +29,8 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // registered once here rather than repeated in each handler — a per-handler
   // check is one forgotten line away from an endpoint that answers on a
   // deployment where the feature is switched off.
-  fastify.addHook("preHandler", async () => {
-    assertSessionRecordingEnabled();
+  fastify.addHook("preHandler", async ({ organizationId }) => {
+    await assertAppsHackathonAvailable(organizationId);
   });
 
   fastify.post(
@@ -206,16 +210,36 @@ export default appRecordingRoutes;
 // =============================================================================
 
 /**
- * 403 unless app session recording is enabled on this deployment.
+ * 403 unless the Apps Hackathon recorder is available to this caller.
  *
- * Not 400: the request is well formed and there is nothing the caller can
- * change about it — the feature is switched off for everyone here.
+ * Three gates, and a request has to clear all of them: the deployment must
+ * offer the feature at all (never true for an activated enterprise licence),
+ * the hackathon must still be running, and the caller's organization must not
+ * have switched it off. Not 400 for any of them — the request is well formed
+ * and there is nothing the caller can change about it.
  */
-function assertSessionRecordingEnabled(): void {
+async function assertAppsHackathonAvailable(
+  organizationId: string,
+): Promise<void> {
   if (!config.hackathonRecorder.enabled) {
     throw new ApiError(
       403,
       "The hackathon recorder is disabled on this deployment (ARCHESTRA_HACKATHON_RECORDER).",
+    );
+  }
+  // Read per request rather than captured at boot: a pod that started before
+  // the closing date would otherwise serve the feature indefinitely past it.
+  if (!isAppsHackathonOpen()) {
+    throw new ApiError(
+      403,
+      "The Apps Hackathon has ended, so session recording is no longer available.",
+    );
+  }
+  const organization = await OrganizationModel.getById(organizationId);
+  if (!organization?.appsHackathonRecorderEnabled) {
+    throw new ApiError(
+      403,
+      "The Apps Hackathon recorder is switched off for this organization.",
     );
   }
 }

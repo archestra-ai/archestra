@@ -21,6 +21,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOrgScopedAgents } from "@/lib/agent.query";
+import {
+  APPS_HACKATHON_REGISTER_URL,
+  APPS_HACKATHON_SETTING_ANCHOR,
+  useAppsHackathonOffered,
+} from "@/lib/app-session-recording/apps-hackathon";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -53,6 +58,8 @@ export default function AgentSettingsPage() {
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
+  const [hackathonRecorder, setHackathonRecorder] =
+    useState<FileUploadsEnabled>("enabled");
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
@@ -60,6 +67,12 @@ export default function AgentSettingsPage() {
     defaultAgentId: "",
   });
   const savedFileUploadsRef = useRef<FileUploadsEnabled>("enabled");
+  const savedHackathonRecorderRef = useRef<FileUploadsEnabled>("enabled");
+  // Only offered while this deployment carries the hackathon and it is still
+  // running; an enterprise deployment never does, so there is nothing here to
+  // switch on. Past the closing date the whole section goes rather than
+  // lingering as a switch that no longer changes anything.
+  const hackathonOffered = useAppsHackathonOffered();
 
   const {
     data: allModels,
@@ -99,8 +112,14 @@ export default function AgentSettingsPage() {
     const savedFileUploads: FileUploadsEnabled =
       (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled";
     setFileUploads(savedFileUploads);
+    const savedHackathonRecorder: FileUploadsEnabled =
+      (organization.appsHackathonRecorderEnabled ?? true)
+        ? "enabled"
+        : "disabled";
+    setHackathonRecorder(savedHackathonRecorder);
     savedStateRef.current = state;
     savedFileUploadsRef.current = savedFileUploads;
+    savedHackathonRecorderRef.current = savedHackathonRecorder;
     initializedRef.current = true;
   }, [organization, apiKeys]);
 
@@ -113,7 +132,9 @@ export default function AgentSettingsPage() {
   };
 
   const changes = detectChanges(localState, savedStateRef.current);
-  const securityHasChanges = fileUploads !== savedFileUploadsRef.current;
+  const securityHasChanges =
+    fileUploads !== savedFileUploadsRef.current ||
+    hackathonRecorder !== savedHackathonRecorderRef.current;
 
   const handleSave = async () => {
     if (!apiKeys) return;
@@ -127,8 +148,16 @@ export default function AgentSettingsPage() {
     if (securityHasChanges) {
       await updateSecurityMutation.mutateAsync({
         allowChatFileUploads: fileUploads === "enabled",
+        // Only sent when the section was actually shown. Otherwise every
+        // unrelated save here would carry a value for a setting this admin was
+        // never offered — and on a deployment without the hackathon that value
+        // is a default, not a decision.
+        ...(hackathonOffered
+          ? { appsHackathonRecorderEnabled: hackathonRecorder === "enabled" }
+          : {}),
       });
       savedFileUploadsRef.current = fileUploads;
+      savedHackathonRecorderRef.current = hackathonRecorder;
     }
 
     initializedRef.current = false;
@@ -140,6 +169,7 @@ export default function AgentSettingsPage() {
     setDefaultModel(saved.defaultModel);
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
+    setHackathonRecorder(savedHackathonRecorderRef.current);
   };
 
   const modelItems = useMemo(() => {
@@ -329,6 +359,50 @@ export default function AgentSettingsPage() {
           </span>
         }
       />
+      {hackathonOffered && (
+        <SettingsBlock
+          id={APPS_HACKATHON_SETTING_ANCHOR}
+          title="Apps Hackathon Recorder"
+          description={
+            <>
+              Show the session recorder control panel in chat composer to
+              participate in Archestra Apps Hackathon July 22-29.{" "}
+              <a
+                href={APPS_HACKATHON_REGISTER_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                Learn more.
+              </a>
+            </>
+          }
+          control={
+            <WithPermissions
+              permissions={{ agentSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Select
+                  value={hackathonRecorder}
+                  onValueChange={(value: FileUploadsEnabled) =>
+                    setHackathonRecorder(value)
+                  }
+                  disabled={isSaving || !hasPermission}
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="enabled">Enabled</SelectItem>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </WithPermissions>
+          }
+        />
+      )}
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={selectedApiKeyId !== "" && defaultModel === ""}

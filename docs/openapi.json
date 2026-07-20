@@ -227907,6 +227907,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -227971,7 +227974,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -228870,6 +228874,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -228934,7 +228941,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -229598,7 +229606,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (default tool guardrails, chat file uploads)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
+        "description": "Update security settings (default tool guardrails, chat file uploads, Apps Hackathon recorder)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "requestBody": {
           "required": true,
           "content": {
@@ -229625,6 +229633,9 @@
                     ]
                   },
                   "allowChatFileUploads": {
+                    "type": "boolean"
+                  },
+                  "appsHackathonRecorderEnabled": {
                     "type": "boolean"
                   },
                   "allowToolAutoAssignment": {
@@ -230119,6 +230130,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -230183,7 +230197,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -230940,6 +230955,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -231004,7 +231022,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -231754,6 +231773,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -231818,7 +231840,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -232568,6 +232591,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -232632,7 +232658,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -232882,7 +232909,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
+        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
         "requestBody": {
           "required": true,
           "content": {
@@ -233397,6 +233424,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -233461,7 +233491,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -234302,6 +234333,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -234366,7 +234400,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -235187,6 +235222,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -235251,7 +235289,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -236006,6 +236045,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -236070,7 +236112,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -236838,6 +236881,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -236902,7 +236948,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -237637,6 +237684,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -237701,7 +237751,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -238749,6 +238800,9 @@
                     },
                     "skillToolsEnabled": {
                       "type": "boolean"
+                    },
+                    "appsHackathonRecorderEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -238813,7 +238867,8 @@
                     "defaultEnvironmentRestricted",
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
-                    "skillToolsEnabled"
+                    "skillToolsEnabled",
+                    "appsHackathonRecorderEnabled"
                   ],
                   "additionalProperties": false
                 }

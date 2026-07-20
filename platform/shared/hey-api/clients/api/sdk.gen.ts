@@ -5626,7 +5626,7 @@ export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Update security settings (default tool guardrails, chat file uploads)
+ * Update security settings (default tool guardrails, chat file uploads, Apps Hackathon recorder)
  *
  * Authentication:
  *
@@ -5634,7 +5634,7 @@ export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads)
+ * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
  */
 export const updateSecuritySettings = <ThrowOnError extends boolean = false>(options: Options<UpdateSecuritySettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateSecuritySettingsResponses, UpdateSecuritySettingsErrors, ThrowOnError>({
     url: '/api/organization/security-settings',
@@ -5714,7 +5714,7 @@ export const updateSkillsSettings = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads)
+ * `agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)
  */
 export const updateAgentSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentSettingsData, ThrowOnError>) => (options.client ?? client).patch<UpdateAgentSettingsResponses, UpdateAgentSettingsErrors, ThrowOnError>({
     url: '/api/organization/agent-settings',

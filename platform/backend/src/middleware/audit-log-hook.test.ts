@@ -286,6 +286,15 @@ describe("registerAuditLogHook", () => {
     app.post("/api/skills/github/discover", async () => ({ ok: true }));
     app.post("/api/skills/github/preview", async () => ({ ok: true }));
 
+    // Route-pattern (":id/suffix") denylist entries — a variable id sits before
+    // a static suffix, so a concrete-URL prefix would over-match the parent.
+    app.delete("/api/apps/:appId/pin", async () => ({ ok: true }));
+    app.post("/api/apps/:appId/diagnostics", async () => ({ ok: true }));
+    // The audited parent under the same prefix must NOT be silenced.
+    app.put("/api/apps/:appId", async () => ({ ok: true }));
+    // Prefix denylist entry for onboarding UI state.
+    app.post("/api/onboarding/seen-nav-items", async () => ({ ok: true }));
+
     // Token rotation route.
     app.post("/api/user-tokens/me/rotate", async () => ({ ok: true }));
 
@@ -790,6 +799,42 @@ describe("registerAuditLogHook", () => {
       await app.inject({
         method: "POST",
         url: "/api/organization/knowledge-settings/test-embedding",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("DELETE /api/apps/:appId/pin writes zero rows (route-pattern denylist entry)", async () => {
+      await app.inject({
+        method: "DELETE",
+        url: "/api/apps/00000000-0000-0000-0000-0000000000aa/pin",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("POST /api/apps/:appId/diagnostics writes zero rows (route-pattern denylist entry)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/apps/00000000-0000-0000-0000-0000000000aa/diagnostics",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("PUT /api/apps/:appId still writes a row (route-pattern entry does not over-match the parent)", async () => {
+      await app.inject({
+        method: "PUT",
+        url: "/api/apps/00000000-0000-0000-0000-0000000000aa",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(1);
+    });
+
+    test("POST /api/onboarding/seen-nav-items writes zero rows (prefix denylist entry)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/onboarding/seen-nav-items",
       });
       await settle();
       expect(await getRows()).toHaveLength(0);

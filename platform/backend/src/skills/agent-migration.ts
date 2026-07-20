@@ -70,6 +70,12 @@ interface SkillDraft {
   compatibility: string | null;
   /** Space-separated `allowed-tools`, carried from the agent's tools. */
   allowedTools: string | null;
+  /**
+   * Always null on conversion: the converted skill runs inline in whatever
+   * agent activates it (the source agent may even be deleted), so it never
+   * designates an execution agent.
+   */
+  agentName: string | null;
   /** True when the prompt used Handlebars, so the body renders at activation. */
   templated: boolean;
   metadata: Record<string, string>;
@@ -171,6 +177,7 @@ export function agentToSkill(
       license: null,
       compatibility: null,
       allowedTools,
+      agentName: null,
       templated,
       metadata,
       scope: agent.scope,

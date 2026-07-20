@@ -89,14 +89,21 @@ function isNonActionableError(error: unknown): boolean {
   if (error instanceof ApiError) {
     // 4xx client errors (not found, validation, upstream client errors).
     if (error.statusCode >= 400 && error.statusCode < 500) return true;
-    // Handled transient upstream condition (empty completion → retryable 503).
+    // Handled transient upstream conditions.
     if (
-      error.internalCode === ArchestraInternalErrorCode.UpstreamEmptyResponse
+      error.internalCode === ArchestraInternalErrorCode.UpstreamEmptyResponse ||
+      error.internalCode === ArchestraInternalErrorCode.ProviderOverloaded
     ) {
       return true;
     }
-    // 502/504 report an upstream's failure, not a crash of ours.
-    if (error.statusCode === 502 || error.statusCode === 504) return true;
+    // Upstream gateway failures and Anthropic overloads.
+    if (
+      error.statusCode === 502 ||
+      error.statusCode === 504 ||
+      error.statusCode === 529
+    ) {
+      return true;
+    }
     return false;
   }
 

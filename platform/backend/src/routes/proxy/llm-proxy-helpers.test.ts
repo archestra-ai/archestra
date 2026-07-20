@@ -512,7 +512,12 @@ describe("shouldForwardAnthropicBeta", () => {
 describe("handleError", () => {
   function makeReply(headersSent: boolean) {
     const writes: string[] = [];
+    const headers: Record<string, string> = {};
     const reply = {
+      header: (name: string, value: string) => {
+        headers[name] = value;
+        return reply;
+      },
       raw: {
         headersSent,
         write: (chunk: string) => {
@@ -522,7 +527,7 @@ describe("handleError", () => {
         end: () => {},
       },
     } as unknown as FastifyReply;
-    return { reply, writes };
+    return { reply, writes, headers };
   }
 
   const extractMessage = (error: unknown) =>
@@ -646,6 +651,122 @@ describe("handleError", () => {
     // No connection/timeout signal → stays a 500 and remains captured.
     expect(throwStatusFor(new TypeError("cannot read x of undefined"))).toBe(
       500,
+    );
+  });
+
+  function makeStreamedOverloadError(headers?: Headers) {
+    const body = {
+      type: "error",
+      error: { type: "overloaded_error", message: "Overloaded" },
+    };
+    return Object.assign(new Error(JSON.stringify(body)), {
+      error: body,
+      headers,
+    });
+  }
+
+  function throwErrorFor(error: unknown, reply: FastifyReply): ApiError {
+    try {
+      handleError(error, reply, extractMessage, true, () => undefined);
+    } catch (thrown) {
+      return thrown as ApiError;
+    }
+    throw new Error("handleError did not throw");
+  }
+
+  test("classifies a streamed Anthropic overload as 529 with the normalized code", () => {
+    const { reply } = makeReply(false);
+    const thrown = throwErrorFor(makeStreamedOverloadError(), reply);
+
+    expect(thrown.statusCode).toBe(529);
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+  });
+
+  test("classifies generic overload wording without a status as 503", () => {
+    const thrown = throwErrorFor(
+      Object.assign(
+        new Error("The server is currently overloaded, please retry"),
+        { error: { message: "Overloaded" } },
+      ),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(503);
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+  });
+
+  test("does not reclassify an internal error containing overload wording", () => {
+    const thrown = throwErrorFor(
+      new Error("Internal worker overloaded"),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.internalCode).toBeUndefined();
+  });
+
+  test("keeps an explicit upstream 529 and tags it as overloaded", () => {
+    const thrown = throwErrorFor(
+      Object.assign(new Error("Overloaded"), { status: 529 }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(529);
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+  });
+
+  test("does not tag an explicit 503 without overload wording", () => {
+    const thrown = throwErrorFor(
+      Object.assign(new Error("Service Unavailable"), { status: 503 }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(503);
+    expect(thrown.internalCode).toBeUndefined();
+  });
+
+  test("forwards the upstream Retry-After header before headers commit", () => {
+    const { reply, headers } = makeReply(false);
+    const error = makeStreamedOverloadError(
+      new Headers({ "retry-after": "30" }),
+    );
+
+    expect(throwErrorFor(error, reply).statusCode).toBe(529);
+    expect(headers["retry-after"]).toBe("30");
+  });
+
+  test("drops a Retry-After value that is neither seconds nor a date", () => {
+    const { reply, headers } = makeReply(false);
+    const error = Object.assign(new Error("rate limited"), {
+      status: 429,
+      headers: { "retry-after": "soon\u0000ish" },
+    });
+
+    expect(throwErrorFor(error, reply).statusCode).toBe(429);
+    expect(headers["retry-after"]).toBeUndefined();
+  });
+
+  test("surfaces the overload code in the mid-stream SSE error event", () => {
+    const { reply, writes } = makeReply(true);
+
+    handleError(
+      makeStreamedOverloadError(),
+      reply,
+      extractMessage,
+      true,
+      () => undefined,
+    );
+
+    expect(writes).toHaveLength(1);
+    const payload = JSON.parse(writes[0].replace(/^event: error\ndata: /, ""));
+    expect(payload.error.internal_code).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
     );
   });
 });

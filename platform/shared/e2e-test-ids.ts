@@ -55,7 +55,7 @@ export const E2eTestId = {
   SelectCredentialTypeTeamDropdown: "select-credential-type-team-dropdown",
   ProfileTeamBadge: "profile-team-badge",
   EditAgentButton: "edit-agent-button",
-  AgentCapabilitiesSection: "agent-capabilities-section",
+  AgentToolsSection: "agent-tools-section",
   AgentToolsAddButton: "agent-tools-add-button",
   AgentToolCatalogPill: "agent-tool-catalog-pill",
   AssignmentComboboxSearchInput: "assignment-combobox-search-input",

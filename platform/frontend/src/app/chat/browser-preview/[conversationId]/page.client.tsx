@@ -11,7 +11,7 @@ export function BrowserPreviewClient({
   initialConversationId,
 }: BrowserPreviewClientProps) {
   return (
-    <div className="h-screen w-full flex flex-col">
+    <div className="h-app-viewport w-full flex flex-col">
       <BrowserPreviewContent
         conversationId={initialConversationId}
         isActive={true}

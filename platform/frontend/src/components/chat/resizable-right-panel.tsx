@@ -9,8 +9,14 @@ import { cn } from "@/lib/utils";
 const MIN_PANEL_WIDTH = 300;
 /** Width the main content column must always keep so it never squashes. */
 const MIN_CONTENT_WIDTH = 400;
-/** Shared across surfaces so the panel keeps its width from page to page. */
-const WIDTH_STORAGE_KEY = "archestra-right-panel-width";
+/**
+ * Shared across surfaces so the panel keeps its width from page to page. Also
+ * read by the session-replay player, whose app stage mirrors the side-panel
+ * app viewport.
+ */
+export const RIGHT_PANEL_WIDTH_STORAGE_KEY = "archestra-right-panel-width";
+/** Panel width before the user has ever resized it. */
+export const DEFAULT_RIGHT_PANEL_WIDTH = 500;
 
 /**
  * The chat page's right-side panel shell, extracted so other pages (e.g. a
@@ -28,10 +34,10 @@ export function ResizableRightPanel({
 }) {
   const [width, setWidth] = useState(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(WIDTH_STORAGE_KEY);
-      return saved ? Number.parseInt(saved, 10) : 500;
+      const saved = localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY);
+      return saved ? Number.parseInt(saved, 10) : DEFAULT_RIGHT_PANEL_WIDTH;
     }
-    return 500;
+    return DEFAULT_RIGHT_PANEL_WIDTH;
   });
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -64,12 +70,18 @@ export function ResizableRightPanel({
         e.preventDefault();
         const newWidth = Math.min(maxWidth, width + step);
         setWidth(newWidth);
-        localStorage.setItem(WIDTH_STORAGE_KEY, newWidth.toString());
+        localStorage.setItem(
+          RIGHT_PANEL_WIDTH_STORAGE_KEY,
+          newWidth.toString(),
+        );
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         const newWidth = Math.max(MIN_PANEL_WIDTH, width - step);
         setWidth(newWidth);
-        localStorage.setItem(WIDTH_STORAGE_KEY, newWidth.toString());
+        localStorage.setItem(
+          RIGHT_PANEL_WIDTH_STORAGE_KEY,
+          newWidth.toString(),
+        );
       }
     },
     [width, getMaxWidth],
@@ -85,7 +97,10 @@ export function ResizableRightPanel({
         Math.min(getMaxWidth(), newWidth),
       );
       setWidth(clampedWidth);
-      localStorage.setItem(WIDTH_STORAGE_KEY, clampedWidth.toString());
+      localStorage.setItem(
+        RIGHT_PANEL_WIDTH_STORAGE_KEY,
+        clampedWidth.toString(),
+      );
     };
 
     const handleMouseUp = () => {

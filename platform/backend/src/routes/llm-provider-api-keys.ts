@@ -785,6 +785,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           apiKey: effectiveApiKey,
           headers,
         });
+      } else if (body.apiKey) {
+        // A new secret value alone can flip an existing shared key into a
+        // per-user credential (pasting an encoded ChatGPT-subscription
+        // credential into a team/org key would share one person's account
+        // with everyone), so classify the new value even when scope/team
+        // don't change.
+        assertPerUserCredentialScope({
+          provider: apiKeyFromDB.provider,
+          apiKey: body.apiKey,
+          scope: newScope,
+        });
       }
 
       const sigV4FromBody =
@@ -1131,19 +1142,7 @@ async function validateScopeAndAuthorization(params: {
   const { scope, teamId, userId, organizationId, provider, apiKey, headers } =
     params;
 
-  // Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
-  // (Codex) key on `openai` — hold an individual's token, so team/org scope
-  // would share one person's credential with everyone. Only personal keys are
-  // allowed; each user links their own account.
-  if (
-    credentialRequiresPerUserScope({ provider, apiKey }) &&
-    scope !== "personal"
-  ) {
-    throw new ApiError(
-      400,
-      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
-    );
-  }
+  assertPerUserCredentialScope({ provider, apiKey, scope });
 
   // Validate scope-specific requirements
   if (scope === "team" && !teamId) {
@@ -1196,6 +1195,29 @@ async function validateScopeAndAuthorization(params: {
         "Only llmProviderApiKey admins can use organization-wide scope",
       );
     }
+  }
+}
+
+/**
+ * Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
+ * (Codex) key on `openai` — hold an individual's token, so team/org scope
+ * would share one person's credential with everyone. Only personal keys are
+ * allowed; each user links their own account.
+ */
+function assertPerUserCredentialScope(params: {
+  provider: SupportedProvider;
+  apiKey: string | null | undefined;
+  scope: ResourceVisibilityScope;
+}): void {
+  const { provider, apiKey, scope } = params;
+  if (
+    credentialRequiresPerUserScope({ provider, apiKey }) &&
+    scope !== "personal"
+  ) {
+    throw new ApiError(
+      400,
+      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
+    );
   }
 }
 

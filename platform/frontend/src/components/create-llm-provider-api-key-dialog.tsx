@@ -1,12 +1,14 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@archestra/shared";
+import {
+  CHATGPT_SUBSCRIPTION_LABEL,
+  isProviderApiKeyOptional,
+} from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import {
-  CHATGPT_SUBSCRIPTION_LABEL,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,

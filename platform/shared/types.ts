@@ -67,7 +67,9 @@ export class ApiError extends Error {
       case 413:
         this.type = "api_payload_too_large_error";
         break;
+      // Anthropic uses 529 for the same transient condition as 503.
       case 503:
+      case 529:
         this.type = "api_service_unavailable_error";
         break;
       default:

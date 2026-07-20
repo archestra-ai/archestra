@@ -686,7 +686,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
           pod selector and live stream survive switching between them. */}
       {isLogsTab && (
         <Card className="py-0">
-          <div className="flex h-[calc(100vh-16rem)] min-h-[480px] flex-col p-6">
+          <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
             <McpLogsContent
               isActive={isLogsTab}
               serverName={item.name}
@@ -703,7 +703,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
 
       {effectiveTab === "yaml" && (
         <Card className="py-0">
-          <div className="flex h-[calc(100vh-16rem)] min-h-[480px] flex-col p-6">
+          <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
             <YamlConfigContent item={item} onClose={() => {}} hideHeader />
           </div>
         </Card>

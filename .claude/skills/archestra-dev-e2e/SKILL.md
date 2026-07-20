@@ -16,7 +16,7 @@ pnpm test:e2e
 tilt trigger e2e-test-dependencies
 ```
 
-`tilt trigger e2e-test-dependencies` starts WireMock and seeds test data to the database.
+`tilt trigger e2e-test-dependencies` starts the e2e dependency stack via the `helm/e2e-tests` chart: WireMock, Keycloak (with pre-configured test users), Vault, and mock MCP servers. It does not seed the database.
 
 In development, e2e tests use the development database. Local data can make e2e tests fail locally.
 
@@ -24,13 +24,15 @@ Check WireMock health at `http://localhost:9092/__admin/health`.
 
 ## WireMock environment variables
 
-Use port `9092` for the Tilt e2e dependency setup:
+Use port `9092` for the Tilt e2e dependency setup. Stub mappings live under provider-prefixed paths, so the base URL must carry the provider prefix:
 
 ```bash
-ARCHESTRA_OPENAI_BASE_URL=http://localhost:9092/v1
-ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092
-ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
+ARCHESTRA_OPENAI_BASE_URL=http://localhost:9092/openai/v1
+ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092/anthropic
+ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092/gemini
 ```
+
+`platform/.env.example` lists the same block for every stubbed provider (vllm, ollama, cerebras, zhipuai, cohere, mistral, ...) — copy from there rather than guessing a prefix.
 
 ## Local and CI setup
 
@@ -39,7 +41,7 @@ ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
 - CI kind config is `.github/kind.yaml`.
 - CI Helm values are `.github/values-ci.yaml`.
 - CI NodePort services use frontend `3000`, backend `9000`, and metrics `9050`.
-- CI e2e checks include `drizzle-kit check`, codegen, and database migrations.
+- `drizzle-kit check`, codegen, and db-migration validation run in the `platform-lint-and-unit-tests` job of `.github/workflows/on-pull-requests.yml`, not in the e2e workflow — a red check there is not an e2e failure.
 
 ## Fixtures
 
@@ -54,7 +56,7 @@ Example:
 import { test } from "./api-fixtures";
 
 test("API example", async ({ request, createAgent, deleteAgent }) => {
-  const response = await createAgent(request, "Test Agent");
+  const response = await createAgent(request, "Test Agent", "org");
   const agent = await response.json();
   // test logic...
   await deleteAgent(request, agent.id);

@@ -14,6 +14,8 @@ export const RouteId = {
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",
   UpdateAgentToolExclusions: "updateAgentToolExclusions",
+  GetAgentSubagentExclusions: "getAgentSubagentExclusions",
+  UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -450,6 +452,9 @@ export const RouteId = {
   // LLM Settings Routes (organization-level)
   UpdateLlmSettings: "updateLlmSettings",
 
+  // MCP Settings Routes (organization-level)
+  UpdateMcpSettings: "updateMcpSettings",
+
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
 
@@ -677,6 +682,13 @@ export const RouteId = {
   UnpinExternalApp: "unpinExternalApp",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
+  // App session recordings live client-side (IndexedDB); the only server
+  // endpoint forwards a shared recording bundle to the public demo catalog.
+  EnhanceAppRecording: "enhanceAppRecording",
+  RenderAppRecordingVideo: "renderAppRecordingVideo",
+  GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
+  DownloadAppRecordingVideo: "downloadAppRecordingVideo",
+  CancelAppRecordingRender: "cancelAppRecordingRender",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
 } as const;

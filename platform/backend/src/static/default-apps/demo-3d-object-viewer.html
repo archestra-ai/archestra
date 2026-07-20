@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo 3D Object Viewer</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
+      background: #000; color: #fff; font-family: var(--font-sans, system-ui, sans-serif);
+    }
+    #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+    #scene:active { cursor: grabbing; }
+
+    /* Intro loader overlay */
+    #intro {
+      position: fixed; inset: 0; z-index: 50;
+      background: #000; color: #fff;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 2rem; box-sizing: border-box;
+      transition: opacity 1.2s ease;
+    }
+    #intro.hide { opacity: 0; pointer-events: none; }
+    .intro-lines { max-width: 34rem; min-height: 4.5rem; display: flex; align-items: center; justify-content: center; }
+    .intro-line {
+      position: absolute; opacity: 0;
+      font-size: 1.5rem; line-height: 1.5; font-weight: 300;
+      letter-spacing: 0.02em;
+      transition: opacity 1s ease;
+    }
+    .intro-line.show { opacity: 1; }
+    .intro-dot {
+      margin-top: 3rem; width: 8px; height: 8px; border-radius: 50%;
+      background: #fff; opacity: 0.4;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.15; transform: scale(0.8); }
+      50% { opacity: 0.9; transform: scale(1.3); }
+    }
+
+    /* HUD controls */
+    #hud {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+      display: flex; gap: 0.75rem; justify-content: center; align-items: center;
+      padding: 1rem; box-sizing: border-box;
+      opacity: 0; transition: opacity 0.8s ease;
+    }
+    #hud.show { opacity: 1; }
+    .hud-btn {
+      background: rgba(255,255,255,0.08); color: #fff;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 0.6rem 1.1rem; border-radius: 999px;
+      font-size: 0.9rem; cursor: pointer; backdrop-filter: blur(8px);
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .hud-btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.5); }
+    #title {
+      position: fixed; top: 0; left: 0; z-index: 20;
+      padding: 1.25rem 1.5rem;
+      opacity: 0; transition: opacity 0.8s ease;
+    }
+    #title.show { opacity: 1; }
+    #title h1 { margin: 0; font-size: 1.1rem; font-weight: 400; letter-spacing: 0.03em; }
+    #title p { margin: 0.2rem 0 0; font-size: 0.8rem; color: rgba(255,255,255,0.5); }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="title">
+    <h1>Demo 3D Object Viewer</h1>
+    <p>Drag to rotate · scroll to zoom</p>
+  </div>
+
+  <div id="hud">
+    <button class="hud-btn" id="btn-new">Generate new object</button>
+    <button class="hud-btn" id="btn-spin">Pause spin</button>
+  </div>
+
+  <div id="intro">
+    <div class="intro-lines" id="intro-lines"></div>
+    <div class="intro-dot"></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+    /* ---------- Intro sequence ---------- */
+    const introLines = [
+      'This app was built as a mini app in Archestra',
+      "It's using Archestra's data layer for persistent storage",
+      'It can be shared with colleagues and used together',
+      'Try creating apps yourself'
+    ];
+    const linesEl = document.getElementById('intro-lines');
+    const lineNodes = introLines.map(t => {
+      const d = document.createElement('div');
+      d.className = 'intro-line';
+      d.textContent = t;
+      linesEl.appendChild(d);
+      return d;
+    });
+
+    function runIntro() {
+      return new Promise(resolve => {
+        let i = 0;
+        const showNext = () => {
+          if (i >= lineNodes.length) {
+            const intro = document.getElementById('intro');
+            intro.classList.add('hide');
+            setTimeout(resolve, 1300);
+            return;
+          }
+          const node = lineNodes[i];
+          node.classList.add('show');
+          setTimeout(() => {
+            node.classList.remove('show');
+            setTimeout(() => { i++; showNext(); }, 1000);
+          }, 2200);
+        };
+        setTimeout(showNext, 500);
+      });
+    }
+
+    /* ---------- Three.js scene ---------- */
+    const canvas = document.getElementById('scene');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    camera.position.set(0, 0, 6);
+
+    const key = new THREE.DirectionalLight(0xffffff, 2.2);
+    key.position.set(4, 6, 5);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x88aaff, 1.4);
+    rim.position.set(-5, -2, -4);
+    scene.add(rim);
+    scene.add(new THREE.AmbientLight(0x404040, 1.2));
+
+    let objectGroup = null;
+
+    // deterministic PRNG from a numeric seed
+    function mulberry32(a) {
+      return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function buildObject(seed) {
+      const rand = mulberry32(seed);
+      const group = new THREE.Group();
+
+      const hue = rand();
+      const geometries = [
+        () => new THREE.IcosahedronGeometry(1, 1),
+        () => new THREE.TorusKnotGeometry(0.7, 0.26, 128, 24, 2 + Math.floor(rand()*4), 3 + Math.floor(rand()*4)),
+        () => new THREE.OctahedronGeometry(1.1, 2),
+        () => new THREE.DodecahedronGeometry(1.05, 0),
+        () => new THREE.TorusGeometry(0.9, 0.32, 24, 96)
+      ];
+      const pick = geometries[Math.floor(rand() * geometries.length)];
+      const coreGeo = pick();
+
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color().setHSL(hue, 0.65, 0.55),
+        metalness: 0.6, roughness: 0.25, flatShading: rand() > 0.5
+      });
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      group.add(core);
+
+      // wireframe shell
+      const shell = new THREE.Mesh(
+        coreGeo.clone(),
+        new THREE.MeshBasicMaterial({
+          color: new THREE.Color().setHSL((hue + 0.5) % 1, 0.8, 0.7),
+          wireframe: true, transparent: true, opacity: 0.25
+        })
+      );
+      shell.scale.setScalar(1.25);
+      group.add(shell);
+
+      // orbiting satellites
+      const count = 6 + Math.floor(rand() * 10);
+      const satGeo = new THREE.IcosahedronGeometry(0.12, 0);
+      for (let i = 0; i < count; i++) {
+        const mat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color().setHSL((hue + rand() * 0.3) % 1, 0.7, 0.6),
+          metalness: 0.5, roughness: 0.3
+        });
+        const s = new THREE.Mesh(satGeo, mat);
+        const r = 1.6 + rand() * 1.2;
+        const theta = rand() * Math.PI * 2;
+        const phi = Math.acos(2 * rand() - 1);
+        s.position.set(
+          r * Math.sin(phi) * Math.cos(theta),
+          r * Math.sin(phi) * Math.sin(theta),
+          r * Math.cos(phi)
+        );
+        s.scale.setScalar(0.6 + rand() * 1.6);
+        group.add(s);
+      }
+      return group;
+    }
+
+    function setObject(seed) {
+      if (objectGroup) scene.remove(objectGroup);
+      objectGroup = buildObject(seed);
+      scene.add(objectGroup);
+    }
+
+    /* ---------- Interaction: rotate + zoom ---------- */
+    let dragging = false, px = 0, py = 0;
+    let rotY = 0.4, rotX = 0.2, velY = 0, velX = 0;
+    let autoSpin = true;
+
+    canvas.addEventListener('pointerdown', e => {
+      dragging = true; px = e.clientX; py = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const dx = e.clientX - px, dy = e.clientY - py;
+      px = e.clientX; py = e.clientY;
+      rotY += dx * 0.008; rotX += dy * 0.008;
+      velY = dx * 0.008; velX = dy * 0.008;
+    });
+    const endDrag = () => { dragging = false; };
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      camera.position.z = Math.min(12, Math.max(3, camera.position.z + e.deltaY * 0.01));
+    }, { passive: false });
+
+    function resize() {
+      const w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (!dragging) {
+        velY *= 0.95; velX *= 0.95;
+        rotY += velY; rotX += velX;
+        if (autoSpin) rotY += 0.003;
+      }
+      rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotX));
+      if (objectGroup) {
+        objectGroup.rotation.y = rotY;
+        objectGroup.rotation.x = rotX;
+        objectGroup.children.forEach((c, i) => {
+          if (i > 1) { c.rotation.y += 0.01 + i * 0.001; }
+        });
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    /* ---------- Persistent storage of the current seed (shared) ---------- */
+    async function loadOrCreateSeed() {
+      try {
+        await archestra.ready;
+        const entry = await archestra.storage.shared.get('current-seed');
+        if (entry && typeof entry.value === 'number') return entry.value;
+        const seed = Math.floor(Math.random() * 1e9);
+        await archestra.storage.shared.set('current-seed', seed);
+        return seed;
+      } catch (e) {
+        return Math.floor(Math.random() * 1e9);
+      }
+    }
+    async function saveSeed(seed) {
+      try { await archestra.storage.shared.set('current-seed', seed); } catch (e) {}
+    }
+
+    /* ---------- Wire up HUD ---------- */
+    document.getElementById('btn-new').addEventListener('click', async () => {
+      const seed = Math.floor(Math.random() * 1e9);
+      setObject(seed);
+      saveSeed(seed);
+    });
+    const spinBtn = document.getElementById('btn-spin');
+    spinBtn.addEventListener('click', () => {
+      autoSpin = !autoSpin;
+      spinBtn.textContent = autoSpin ? 'Pause spin' : 'Resume spin';
+    });
+
+    /* ---------- Boot ---------- */
+    (async () => {
+      const seed = await loadOrCreateSeed();
+      setObject(seed);
+      await runIntro();
+      document.getElementById('title').classList.add('show');
+      document.getElementById('hud').classList.add('show');
+    })();
+  </script>
+</body>
+</html>

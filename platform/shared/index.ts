@@ -1,4 +1,5 @@
 export * from "./agents";
+export * from "./app-recording";
 export * from "./archestra-mcp-server";
 export * from "./built-in-agents";
 export * from "./cascade-scenarios";

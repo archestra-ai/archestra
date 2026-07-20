@@ -1,4 +1,5 @@
 import {
+  ADMIN_ROLE_NAME,
   ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -6,20 +7,32 @@ import {
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@archestra/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { OrganizationModel, SkillFileModel, SkillModel } from "@/models";
+import {
+  AppModel,
+  AppVersionModel,
+  OrganizationModel,
+  SkillFileModel,
+  SkillModel,
+} from "@/models";
 import AgentModel from "@/models/agent";
+import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
   BUILT_IN_SKILLS,
   builtInSkillSourceRef,
   builtInSkillVersion,
 } from "@/skills/built-in-skills";
 import { describe, expect, test } from "@/test";
-import { decideEnvSeed, syncBuiltInAgents, syncBuiltInSkills } from "./seed";
+import {
+  decideEnvSeed,
+  seedDefaultAppsForPristineOrgs,
+  syncBuiltInAgents,
+  syncBuiltInSkills,
+} from "./seed";
 
 const [BASE_SKILL] = BUILT_IN_SKILLS;
 
@@ -502,5 +515,134 @@ describe("decideEnvSeed", () => {
       kind: "create",
       persistedBaseUrl: null,
     });
+  });
+});
+
+describe("seedDefaultAppsForPristineOrgs", () => {
+  test("seeds the default apps into an org that never had one", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+    await seedDefaultAppsForPristineOrgs();
+
+    const apps = await db
+      .select()
+      .from(schema.appsTable)
+      .where(eq(schema.appsTable.organizationId, org.id));
+    expect(apps).toHaveLength(DEFAULT_APPS.length);
+    expect(new Set(apps.map((app) => app.name))).toEqual(
+      new Set(DEFAULT_APPS.map((definition) => definition.name)),
+    );
+    for (const app of apps) {
+      expect(app.authorId).toBe(admin.id);
+      expect(app.mcpServerId).not.toBeNull();
+      expect(app.templateId).toMatch(/^default-app:/);
+    }
+
+    // Version 1 carries the shipped HTML and the backing is org-scoped.
+    const [taskTracker] = apps.filter(
+      (app) => app.name === "Demo Task Tracker",
+    );
+    const loaded = await AppModel.findById(taskTracker.id);
+    expect(loaded?.scope).toBe("org");
+    const version = await AppVersionModel.findByAppAndVersion(
+      taskTracker.id,
+      1,
+    );
+    expect(version?.html).toContain("<!DOCTYPE html>");
+  });
+
+  test("is idempotent across restarts", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+    await seedDefaultAppsForPristineOrgs();
+    await seedDefaultAppsForPristineOrgs();
+
+    const apps = await db
+      .select()
+      .from(schema.appsTable)
+      .where(eq(schema.appsTable.organizationId, org.id));
+    expect(apps).toHaveLength(DEFAULT_APPS.length);
+  });
+
+  test("leaves an org with an existing app untouched", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+    const existing = await makeApp({
+      organizationId: org.id,
+      authorId: admin.id,
+    });
+
+    await seedDefaultAppsForPristineOrgs();
+
+    const apps = await db
+      .select()
+      .from(schema.appsTable)
+      .where(eq(schema.appsTable.organizationId, org.id));
+    expect(apps.map((app) => app.id)).toEqual([existing.id]);
+  });
+
+  test("does not resurrect demos into an org whose apps were all deleted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+    const existing = await makeApp({
+      organizationId: org.id,
+      authorId: admin.id,
+    });
+    await AppModel.delete(existing.id);
+
+    await seedDefaultAppsForPristineOrgs();
+
+    const active = await db
+      .select()
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, org.id),
+          isNull(schema.appsTable.deletedAt),
+        ),
+      );
+    expect(active).toHaveLength(0);
+  });
+
+  test("skips an org with no admin member", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id);
+
+    await seedDefaultAppsForPristineOrgs();
+
+    const apps = await db
+      .select()
+      .from(schema.appsTable)
+      .where(eq(schema.appsTable.organizationId, org.id));
+    expect(apps).toHaveLength(0);
   });
 });

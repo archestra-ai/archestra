@@ -7,6 +7,14 @@ import { SidebarUserMenu } from "./sidebar-user-menu";
 
 vi.mock("@/lib/clients/auth/auth-client");
 
+const { mockUseTheme } = vi.hoisted(() => ({
+  mockUseTheme: vi.fn(),
+}));
+
+vi.mock("next-themes", () => ({
+  useTheme: () => mockUseTheme(),
+}));
+
 function renderMenu() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -24,6 +32,7 @@ function renderMenu() {
 describe("SidebarUserMenu", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseTheme.mockReturnValue({ theme: "system", setTheme: vi.fn() });
   });
 
   it("renders nothing without a session", async () => {
@@ -69,5 +78,34 @@ describe("SidebarUserMenu", () => {
       "href",
       "/auth/sign-out",
     );
+  });
+
+  it("switches the theme via the theme mode buttons", async () => {
+    const user = userEvent.setup();
+    const setTheme = vi.fn();
+    mockUseTheme.mockReturnValue({ theme: "system", setTheme });
+    vi.mocked(authClient.getSession).mockResolvedValue({
+      data: {
+        user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com" },
+        session: { id: "session-1" },
+      },
+      error: null,
+    } as Awaited<ReturnType<typeof authClient.getSession>>);
+
+    renderMenu();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Ada Lovelace/ }),
+    );
+
+    const darkButton = await screen.findByRole("button", { name: "Dark" });
+    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(darkButton).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(darkButton);
+    expect(setTheme).toHaveBeenCalledWith("dark");
   });
 });

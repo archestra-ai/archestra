@@ -139,9 +139,63 @@ test.describe("Skills marketplace share step", () => {
       page.getByText("Revoke and block all existing clones?"),
     ).toBeVisible();
 
+    // after the DELETE the list refetch no longer returns the link — the real
+    // backend filters revoked links out
+    await mswControl.use({
+      method: "get",
+      url: "/api/skill-share-links",
+      body: { links: [] },
+    });
+
     await page.getByTestId("skills-marketplace-confirm-revoke").click();
     // the mutation's success toast confirms the DELETE round trip completed
     await expect(page.getByText("Share link revoked")).toBeVisible();
+
+    // the confirmation panel must dismiss and the UI return to the initial
+    // create state instead of lingering with no way out
+    await expect(
+      page.getByText("Revoke and block all existing clones?"),
+    ).toBeHidden();
+    await expect(page.getByTestId("skills-marketplace-create")).toBeVisible();
+  });
+
+  test("revoking a freshly created link returns to the create state", async ({
+    page,
+    mswControl,
+  }) => {
+    await page.goto(STEP_URL);
+    await expect(page.getByTestId("skills-marketplace-create")).toBeVisible();
+
+    // after create the invalidated list refetch returns the created link,
+    // like the real backend; install the override before the mutation fires
+    await mswControl.use({
+      method: "get",
+      url: "/api/skill-share-links",
+      body: { links: [makeShareLinkCreateResult("created0").link] },
+    });
+
+    await page.getByTestId("skills-marketplace-create").click();
+    await expect(
+      page.getByTestId("skills-marketplace-snippets-generic"),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Revoke", exact: true }).click();
+
+    // the revoked link disappears from the next list refetch
+    await mswControl.use({
+      method: "get",
+      url: "/api/skill-share-links",
+      body: { links: [] },
+    });
+
+    await page.getByTestId("skills-marketplace-confirm-revoke").click();
+
+    // the confirmation panel must not persist after the link is revoked
+    // (regression: it lingered with no way to dismiss it)
+    await expect(
+      page.getByText("Revoke and block all existing clones?"),
+    ).toBeHidden();
+    await expect(page.getByTestId("skills-marketplace-create")).toBeVisible();
   });
 
   test("a link covering fewer skills than the org now has shows the stale notice", async ({

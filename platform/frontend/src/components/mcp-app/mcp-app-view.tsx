@@ -19,6 +19,7 @@ import {
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AppSessionRecorderRuntimeHooks } from "@/components/app-session-recording/use-app-session-recorder";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import { McpAppAuthBanner } from "@/components/mcp-app/mcp-app-auth-banner";
 import {
@@ -104,6 +105,7 @@ export const McpAppRuntime = function McpAppRuntime({
   reloadNonce,
   inlineInitialHeight,
   degradeResourceLoadError,
+  recorder,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -142,6 +144,13 @@ export const McpAppRuntime = function McpAppRuntime({
    * author must see), so failures stay visible there.
    */
   degradeResourceLoadError?: boolean;
+  /**
+   * Session-recorder hooks from {@link useAppSessionRecorder}: the runtime
+   * reports its proxied MCP exchanges, the served HTML it renders, the live
+   * sandbox iframe, and the input-event batches the injected SDK posts up.
+   * All no-ops while the user isn't recording.
+   */
+  recorder?: AppSessionRecorderRuntimeHooks;
 }) {
   const { resolvedTheme } = useTheme();
   // The host only ever caps height (width is unbounded); unpack the SEP-shaped
@@ -211,6 +220,8 @@ export const McpAppRuntime = function McpAppRuntime({
   const ownedAppId = endpoint.kind === "app" ? endpoint.appId : null;
   const appVersionRef = useRef(appVersion);
   appVersionRef.current = appVersion;
+  const recorderRef = useRef(recorder);
+  recorderRef.current = recorder;
   const containerMaxHeightRef = useRef(containerMaxHeight);
   containerMaxHeightRef.current = containerMaxHeight;
 
@@ -377,7 +388,24 @@ export const McpAppRuntime = function McpAppRuntime({
           : `/api/mcp/app/${endpoint.appId}`;
 
     // Proxy a JSON-RPC method to the backend MCP gateway (agent or app endpoint).
+    // Every exchange (request, response, latency) is reported to the session
+    // recorder — these captures are the "mocked MCP responses" a recorded demo
+    // replays instead of a live gateway. No-op unless the user is recording.
     const mcpProxy = async (method: string, params: unknown) => {
+      const proxyStartedAt = Date.now();
+      const recordExchange = (result: unknown, isError: boolean) => {
+        recorderRef.current?.captureMcp({
+          method,
+          toolName:
+            method === "tools/call"
+              ? (params as { name?: string } | undefined)?.name
+              : undefined,
+          params,
+          result,
+          isError: isError || undefined,
+          durationMs: Date.now() - proxyStartedAt,
+        });
+      };
       const response = await fetch(mcpUrl, {
         method: "POST",
         headers: {
@@ -391,10 +419,16 @@ export const McpAppRuntime = function McpAppRuntime({
           params,
         }),
       });
-      if (!response.ok)
+      if (!response.ok) {
+        recordExchange({ message: response.statusText }, true);
         throw new Error(`Failed to fetch ${method}: ${response.statusText}`);
+      }
       const json = await response.json();
-      if (json.error) throw new Error(json.error.message);
+      if (json.error) {
+        recordExchange(json.error, true);
+        throw new Error(json.error.message);
+      }
+      recordExchange(json.result, false);
       return json.result;
     };
 
@@ -658,6 +692,18 @@ export const McpAppRuntime = function McpAppRuntime({
     // reconnect the already-connected bridge and throw.
   }, [endpointKey, toolResourceUri, reloadNonce]);
 
+  // Report the served HTML to the session recorder: the first snapshot seeds
+  // segment 0 when a recording starts; a mid-recording change (reload after an
+  // app edit) appends a new version segment on the timeline.
+  useEffect(() => {
+    if (appResource) {
+      recorderRef.current?.captureSnapshot(
+        appResource.html,
+        appVersionRef.current ?? null,
+      );
+    }
+  }, [appResource]);
+
   // If preloadedResource arrives as a prop update after initial mount (race
   // condition: tool part rendered before the SSE event was processed), apply it.
   // Only set if no resource is loaded yet to avoid overwriting a fetch result.
@@ -808,6 +854,8 @@ export const McpAppRuntime = function McpAppRuntime({
           maxHeight={containerMaxHeight}
           onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
           onScreenshot={ownedAppId ? handleScreenshot : undefined}
+          onIframeElement={recorder ? recorder.bindIframe : undefined}
+          onRecordingEvents={recorder ? recorder.onRecordingEvents : undefined}
           ownedApp={ownedAppId != null}
         />
       )}
@@ -863,8 +911,11 @@ const RENDER_SETTLE_POST_MS = 1_500;
  * Replaces @mcp-ui/client's AppFrame which hardcodes allow-same-origin on the
  * iframe — incompatible with single-port deployments where the sandbox must
  * have an opaque origin to prevent access to the host's cookies/storage.
+ *
+ * Exported for the session-recording player, which drives it with a replay
+ * bridge (recorded MCP responses) instead of a live gateway.
  */
-function SandboxIframe({
+export function SandboxIframe({
   html,
   sandboxUrl,
   csp,
@@ -879,6 +930,9 @@ function SandboxIframe({
   maxHeight,
   onDiagnostic,
   onScreenshot,
+  onIframeElement,
+  onRecordingEvents,
+  onConnected,
   ownedApp,
 }: {
   html: string;
@@ -906,6 +960,15 @@ function SandboxIframe({
   onDiagnostic?: (data: unknown) => void;
   /** Raw screenshot payload forwarded by the sandbox proxy. */
   onScreenshot?: (data: unknown) => void;
+  /** The live iframe element (null on teardown) — recording/replay control
+   * messages are posted to its contentWindow through the sandbox proxy relay. */
+  onIframeElement?: (el: HTMLIFrameElement | null) => void;
+  /** Raw recorder batch (`mcp-apps:recording-event`) forwarded by the proxy. */
+  onRecordingEvents?: (data: unknown) => void;
+  /** Fired when the guest bridge connects — the injected app SDK (and its
+   * replay listener) is live. The session player gates replay on this so early
+   * events aren't posted to a frame whose SDK hasn't attached yet. */
+  onConnected?: () => void;
   /** Archestra-owned app: its envelope carries the platform CSP, so the proxy
    * must not inject a second one. A trusted host signal, not derived from HTML. */
   ownedApp?: boolean;
@@ -926,6 +989,9 @@ function SandboxIframe({
   const onErrorRef = useRef(onError);
   const onDiagnosticRef = useRef(onDiagnostic);
   const onScreenshotRef = useRef(onScreenshot);
+  const onIframeElementRef = useRef(onIframeElement);
+  const onRecordingEventsRef = useRef(onRecordingEvents);
+  const onConnectedRef = useRef(onConnected);
   // Read at iframe-creation time only; a ref keeps it out of the effect deps so
   // the iframe never remounts when the height changes.
   const initialHeightRef = useRef(initialHeight);
@@ -948,6 +1014,9 @@ function SandboxIframe({
     onErrorRef.current = onError;
     onDiagnosticRef.current = onDiagnostic;
     onScreenshotRef.current = onScreenshot;
+    onIframeElementRef.current = onIframeElement;
+    onRecordingEventsRef.current = onRecordingEvents;
+    onConnectedRef.current = onConnected;
     initialHeightRef.current = initialHeight;
     maxHeightRef.current = maxHeight;
   });
@@ -1038,6 +1107,7 @@ function SandboxIframe({
             if (!cancelled) {
               setError(null);
               setConnectedBridge(appBridge);
+              onConnectedRef.current?.();
             }
           })
           .catch((err) => {
@@ -1068,12 +1138,15 @@ function SandboxIframe({
         onDiagnosticRef.current?.(event.data);
       } else if (type === "mcp-apps:screenshot") {
         onScreenshotRef.current?.(event.data);
+      } else if (type === "mcp-apps:recording-event") {
+        onRecordingEventsRef.current?.(event.data);
       }
     };
 
     window.addEventListener("message", onMessage);
     window.addEventListener("message", onDiagnosticMessage);
     container.appendChild(iframe);
+    onIframeElementRef.current?.(iframe);
 
     return () => {
       cancelled = true;
@@ -1081,6 +1154,7 @@ function SandboxIframe({
       themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onDiagnosticMessage);
+      onIframeElementRef.current?.(null);
       iframe.remove();
       iframeRef.current = null;
       // Reset connection state so the send effects below don't fire against a
@@ -1250,6 +1324,28 @@ export function isRenderableMcpAppHtml(html: string): boolean {
       ].join(","),
     ),
   );
+}
+
+/**
+ * Host context for an app bridge on a chromeless surface with no live gateway
+ * behind it (the session-replay player). Matches the runtime's context shape so
+ * a replayed app themes itself exactly like the live render did.
+ */
+export function buildReplayHostContext(displayMode: McpUiDisplayMode) {
+  return {
+    displayMode,
+    theme: readDocumentTheme(),
+    platform: "web",
+    availableDisplayModes: [displayMode],
+    containerDimensions: {},
+    locale: navigator.language,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
+    styles: {
+      variables: buildMcpUiStyleVariables(),
+      css: { fonts: collectFontFacesCss() },
+    },
+  };
 }
 
 // ── Host-theme bridging helpers ──────────────────────────────────────────────

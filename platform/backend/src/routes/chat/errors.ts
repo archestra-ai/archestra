@@ -350,7 +350,8 @@ function extractArchestraInternalCode(
       code === ArchestraInternalErrorCode.ContextLengthExceeded ||
       code === ArchestraInternalErrorCode.ProviderInsufficientBalance ||
       code === ArchestraInternalErrorCode.UpstreamEmptyResponse ||
-      code === ArchestraInternalErrorCode.UpstreamTimeout
+      code === ArchestraInternalErrorCode.UpstreamTimeout ||
+      code === ArchestraInternalErrorCode.ProviderOverloaded
     ) {
       return code;
     }
@@ -1810,6 +1811,9 @@ export function mapProviderError(
     // Mid-stream HTTP status is already committed as 200, so the normalized
     // code preserves the upstream 504 semantics and retryability.
     errorCode = ChatErrorCode.NetworkError;
+  } else if (normalizedCode === ArchestraInternalErrorCode.ProviderOverloaded) {
+    // Mid-stream overloads have no usable HTTP status.
+    errorCode = ChatErrorCode.ServerError;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
   // An Archestra usage-limit block arrives over the proxy envelope as an HTTP

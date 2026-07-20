@@ -23,7 +23,7 @@ import { EmptyModelResponseError } from "@/routes/chat/errors";
 
 // Maximum agent steps (tool round-trips) per run, shared by every surface. The
 // primitive does not inject this — callers pass `stopWhen: stepCountIs(MAX_AGENT_STEPS)`
-// (plus any surface-specific stops, e.g. chat's swap-agent conditions).
+// (plus any surface-specific stops).
 export const MAX_AGENT_STEPS = 500;
 
 type StreamTextConfig = Parameters<typeof streamText>[0];

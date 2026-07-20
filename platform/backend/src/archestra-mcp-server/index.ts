@@ -5,6 +5,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  isSkillTool,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -39,6 +40,7 @@ import {
   formatZodErrorWithSchema,
   structuredToolErrorResult,
 } from "./helpers";
+import { toolEntries as hookToolEntries, tools as hookTools } from "./hooks";
 import {
   toolEntries as identityToolEntries,
   tools as identityTools,
@@ -81,6 +83,7 @@ import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
+import { handleSkillDelegation } from "./skill-delegation";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import { toolEntries as teamToolEntries, tools as teamTools } from "./teams";
 import { toolParamsSkeleton } from "./tool-args-skeleton";
@@ -94,6 +97,7 @@ import type { ArchestraContext } from "./types";
 export { archestraMcpBranding } from "./branding";
 export { getAgentTools } from "./delegation";
 export { filterToolNamesByPermission } from "./rbac";
+export { getSkillDelegationTools } from "./skill-delegation";
 export type { ArchestraContext } from "./types";
 
 /**
@@ -116,6 +120,7 @@ const toolEntries: Partial<
 > = {
   ...identityToolEntries,
   ...agentToolEntries,
+  ...hookToolEntries,
   ...llmProxyToolEntries,
   ...mcpGatewayToolEntries,
   ...mcpServerToolEntries,
@@ -153,6 +158,9 @@ export function getArchestraMcpTools() {
     ...runToolTools,
     ...skillTools,
     ...(config.skillsSandbox.enabled ? sandboxTools : []),
+    // Lifecycle hooks execute in the conversation sandbox; hide their
+    // management tools when the runtime (and thus hooks) is unavailable.
+    ...(config.hooks.enabled ? hookTools : []),
     ...appTools,
     ...appDataTools,
     ...appLlmTools,
@@ -216,6 +224,21 @@ export async function executeArchestraTool(
       return parsedArgs.error;
     }
     return handleDelegation(toolName, parsedArgs.value, context);
+  }
+
+  // Skill delegation tools (skill__<slug>) are dynamic too: one per accessible
+  // agent-designated skill. Like agent delegation, they bypass centralized
+  // RBAC and enforce skill + agent access checks internally.
+  if (isSkillTool(toolName)) {
+    const parsedArgs = validateToolArgs(
+      delegationToolArgsSchema,
+      args,
+      toolName,
+    );
+    if ("error" in parsedArgs) {
+      return parsedArgs.error;
+    }
+    return handleSkillDelegation(toolName, parsedArgs.value, context);
   }
 
   // Centralized RBAC check — ensures the user has the required permission

@@ -24,9 +24,7 @@ tilt trigger observability
 docker compose -f dev/docker-compose.observability.yml up -d
 ```
 
-`tilt trigger observability` starts the full observability stack: Tempo, OTEL Collector, Prometheus, and Grafana.
-
-The docker-compose command is an alternative local setup with pre-configured datasources.
+Both commands are equivalent — the tilt resource wraps the same compose file — and start the full observability stack with pre-configured datasources: Tempo, Loki, OTEL Collector, Prometheus, and Grafana.
 
 ## Local URLs
 
@@ -43,15 +41,15 @@ The docker-compose command is an alternative local setup with pre-configured dat
 - Team metadata uses the custom `archestra.<scope>.team.*` namespace (no OTEL registry equivalent), where scope is the principal the teams belong to — `agent` (the executing agent's teams) or `user` (the requesting user's teams). `archestra.<scope>.team.ids` / `.names` are array-valued (a principal can belong to multiple teams), and `archestra.<scope>.team.label.<key>` carries team labels merged per key across the principal's teams. Set via `setTeamAttributes(span, teams, scope)` in `observability/tracing/attributes.ts`; agent teams come from `AgentTeamModel.getTeamLabelInfoForAgent` and user teams from `TeamModel.getTeamLabelInfoForUser`, resolved once per request.
 - Session tracking uses `gen_ai.conversation.id` from the `X-Archestra-Session-Id` header.
 - Span names are `chat {model}`, `generate_content {model}`, and `execute_tool {tool_name}`.
-- Agent label keys are fetched from the database on startup and included as resource attributes.
+- Agent label keys are fetched from the database on startup and used as dynamic Prometheus metric label dimensions (see Metrics); the tracing SDK's resource carries only `service.name`/`service.version`. On spans, agent labels are set per-request via `setAgentAttributes`.
 - Traces are stored in Grafana Tempo.
 - User identity is tracked with `archestra.user.id`, `archestra.user.email`, and `archestra.user.name` when available.
 - LLM spans include `archestra.cost` in USD and `gen_ai.usage.total_tokens`.
 
 ## Metrics
 
-- Prometheus metrics `llm_request_duration_seconds` and `llm_tokens_total` include `agent_id`, `agent_name`, `agent_type`, `external_agent_id`, and dynamic agent labels as dimensions.
+- Prometheus metrics `llm_request_duration_seconds` and `llm_tokens_total` include `provider`, `model`, `agent_id`, `agent_name`, `agent_type`, `source`, and dynamic agent labels as dimensions — deliberately NOT `external_agent_id`, which is client-supplied and unbounded and would explode series cardinality. Do not add it back.
 - `agent_id` is internal.
-- `external_agent_id` comes from the client-provided header and is used for agent execution metrics.
+- `external_agent_id` comes from the client-provided `X-Archestra-Agent-Id` header and is a label only on `agent_executions_total`.
 - MCP metrics include `agent_id`, `agent_name`, and `agent_type`.
 - Metrics are reinitialized on startup with current label keys from the database.

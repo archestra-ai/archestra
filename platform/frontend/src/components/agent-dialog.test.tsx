@@ -21,10 +21,12 @@ const {
   pendingSaveChanges,
   useAvailableLlmProviderApiKeysMock,
   useAgentDelegationsMock,
+  useAgentSubagentExclusionsMock,
   useInternalAgentsMock,
   useLlmModelsByProviderMock,
   useProfileMock,
   useSyncAgentDelegationsMock,
+  useUpdateAgentSubagentExclusionsMock,
   useUpdateProfileMock,
 } = vi.hoisted(() => ({
   pendingSaveChanges: vi.fn(
@@ -50,6 +52,16 @@ const {
     }),
   ),
   useSyncAgentDelegationsMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
+  useAgentSubagentExclusionsMock: vi.fn(
+    (): { data: { excludedSubagentIds: string[] }; isFetched: boolean } => ({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    }),
+  ),
+  useUpdateAgentSubagentExclusionsMock: vi.fn(() => ({
     mutateAsync: vi.fn(),
     isPending: false,
   })),
@@ -80,6 +92,11 @@ vi.mock("@/lib/agent.query", () => ({
 vi.mock("@/lib/agent-tools.query", () => ({
   useAgentDelegations: useAgentDelegationsMock,
   useSyncAgentDelegations: useSyncAgentDelegationsMock,
+}));
+
+vi.mock("@/lib/agent-subagent-exclusions.query", () => ({
+  useAgentSubagentExclusions: useAgentSubagentExclusionsMock,
+  useUpdateAgentSubagentExclusions: useUpdateAgentSubagentExclusionsMock,
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -373,6 +390,7 @@ const baseAgent = {
   agentType: "agent" as const,
   toolExposureMode: "full" as const,
   accessAllTools: false,
+  accessAllSubagents: false,
   scope: "personal" as const,
   isDefault: false,
   isPersonalGateway: false,
@@ -500,6 +518,7 @@ describe.skip("AgentDialog", () => {
           agentType: "agent",
           toolExposureMode: "full",
           accessAllTools: false,
+          accessAllSubagents: false,
           scope: "personal",
           isDefault: false,
           isPersonalGateway: false,

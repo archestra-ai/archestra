@@ -37,6 +37,10 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    # Apps Hackathon session recording. Explicit because the enterprise
+    # license above defaults it off; undocumented on purpose — the feature is
+    # temporary and announced only to hackathon participants.
+    ARCHESTRA_HACKATHON_RECORDER: "true"
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
     # Dedicated origin for MCP App sandboxes so browser device permissions
     # (camera/mic/geolocation/clipboard) can be delegated to app iframes. Each

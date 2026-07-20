@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/collapsible";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   formatOriginalError,
   mapClientError,
@@ -131,7 +132,7 @@ export function InlineChatError({
     }
 
     try {
-      await navigator.clipboard.writeText(lines.join("\n"));
+      await copyToClipboard(lines.join("\n"));
       toast.success(
         slimChatErrorUi ? "Error details copied" : "Debug info copied",
       );

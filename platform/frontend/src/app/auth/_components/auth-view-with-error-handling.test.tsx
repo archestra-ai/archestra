@@ -144,16 +144,15 @@ describe("AuthViewWithErrorHandling", () => {
     });
   });
 
-  it("links the forgot-password hint to the password reset docs", () => {
+  it("does not show the forgot-password hint before any failed sign-in attempt", () => {
     mockSearchParams.get.mockReturnValue(null);
 
     render(<AuthViewWithErrorHandling path="sign-in" callbackURL="/" />);
 
-    const link = screen.getByRole("link", { name: /reset your password/i });
-    expect(link).toHaveAttribute(
-      "href",
-      getDocsUrl(DocsPage.PlatformResetUserPassword),
-    );
+    expect(screen.queryByText(/forgot your password/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /reset your password/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("surfaces the password-reset hint over the form after three failed sign-in attempts", async () => {
@@ -185,7 +184,7 @@ describe("AuthViewWithErrorHandling", () => {
     ).toBeInTheDocument();
     expect(
       within(alert).getByRole("link", {
-        name: /learn how to reset your password/i,
+        name: /learn how to reset admin password/i,
       }),
     ).toHaveAttribute("href", getDocsUrl(DocsPage.PlatformResetUserPassword));
   });

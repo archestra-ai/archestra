@@ -41,8 +41,8 @@ describe("classifyErrorForTracking", () => {
     }
   });
 
-  test("drops 502/504 ApiErrors as upstream failures", () => {
-    for (const statusCode of [502, 504]) {
+  test("drops 502/504/529 ApiErrors as upstream failures", () => {
+    for (const statusCode of [502, 504, 529]) {
       expect(
         classifyErrorForTracking(new ApiError(statusCode, "upstream")).report,
       ).toBe(false);
@@ -54,6 +54,15 @@ describe("classifyErrorForTracking", () => {
       500,
       "provider streamed an empty completion",
       ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+    expect(classifyErrorForTracking(error).report).toBe(false);
+  });
+
+  test("drops the handled provider-overload condition", () => {
+    const error = new ApiError(
+      503,
+      "The server is currently overloaded",
+      ArchestraInternalErrorCode.ProviderOverloaded,
     );
     expect(classifyErrorForTracking(error).report).toBe(false);
   });

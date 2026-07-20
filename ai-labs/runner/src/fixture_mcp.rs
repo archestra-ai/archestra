@@ -22,7 +22,7 @@ use std::net::SocketAddr;
 
 use axum::Router;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult, PaginatedRequestParams,
+    CallToolRequestParams, CallToolResult, ContentBlock, Implementation, ListToolsResult, PaginatedRequestParams,
     ServerCapabilities, ServerInfo,
 };
 use rmcp::service::{RequestContext, RoleServer};
@@ -360,7 +360,7 @@ fn contracts() -> Vec<JsonValue> {
 }
 
 fn text(s: impl Into<String>) -> CallToolResult {
-    CallToolResult::success(vec![Content::text(s.into())])
+    CallToolResult::success(vec![ContentBlock::text(s.into())])
 }
 
 fn string_prop(description: &str) -> JsonValue {

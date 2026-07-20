@@ -4,7 +4,7 @@ use std::sync::Arc;
 use axum::Router;
 use jsonschema::{Draft, Validator};
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult, PaginatedRequestParams,
+    CallToolRequestParams, CallToolResult, ContentBlock, Implementation, ListToolsResult, PaginatedRequestParams,
     ServerCapabilities, ServerInfo,
 };
 use rmcp::service::{RequestContext, RoleServer};
@@ -357,7 +357,7 @@ fn retryable_rejection(errors: &[String], result_schema: &JsonValue) -> String {
 }
 
 fn text_result(text: impl Into<String>) -> CallToolResult {
-    CallToolResult::success(vec![Content::text(text)])
+    CallToolResult::success(vec![ContentBlock::text(text)])
 }
 
 fn schema_errors(validator: &Validator, result: &JsonValue) -> Vec<String> {

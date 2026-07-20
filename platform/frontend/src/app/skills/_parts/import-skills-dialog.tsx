@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  ChevronRight,
   Eye,
   Info,
   Loader2,
@@ -23,6 +24,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -33,11 +39,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
+import { useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDiscoverGithubSkills,
@@ -94,12 +108,15 @@ export function ImportSkillsDialog({
   const discover = useDiscoverGithubSkills();
   const importSkills = useImportGithubSkills();
   const { data: githubAppConfigs = [] } = useGithubAppConfigs();
+  const { data: githubPats = [] } = useGithubPats();
   const appName = useAppName();
 
   const [repoUrl, setRepoUrl] = useState(initialRepoUrl);
   const [path, setPath] = useState("");
   const [authMethod, setAuthMethod] = useState<"pat" | "github_app">("pat");
   const [githubToken, setGithubToken] = useState("");
+  // "" = paste a one-time token; otherwise the id of a saved token
+  const [githubPatId, setGithubPatId] = useState("");
   const [githubAppConfigId, setGithubAppConfigId] = useState("");
   const [discovered, setDiscovered] = useState<SelectStepSkill[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -109,16 +126,37 @@ export function ImportSkillsDialog({
   // scope applies to every skill selected in this import
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  // sync mode applies to every skill selected in this import. "none" = a
+  // one-time editable copy; an interval keeps the skills pulled from the repo
+  // on that schedule and read-only here until disconnected.
+  const [syncInterval, setSyncInterval] = useState<
+    "15m" | "1h" | "1d" | "none"
+  >("1d");
+  // subpath + authentication live behind this fold; opened automatically when
+  // a discover failure looks like a missing-auth problem.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // PAT and GitHub App auth are mutually exclusive; the backend rejects both
+  // A one-time pasted token is never stored, so it cannot back a recurring
+  // sync — scheduled pulls would have nothing to authenticate with. Saved
+  // tokens and App configs can.
+  const patBlocksSync =
+    authMethod === "pat" && !githubPatId && githubToken.trim().length > 0;
+  const effectiveSync =
+    patBlocksSync || syncInterval === "none"
+      ? null
+      : { interval: syncInterval };
+
+  // auth methods are mutually exclusive; the backend rejects combinations
   const githubAuthFields =
     authMethod === "github_app"
       ? githubAppConfigId
         ? { githubAppConfigId }
         : {}
-      : githubToken.trim()
-        ? { githubToken: githubToken.trim() }
-        : {};
+      : githubPatId
+        ? { githubPatId }
+        : githubToken.trim()
+          ? { githubToken: githubToken.trim() }
+          : {};
 
   // strict null check: a repo-root skill's path is "", which is still a
   // previewable selection
@@ -139,6 +177,7 @@ export function ImportSkillsDialog({
     setPath("");
     setAuthMethod("pat");
     setGithubToken("");
+    setGithubPatId("");
     setGithubAppConfigId("");
     setDiscovered(null);
     setSelected(new Set());
@@ -147,6 +186,8 @@ export function ImportSkillsDialog({
     setDiscoverError(null);
     setScope("personal");
     setTeamIds([]);
+    setSyncInterval("1d");
+    setAdvancedOpen(false);
   };
 
   const backToDiscover = () => {
@@ -164,6 +205,9 @@ export function ImportSkillsDialog({
     setAuthMethod(value);
     if (value === "pat") {
       setGithubAppConfigId("");
+    } else {
+      setGithubPatId("");
+      setGithubToken("");
     }
   };
 
@@ -180,6 +224,9 @@ export function ImportSkillsDialog({
       setSelected(new Set(importableSkills.map((s) => s.skillPath)));
     } else if (errorMessage) {
       setDiscoverError(errorMessage);
+      // a private repo without credentials is the most common failure — put
+      // the auth fields in front of the user
+      if (!hasGithubAuth) setAdvancedOpen(true);
     }
   };
 
@@ -206,6 +253,7 @@ export function ImportSkillsDialog({
       skillPaths: [...selected],
       scope,
       teamIds: scope === "team" ? teamIds : [],
+      sync: effectiveSync,
     });
     // only navigate away when something was actually created; if every selected
     // skill was already in the org (created: [], skipped: [...]) the import was
@@ -270,7 +318,21 @@ export function ImportSkillsDialog({
   const hasGithubAuth =
     authMethod === "github_app"
       ? githubAppConfigId.length > 0
-      : githubToken.trim().length > 0;
+      : githubPatId.length > 0 || githubToken.trim().length > 0;
+
+  // what the collapsed Advanced fold is configured with, e.g. "saved token, subpath"
+  const advancedSummary = [
+    authMethod === "github_app" && githubAppConfigId
+      ? "GitHub App"
+      : githubPatId
+        ? "saved token"
+        : githubToken.trim()
+          ? "one-time token"
+          : null,
+    path.trim() ? "subpath" : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const repoSlug = repoUrl
     .replace(/^https?:\/\//, "")
@@ -616,16 +678,7 @@ export function ImportSkillsDialog({
           )}
         </div>
       ) : (
-        <div className="space-y-6">
-          <div className="flex gap-2.5 rounded-md border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-            <Info className="mt-0.5 size-4 shrink-0" />
-            <p>
-              Importing copies the selected skills into your organization once.{" "}
-              {appName} doesn’t pull from the repo afterward — later changes
-              there won’t appear here, your edits here won’t go back to GitHub,
-              and re-importing skips skills you’ve already imported.
-            </p>
-          </div>
+        <div className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="skill-repo-url">Repository URL</Label>
             <Input
@@ -639,78 +692,169 @@ export function ImportSkillsDialog({
               data-lpignore="true"
             />
             <p className="text-sm text-muted-foreground">
-              Any directory containing a{" "}
-              <code className="font-mono">SKILL.md</code> with{" "}
-              <code className="font-mono">name</code> and{" "}
-              <code className="font-mono">description</code> frontmatter counts
-              as a skill.
+              Every directory with a <code className="font-mono">SKILL.md</code>{" "}
+              becomes an importable skill.
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="skill-subpath">
-              Subpath
-              <span className="text-muted-foreground font-normal">
-                (optional)
-              </span>
-            </Label>
-            <Input
-              id="skill-subpath"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              placeholder="packages/skills"
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
-            />
+            <Label htmlFor="skill-sync-interval">Keep in sync</Label>
+            <Select
+              value={patBlocksSync ? "none" : syncInterval}
+              onValueChange={(value) =>
+                setSyncInterval(value as typeof syncInterval)
+              }
+              disabled={patBlocksSync}
+            >
+              <SelectTrigger id="skill-sync-interval" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="15m">Every 15 minutes</SelectItem>
+                <SelectItem value="1h">Every hour</SelectItem>
+                <SelectItem value="1d">Once a day</SelectItem>
+                <SelectItem value="none">
+                  Don’t sync — one-time import
+                </SelectItem>
+              </SelectContent>
+            </Select>
             <p className="text-sm text-muted-foreground">
-              Restrict the scan to <code className="font-mono">SKILL.md</code>{" "}
-              directories under this path.
+              {patBlocksSync
+                ? "A one-time token can’t stay in sync (it is never stored). Use a saved token, a GitHub App, or a public repository."
+                : syncInterval === "none"
+                  ? `One-time editable copy — later repo changes won’t appear in ${appName}.`
+                  : `Pulled from the repository on this schedule; read-only in ${appName} until disconnected.`}
             </p>
           </div>
-          <GithubAuthConfigFields
-            authMethod={authMethod}
-            onAuthMethodChange={handleAuthMethodChange}
-            githubAppConfigId={githubAppConfigId}
-            onGithubAppConfigIdChange={setGithubAppConfigId}
-            githubAppConfigs={githubAppConfigs}
-            authLabel="Authentication"
-            authOptional
-            configuredDescription={
-              <>
-                Mints a short-lived installation token for this import. Manage
-                configurations in
-              </>
-            }
-            patFields={
-              <>
-                <SecretInput
-                  id="skill-token"
-                  value={githubToken}
-                  onChange={(e) => setGithubToken(e.target.value)}
-                  placeholder="ghp_…"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Required for private repositories. Used only for this import
-                  and never stored.{" "}
-                  <a
-                    href="https://github.com/settings/personal-access-tokens/new"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    Create a token
-                  </a>
-                  .
-                </p>
-              </>
-            }
-          />
           <SkillScopeSelector
             scope={scope}
             onScopeChange={setScope}
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
           />
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+              <ChevronRight
+                className={cn(
+                  "h-4 w-4 shrink-0 transition-transform",
+                  advancedOpen && "rotate-90",
+                )}
+              />
+              Authentication & subpath
+              {!advancedOpen && advancedSummary && (
+                <span className="font-normal text-xs">· {advancedSummary}</span>
+              )}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-5 pt-4">
+              <GithubAuthConfigFields
+                authMethod={authMethod}
+                onAuthMethodChange={handleAuthMethodChange}
+                githubAppConfigId={githubAppConfigId}
+                onGithubAppConfigIdChange={setGithubAppConfigId}
+                githubAppConfigs={githubAppConfigs}
+                authLabel="Authentication"
+                authOptional
+                authDescription={null}
+                configuredDescription={
+                  <>
+                    Mints a short-lived installation token for this import.
+                    Manage configurations in
+                  </>
+                }
+                patFields={
+                  <>
+                    {githubPats.length > 0 && (
+                      <Select
+                        value={githubPatId || "onetime"}
+                        onValueChange={(value) => {
+                          setGithubPatId(value === "onetime" ? "" : value);
+                          if (value !== "onetime") setGithubToken("");
+                        }}
+                      >
+                        <SelectTrigger
+                          className="w-full"
+                          aria-label="Saved token"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {githubPats.map((pat) => (
+                            <SelectItem key={pat.id} value={pat.id}>
+                              {pat.name}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="onetime">
+                            One-time token…
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {githubPatId ? (
+                      <p className="text-sm text-muted-foreground">
+                        Synced imports stay authenticated with this saved token.
+                        Manage saved tokens in{" "}
+                        <a
+                          href="/settings/github"
+                          className="font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                          Settings → GitHub
+                        </a>
+                        .
+                      </p>
+                    ) : (
+                      <>
+                        <SecretInput
+                          id="skill-token"
+                          value={githubToken}
+                          onChange={(e) => setGithubToken(e.target.value)}
+                          placeholder="ghp_…"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Needed for private repositories; used once and never
+                          stored.{" "}
+                          <a
+                            href="https://github.com/settings/personal-access-tokens/new"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                          >
+                            Create a token
+                          </a>{" "}
+                          or save one for reuse in{" "}
+                          <a
+                            href="/settings/github"
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                          >
+                            Settings → GitHub
+                          </a>
+                          .
+                        </p>
+                      </>
+                    )}
+                  </>
+                }
+              />
+              <div className="space-y-2">
+                <Label htmlFor="skill-subpath">
+                  Subpath
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="skill-subpath"
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  placeholder="packages/skills"
+                  autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Scan only this directory of a large repository.
+                </p>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
           {discoverError && (
             <Alert variant="destructive">
               <AlertTriangle />

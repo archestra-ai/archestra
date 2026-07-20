@@ -198,6 +198,9 @@ export async function handleSkillDelegation(
   // The caller's ancestor path, which the executor checks for cycles.
   const parentDelegationChain = context.delegationChain || context.agentId;
 
+  // dispatching the skill to its designated agent counts one use.
+  SkillModel.recordUsage(skill.id);
+
   try {
     const sessionId =
       context.sessionId || context.conversationId || context.isolationKey;

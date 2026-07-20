@@ -87,6 +87,7 @@ export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
 export { default as filesTable } from "./file";
 export { default as githubAppConfigsTable } from "./github-app-config";
+export { default as githubPatsTable } from "./github-pat";
 export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";

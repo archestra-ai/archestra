@@ -10,9 +10,11 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { SkillSourceType } from "@/types/skill";
+import type { SkillGithubSyncInterval, SkillSourceType } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import environmentsTable from "./environment";
+import githubAppConfigsTable from "./github-app-config";
+import githubPatsTable from "./github-pat";
 import usersTable from "./user";
 
 /**
@@ -104,6 +106,54 @@ const skillsTable = pgTable(
     sourceRef: text("source_ref"),
     /** Commit SHA the skill was imported at, when known. */
     sourceCommit: text("source_commit"),
+    /**
+     * Recurring-pull frequency for a GitHub-synced skill. Non-null marks the
+     * skill as synced: its content (SKILL.md + files) is read-only in
+     * Archestra and a background worker re-pulls it from the source repo on
+     * this schedule. Null = editable in Archestra (a one-time snapshot for
+     * `github` skills). Cleared on "disconnect".
+     */
+    githubSyncInterval: text(
+      "github_sync_interval",
+    ).$type<SkillGithubSyncInterval>(),
+    /**
+     * Git ref (branch or tag) a synced skill tracks; null tracks the repo's
+     * default branch (HEAD). Only meaningful while `githubSyncInterval` is
+     * set — `sourceRef` pins the requested-ref-or-SHA at import and is
+     * provenance, not the tracking target.
+     */
+    githubSyncRef: text("github_sync_ref"),
+    /**
+     * GitHub App config used to authenticate scheduled pulls; null for public
+     * repos. PATs are never stored, so a PAT import cannot be synced. Deleting
+     * the config nulls this and subsequent private-repo syncs fail (recorded
+     * in `lastSyncError`).
+     */
+    githubAppConfigId: uuid("github_app_config_id").references(
+      () => githubAppConfigsTable.id,
+      { onDelete: "set null" },
+    ),
+    /**
+     * Stored PAT used to authenticate scheduled pulls; the stored-token twin
+     * of `githubAppConfigId` (at most one of the two is set). Deleting the
+     * PAT is blocked while synced skills reference it.
+     */
+    githubPatId: uuid("github_pat_id").references(() => githubPatsTable.id, {
+      onDelete: "set null",
+    }),
+    /** When the last scheduled/manual sync ran (success or failure). */
+    lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),
+    /** Why the last sync failed; null when it succeeded. */
+    lastSyncError: text("last_sync_error"),
+    /**
+     * Total activations: `load_skill` by name (catalog clients), slash-command
+     * activation in chat, and skill-delegation dispatch each count one. File
+     * reads and catalog listing don't. Incremented by `SkillModel.recordUsage`
+     * without touching `updatedAt`.
+     */
+    usageCount: integer("usage_count").notNull().default(0),
+    /** When the skill was last activated (see `usageCount`). */
+    lastUsedAt: timestamp("last_used_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -114,6 +164,10 @@ const skillsTable = pgTable(
     index("skills_organization_id_idx").on(table.organizationId),
     index("skills_scope_idx").on(table.scope),
     index("skills_environment_id_idx").on(table.environmentId),
+    // the sync worker's check-due scan touches only synced skills.
+    index("skills_github_sync_due_idx")
+      .on(table.lastSyncedAt)
+      .where(sql`${table.githubSyncInterval} is not null`),
     // Name uniqueness mirrors visibility: a name only needs to be unique among
     // those who can see the skill. Personal skills are visible to their author
     // alone, so they are unique per (org, author); team/org skills are shared,

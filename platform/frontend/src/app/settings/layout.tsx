@@ -28,7 +28,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   "/settings/github": {
     title: "GitHub",
     description:
-      "Manage organization GitHub App credentials for connectors and skill imports.",
+      "Manage organization GitHub credentials for connectors and skill sync.",
   },
   "/settings/environments": {
     title: "Environments",

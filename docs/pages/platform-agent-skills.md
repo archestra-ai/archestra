@@ -12,7 +12,7 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, and file count.
+Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
 
 ![The Skills page open under the Studio tab of the sidebar, listing the organization's skills](/docs/automated_screenshots/platform-agent-skills_skills-in-studio.webp)
 
@@ -86,12 +86,20 @@ The visibility **scope** chosen in the dialog applies to every skill in the batc
 
 Each import records the source (`owner/repo@ref:path`) and the resolved commit SHA, so you can later filter the catalog by repo and see exactly which revision landed.
 
+### Synced or One-Time
+
+**Keep in sync** in the dialog picks the mode for the batch. Synced skills — the default, once a day — are pulled from the repository on the chosen schedule (every 15 minutes, every hour, or once a day) and marked with a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Visibility scope, teams, and environment stay editable. A failed pull keeps the last good content and shows the error in the editor.
+
+**Disconnect** in the skill editor breaks the link: the skill keeps its current content, becomes editable, and stops updating. **Sync now** pulls immediately instead of waiting for the schedule.
+
+Sync authenticates with a saved personal access token or a GitHub App configuration — both managed under **Settings → GitHub** — or not at all (public repos). A pasted one-time token can only back a one-time import: it is never stored, so scheduled pulls would have nothing to authenticate with.
+
+A one-time import copies the skills once as editable; re-import to pull in upstream changes (duplicates by name are skipped, never overwritten).
+
 A few behaviors worth knowing:
 
-- **Duplicates are skipped.** Importing a skill whose name already exists leaves the local copy alone — no silent overwrite.
 - **One snapshot per session.** The repo tree is cached for five minutes, so what you previewed is what you import even if upstream moves in between.
 - **Per-file 10 MB cap, 500 files per skill.** Binary assets are preserved (base64-encoded), so images and fonts round-trip.
-- **No background sync.** Re-import to pull in upstream changes; your edits are never overwritten.
 
 ## Permissions and scope
 

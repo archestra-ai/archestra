@@ -9,13 +9,27 @@ import {
   isNotNull,
   like,
   or,
+  sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
-import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
+import type {
+  InsertSkill,
+  InsertSkillFile,
+  Skill,
+  SortDirection,
+  UpdateSkill,
+} from "@/types";
 import { ApiError } from "@/types";
-import type { SkillFileEncoding, SkillFileKind } from "@/types/skill";
+import type {
+  SkillFileEncoding,
+  SkillFileKind,
+  SkillGithubSyncInterval,
+  SkillSortBy,
+} from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import { trackBackgroundWork } from "@/utils/background-work";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
 class SkillModel {
@@ -33,12 +47,13 @@ class SkillModel {
      * Omit for management surfaces that list every environment.
      */
     environmentId?: string | null;
+    sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
       .select()
       .from(schema.skillsTable)
       .where(and(...buildOrgFilters(params)))
-      .orderBy(desc(schema.skillsTable.createdAt))
+      .orderBy(...buildOrderBy(params.sorting))
       .$dynamic();
 
     if (params.limit !== undefined) {
@@ -367,6 +382,132 @@ class SkillModel {
     });
   }
 
+  /**
+   * GitHub-synced skills whose per-row interval has elapsed since the last
+   * sync (never-synced rows are always due). Backs the `check_due_skill_
+   * github_syncs` worker tick; uses the partial `skills_github_sync_due_idx`.
+   */
+  static async findDueGithubSyncs(): Promise<Skill[]> {
+    return await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          isNotNull(schema.skillsTable.githubSyncInterval),
+          sql`(${schema.skillsTable.lastSyncedAt} IS NULL OR ${schema.skillsTable.lastSyncedAt} <= now() - CASE ${schema.skillsTable.githubSyncInterval}
+            WHEN '15m' THEN interval '15 minutes'
+            WHEN '1h' THEN interval '1 hour'
+            ELSE interval '1 day'
+          END)`,
+        ),
+      );
+  }
+
+  /**
+   * Synced skills whose scheduled pulls authenticate with this stored PAT.
+   * Deleting the PAT is blocked while this is non-zero.
+   */
+  static async countSyncedReferencingGithubPat(
+    githubPatId: string,
+  ): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.githubPatId, githubPatId),
+          isNotNull(schema.skillsTable.githubSyncInterval),
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
+  /** Same guard for GitHub App configs referenced by synced skills. */
+  static async countSyncedReferencingGithubAppConfig(
+    githubAppConfigId: string,
+  ): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.githubAppConfigId, githubAppConfigId),
+          isNotNull(schema.skillsTable.githubSyncInterval),
+        ),
+      );
+    return result?.count ?? 0;
+  }
+
+  /**
+   * Stamp the outcome of a sync attempt: `lastSyncedAt` = now, `lastSyncError`
+   * set (failure) or cleared (success). `updatedAt` is preserved — the stamp
+   * itself is bookkeeping, not an edit; a content change goes through
+   * `updateWithFiles` and bumps `updatedAt` there.
+   */
+  static async markGithubSyncResult(
+    id: string,
+    error: string | null,
+  ): Promise<void> {
+    await db
+      .update(schema.skillsTable)
+      .set({
+        lastSyncedAt: new Date(),
+        lastSyncError: error,
+        updatedAt: sql`${schema.skillsTable.updatedAt}`,
+      })
+      .where(eq(schema.skillsTable.id, id));
+  }
+
+  /**
+   * Change a synced skill's pull frequency, or disconnect it (`sync: null`):
+   * clears the schedule, tracking ref, App config, and last error, leaving the
+   * skill an editable snapshot with its `github` provenance intact.
+   */
+  static async setGithubSync(
+    id: string,
+    sync: { interval: SkillGithubSyncInterval } | null,
+  ): Promise<Skill | null> {
+    const [updated] = await db
+      .update(schema.skillsTable)
+      .set(
+        sync
+          ? { githubSyncInterval: sync.interval }
+          : {
+              githubSyncInterval: null,
+              githubSyncRef: null,
+              githubAppConfigId: null,
+              githubPatId: null,
+              lastSyncError: null,
+            },
+      )
+      .where(eq(schema.skillsTable.id, id))
+      .returning();
+    return updated ?? null;
+  }
+
+  /**
+   * Count one activation: bump `usageCount` and stamp `lastUsedAt`.
+   * `updatedAt` is explicitly preserved — a usage tick is not an edit.
+   * Fire-and-forget: never throws and needs no awaiting (metrics must not
+   * fail or slow an activation); the write is registered as background work
+   * so the test teardown can drain it.
+   */
+  static recordUsage(id: string): void {
+    const write = db
+      .update(schema.skillsTable)
+      .set({
+        usageCount: sql`${schema.skillsTable.usageCount} + 1`,
+        lastUsedAt: new Date(),
+        updatedAt: sql`${schema.skillsTable.updatedAt}`,
+      })
+      .where(eq(schema.skillsTable.id, id));
+    trackBackgroundWork(
+      Promise.resolve(write).catch((error) => {
+        logger.warn({ error, skillId: id }, "[Skills] Failed to record usage");
+      }),
+    );
+  }
+
   static async delete(id: string): Promise<boolean> {
     const rows = await db
       .delete(schema.skillsTable)
@@ -410,6 +551,26 @@ function toVersionFiles(
     encoding: file.encoding ?? "utf8",
     kind: file.kind,
   }));
+}
+
+/**
+ * Order clause for the skills list. Defaults to most-used first;
+ * `createdAt desc` breaks ties so never-used skills list newest-first.
+ */
+function buildOrderBy(sorting?: {
+  sortBy?: SkillSortBy;
+  sortDirection?: SortDirection;
+}) {
+  const direction = sorting?.sortDirection === "asc" ? asc : desc;
+  const column = {
+    usageCount: schema.skillsTable.usageCount,
+    // never-used skills sort as oldest (asc first / desc last), instead of
+    // Postgres's default NULLS FIRST on desc.
+    lastUsedAt: sql`COALESCE(${schema.skillsTable.lastUsedAt}, '-infinity'::timestamp)`,
+    name: schema.skillsTable.name,
+    createdAt: schema.skillsTable.createdAt,
+  }[sorting?.sortBy ?? "usageCount"];
+  return [direction(column), desc(schema.skillsTable.createdAt)];
 }
 
 function buildOrgFilters(params: {

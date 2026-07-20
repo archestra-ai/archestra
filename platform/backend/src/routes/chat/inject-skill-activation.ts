@@ -162,6 +162,9 @@ export async function injectSkillActivation({
   const { version, mounted } = activation;
   const files = await SkillVersionModel.findFiles(version.id);
 
+  // an inline slash-command activation counts one use; the agent-designated
+  // branch above doesn't — its use is counted at delegation dispatch.
+  SkillModel.recordUsage(skill.id);
   logger.info(
     {
       organizationId,

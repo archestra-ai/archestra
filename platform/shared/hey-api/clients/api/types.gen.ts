@@ -18241,7 +18241,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -18345,7 +18345,7 @@ export type GetAuditLogsResponses = {
             actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
             actorName: string | null;
             actorEmail: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -31482,6 +31482,366 @@ export type GithubCopilotListModelsWithAgentResponses = {
 
 export type GithubCopilotListModelsWithAgentResponse = GithubCopilotListModelsWithAgentResponses[keyof GithubCopilotListModelsWithAgentResponses];
 
+export type ListGithubPatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/github-pats';
+};
+
+export type ListGithubPatsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListGithubPatsError = ListGithubPatsErrors[keyof ListGithubPatsErrors];
+
+export type ListGithubPatsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type ListGithubPatsResponse = ListGithubPatsResponses[keyof ListGithubPatsResponses];
+
+export type CreateGithubPatData = {
+    body: {
+        name: string;
+        /**
+         * GitHub personal access token
+         */
+        token: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-pats';
+};
+
+export type CreateGithubPatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateGithubPatError = CreateGithubPatErrors[keyof CreateGithubPatErrors];
+
+export type CreateGithubPatResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateGithubPatResponse = CreateGithubPatResponses[keyof CreateGithubPatResponses];
+
+export type DeleteGithubPatData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/github-pats/{id}';
+};
+
+export type DeleteGithubPatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteGithubPatError = DeleteGithubPatErrors[keyof DeleteGithubPatErrors];
+
+export type DeleteGithubPatResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteGithubPatResponse = DeleteGithubPatResponses[keyof DeleteGithubPatResponses];
+
+export type UpdateGithubPatData = {
+    body: {
+        name?: string;
+        /**
+         * Provide only to rotate the stored token.
+         */
+        token?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/github-pats/{id}';
+};
+
+export type UpdateGithubPatErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateGithubPatError = UpdateGithubPatErrors[keyof UpdateGithubPatErrors];
+
+export type UpdateGithubPatResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateGithubPatResponse = UpdateGithubPatResponses[keyof UpdateGithubPatResponses];
+
 export type GroqChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {
@@ -44498,7 +44858,7 @@ export type GetConnectorsResponses = {
                 githubUrl: unknown;
                 owner: string;
                 authMethod?: 'pat' | 'github_app';
-                githubAppConfigId?: string;
+                githubAppConfigId?: string | '';
                 repos?: Array<string>;
                 includeIssues?: boolean;
                 includePullRequests?: boolean;
@@ -44675,7 +45035,7 @@ export type CreateConnectorData = {
             githubUrl: string;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppConfigId?: string;
+            githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -44908,7 +45268,7 @@ export type CreateConnectorResponses = {
             githubUrl: unknown;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppConfigId?: string;
+            githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -45235,7 +45595,7 @@ export type GetConnectorResponses = {
             githubUrl: unknown;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppConfigId?: string;
+            githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -45398,7 +45758,7 @@ export type UpdateConnectorData = {
             githubUrl: string;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppConfigId?: string;
+            githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -45632,7 +45992,7 @@ export type UpdateConnectorResponses = {
             githubUrl: unknown;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppConfigId?: string;
+            githubAppConfigId?: string | '';
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -65941,6 +66301,8 @@ export type GetSkillsData = {
          * Restrict results to skills visible from this agent's environment (strict match, built-in skills exempt).
          */
         forAgentId?: string;
+        sortBy?: 'usageCount' | 'lastUsedAt' | 'name' | 'createdAt';
+        sortDirection?: 'asc' | 'desc';
     };
     url: '/api/skills';
 };
@@ -66036,6 +66398,14 @@ export type GetSkillsResponses = {
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceCommit: string | null;
+            githubSyncInterval: '15m' | '1h' | '1d' | null;
+            githubSyncRef: string | null;
+            githubAppConfigId: string | null;
+            githubPatId: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+            usageCount: number;
+            lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
             fileCount: number;
@@ -66181,6 +66551,14 @@ export type CreateSkillResponses = {
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        usageCount: number;
+        lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
         files: Array<{
@@ -66304,6 +66682,14 @@ export type ConvertAgentToSkillResponses = {
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceCommit: string | null;
+            githubSyncInterval: '15m' | '1h' | '1d' | null;
+            githubSyncRef: string | null;
+            githubAppConfigId: string | null;
+            githubPatId: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+            usageCount: number;
+            lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
             files: Array<{
@@ -66605,6 +66991,14 @@ export type GetSkillResponses = {
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        usageCount: number;
+        lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
         files: Array<{
@@ -66750,6 +67144,14 @@ export type UpdateSkillResponses = {
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        usageCount: number;
+        lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
         files: Array<{
@@ -66952,6 +67354,14 @@ export type ResetSkillResponses = {
         sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        usageCount: number;
+        lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
         files: Array<{
@@ -66971,6 +67381,146 @@ export type ResetSkillResponses = {
 };
 
 export type ResetSkillResponse = ResetSkillResponses[keyof ResetSkillResponses];
+
+export type UpdateSkillGithubSyncData = {
+    body: {
+        /**
+         * New pull frequency.
+         */
+        interval?: '15m' | '1h' | '1d';
+        /**
+         * Trigger an immediate pull from the source repo.
+         */
+        syncNow?: true;
+        /**
+         * Disconnect the skill from its GitHub source: it keeps its content and becomes editable in the app.
+         */
+        disconnect?: true;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skills/{id}/github-sync';
+};
+
+export type UpdateSkillGithubSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSkillGithubSyncError = UpdateSkillGithubSyncErrors[keyof UpdateSkillGithubSyncErrors];
+
+export type UpdateSkillGithubSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
+        name: string;
+        description: string;
+        content: string;
+        latestVersion: number;
+        license: string | null;
+        compatibility: string | null;
+        allowedTools: string | null;
+        agentName: string | null;
+        templated: boolean;
+        metadata: {
+            [key: string]: string;
+        };
+        sourceType: 'manual' | 'github' | 'built_in';
+        sourceRef: string | null;
+        sourceCommit: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        usageCount: number;
+        lastUsedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        files: Array<{
+            id: string;
+            skillId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'reference' | 'script' | 'asset';
+            createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type UpdateSkillGithubSyncResponse = UpdateSkillGithubSyncResponses[keyof UpdateSkillGithubSyncResponses];
 
 export type EnableSkillToolDefaultsData = {
     body?: never;
@@ -67156,6 +67706,7 @@ export type DiscoverGithubSkillsData = {
         path?: string;
         githubToken?: string;
         githubAppConfigId?: string;
+        githubPatId?: string;
     };
     path?: never;
     query?: never;
@@ -67255,6 +67806,7 @@ export type PreviewGithubSkillData = {
         path?: string;
         githubToken?: string;
         githubAppConfigId?: string;
+        githubPatId?: string;
         skillPath: string;
     };
     path?: never;
@@ -67366,9 +67918,16 @@ export type ImportGithubSkillsData = {
         path?: string;
         githubToken?: string;
         githubAppConfigId?: string;
+        githubPatId?: string;
         skillPaths: Array<string>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        /**
+         * Keep the imported skills synced from the repo on this schedule; synced skills are read-only in the app until disconnected. Pass null for a one-time import (editable copy). Defaults to daily sync.
+         */
+        sync?: {
+            interval: '15m' | '1h' | '1d';
+        } | null;
     };
     path?: never;
     query?: never;
@@ -67466,6 +68025,14 @@ export type ImportGithubSkillsResponses = {
             sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceCommit: string | null;
+            githubSyncInterval: '15m' | '1h' | '1d' | null;
+            githubSyncRef: string | null;
+            githubAppConfigId: string | null;
+            githubPatId: string | null;
+            lastSyncedAt: string | null;
+            lastSyncError: string | null;
+            usageCount: number;
+            lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
         }>;

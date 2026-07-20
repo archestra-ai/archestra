@@ -34,6 +34,7 @@ export * from "./environment";
 export * from "./environment-default-user-limit";
 export * from "./file";
 export * from "./github-app-config";
+export * from "./github-pat";
 export * from "./hook";
 export * from "./identity-provider";
 export * from "./incoming-email";

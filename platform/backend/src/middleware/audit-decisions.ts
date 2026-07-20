@@ -8,6 +8,7 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import GithubAppConfigModel from "@/models/github-app-config";
+import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -92,6 +93,7 @@ export const AUDIT_DECISIONS = {
     model: EnvironmentDefaultUserLimitModel,
   },
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
+  githubPatsTable: { audited: true, model: GithubPatModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {

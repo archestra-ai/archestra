@@ -1,4 +1,7 @@
 import type { ApiError } from "@archestra/shared";
+// Subpath import (not the barrel) so tests that factory-mock
+// "@archestra/shared" for the SDK don't erase this helper.
+import { getUserFacingApiErrorMessage } from "@archestra/shared/api-error";
 import { toast } from "sonner";
 
 type ApiSdkError =
@@ -20,35 +23,13 @@ function unwrapApiError(error: ApiSdkError): unknown {
   return error;
 }
 
+/**
+ * User-facing message for an API error. Delegates to the shared helper so a
+ * bare status token from the server ("Forbidden", "Not Found", ...) is
+ * replaced with readable copy instead of surfacing raw in a toast.
+ */
 export function getApiErrorMessage(error: unknown): string {
-  const unwrapped = unwrapApiError(error);
-
-  if (
-    typeof unwrapped === "object" &&
-    unwrapped !== null &&
-    "message" in unwrapped &&
-    typeof unwrapped.message === "string"
-  ) {
-    return unwrapped.message;
-  }
-
-  if (
-    typeof unwrapped === "object" &&
-    unwrapped !== null &&
-    "error" in unwrapped &&
-    typeof unwrapped.error === "object" &&
-    unwrapped.error !== null &&
-    "message" in unwrapped.error &&
-    typeof unwrapped.error.message === "string"
-  ) {
-    return unwrapped.error.message;
-  }
-
-  if (typeof unwrapped === "string" && unwrapped.trim().length > 0) {
-    return unwrapped;
-  }
-
-  return "API request failed";
+  return getUserFacingApiErrorMessage(error, "API request failed");
 }
 
 /**
@@ -85,7 +66,8 @@ export function handleApiError(error: ApiSdkError) {
 
   if (typeof window !== "undefined") {
     // Errors stay long enough to read and copy; the close button dismisses early.
-    toast.error(sentryError.message, { duration: 12000 });
+    // The toast shows the humanized message; Sentry keeps the raw error.
+    toast.error(getApiErrorMessage(error), { duration: 12000 });
   }
 
   void import("@sentry/nextjs")

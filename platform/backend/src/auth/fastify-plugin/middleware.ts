@@ -1,5 +1,8 @@
 import { type RouteId, SupportedProviders } from "@archestra/shared";
-import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
+import {
+  buildForbiddenErrorMessage,
+  requiredEndpointPermissionsMap,
+} from "@archestra/shared/access-control";
 import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
@@ -78,7 +81,7 @@ export class Authnz {
       "[Authnz] User info populated, checking authorization",
     );
 
-    const { success } = await this.isAuthorized(request);
+    const { success, error } = await this.isAuthorized(request);
     if (success) {
       logger.trace(
         { requestId, userId: request.user?.id },
@@ -87,7 +90,7 @@ export class Authnz {
       return;
     }
 
-    // return 403 if unauthorized
+    // return 403 if unauthorized, saying what was blocked and why
     logger.trace(
       {
         requestId,
@@ -96,7 +99,7 @@ export class Authnz {
       },
       "[Authnz] Authorization failed",
     );
-    throw new ApiError(403, "Forbidden");
+    throw new ApiError(403, error?.message || buildForbiddenErrorMessage({}));
   };
 
   private shouldSkipAuthCheck = async ({
@@ -294,7 +297,7 @@ export class Authnz {
       return {
         success: false,
         error: new Error(
-          "Forbidden, the route is not configured in auth middleware and is protected by default",
+          "Access denied: this endpoint is not registered for access control, so it is protected by default. This is a server configuration issue — please report it.",
         ),
       };
     }
@@ -327,7 +330,22 @@ export class Authnz {
         : undefined,
     );
     logger.trace({ routeId, result }, "[Authnz] hasPermission result");
-    return result;
+    if (result.success) {
+      return result;
+    }
+    // Rebuild the message with the route context ("upload project files")
+    // and the permissions that are actually missing — falling back to the
+    // route's full requirement set when the check failed before it could
+    // determine the specific gap (e.g. an invalid API key).
+    return {
+      success: false,
+      error: new Error(
+        buildForbiddenErrorMessage({
+          routeId,
+          missingPermissions: result.missingPermissions ?? requiredPermissions,
+        }),
+      ),
+    };
   };
 
   private populateUserInfo = async (

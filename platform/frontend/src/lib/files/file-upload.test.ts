@@ -88,4 +88,41 @@ describe("summarizeUploadResults", () => {
       { type: "error", message: "Upload failed" },
     ]);
   });
+
+  it("includes the server's explanation when every file failed with one", () => {
+    const forbidden =
+      "You don't have permission to upload project files. Missing permission: file:manage (List, read, write, and delete files in chats and projects).";
+    expect(
+      summarizeUploadResults(
+        [
+          {
+            name: "a.txt",
+            ok: false,
+            reason: "server",
+            serverMessage: forbidden,
+          },
+        ],
+        25,
+      ),
+    ).toEqual([{ type: "error", message: `Upload failed: ${forbidden}` }]);
+  });
+
+  it("appends the server's explanation to a partial-failure summary", () => {
+    expect(
+      summarizeUploadResults(
+        [
+          ok("a"),
+          {
+            name: "b",
+            ok: false,
+            reason: "server",
+            serverMessage: "Storage full",
+          },
+        ],
+        25,
+      ),
+    ).toEqual([
+      { type: "error", message: "Uploaded 1 of 2; 1 failed: Storage full" },
+    ]);
+  });
 });

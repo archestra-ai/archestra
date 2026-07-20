@@ -49,6 +49,8 @@ export type UploadOutcome = {
   name: string;
   ok: boolean;
   reason?: "too_large" | "empty" | "server";
+  /** Human-readable server error for `reason: "server"` (e.g. a 403's copy). */
+  serverMessage?: string;
 };
 
 export type UploadToast = { type: "success" | "error"; message: string };
@@ -77,6 +79,11 @@ export function summarizeUploadResults(
   }
   const succeeded = results.filter((r) => r.ok).length;
   const failed = results.length - succeeded;
+  // The server's own explanation of a failure (e.g. "You don't have
+  // permission to upload project files. …") beats a generic "failed".
+  const serverMessage = results.find(
+    (r) => r.reason === "server" && r.serverMessage,
+  )?.serverMessage;
   if (failed === 0) {
     toasts.push({
       type: "success",
@@ -86,12 +93,17 @@ export function summarizeUploadResults(
   } else if (succeeded > 0) {
     toasts.push({
       type: "error",
-      message: `Uploaded ${succeeded} of ${results.length}; ${failed} failed`,
+      message: `Uploaded ${succeeded} of ${results.length}; ${failed} failed${serverMessage ? `: ${serverMessage}` : ""}`,
     });
   } else if (results.some((r) => r.reason === "server")) {
     // Everything failed and at least one was a server error with no specific
     // toast above — surface it rather than failing silently.
-    toasts.push({ type: "error", message: "Upload failed" });
+    toasts.push({
+      type: "error",
+      message: serverMessage
+        ? `Upload failed: ${serverMessage}`
+        : "Upload failed",
+    });
   }
   return toasts;
 }

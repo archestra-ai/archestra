@@ -45,6 +45,7 @@ const nextConfig: NextConfig = {
     root: resolve(import.meta.dirname, ".."),
     resolveAlias: {
       "@archestra/shared/access-control": "../shared/access-control.ts",
+      "@archestra/shared/api-error": "../shared/api-error.ts",
     },
   },
   logging: {

@@ -17,6 +17,10 @@ export default defineConfig({
         __dirname,
         "../shared/access-control.ts",
       ),
+      "@archestra/shared/api-error": path.resolve(
+        __dirname,
+        "../shared/api-error.ts",
+      ),
       "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },

@@ -7,6 +7,7 @@
   "exports": {
     ".": "./index.ts",
     "./access-control": "./access-control.ts",
+    "./api-error": "./api-error.ts",
     "./e2e-test-ids": "./e2e-test-ids.ts",
     "./interactions/client": "./interactions/client.ts",
     "./permission.types": "./permission.types.ts",

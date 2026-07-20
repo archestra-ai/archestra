@@ -70,7 +70,10 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
       if (!agent || agent.organizationId !== organizationId) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(
+          403,
+          "You don't have access to this agent, or it doesn't exist.",
+        );
       }
 
       const externalIdpToken = await resolveSessionExternalIdpToken({

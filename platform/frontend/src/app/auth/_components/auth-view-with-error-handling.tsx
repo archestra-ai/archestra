@@ -530,10 +530,7 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
     redirectAfterSignIn(result.redirectUrl);
   }
 
-  // The hint's only value over the always-present footer is the docs link, so
-  // only raise it when there is a link to offer.
-  const showResetHint =
-    failedAttempts >= FAILED_ATTEMPTS_BEFORE_RESET_HINT && docsUrl !== null;
+  const showResetHint = failedAttempts >= FAILED_ATTEMPTS_BEFORE_RESET_HINT;
 
   return (
     <>
@@ -544,12 +541,19 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
             Forgot your password?
           </AlertTitle>
           <AlertDescription className="text-amber-700 dark:text-amber-300">
-            <ExternalDocsLink
-              href={docsUrl}
-              className="text-amber-800 dark:text-amber-200"
-            >
-              Learn how to reset your password.
-            </ExternalDocsLink>
+            {/* There is no self-service reset flow (no email provider). An
+                operator with shell access resets any user's password via the
+                reset-user-password CLI, documented on the Password Reset page. */}
+            {docsUrl ? (
+              <ExternalDocsLink
+                href={docsUrl}
+                className="text-amber-800 dark:text-amber-200"
+              >
+                Learn how to reset admin password.
+              </ExternalDocsLink>
+            ) : (
+              "Ask your administrator to reset it."
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -615,24 +619,6 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
               </Button>
             </form>
           </Form>
-          {/* There is no self-service reset flow (no email provider). An operator
-              with shell access resets any user's password via the
-              reset-user-password CLI, documented on the Password Reset page. */}
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            {docsUrl ? (
-              <>
-                Forgot your password?{" "}
-                <ExternalDocsLink
-                  href={docsUrl}
-                  className="text-muted-foreground underline hover:text-foreground"
-                >
-                  Learn how to reset your password.
-                </ExternalDocsLink>
-              </>
-            ) : (
-              "Forgot your password? Ask your administrator to reset it."
-            )}
-          </p>
         </CardContent>
       </Card>
     </>

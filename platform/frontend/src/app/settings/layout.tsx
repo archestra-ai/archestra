@@ -50,6 +50,10 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     description:
       "Configure platform-wide LLM behavior, like tool-result compression and default cost limits.",
   },
+  "/settings/mcp": {
+    title: "MCP",
+    description: "Configure how MCP servers are added and managed.",
+  },
   "/settings/organization": {
     title: "Organization",
     description:

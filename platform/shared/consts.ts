@@ -23,6 +23,15 @@ export const ALL_ARCHESTRA_TOKEN_PREFIXES = [
   ...LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 ] as const;
 
+/**
+ * Constraints enforced by the Better Auth api-key plugin on API key creation.
+ * Pinned explicitly in the backend plugin config and mirrored in the frontend
+ * create-API-key form validation so limits and error copy cannot drift.
+ */
+export const API_KEY_MIN_EXPIRATION_DAYS = 1;
+export const API_KEY_MAX_EXPIRATION_DAYS = 365;
+export const API_KEY_MAX_NAME_LENGTH = 32;
+
 export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
 export const DEFAULT_ADMIN_PASSWORD = "password";
 

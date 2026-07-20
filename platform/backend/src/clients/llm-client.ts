@@ -257,6 +257,7 @@ export async function createLLMModelForAgent(params: {
     source: apiKeySource,
     baseUrl,
     chatApiKeyId,
+    authRequired,
   } = await resolveProviderApiKey({
     organizationId,
     userId,
@@ -301,9 +302,18 @@ export async function createLLMModelForAgent(params: {
     !isAzureWithEntra &&
     !isAnthropicWithWif
   ) {
-    // Per-user providers (GitHub Copilot) need the acting user's own linked
-    // account; surface a typed error so callers can prompt them to connect
-    // rather than showing a generic "configure a key" message.
+    // Per-user credentials need the acting user's own linked account; surface
+    // a typed error so callers can prompt them to connect rather than showing
+    // a generic "configure a key" message. Two per-user cases: resolution
+    // refused a credential-level key (a ChatGPT subscription belonging to
+    // someone else) and said so via authRequired, or the provider itself is
+    // per-user (GitHub/Microsoft Copilot) and the user has no personal key.
+    if (authRequired) {
+      throw new LlmProviderAuthRequiredError(
+        authRequired.provider,
+        authRequired.providerLabel,
+      );
+    }
     if (providerRequiresPerUserCredential(provider)) {
       throw new LlmProviderAuthRequiredError(provider);
     }

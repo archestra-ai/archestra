@@ -1,6 +1,7 @@
 import path from "node:path";
 import { dump as dumpYaml } from "js-yaml";
 import logger from "@/logging";
+import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillFile } from "@/types";
 import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
 import {
@@ -31,6 +32,7 @@ export interface MaterializeSkillInput {
   license: string | null;
   compatibility: string | null;
   allowedTools: string | null;
+  agentName: string | null;
   templated: boolean;
   metadata: Record<string, string>;
   updatedAt: Date;
@@ -121,7 +123,7 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
 
     const skillRoot = `${pluginRoot}/skills/${slug}`;
     const skillMd = textFile(
-      `${skillRoot}/SKILL.md`,
+      `${skillRoot}/${SKILL_MANIFEST_FILENAME}`,
       buildSkillMarkdown(skill, slug),
     );
     files.push(skillMd);
@@ -170,6 +172,7 @@ function buildSkillMarkdown(
   if (skill.license) frontmatter.license = skill.license;
   if (skill.compatibility) frontmatter.compatibility = skill.compatibility;
   if (skill.allowedTools) frontmatter["allowed-tools"] = skill.allowedTools;
+  if (skill.agentName) frontmatter.agent = skill.agentName;
   if (skill.templated) frontmatter.templated = true;
   frontmatter.metadata = { displayName: skill.name, ...skill.metadata };
 

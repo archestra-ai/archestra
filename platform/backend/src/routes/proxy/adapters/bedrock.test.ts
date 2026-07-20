@@ -194,6 +194,177 @@ describe("Bedrock tool name encoding", () => {
     expect(providerToolNames[1]).toMatch(/^server__read_file_[a-f0-9]{8}$/);
   });
 
+  // A dynamically-dispatched tool is never declared in toolConfig, so its name
+  // reaches Bedrock only through history and misses the toolConfig-derived
+  // mapping — it has to be encoded via the getProviderToolName fallback.
+  test("sanitizes a history-only tool name absent from toolConfig", () => {
+    const request = createConverseRequest({
+      messages: [
+        { role: "user", content: [{ text: "Continue." }] },
+        {
+          role: "assistant",
+          content: [
+            {
+              toolUse: {
+                toolUseId: "tooluse_123",
+                name: "Project Tracker__show_board",
+                input: {},
+              },
+            },
+          ],
+        },
+      ],
+      toolConfig: {
+        tools: [
+          {
+            toolSpec: {
+              name: "agent__run_tool",
+              inputSchema: { json: { type: "object" } },
+            },
+          },
+        ],
+      },
+    });
+
+    const commandInput = getCommandInput(request);
+    const historyBlock = commandInput.messages?.[1]?.content?.[0];
+    const providerHistoryToolName =
+      historyBlock && "toolUse" in historyBlock
+        ? historyBlock.toolUse.name
+        : "";
+
+    expect(providerHistoryToolName).toBe("Project_Tracker__show_board");
+  });
+
+  test("sanitizes tool name characters Bedrock rejects", () => {
+    const toolName = "weather.get current@v2";
+    const request = createConverseRequest({
+      messages: [
+        { role: "user", content: [{ text: "What is the weather?" }] },
+        {
+          role: "assistant",
+          content: [
+            {
+              toolUse: {
+                toolUseId: "tooluse_123",
+                name: toolName,
+                input: { city: "Berlin" },
+              },
+            },
+          ],
+        },
+      ],
+      toolConfig: {
+        tools: [
+          {
+            toolSpec: {
+              name: toolName,
+              inputSchema: { json: { type: "object" } },
+            },
+          },
+        ],
+        toolChoice: { tool: { name: toolName } },
+      },
+    });
+
+    const commandInput = getCommandInput(request);
+    const toolChoice = commandInput.toolConfig?.toolChoice as
+      | { tool?: { name?: string } }
+      | undefined;
+    const providerHistoryToolName =
+      commandInput.messages?.[1]?.content?.[0] &&
+      "toolUse" in commandInput.messages[1].content[0]
+        ? commandInput.messages[1].content[0].toolUse.name
+        : "";
+
+    expect(commandInput.toolConfig?.tools?.[0]?.toolSpec?.name).toBe(
+      "weather_get_current_v2",
+    );
+    expect(toolChoice?.tool?.name).toBe("weather_get_current_v2");
+    expect(providerHistoryToolName).toBe("weather_get_current_v2");
+  });
+
+  test("keeps sanitized tool names unique when originals collapse", () => {
+    const request = createConverseRequest({
+      toolConfig: {
+        tools: [
+          {
+            toolSpec: {
+              name: "server.read_file",
+              inputSchema: { json: { type: "object" } },
+            },
+          },
+          {
+            toolSpec: {
+              name: "server@read_file",
+              inputSchema: { json: { type: "object" } },
+            },
+          },
+        ],
+      },
+    });
+
+    const commandInput = getCommandInput(request);
+    const providerToolNames =
+      commandInput.toolConfig?.tools?.map((tool) => tool.toolSpec?.name) ?? [];
+
+    expect(providerToolNames).toHaveLength(2);
+    expect(new Set(providerToolNames).size).toBe(2);
+    expect(providerToolNames[0]).toBe("server_read_file");
+    expect(providerToolNames[1]).toMatch(/^server_read_file_[a-f0-9]{8}$/);
+  });
+
+  test("decodes sanitized Bedrock tool call names back to the original name", async () => {
+    const toolName = "weather.get current@v2";
+    const request = createConverseRequest({
+      toolConfig: {
+        tools: [
+          {
+            toolSpec: {
+              name: toolName,
+              inputSchema: { json: { type: "object" } },
+            },
+          },
+        ],
+      },
+    });
+    const commandInput = getCommandInput(request);
+    const providerToolName =
+      commandInput.toolConfig?.tools?.[0]?.toolSpec?.name ?? "";
+    const client = {
+      converse: async () => ({
+        $metadata: { requestId: "req_123" },
+        output: {
+          message: {
+            role: "assistant",
+            content: [
+              {
+                toolUse: {
+                  toolUseId: "tooluse_123",
+                  name: providerToolName,
+                  input: { city: "Berlin" },
+                },
+              },
+            ],
+          },
+        },
+        stopReason: "tool_use",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      }),
+    };
+
+    const response = await bedrockAdapterFactory.execute(client, request);
+    const adapter = bedrockAdapterFactory.createResponseAdapter(response);
+
+    expect(adapter.getToolCalls()).toEqual([
+      {
+        id: "tooluse_123",
+        name: toolName,
+        arguments: { city: "Berlin" },
+      },
+    ]);
+  });
+
   test("sanitizes provider-facing document names for Bedrock validation", () => {
     const request = createConverseRequest({
       messages: [

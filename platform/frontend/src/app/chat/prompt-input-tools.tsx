@@ -16,6 +16,7 @@ import {
   PromptInputTools,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
+import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
 import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
@@ -80,8 +81,6 @@ export interface ChatPromptInputToolsProps {
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
-  /** Fallback display name when the selected agent is not yet present in the cached agent list */
-  selectorAgentName?: string;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
@@ -139,7 +138,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   inputModalities,
   agentLlmApiKeyId,
   selectorAgentId,
-  selectorAgentName,
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
@@ -412,7 +410,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             onAgentChange && (
               <InitialAgentSelector
                 currentAgentId={selectorAgentId}
-                currentAgentName={selectorAgentName}
                 onAgentChange={onAgentChange}
               />
             )}
@@ -507,6 +504,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           )}
         </>
       )}
+
+      {/* Apps Hackathon session recorder — a distinct cluster in the composer.
+          It records the whole chat (from scratch, even before the first message)
+          and opens the replay. Renders nothing when the feature is disabled. */}
+      <AppRecordingControls />
     </PromptInputTools>
   );
 });

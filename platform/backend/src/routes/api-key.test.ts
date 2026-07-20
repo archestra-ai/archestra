@@ -58,7 +58,7 @@ describe("api key routes", () => {
       url: "/api/api-keys",
       payload: {
         name: "CLI Key",
-        expiresIn: 3600,
+        expiresIn: 30 * 24 * 60 * 60,
       },
     });
 
@@ -69,6 +69,86 @@ describe("api key routes", () => {
         type: "api_validation_error",
       },
     });
+  });
+
+  test("surfaces known better-auth validation errors on create", async () => {
+    createApiKeyMock.mockRejectedValue(
+      Object.assign(new Error("The expiresIn is smaller"), {
+        statusCode: 400,
+        body: {
+          code: "EXPIRES_IN_IS_TOO_SMALL",
+          message:
+            "The expiresIn is smaller than the predefined minimum value.",
+        },
+      }),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/api-keys",
+      payload: {
+        name: "CLI Key",
+        expiresIn: 30 * 24 * 60 * 60,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: {
+        message: "Expiration must be at least 1 day from now",
+        type: "api_validation_error",
+      },
+    });
+  });
+
+  test("rejects an expiration under 1 day before calling better-auth", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/api-keys",
+      payload: {
+        name: "CLI Key",
+        expiresIn: 3600,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "Expiration must be at least 1 day from now",
+    );
+    expect(createApiKeyMock).not.toHaveBeenCalled();
+  });
+
+  test("rejects an expiration over 365 days before calling better-auth", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/api-keys",
+      payload: {
+        name: "CLI Key",
+        expiresIn: 366 * 24 * 60 * 60,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "Expiration cannot be more than 365 days from now",
+    );
+    expect(createApiKeyMock).not.toHaveBeenCalled();
+  });
+
+  test("rejects a name over 32 characters before calling better-auth", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/api-keys",
+      payload: {
+        name: "a".repeat(33),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "Name must be at most 32 characters",
+    );
+    expect(createApiKeyMock).not.toHaveBeenCalled();
   });
 
   test("lists the authenticated user's API keys only", async () => {
@@ -202,7 +282,7 @@ describe("api key routes", () => {
       url: "/api/api-keys",
       payload: {
         name: "CLI Key",
-        expiresIn: 3600,
+        expiresIn: 86400,
       },
     });
 
@@ -252,7 +332,7 @@ describe("api key routes", () => {
       url: "/api/api-keys",
       payload: {
         name: null,
-        expiresIn: 3600,
+        expiresIn: 86400,
       },
     });
 
@@ -260,7 +340,7 @@ describe("api key routes", () => {
     expect(createApiKeyMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: {
-          expiresIn: 3600,
+          expiresIn: 86400,
         },
       }),
     );

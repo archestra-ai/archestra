@@ -91,7 +91,10 @@ export function AppCreateDialog({
           aria-invalid={!!form.formState.errors.name}
           {...form.register("name", {
             required: "Name is required.",
-            maxLength: 100,
+            maxLength: {
+              value: 100,
+              message: "Name must be 100 characters or fewer.",
+            },
             validate: (value) => value.trim().length > 0 || "Name is required.",
           })}
         />

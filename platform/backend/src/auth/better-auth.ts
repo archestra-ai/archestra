@@ -1,5 +1,8 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
+  API_KEY_MAX_EXPIRATION_DAYS,
+  API_KEY_MAX_NAME_LENGTH,
+  API_KEY_MIN_EXPIRATION_DAYS,
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
   DEFAULT_APP_NAME,
@@ -180,6 +183,14 @@ export const auth = betterAuth({
       },
       rateLimit: {
         enabled: false,
+      },
+      // Pin the plugin's validation limits so they match the constraints the
+      // API schema and the frontend form advertise, regardless of plugin
+      // default changes.
+      maximumNameLength: API_KEY_MAX_NAME_LENGTH,
+      keyExpiration: {
+        minExpiresIn: API_KEY_MIN_EXPIRATION_DAYS,
+        maxExpiresIn: API_KEY_MAX_EXPIRATION_DAYS,
       },
       permissions: {
         /**

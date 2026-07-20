@@ -1,9 +1,15 @@
-import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import {
+  API_KEY_MAX_EXPIRATION_DAYS,
+  API_KEY_MAX_NAME_LENGTH,
+  API_KEY_MIN_EXPIRATION_DAYS,
+} from "@archestra/shared";
+import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 
+const SECONDS_PER_DAY = 24 * 60 * 60;
+
 export const SelectApiKeySchema = createSelectSchema(schema.apikeysTable);
-export const InsertApiKeySchema = createInsertSchema(schema.apikeysTable);
 
 export const ApiKeyPermissionsSchema = z.record(
   z.string(),
@@ -30,11 +36,29 @@ export const ApiKeyWithValueResponseSchema = ApiKeyResponseSchema.extend({
   key: z.string(),
 });
 
-export const CreateApiKeyBodySchema = InsertApiKeySchema.pick({
-  name: true,
-})
-  .extend({
-    expiresIn: z.number().int().positive().nullable().optional(),
+export const CreateApiKeyBodySchema = z
+  .object({
+    name: z
+      .string()
+      .max(
+        API_KEY_MAX_NAME_LENGTH,
+        `Name must be at most ${API_KEY_MAX_NAME_LENGTH} characters`,
+      )
+      .nullable()
+      .optional(),
+    expiresIn: z
+      .number()
+      .int()
+      .min(
+        API_KEY_MIN_EXPIRATION_DAYS * SECONDS_PER_DAY,
+        `Expiration must be at least ${API_KEY_MIN_EXPIRATION_DAYS} day from now`,
+      )
+      .max(
+        API_KEY_MAX_EXPIRATION_DAYS * SECONDS_PER_DAY,
+        `Expiration cannot be more than ${API_KEY_MAX_EXPIRATION_DAYS} days from now`,
+      )
+      .nullable()
+      .optional(),
   })
   .strict();
 

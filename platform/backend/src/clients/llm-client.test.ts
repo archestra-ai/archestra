@@ -1,5 +1,6 @@
 import {
   CHAT_API_KEY_ID_HEADER,
+  CHATGPT_SUBSCRIPTION_LABEL,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
@@ -10,6 +11,7 @@ import {
 import { streamText } from "ai";
 import { vi } from "vitest";
 import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, it, test } from "@/test";
 
 // Mock the gemini-client module before importing llm-client
@@ -502,6 +504,50 @@ describe("createLLMModel", () => {
     expect(new Headers(fetchInit?.headers).get("authorization")).toBe(
       "Bearer EMPTY",
     );
+  });
+
+  test("throws the typed connect prompt when the agent's key is another user's ChatGPT subscription", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const otherUser = await makeUser();
+    const agent = await makeAgent({ name: "Codex Agent", teams: [] });
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "refresh-token",
+          accountId: "account-id",
+        }),
+      },
+    });
+    const ownerKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: secret.id,
+      name: CHATGPT_SUBSCRIPTION_LABEL,
+      provider: "openai",
+      scope: "personal",
+      userId: owner.id,
+    });
+
+    await expect(
+      createLLMModelForAgent({
+        organizationId: org.id,
+        userId: otherUser.id,
+        agentId: agent.id,
+        model: "gpt-5-codex",
+        provider: "openai",
+        agentLlmApiKeyId: ownerKey.id,
+        source: "chat",
+      }),
+    ).rejects.toMatchObject({
+      name: "LlmProviderAuthRequiredError",
+      provider: "openai",
+      providerLabel: CHATGPT_SUBSCRIPTION_LABEL,
+    });
   });
 
   test("sets the untrusted-context header only when contextIsTrusted is false", () => {

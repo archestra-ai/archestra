@@ -11,7 +11,12 @@ import {
   TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@archestra/shared";
-import { SkillFileModel, SkillModel, SkillVersionModel } from "@/models";
+import {
+  EnvironmentModel,
+  SkillFileModel,
+  SkillModel,
+  SkillVersionModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertSkill, InsertSkillFile } from "@/types";
 import {
@@ -76,6 +81,66 @@ describe("skill tool execution", () => {
       body,
     ].join("\n");
   }
+
+  test("load_skill refuses a skill from another environment", async ({
+    makeAgent,
+  }) => {
+    const otherEnv = await EnvironmentModel.create({
+      organizationId,
+      name: "Other Environment",
+    });
+    await seedSkill({ skill: { environmentId: otherEnv.id } });
+
+    const result = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "pdf-processing" },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('No skill named "pdf-processing" exists');
+
+    // ...while an agent in that environment loads it fine.
+    const envAgent = await makeAgent({
+      name: "Env Agent",
+      organizationId,
+      environmentId: otherEnv.id,
+    });
+    const envResult = await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "pdf-processing" },
+      { ...context, agent: { id: envAgent.id, name: envAgent.name } },
+    );
+    expect(envResult.isError).toBeFalsy();
+    expect(textOf(envResult)).toContain("PDF Processing");
+  });
+
+  test("create_skill inherits the calling agent's environment", async ({
+    makeAgent,
+  }) => {
+    const otherEnv = await EnvironmentModel.create({
+      organizationId,
+      name: "Other Environment",
+    });
+    const envAgent = await makeAgent({
+      name: "Env Agent",
+      organizationId,
+      environmentId: otherEnv.id,
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_CREATE_SKILL_FULL_NAME,
+      { content: manifest("env-authored") },
+      { ...context, agent: { id: envAgent.id, name: envAgent.name } },
+    );
+    expect(result.isError).toBeFalsy();
+
+    const [skill] = await SkillModel.findAllByName(
+      organizationId,
+      "env-authored",
+    );
+    expect(skill?.environmentId).toBe(otherEnv.id);
+  });
 
   test("all skill tools are registered as Archestra tools", () => {
     const names = getArchestraMcpTools().map((tool) => tool.name);

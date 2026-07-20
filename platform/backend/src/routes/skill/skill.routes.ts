@@ -35,6 +35,7 @@ import {
   UserModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
   builtInSkillShippedWrite,
@@ -179,6 +180,13 @@ const SkillManifestInputSchema = z
     files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string()).optional(),
+    environmentId: UuidIdSchema.nullable()
+      .optional()
+      .describe(
+        "Environment the skill belongs to; null (or omitted on create) is " +
+          "the Default environment. Agents only see skills in their own " +
+          "environment.",
+      ),
     allowedTools: z
       .array(z.string())
       .optional()
@@ -210,6 +218,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
           sourceRepo: z.string().optional(),
+          forAgentId: UuidIdSchema.optional().describe(
+            "Restrict results to skills visible from this agent's " +
+              "environment (strict match, built-in skills exempt).",
+          ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -217,13 +229,28 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, search, sourceRepo }, organizationId, user },
+      {
+        query: { limit, offset, search, sourceRepo, forAgentId },
+        organizationId,
+        user,
+      },
       reply,
     ) => {
       const checker = await getSkillPermissionChecker({
         userId: user.id,
         organizationId,
       });
+
+      // Skills are environment-scoped; `forAgentId` narrows the list to what
+      // that agent can actually see (used by the chat slash-command menu).
+      let environmentId: string | null | undefined;
+      if (forAgentId !== undefined) {
+        const agent = await AgentModel.findById(forAgentId);
+        if (!agent || agent.organizationId !== organizationId) {
+          throw new ApiError(404, "Agent not found");
+        }
+        environmentId = agent.environmentId ?? null;
+      }
       // Non-admins see only skills within their scope; admins see all.
       const accessibleSkillIds = checker.isAdmin
         ? undefined
@@ -240,12 +267,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           sourceRepo,
           accessibleSkillIds,
+          environmentId,
         }),
         SkillModel.countByOrganization({
           organizationId,
           search,
           sourceRepo,
           accessibleSkillIds,
+          environmentId,
         }),
       ]);
 
@@ -302,6 +331,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds,
       });
 
+      // Always assert on create: a null/omitted environment still lands on the
+      // org default, which may itself be restricted (mirrors the agent path).
+      await assertSkillEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
+
       const skill = await withTeamFkErrorMapped(() =>
         SkillModel.createWithFiles({
           skill: {
@@ -309,6 +346,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId,
             authorId: user.id,
             allowedTools: resolveAllowedTools(body, parsed),
+            environmentId: body.environmentId ?? null,
             sourceType: "manual",
             scope,
           },
@@ -416,6 +454,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 ...toSkillInsertFields(draft),
                 organizationId,
                 authorId: user.id,
+                // skills are environment-scoped; inherit the source agent's
+                // environment so the converted skill stays visible where the
+                // agent lived.
+                environmentId: agent.environmentId ?? null,
                 sourceType: "manual",
                 scope: draft.scope,
               },
@@ -571,6 +613,19 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Moving a skill between environments is gated like assigning one: the
+      // target environment must be assignable by this user.
+      const environmentChanged =
+        body.environmentId !== undefined &&
+        body.environmentId !== existing.environmentId;
+      if (environmentChanged) {
+        await assertSkillEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId ?? null,
+        });
+      }
+
       let updated: Skill | null;
       try {
         // The metadata, files, and team assignments are updated in a single
@@ -585,6 +640,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ...toSkillInsertFields(parsed),
               allowedTools: resolveAllowedTools(body, parsed),
               scope: newScope,
+              ...(environmentChanged
+                ? { environmentId: body.environmentId ?? null }
+                : {}),
             },
             files:
               body.files === undefined ? undefined : toSkillFiles(body.files),
@@ -855,6 +913,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             license: z.string().nullable(),
             compatibility: z.string().nullable(),
             allowedTools: z.string().nullable(),
+            agentName: z.string().nullable(),
             templated: z.boolean(),
             metadata: z.record(z.string(), z.string()),
             files: z.array(
@@ -1017,6 +1076,34 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 // ===== Internal helpers =====
+
+/**
+ * Assigning a skill to a restricted environment is gated by the same
+ * environment:deploy-to-restricted permission the agent and MCP-catalog
+ * assignment paths use (environment:admin implies it). Throws 403/404 if the
+ * caller may not assign the environment.
+ */
+async function assertSkillEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+    userHasPermission(userId, organizationId, "environment", "admin"),
+    userHasPermission(
+      userId,
+      organizationId,
+      "environment",
+      "deploy-to-restricted",
+    ),
+  ]);
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+  });
+}
 
 /**
  * Resolve the token a GitHub skill import authenticates with. A stored GitHub

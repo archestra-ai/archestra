@@ -5,6 +5,7 @@ import { ArrowLeft, Copy, PencilRuler, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { LoadingSpinner } from "@/components/loading";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useOrganization } from "@/lib/organization.query";
 import { ArchestraCatalogTab } from "../_parts/archestra-catalog-tab";
 import { SetupStepper } from "../_parts/catalog-setup-wizard";
 import { McpCatalogForm } from "../_parts/mcp-catalog-form";
@@ -33,6 +35,14 @@ export default function NewMcpCatalogItemPage() {
   const searchParams = useSearchParams();
   const createMutation = useCreateInternalMcpCatalogItem();
   const { data: catalogItems } = useInternalMcpCatalog();
+  const { data: organization, isPending: isOrganizationPending } =
+    useOrganization();
+
+  // When the org disables the online catalog, the source-selection step is
+  // skipped entirely and the manual create form opens directly. Fail closed:
+  // if the org read is missing (error/stale), honor the disable rather than
+  // exposing the public catalog against an admin's intent.
+  const catalogEnabled = organization?.onlineMcpCatalogEnabled === true;
 
   // ?clone=<catalogId> seeds the form from an existing item (used by the
   // Clone action on the item detail page) and skips the source step.
@@ -72,6 +82,12 @@ export default function NewMcpCatalogItemPage() {
     setStep("configure");
   };
 
+  // Resolve the catalog setting before rendering so a disabled org never
+  // flashes the source chooser before falling back to the form.
+  if (isOrganizationPending) {
+    return <LoadingSpinner className="my-8" />;
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <Button
@@ -98,7 +114,7 @@ export default function NewMcpCatalogItemPage() {
 
       <SetupStepper activeStep="configuration" />
 
-      {step === "source" && !browsingCatalog && (
+      {catalogEnabled && step === "source" && !browsingCatalog && (
         <div className="grid gap-4 sm:grid-cols-2">
           <button
             type="button"
@@ -142,7 +158,7 @@ export default function NewMcpCatalogItemPage() {
         </div>
       )}
 
-      {step === "source" && browsingCatalog && (
+      {catalogEnabled && step === "source" && browsingCatalog && (
         <div className="space-y-3">
           <Button
             type="button"
@@ -160,7 +176,7 @@ export default function NewMcpCatalogItemPage() {
         </div>
       )}
 
-      {step === "configure" && (
+      {(!catalogEnabled || step === "configure") && (
         <div className="flex flex-col rounded-lg border">
           <McpCatalogForm
             mode="create"
@@ -180,7 +196,7 @@ export default function NewMcpCatalogItemPage() {
             }
             footer={({ hasBlockingErrors }) => (
               <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
-                {cloneSourceId ? (
+                {cloneSourceId || !catalogEnabled ? (
                   <Button variant="outline" type="button" asChild>
                     <Link href="/mcp/registry">Cancel</Link>
                   </Button>

@@ -45,10 +45,12 @@ export const SkillManifestContentSchema = z
   .describe(
     "A complete SKILL.md manifest: a YAML frontmatter block with `name` and " +
       "`description` (and optional `license`, `compatibility`, `allowed-tools`, " +
-      "`templated`, `metadata`), followed by the Markdown instruction body. Set " +
-      "`templated: true` to render the body through Handlebars (e.g. " +
+      "`agent`, `templated`, `metadata`), followed by the Markdown instruction " +
+      "body. Set `templated: true` to render the body through Handlebars (e.g. " +
       "`{{user.name}}`) at activation. `allowed-tools` is a space-separated " +
-      "list of tools the skill is pre-approved to use.",
+      "list of tools the skill is pre-approved to use. `agent` names an agent " +
+      "the skill runs in — when set, activating the skill delegates it to that " +
+      "agent instead of loading the instructions into the caller's context.",
   );
 
 type SkillManifestFieldKey =
@@ -58,6 +60,7 @@ type SkillManifestFieldKey =
   | "license"
   | "compatibility"
   | "allowedTools"
+  | "agentName"
   | "templated"
   | "metadata";
 
@@ -81,6 +84,7 @@ export function toSkillInsertFields(draft: ParsedSkill): SkillManifestFields {
     license: draft.license,
     compatibility: draft.compatibility,
     allowedTools: draft.allowedTools,
+    agentName: draft.agentName,
     templated: draft.templated,
     metadata: draft.metadata,
   };

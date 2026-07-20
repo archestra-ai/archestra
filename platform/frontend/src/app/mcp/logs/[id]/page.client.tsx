@@ -142,14 +142,22 @@ function McpToolCallDetail({
             </>
           }
         >
-          <MetadataItem label="MCP Gateway">
-            <div className="font-semibold">
-              {agent?.name ??
-                (mcpToolCall.agentId === null
-                  ? "Deleted MCP Gateway"
-                  : "Unknown")}
-            </div>
-          </MetadataItem>
+          {mcpToolCall.ownerType === "app" ? (
+            <MetadataItem label="App">
+              <div className="font-semibold">
+                {mcpToolCall.appName ?? "Deleted App"}
+              </div>
+            </MetadataItem>
+          ) : (
+            <MetadataItem label="MCP Gateway">
+              <div className="font-semibold">
+                {agent?.name ??
+                  (mcpToolCall.agentId === null
+                    ? "Deleted MCP Gateway"
+                    : "Unknown")}
+              </div>
+            </MetadataItem>
+          )}
           <MetadataItem label="MCP Server">
             <div className="font-mono">{mcpToolCall.mcpServerName}</div>
           </MetadataItem>

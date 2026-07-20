@@ -14,7 +14,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "ai";
-import { archestraMcpBranding, getAgentTools } from "@/archestra-mcp-server";
+import {
+  archestraMcpBranding,
+  getAgentTools,
+  getSkillDelegationTools,
+} from "@/archestra-mcp-server";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import {
@@ -1037,18 +1041,23 @@ export async function getChatMcpTools({
       "Successfully converted MCP tools to AI SDK Tool format",
     );
 
-    // Fetch and add agent delegation tools if organizationId is available
+    // Fetch and add agent + skill delegation tools if organizationId is
+    // available. Both dispatch through executeArchestraTool, so they share the
+    // same AI SDK wrapper.
     if (organizationId) {
       try {
-        const agentToolsList = await getAgentTools({
-          agentId,
-          organizationId,
-          userId,
-          skipAccessCheck: userId === "system",
-        });
+        const [agentToolsList, skillToolsList] = await Promise.all([
+          getAgentTools({
+            agentId,
+            organizationId,
+            userId,
+            skipAccessCheck: userId === "system",
+          }),
+          getSkillDelegationTools({ agentId, organizationId, userId }),
+        ]);
 
-        // Convert agent tools to AI SDK Tool format
-        for (const agentTool of agentToolsList) {
+        // Convert delegation tools to AI SDK Tool format
+        for (const agentTool of [...agentToolsList, ...skillToolsList]) {
           aiTools[agentTool.name] = buildAgentDelegationTool({
             agentTool,
             ctx: toolContext,
@@ -1060,14 +1069,15 @@ export async function getChatMcpTools({
             agentId,
             userId,
             agentToolCount: agentToolsList.length,
+            skillToolCount: skillToolsList.length,
             totalToolCount: Object.keys(aiTools).length,
           },
-          "Added agent delegation tools to chat tools",
+          "Added agent and skill delegation tools to chat tools",
         );
       } catch (error) {
         logger.error(
           { agentId, userId, error },
-          "Failed to fetch agent delegation tools, continuing without them",
+          "Failed to fetch delegation tools, continuing without them",
         );
       }
     }

@@ -20,7 +20,7 @@ import {
   SupportedProviders,
   testMcpServerCommand,
 } from "@archestra/shared";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config, {
   getProviderConfiguredBaseUrl,
@@ -31,6 +31,7 @@ import logger from "@/logging";
 import {
   AgentExcludedToolModel,
   AgentModel,
+  AppModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
   McpHttpSessionModel,
@@ -44,6 +45,8 @@ import {
   UserModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { createAppBacking } from "@/services/apps/app-mcp-backing";
+import { DEFAULT_APPS, loadDefaultAppHtml } from "@/services/apps/default-apps";
 import { modelSyncService } from "@/services/model-sync";
 import {
   BUILT_IN_SKILLS,
@@ -887,6 +890,103 @@ async function enableSkillToolsForExistingOrgs(): Promise<void> {
   }
 }
 
+/**
+ * Pre-populate the demo apps into every organization that has never had an
+ * app, so the Apps page opens with working examples instead of an empty state.
+ *
+ * "Never had an app" deliberately includes soft-deleted rows: an org where
+ * someone created and then deleted apps has made a choice, and startup must
+ * not resurrect demo content there. Runs on every startup, so an org created
+ * mid-flight is picked up on the next boot, and a partial failure only skips
+ * the app that failed.
+ *
+ * @public — exported for testability
+ */
+export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
+  const organizations = await db
+    .select({ id: schema.organizationsTable.id })
+    .from(schema.organizationsTable);
+
+  for (const org of organizations) {
+    try {
+      const [existingApp] = await db
+        .select({ id: schema.appsTable.id })
+        .from(schema.appsTable)
+        .where(eq(schema.appsTable.organizationId, org.id))
+        .limit(1);
+      if (existingApp) continue;
+
+      // Seeded apps need an author (backing rows and the launch-tool
+      // auto-assign are keyed on a user): the org's earliest admin.
+      const [admin] = await db
+        .select({ userId: schema.membersTable.userId })
+        .from(schema.membersTable)
+        .where(
+          and(
+            eq(schema.membersTable.organizationId, org.id),
+            eq(schema.membersTable.role, ADMIN_ROLE_NAME),
+          ),
+        )
+        .orderBy(asc(schema.membersTable.createdAt))
+        .limit(1);
+      if (!admin) continue;
+
+      let created = 0;
+      for (const definition of DEFAULT_APPS) {
+        try {
+          const app = await AppModel.create({
+            app: {
+              organizationId: org.id,
+              authorId: admin.userId,
+              name: definition.name,
+              description: definition.description,
+              templateId: definition.templateId,
+            },
+            payload: {
+              html: loadDefaultAppHtml(definition),
+              uiPermissions: null,
+            },
+          });
+          try {
+            // Org scope so every member sees the demos, mirroring built-in
+            // skills. An app must never exist without its backing — on
+            // backing failure remove the app row (same invariant as the
+            // create route).
+            await createAppBacking({
+              app,
+              scope: "org",
+              environmentId: null,
+              userId: admin.userId,
+              organizationId: org.id,
+              teamIds: [],
+            });
+          } catch (backingError) {
+            await AppModel.purge(app.id);
+            throw backingError;
+          }
+          created++;
+        } catch (error) {
+          logger.error(
+            { err: error, organizationId: org.id, app: definition.name },
+            "Failed to seed default app",
+          );
+        }
+      }
+      if (created > 0) {
+        logger.info(
+          { organizationId: org.id, count: created },
+          "Seeded default apps for organization",
+        );
+      }
+    } catch (error) {
+      logger.error(
+        { err: error, organizationId: org.id },
+        "Failed to seed default apps for organization",
+      );
+    }
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
@@ -907,6 +1007,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Ensure all existing members have a personal MCP gateway
   await ensureExistingUsersHavePersonalMcpGateways();
   await ensureExistingUsersHavePersonalLlmProxies();
+  await seedDefaultAppsForPristineOrgs();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }

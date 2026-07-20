@@ -285,16 +285,7 @@ class AppModel {
   static async update(params: {
     id: string;
     patch?: Partial<
-      Pick<
-        App,
-        | "name"
-        | "description"
-        | "scope"
-        | "templateId"
-        | "spec"
-        | "environmentId"
-        | "mcpServerId"
-      >
+      Pick<App, "name" | "description" | "scope" | "spec" | "environmentId">
     >;
     version?: VersionPayload;
     teamIds?: string[];
@@ -302,20 +293,12 @@ class AppModel {
   }): Promise<App | null> {
     const patch = params.patch ?? {};
     // App-row columns only; scope/environmentId are owned by the backing catalog.
-    const appRowPatch: Partial<
-      Pick<
-        AppRow,
-        "name" | "description" | "templateId" | "spec" | "mcpServerId"
-      >
-    > = {};
+    const appRowPatch: Partial<Pick<AppRow, "name" | "description" | "spec">> =
+      {};
     if (patch.name !== undefined) appRowPatch.name = patch.name;
     if (patch.description !== undefined)
       appRowPatch.description = patch.description;
-    if (patch.templateId !== undefined)
-      appRowPatch.templateId = patch.templateId;
     if (patch.spec !== undefined) appRowPatch.spec = patch.spec;
-    if (patch.mcpServerId !== undefined)
-      appRowPatch.mcpServerId = patch.mcpServerId;
 
     const ok = await withDbTransaction(async (tx) => {
       let app: AppRow | undefined;

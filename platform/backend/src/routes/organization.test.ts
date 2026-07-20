@@ -4,6 +4,7 @@ import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -119,6 +120,66 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe("PATCH /api/organization/mcp-settings - online catalog", () => {
+    test("defaults onlineMcpCatalogEnabled to true for a new organization", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().onlineMcpCatalogEnabled).toBe(true);
+    });
+
+    test("disables the online catalog and persists it", async () => {
+      const disable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      expect(disable.statusCode).toBe(200);
+      expect(disable.json().onlineMcpCatalogEnabled).toBe(false);
+
+      const afterDisable = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+      expect(afterDisable.json().onlineMcpCatalogEnabled).toBe(false);
+    });
+
+    test("re-enables the online catalog", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: true },
+      });
+
+      expect(enable.statusCode).toBe(200);
+      expect(enable.json().onlineMcpCatalogEnabled).toBe(true);
+    });
+
+    test("captures the catalog toggle in the audit snapshot", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      const snapshot = await OrganizationModel.findByIdForAudit(
+        organizationId,
+        organizationId,
+      );
+      expect(snapshot?.onlineMcpCatalogEnabled).toBe(false);
     });
   });
 

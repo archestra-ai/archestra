@@ -103,13 +103,11 @@ type CatalogItem =
 
 interface InitialAgentSelectorProps {
   currentAgentId: string | null;
-  currentAgentName?: string;
   onAgentChange: (agentId: string) => void;
 }
 
 export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
-  currentAgentName,
   onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
@@ -147,8 +145,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
       allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
     [allAgents, currentAgentId],
   );
-  const displayAgentName =
-    currentAgent?.name ?? currentAgentName ?? "Select agent";
+  const displayAgentName = currentAgent?.name ?? "Select agent";
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
   const shouldLoadAgentManagementDetails = open || !!editingAgentId;
   const installer = useMcpInstallOrchestrator({
@@ -464,7 +461,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               <ConfigureToolView
                 agentId={editingAgent.id}
                 agentName={editingAgent.name}
-                agentScope={(editingAgent.scope as AgentScope) ?? "personal"}
                 catalog={selectedCatalog}
                 onBack={() => setDialogView(configureToolFrom)}
                 onDone={() => setDialogView("settings")}
@@ -1424,14 +1420,12 @@ function AddToolView({
 function ConfigureToolView({
   agentId,
   agentName,
-  agentScope,
   catalog,
   onBack,
   onDone,
 }: {
   agentId: string;
   agentName: string;
-  agentScope: AgentScope;
   catalog: CatalogItem;
   onBack: () => void;
   onDone: () => void;
@@ -1577,7 +1571,6 @@ function ConfigureToolView({
             </Label>
             <TokenSelect
               catalogId={catalog.id}
-              agentScope={agentScope}
               value={credential}
               onValueChange={setCredential}
               shouldSetDefaultValue={false}

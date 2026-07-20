@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { copyToClipboard } from "@/lib/clipboard";
 import websocketService from "@/lib/websocket/websocket";
 
 type ConnectionStatus =
@@ -217,7 +218,7 @@ export function McpExecTerminal({ serverId, isActive }: McpExecTerminalProps) {
   const handleCopyCommand = useCallback(async () => {
     if (!command) return;
     try {
-      await navigator.clipboard.writeText(command);
+      await copyToClipboard(command);
       setCommandCopied(true);
       toast.success("Command copied to clipboard");
       setTimeout(() => setCommandCopied(false), 2000);

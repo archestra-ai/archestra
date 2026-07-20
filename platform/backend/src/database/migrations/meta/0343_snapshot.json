@@ -1,5 +1,5 @@
 {
-  "id": "2a3b5ae8-f71c-417c-8a27-ca9e34eb4e7f",
+  "id": "cfd74a18-17d4-4b71-b5ac-f60cbb2819ab",
   "prevId": "568e1d27-11fb-4d57-90a7-c35c4a999c7e",
   "version": "7",
   "dialect": "postgresql",
@@ -6792,12 +6792,6 @@
           "notNull": true,
           "default": false
         },
-        "deployment_name": {
-          "name": "deployment_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "dynamic_connection_mcp_server_id": {
           "name": "dynamic_connection_mcp_server_id",
           "type": "uuid",
@@ -9681,12 +9675,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "deployment_name": {
-          "name": "deployment_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "catalog_id": {
           "name": "catalog_id",
           "type": "uuid",
@@ -11416,6 +11404,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'organization'"
+        },
+        "online_mcp_catalog_enabled": {
+          "name": "online_mcp_catalog_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "global_tool_policy": {
           "name": "global_tool_policy",

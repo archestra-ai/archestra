@@ -1446,6 +1446,21 @@ class AgentModel {
   }
 
   /**
+   * Single-column lookup for the Auto-subagent-mode gate on the delegation
+   * dispatch path; intentionally not cached so toggling the setting affects the
+   * next delegation call. Defaults to false when the agent is missing/deleted.
+   */
+  static async getAccessAllSubagents(id: string): Promise<boolean> {
+    const [result] = await db
+      .select({ accessAllSubagents: schema.agentsTable.accessAllSubagents })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.accessAllSubagents ?? false;
+  }
+
+  /**
    * Single-column agentType lookup for per-call dispatch gates, avoiding
    * findById's multi-table join. Null when the agent is missing or deleted.
    */
@@ -1553,6 +1568,85 @@ class AgentModel {
       );
 
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * Internal agents eligible as Auto-mode delegation targets for a caller:
+   * agentType "agent", not built-in, not soft-deleted, that the caller user can
+   * access (org, own personal, or a team the user belongs to), minus the caller
+   * agent itself. This is the delegation analog of
+   * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
+   * `agents.access_all_subagents`. Admins see every internal agent.
+   */
+  static async findAccessibleDelegationTargets(params: {
+    userId: string;
+    isAdmin: boolean;
+    excludeAgentId: string;
+    /**
+     * The calling agent's environment: delegation never crosses environment
+     * boundaries (null is the Default environment), mirroring tool isolation.
+     */
+    environmentId: string | null;
+  }): Promise<Pick<Agent, "id" | "name" | "description">[]> {
+    const { userId, isAdmin, excludeAgentId, environmentId } = params;
+
+    const baseConditions = [
+      eq(schema.agentsTable.agentType, "agent"),
+      eq(schema.agentsTable.builtIn, false),
+      ne(schema.agentsTable.id, excludeAgentId),
+      environmentId === null
+        ? isNull(schema.agentsTable.environmentId)
+        : eq(schema.agentsTable.environmentId, environmentId),
+      notDeleted(schema.agentsTable),
+    ];
+
+    if (isAdmin) {
+      return db
+        .selectDistinct({
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+          description: schema.agentsTable.description,
+        })
+        .from(schema.agentsTable)
+        .where(and(...baseConditions))
+        .orderBy(asc(schema.agentsTable.name));
+    }
+
+    return db
+      .selectDistinct({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
+      })
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
+      )
+      .leftJoin(
+        schema.teamMembersTable,
+        and(
+          eq(schema.agentTeamsTable.teamId, schema.teamMembersTable.teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .where(
+        and(
+          ...baseConditions,
+          or(
+            eq(schema.agentsTable.scope, "org"),
+            and(
+              eq(schema.agentsTable.scope, "personal"),
+              eq(schema.agentsTable.authorId, userId),
+            ),
+            and(
+              eq(schema.agentsTable.scope, "team"),
+              eq(schema.teamMembersTable.userId, userId),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name));
   }
 
   static async findDelegationTarget(

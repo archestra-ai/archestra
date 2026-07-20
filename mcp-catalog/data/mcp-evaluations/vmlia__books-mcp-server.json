@@ -1,0 +1,86 @@
+{
+  "name": "vmlia__books-mcp-server",
+  "display_name": "books-mcp-server",
+  "description": "This is an MCP server used for querying books, and it can be applied in common MCP clients, such as Cherry Studio.",
+  "author": {
+    "name": "VmLia"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "## Get the Project and Initialize\n```\ngit clone https://github.com/VmLia/books-mcp-server.git\ncd books-mcp-server\nuv venv\n```\nif macbook or linux\n````\nsource .venv/bin/activate\n````\nif windows\n````\n.venv\\Scripts\\activate.bat\n````\n\n### Install Python Packages\n```\nuv add \"mcp[cli]\" httpx openai beautifulsoup4 lxml \n```\nIf the network is slow, you can set up a domestic mirror source.\n```\nuv add \"mcp[cli]\" httpx openai beautifulsoup4 lxml --index-url https://pypi.tuna.tsinghua.edu.cn/simple\n```\n\n## Example of Using cherry-studio\n**Method 1**: On the setting page of cherry-studio, click on the MCP server, then click \"Add Server\", and subsequently configure it on the page.\n### Type\n```\nSTDIO\n```\n### Command\n```\nuv\n```\n### Parameters\n```\n--directory\n# your project dir\nrun\nmain.py\n```\n\n**Method 2**: Use the configuration parameters\n```\n{\n  \"mcpServers\": {\n    \"books-mcp-server\": {\n      \"name\": \"books-mcp\",\n      \"type\": \"stdio\",\n      \"description\": \"\",\n      \"isActive\": true,\n      \"registryUrl\": \"\",\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/Enter your local project directory/books-mcp-server\",\n        \"run\",\n        \"main.py\"\n      ]\n    }\n  }\n}\n```",
+  "category": "AI Tools",
+  "quality_score": 32,
+  "archestra_config": {
+    "client_config_permutations": {
+      "books-mcp-server-stdio": {
+        "command": "uv",
+        "args": ["--directory", "/Enter your local project directory/books-mcp-server", "run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "VmLia",
+    "repo": "books-mcp-server",
+    "url": "https://github.com/VmLia/books-mcp-server",
+    "name": "vmlia__books-mcp-server",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e81a33ca2ad85b704d42bc4f075c313f36d96101"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:18.356Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "beautifulsoup4",
+      "importance": 5
+    },
+    {
+      "name": "lxml",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"books-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"beautifulsoup4>=4.13.3\",\n    \"httpx>=0.28.1\",\n    \"lxml\",\n    \"mcp[cli]>=1.6.0\",\n    \"openai>=1.72.0\",\n]\n\n[tool.uv.workspace]\nmembers = [\"books-mcp-server\"]\n"
+}

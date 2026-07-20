@@ -1,0 +1,138 @@
+{
+  "name": "hyperb1iss__lucidity-mcp",
+  "display_name": "lucidity-mcp",
+  "description": "AI-powered code quality analysis using MCP to help AI assistants review code more effectively. Analyze git changes for complexity, security issues, and more through structured prompts.",
+  "author": {
+    "name": "hyperb1iss"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/lucidity_mcp/cli.py", "--transport", "sse", "--host", "127.0.0.1", "--port", "6969"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# ✨ Lucidity MCP 🔍\n\n<div align=\"center\">\n\n[![Python 3.13+](https://img.shields.io/badge/python-3.13+-9D00FF.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)\n[![License](https://img.shields.io/badge/license-Apache_2.0-FF00FF.svg?style=for-the-badge)](LICENSE)\n[![Status](https://img.shields.io/badge/status-active_development-39FF14.svg?style=for-the-badge)](docs/plan.md)\n[![Code Style](https://img.shields.io/badge/code_style-ruff-00FFFF.svg?style=for-the-badge)](https://github.com/astral-sh/ruff)\n[![Type Check](https://img.shields.io/badge/type_check-mypy-FFBF00.svg?style=for-the-badge)](https://mypy.readthedocs.io/en/stable/)\n\n**Clarity in Code, Confidence in Creation**\n\n</div>\n\nLucidity is a Model Context Protocol (MCP) server designed to enhance the quality of AI-generated code through intelligent, prompt-based analysis. By providing structured guidance to AI coding assistants, Lucidity helps identify and address common quality issues, resulting in cleaner, more maintainable, and more robust code.\n\nBefore you commit, just ask Lucidity to analyze the changes instead of vibe-coding yourself into a nightmare hellscape! 😱 💥 🚫\n\n## 💫 Features\n\n- 🔮 **Comprehensive Issue Detection** - Covers 10 critical quality dimensions from complexity to security vulnerabilities\n- 🔄 **Contextual Analysis** - Compares changes against original code to identify unintended modifications\n- 🌐 **Language Agnostic** - Works with any programming language the AI assistant understands\n- 🎯 **Focused Analysis** - Option to target specific issue types based on project needs\n- 📝 **Structured Outputs** - Guides AI to provide actionable feedback with clear recommendations\n- 🤖 **MCP Integration** - Seamless integration with Claude and other MCP-compatible AI assistants\n- 🪶 **Lightweight Implementation** - Simple server design with minimal dependencies\n- 🧩 **Extensible Framework** - Easy to add new issue types or refine analysis criteria\n- 🔀 **Flexible Transport** - Supports both stdio for terminal-based interaction and SSE for network-based communication\n- 🔄 **Git-Aware Analysis** - Analyzes changes directly from git diff, making it ideal for pre-commit reviews\n\n## 🚀 Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/hyperbliss/lucidity-mcp.git\ncd lucidity-mcp\n\n# Set up a virtual environment with UV\nuv venv .venv\nsource .venv/bin/activate  # On Windows: .venv\\Scripts\\activate\n\n# Install dependencies with UV\nuv sync\n```\n\n## 📋 Prerequisites\n\n- Python 3.13 or higher\n- Git (for analyzing code changes)\n- UV package manager (recommended for dependency management)\n\n## 🔮 Quick Start\n\n### Run the Lucidity server\n\n```bash\n# Start with stdio transport (for terminal use)\nlucidity-mcp\n\n# Start with SSE transport (for network use)\nlucidity-mcp --transport sse --host 127.0.0.1 --port 6969\n\n# Run with debug logging\nlucidity-mcp --debug\n\n# Run with file logging\nlucidity-mcp --log-file lucidity.log\n```\n\n### Using with AI Assistants\n\n1. Start Lucidity in SSE mode:\n\n   ```bash\n   lucidity-mcp --transport sse\n   ```\n\n2. Connect your AI assistant using the MCP protocol URI:\n\n   ```\n   sse://localhost:6969/sse\n   ```\n\n3. The AI can now invoke the `analyze_changes` tool to get code quality feedback!\n\n## 🧠 Analysis Dimensions\n\nLucidity analyzes code across 10 critical quality dimensions:\n\n1. **Unnecessary Complexity** - Identifies overly complex algorithms, excessive abstractions, and convoluted logic\n2. **Poor Abstractions** - Detects leaky or inappropriate abstractions and unclear separation of concerns\n3. **Unintended Code Deletion** - Catches accidental removal of critical functionality or validation\n4. **Hallucinated Components** - Finds references to non-existent functions, classes, or APIs\n5. **Style Inconsistencies** - Spots deviations from project coding standards and conventions\n6. **Security Vulnerabilities** - Identifies potential security issues in code changes\n7. **Performance Issues** - Detects inefficient algorithms or operations that could impact performance\n8. **Code Duplication** - Finds repeated logic or functionality that should be refactored\n9. **Incomplete Error Handling** - Spots missing or inadequate exception handling\n10. **Test Coverage Gaps** - Identifies missing tests for critical functionality\n\n## 📊 Example AI Assistant Queries\n\nWith an AI assistant connected to Lucidity, try these queries:\n\n- \"Analyze the code quality in my latest git changes\"\n- \"Check for security vulnerabilities in my JavaScript changes\"\n- \"Make sure my Python code follows best practices\"\n- \"Identify any performance issues in my recent code changes\"\n- \"Are there any unintended side effects in my recent refactoring?\"\n- \"Help me improve the abstractions in my code\"\n- \"Check if I've accidentally removed any important validation\"\n- \"Find any hallucinated API calls in my latest commit\"\n- \"Is my error handling complete and robust?\"\n- \"Are there any test coverage gaps in my new feature?\"\n\n## 🛠️ Available MCP Tools\n\n### Tools\n\n- `analyze_changes` - Prepares git changes for analysis through MCP\n  - Parameters:\n    - `workspace_root`: The root directory of the workspace/git repository\n    - `path`: Optional specific file path to analyze\n\n## 💻 Development\n\nLucidity uses UV for dependency management and development workflows. UV is a fast, reliable Python package manager and resolver.\n\n```bash\n# Update dependencies\nuv sync\n\n# Run tests\npytest\n\n# Run linting\nruff check .\n\n# Run type checking\nmypy .\n```\n\n## 🔧 Logging Behavior\n\nLucidity handles logging differently depending on the transport:\n\n- **SSE transport**: Full console logging is enabled\n- **Stdio transport with --log-file**: All logs go to the file, console is disabled\n- **Stdio transport without --log-file**: Only warnings and errors go to stderr, info logs are disabled\n\nThis ensures that stdio communication isn't broken by logs appearing on stdout.\n\n## 🎛️ Command-line Options\n\n```\nusage: lucidity-mcp [-h] [--debug] [--host HOST] [--port PORT] [--transport {stdio,sse}]\n                [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--verbose]\n                [--log-file LOG_FILE]\n\noptions:\n  -h, --help            show this help message and exit\n  --debug               Enable debug logging\n  --host HOST           Host to bind the server to (use 0.0.0.0 for all interfaces)\n  --port PORT           Port to listen on for network connections\n  --transport {stdio,sse}\n                        Transport type to use (stdio for terminal, sse for network)\n  --log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}\n                        Set the logging level\n  --verbose             Enable verbose logging for HTTP requests\n  --log-file LOG_FILE   Path to log file (required for stdio transport if logs enabled)\n```\n\n## 🤝 Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Set up your development environment with UV\n4. Make your changes\n5. Run tests and linting\n6. Commit your changes (`git commit -m 'Add some amazing feature'`)\n7. Push to the branch (`git push origin feature/amazing-feature`)\n8. Open a Pull Request\n\n## 📝 License\n\nThis project is licensed under the Apache License 2.0 - see the LICENSE file for details.\n\n---\n\n<div align=\"center\">\n\nCreated by [Stefanie Jane 🌠](https://github.com/hyperb1iss)\n\nIf you find Lucidity useful, [buy me a Monster Ultra Violet ⚡️](https://ko-fi.com/hyperb1iss)\n\n</div>\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "lucidity-mcp-stdio": {
+        "command": "lucidity-mcp",
+        "args": [],
+        "env": {}
+      },
+      "lucidity-mcp-sse-configured": {
+        "command": "lucidity-mcp",
+        "args": ["--transport", "sse", "--host", "127.0.0.1", "--port", "6969"],
+        "env": {}
+      },
+      "lucidity-mcp-debug": {
+        "command": "lucidity-mcp",
+        "args": ["--debug"],
+        "env": {}
+      },
+      "lucidity-mcp-log-file": {
+        "command": "lucidity-mcp",
+        "args": ["--log-file", "lucidity.log"],
+        "env": {}
+      },
+      "lucidity-mcp-sse": {
+        "command": "lucidity-mcp",
+        "args": ["--transport", "sse"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hyperb1iss",
+    "repo": "lucidity-mcp",
+    "url": "https://github.com/hyperb1iss/lucidity-mcp",
+    "name": "lucidity-mcp",
+    "path": null,
+    "stars": 55,
+    "contributors": 1,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cdcb184bf1e0b59f118fa41011d266d8f29fb4ff"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:23.691Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "rich",
+      "importance": 5
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 8
+    },
+    {
+      "name": "starlette",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "anyio",
+      "importance": 6
+    },
+    {
+      "name": "types-pyyaml",
+      "importance": 3
+    },
+    {
+      "name": "types-pygments",
+      "importance": 3
+    },
+    {
+      "name": "types-colorama",
+      "importance": 3
+    },
+    {
+      "name": "types-pexpect",
+      "importance": 3
+    },
+    {
+      "name": "types-setuptools",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"lucidity-mcp\"\nversion = \"0.1.0\"\ndescription = \"An AI powered code review tool for MCP\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\nlicense = { file = \"LICENSE\" }\nauthors = [{ name = \"Stefanie Jane\", email = \"stef@hyperbliss.tech\" }]\nkeywords = [\"mcp\", \"android\", \"ai\", \"llm\", \"claude\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: Apache Software License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.13\",\n]\n# Dependencies organized by category\ndependencies = [\n    \"dotenv>=0.9.9\",\n    \"httpx>=0.28.1\",\n    # Core MCP protocol\n    \"mcp[cli]>=1.4.1\",\n    # UI and display\n    \"rich>=13.9.4\",\n    \"sse-starlette>=2.2.1\",\n    \"starlette>=0.36.3\",\n    \"uvicorn>=0.30.0\",\n    \"anyio>=4.8.0\",\n    \"types-pyyaml>=6.0.12.20241230\",\n    \"types-pygments>=2.19.0.20250305\",\n    \"types-colorama>=0.4.15.20240311\",\n    \"types-pexpect>=4.9.0.20241208\",\n    \"types-setuptools>=76.0.0.20250313\",\n]\n\n[dependency-groups]\ndev = [\n    # Testing\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=0.25.3\",\n    \"pytest-cov>=6.0.0\",\n    # Linting and type checking\n    \"mypy>=1.15.0\",\n    \"pylint>=3.3.5\",\n    \"ruff>=0.11.0\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/hyperbliss/lucidity\"\nIssues = \"https://github.com/hyperbliss/lucidity/issues\"\nDocumentation = \"https://github.com/hyperbliss/lucidity#readme\"\n\n[project.scripts]\nlucidity-mcp = \"lucidity.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"lucidity\"]\n\n# Testing configuration\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\naddopts = [\"-v\", \"--tb=short\"]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\n\n# Type checking configuration\n[tool.mypy]\npython_version = \"3.13\"\n# Basic type checking\nwarn_return_any = true\nwarn_unused_configs = true\ndisallow_untyped_defs = true\ndisallow_incomplete_defs = true\n\n# Enhanced type checking\ndisallow_any_generics = true\ndisallow_subclassing_any = true\ndisallow_untyped_calls = true\ndisallow_untyped_decorators = true\ncheck_untyped_defs = true\n\n# Warnings as errors for critical issues\nerror_summary = true\nwarn_redundant_casts = true\nwarn_unused_ignores = true\nwarn_no_return = true\nwarn_unreachable = true\n\n# Strict equality checking\nstrict_equality = true\n\n# Import discovery\nnamespace_packages = true\nexplicit_package_bases = true\n\n# Error reporting\nshow_error_context = true\nshow_column_numbers = true\npretty = true\n\n# Third-party modules without type stubs\n[[tool.mypy.overrides]]\nmodule = [\"mcp.*\", \"starlette.*\", \"uvicorn.*\", \"sse_starlette.*\"]\nignore_missing_imports = true\n\n# Test files can be less strict\n[[tool.mypy.overrides]]\nmodule = [\"tests.*\"]\ndisallow_untyped_defs = false\ndisallow_incomplete_defs = false\ncheck_untyped_defs = false\n\n# Core modules should be very strict\n[[tool.mypy.overrides]]\nmodule = [\"droidmind.core.*\"]\ndisallow_any_generics = true\ndisallow_any_explicit = true\nwarn_unreachable = true\n\n# Code formatting and linting configuration\n[tool.ruff]\n# General settings\nline-length = 120\ntarget-version = \"py313\"\nsrc = [\"droidmind\", \"tests\"]\nextend-exclude = [\".venv\", \"docs\"]\n\n[tool.ruff.lint]\n# Rules to enable\nselect = [\n    # Core rules\n    \"E\",   # pycodestyle errors\n    \"W\",   # pycodestyle warnings\n    \"F\",   # pyflakes\n    \"I\",   # isort\n    \"C\",   # flake8-comprehensions\n    \"B\",   # flake8-bugbear\n    \"N\",   # pep8-naming\n    \"UP\",  # pyupgrade\n    \"RUF\", # ruff-specific rules\n    \"PT\",  # pytest style\n    \"SIM\", # simplify\n\n    # Additional valuable rules for a server application\n    \"ASYNC\", # async/await best practices\n    \"BLE\",   # blind except handling\n    \"DTZ\",   # datetime handling\n    \"G\",     # logging format string issues\n    \"ICN\",   # import conventions\n    \"PGH\",   # pygrep hooks\n    \"PIE\",   # misc. linting\n    \"PL\",    # pylint rules ported to ruff\n    \"RET\",   # return value consistency\n    \"RSE\",   # raise statement formatting\n    \"S\",     # bandit (security) - important for command execution!\n    \"SLF\",   # private member access\n    \"TRY\",   # try-except best practices\n    \"COM\",   # trailing comma enforcement (except COM812 which conflicts with formatter)\n    \"ERA\",   # eradicate (commented out code)\n    \"T20\",   # print statements\n    \"ARG\",   # unused arguments\n]\n\n# Rules to ignore\nignore = [\n    # Complexity - handled by pylint\n    \"C901\",    # Function is too complex\n    \"PLR0911\", # Too many return statements\n    \"PLR0912\", # Too many branches\n    \"PLR0913\", # Too many arguments\n    \"PLR0915\", # Too many statements\n    \"PLR2004\", # Magic value in comparison\n\n    # Stylistic preferences\n    \"RUF012\", # Mutable class attributes should be annotated with typing.ClassVar\n\n    # Noise reduction - warnings that often produce false positives\n    \"PLC0414\", # Import alias does not rename variable\n    \"PLR0904\", # Too many public methods\n    \"PLW0603\", # Global statement usage\n    \"PLW2901\", # Outer loop variable overwritten\n    \"PT011\",   # Too broad pytest.raises without match\n    \"SIM102\",  # Nested if-statements (sometimes better for readability)\n    \"SIM108\",  # Use ternary instead of if-else (often less readable)\n    \"TRY003\",  # Avoid long messages in exceptions\n\n    # User-requested suppressions\n    \"G004\",   # Don't warn about f-strings in logging\n    \"PGH003\", # Don't warn about unspecific # type: ignore comments\n    \"RET502\", # Don't warn about implicit return None\n    \"RET503\", # Don't warn about missing explicit return\n    \"RET505\", # Don't warn about elif after return\n    \"TRY300\", # Don't suggest moving return to else block\n    \"TRY301\", # Don't suggest abstracting raise to inner function\n    \"TRY401\", # Don't warn about redundant exception in logging.exception\n\n    # Security exceptions that make sense for this project\n    \"S101\", # Use of assert detected (fine for tests)\n\n    # Rule that conflicts with the formatter\n    \"COM812\", # Missing trailing comma in collection of items\n]\n\n# Import organization settings\n[tool.ruff.lint.isort]\ncombine-as-imports = true\nforce-sort-within-sections = true\nknown-first-party = [\"lucidity\"]\nsection-order = [\n    \"future\",\n    \"standard-library\",\n    \"third-party\",\n    \"first-party\",\n    \"local-folder\",\n]\n\n# File-specific rule adjustments\n[tool.ruff.lint.per-file-ignores]\n# Ignore unused imports in __init__ files\n\"__init__.py\" = [\"F401\", \"E402\"]\n\n# Allow catching blind exceptions in prompts, resources, and tools \n\"lucidity/prompts.py\" = [\"BLE001\", \"ARG001\"]\n\"lucidity/resources.py\" = [\"BLE001\", \"ARG001\"]\n\"lucidity/tools/*.py\" = [\"BLE001\", \"ARG001\"]\n\n# Allow accessing private members in server.py for MCP server access\n\"lucidity/server.py\" = [\"BLE001\", \"SLF001\"]\n\n# Run git commands\n\"lucidity/tools/code_analysis.py\" = [\"S603\", \"S607\"]\n# More relaxed rules for tests\n\"tests/**/*.py\" = [\n    \"ARG001\",  # Unused function arguments (common for fixtures)\n    \"ARG002\",  # Unused function arguments (common for fixtures)\n    \"ARG005\",  # Unused lambda arguments (common for fixtures)\n    \"E501\",    # Allow longer lines in tests (assertions can get verbose)\n    \"PIE790\",  # Allow unnecessary 'pass' statements in mocks\n    \"PLR2004\", # Allow magic numbers in tests\n    \"PT018\",   # Allow complex assertions (common in tests to check multiple conditions)\n    \"RET504\",  # Allow unnecessary assignment before return (clearer in tests)\n    \"S101\",    # Allow asserts in tests\n    \"S105\",    # Allow hardcoded passwords in variable assignments (it's just test data!)\n    \"S106\",    # Allow hardcoded passwords as arguments (it's just test data!)\n    \"S108\",    # Ignore insecure usage of temporary files\n    \"SLF001\",  # Allow private member access in tests\n    \"BLE001\",  # Allow catching blind exceptions in tests\n]\n\n# Format settings for consistency\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nline-ending = \"auto\"\ndocstring-code-format = true\ndocstring-code-line-length = 80\n\n# Pylint configuration - only for things Ruff can't handle\n[tool.pylint]\npy-version = \"3.13\"\njobs = 2\nmax-line-length = 120\ndisable = [\n    # Covered by Ruff\n    \"bad-indentation\",\n    \"line-too-long\",\n    \"missing-final-newline\",\n    \"trailing-whitespace\",\n    \"unnecessary-semicolon\",\n    \"missing-docstring\",\n    \"invalid-name\",\n    \"abstract-class-instantiated\",\n    \"abstract-method\",\n    \"arguments-differ\",\n    \"assignment-from-none\",\n    \"attribute-defined-outside-init\",\n    \"protected-access\",\n    \"signature-differs\",\n    \"too-few-public-methods\",\n    \"import-error\",\n    \"no-member\",\n    \"no-name-in-module\",\n    \"unused-import\",\n    \"redefined-outer-name\",\n    \"unused-argument\",\n    \"unused-variable\",\n    \"wrong-import-position\",\n    \"import-outside-toplevel\",\n    \"too-many-positional-arguments\",\n    \"fixme\",\n\n    # Additional suppressions for practicality\n    \"broad-except\",\n]\n\n# Enable only the high-value checks that Ruff doesn't cover\nenable = [\n    \"use-symbolic-message-instead\",\n    \"useless-suppression\",\n    \"duplicate-code\",\n]\n\n[tool.pylint.basic]\ngood-names = [\"i\", \"j\", \"k\", \"ex\", \"id\", \"fd\", \"_\"]\n\n[tool.pylint.design]\nmax-parents = 15\nmax-returns = 10\nmax-branches = 20\nmax-statements = 60\nmax-attributes = 20\nmax-locals = 25\nmax-args = 10\nmax-nested-blocks = 8\n"
+}

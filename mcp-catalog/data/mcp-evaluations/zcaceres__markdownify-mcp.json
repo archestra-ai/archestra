@@ -1,0 +1,114 @@
+{
+  "name": "zcaceres__markdownify-mcp",
+  "display_name": "markdownify-mcp",
+  "description": "A Model Context Protocol server for converting almost anything to Markdown",
+  "author": {
+    "name": "zcaceres"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "UV_PATH": "${user_config.uv_path}",
+      "MD_SHARE_DIR": "${user_config.md_share_dir}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "uv_path": {
+      "type": "string",
+      "title": "UV Path",
+      "description": "Path to the uv executable. By default, the server will use the default install location of `uv`.",
+      "required": false,
+      "sensitive": false
+    },
+    "md_share_dir": {
+      "type": "directory",
+      "title": "Markdown Share Directory",
+      "description": "Restrict the directory from which Markdown files can be retrieved.",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "readme": "# Markdownify MCP Server\n\n> Help! I need someone with a Windows computer to help me add support for Markdownify-MCP on Windows. PRs exist but I cannot test them. Post [here](https://github.com/zcaceres/markdownify-mcp/issues/18) if interested.\n\n![markdownify mcp logo](logo.jpg)\n\nMarkdownify is a Model Context Protocol (MCP) server that converts various file types and web content to Markdown format. It provides a set of tools to transform PDFs, images, audio files, web pages, and more into easily readable and shareable Markdown text.\n\n<a href=\"https://glama.ai/mcp/servers/bn5q4b0ett\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/bn5q4b0ett/badge\" alt=\"Markdownify Server MCP server\" /></a>\n\n## Features\n\n- Convert multiple file types to Markdown:\n  - PDF\n  - Images\n  - Audio (with transcription)\n  - DOCX\n  - XLSX\n  - PPTX\n- Convert web content to Markdown:\n  - YouTube video transcripts\n  - Bing search results\n  - General web pages\n- Retrieve existing Markdown files\n\n## Getting Started\n\n1. Clone this repository\n2. Install dependencies:\n   ```\n   pnpm install\n   ```\n\nNote: this will also install `uv` and related Python depdencies.\n\n3. Build the project:\n   ```\n   pnpm run build\n   ```\n4. Start the server:\n   ```\n   pnpm start\n   ```\n\n## Development\n\n- Use `pnpm run dev` to start the TypeScript compiler in watch mode\n- Modify `src/server.ts` to customize server behavior\n- Add or modify tools in `src/tools.ts`\n\n## Usage with Desktop App\n\nTo integrate this server with a desktop app, add the following to your app's server configuration:\n\n```js\n{\n  \"mcpServers\": {\n    \"markdownify\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"{ABSOLUTE PATH TO FILE HERE}/dist/index.js\"\n      ],\n      \"env\": {\n        // By default, the server will use the default install location of `uv`\n        \"UV_PATH\": \"/path/to/uv\"\n      }\n    }\n  }\n}\n```\n\n## Available Tools\n\n- `youtube-to-markdown`: Convert YouTube videos to Markdown\n- `pdf-to-markdown`: Convert PDF files to Markdown\n- `bing-search-to-markdown`: Convert Bing search results to Markdown\n- `webpage-to-markdown`: Convert web pages to Markdown\n- `image-to-markdown`: Convert images to Markdown with metadata\n- `audio-to-markdown`: Convert audio files to Markdown with transcription\n- `docx-to-markdown`: Convert DOCX files to Markdown\n- `xlsx-to-markdown`: Convert XLSX files to Markdown\n- `pptx-to-markdown`: Convert PPTX files to Markdown\n- `get-markdown-file`: Retrieve an existing Markdown file. File extension must end with: *.md, *.markdown.\n  \n  OPTIONAL: set `MD_SHARE_DIR` env var to restrict the directory from which files can be retrieved, e.g. `MD_SHARE_DIR=[SOME_PATH] pnpm run start` \n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "markdownify-mcp": {
+        "command": "pnpm",
+        "args": ["start"],
+        "env": {}
+      },
+      "markdownify": {
+        "command": "node",
+        "args": ["{ABSOLUTE PATH TO FILE HERE}/dist/index.js"],
+        "env": {
+          "UV_PATH": "/path/to/uv"
+        }
+      },
+      "markdownify-mcp-with-config": {
+        "command": "pnpm",
+        "args": ["run", "start"],
+        "env": {
+          "MD_SHARE_DIR": "[SOME_PATH]"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zcaceres",
+    "repo": "markdownify-mcp",
+    "url": "https://github.com/zcaceres/markdownify-mcp",
+    "name": "zcaceres__markdownify-mcp",
+    "path": null,
+    "stars": 2093,
+    "contributors": 7,
+    "issues": 19,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4add350f4643365d31f7b3385ab1b65d37f97f1e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.207Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "private-ip",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "markitdown",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-markdownify-server\",\n  \"version\": \"0.0.2\",\n  \"description\": \"MCP Markdownify Server - Model Context Protocol Server for Converting Almost Anything to Markdown\",\n  \"license\": \"MIT\",\n  \"author\": \"@zcaceres (@zachcaceres | zach.dev)\",\n  \"homepage\": \"https://github.com/zcaceres/mcp-markdownify-server\",\n  \"bugs\": \"https://github.com/zcaceres/mcp-markdownify-server/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-markdownify-server\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"dev\": \"tsc --watch\",\n    \"preinstall\": \"node preinstall.js\",\n    \"start\": \"node dist/index.js\",\n    \"test\": \"bun test\",\n    \"test:watch\": \"bun test --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"private-ip\": \"^3.0.2\",\n    \"zod\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.9.3\",\n    \"@types/private-ip\": \"^1.0.3\",\n    \"bun\": \"^1.1.41\",\n    \"sdk\": \"link:@types/modelcontextprotocol/sdk\",\n    \"shx\": \"^0.3.4\",\n    \"ts-jest\": \"^29.2.5\",\n    \"typescript\": \"^5.6.2\"\n  },\n  \"packageManager\": \"pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39\"\n}\n\n\n=== pyproject.toml ===\n[project]\nname = \"ocr\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"markitdown>=0.0.1a3\",\n]\n"
+}

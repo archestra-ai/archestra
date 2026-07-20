@@ -1,0 +1,90 @@
+{
+  "name": "kukapay__wallet-inspector-mcp",
+  "display_name": "wallet-inspector-mcp",
+  "description": "An MCP server that empowers AI agents to inspect any wallet’s balance and onchain activity across major EVM chains and Solana chain.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {
+      "DUNE_SIM_API_KEY": "${user_config.dune_sim_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "dune_sim_api_key": {
+      "type": "string",
+      "title": "Dune SIM API Key",
+      "description": "Obtain from Dune Analytics",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Wallet Inspector MCP\n\nAn MCP server  that empowers AI agents to inspect any wallet’s balance and onchain activity across major EVM chains and Solana chain.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/wallet-inspector-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Multi-Chain Support**: Queries Solana, Ethereum, Polygon, Binance Smart Chain (BSC), Base, Arbitrum and more.\n- **Flexible Output**: Balances in ASCII tables, activities and transactions in structured text.\n\n## Installation\n\n### Prerequisites\n\n- **Python**: Version 3.10 or higher.\n- **Dune SIM API Key**: Obtain from [Dune Analytics](https://dune.com).\n- **Dependency Manager**: `uv` (recommended) or `pip`.\n\n### Setup\n\n1. **Clone the Repository**:\n\n   ```bash\n   git clone https://github.com/kukapay/wallet-inspector-mcp.git\n   cd wallet-inspector-mcp\n   ```\n\n2. **Install Dependencies**:\n\n   Using `uv` (recommended):\n\n   ```bash\n   uv async\n   ```\n\n   Or using `pip`:\n\n   ```bash\n   pip install mcp[cli] python-dotenv tabulate\n   ```\n\n3. **Installing to Claude Desktop**:\n\n    Install the server as a Claude Desktop application:\n    ```bash\n    uv run mcp install cli.py --name \"Wallet Inspector\"\n    ```\n\n    Configuration file as a reference:\n\n    ```json\n    {\n       \"mcpServers\": {\n           \"Wallet Inspector\": {\n               \"command\": \"uv\",\n               \"args\": [ \"--directory\", \"/path/to/wallet-inspector-mcp\", \"run\", \"main.py\" ],\n               \"env\": { \"DUNE_SIM_API_KEY\": \"your_dune_sim_api_key_here\"},               \n           }\n       }\n    }\n    ```\n    Replace `/path/to/wallet-inspector-mcp` with your actual installation path, and `your_dune_sim_api_key_here` with your Dune SIM API key.\n\n## Usage\n\n### Interacting with the Server\n\nUse an MCP-compatible client (e.g., Claude Desktop CLI) to query the server. Example natural language queries:\n\n- **Balance Queries**:\n  - \"Check the balance of wallet 0xd8da6bf26964af9d7eed9e03e53415d37aa96045.\"\n  - \"What is the balance for wallet DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK?\"\n  - \"Get balances for 0x1234567890abcdef1234567890abcdef12345678 on EVM chains.\"\n\n- **Activity Queries** (EVM only):\n  - \"Show activity for wallet 0xd8da6bf26964af9d7eed9e03e53415d37aa96045.\"\n  - \"Get transaction history for 0x1234567890abcdef1234567890abcdef12345678 on EVM chains.\"\n\n- **Transaction Queries**:\n  - \"List transactions for wallet 0xd8da6bf26964af9d7eed9e03e53415d37aa96045 with limit 50.\"\n  - \"Show transaction history for wallet DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK.\"\n  - \"Get the latest 10 transactions for 0x1234567890abcdef1234567890abcdef12345678.\"\n\n### Example Outputs\n\n- **Balance Output**:\n\n  ```\n  Wallet 0xd8da6bf26964af9d7eed9e03e53415d37aa96045 balances:\n\n  +----------+-----------------+-------------+\n  | Chain    | Token Amount    | USD Value   |\n  +==========+=================+=============+\n  | ethereum | 605.371497 ETH  | $1842034.66 |\n  +----------+-----------------+-------------+\n  | polygon  | 100.500000 MATIC| $50.25      |\n  +----------+-----------------+-------------+\n  | bsc      | 10.000000 BNB   | $600.00     |\n  +----------+-----------------+-------------+\n\n  Wallet DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK balances:\n\n  +----------+---------------+-------------+\n  | Chain    | Token Amount  | USD Value   |\n  +==========+===============+=============+\n  | solana   | 1.000000 SOL  | $20.50      |\n  +----------+---------------+-------------+\n  ```\n\n- **Activity Output** (EVM only):\n\n  ```\n  Wallet 0xd8da6bf26964af9d7eed9e03e53415d37aa96045 activity:\n\n  Chain ID: 8453\n  Block Time: 2025-02-20T13:52:29+00:00\n  Tx Hash: 0x184544c8d67a0cbed0a3f04abe5f958b96635e8c743c070f70e24b1c06cd1aa6\n  Type: Receive\n  Asset Type: ERC20\n  Value: 123.069653 ENT\n  USD Value: $0.14\n  ```\n\n- **Transaction Output**:\n\n  ```\n  Wallet 0xd8da6bf26964af9d7eed9e03e53415d37aa96045 transactions:\n\n  Chain: ethereum\n  Block Time: 2023-11-07T05:31:56Z\n  Tx Hash: 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef\n  From: 0xd8da6bf26964af9d7eed9e03e53415d37aa96045\n  To: 0x1234567890abcdef1234567890abcdef12345678\n  Value: 0.000320 ETH\n\n  Wallet DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK transactions:\n\n  Chain: solana\n  Block Time: 2023-03-28T09:20:00Z\n  Tx Hash: 5SzSbWKM9yZC7cCGMhUhvnYdWQytrk9NBaWwug1gQBKKwNEBvBKqPSfVeYYnZwUuUyvcCHgYhDkTRrB6YBfwzfv8\n  From: DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK\n  To: 9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin\n  Value: 0.010000 SOL\n  ```\n\n## Tools\n### `get_wallet_balance`\n\n- **Description**: Retrieves the balance of a specified wallet address across supported EVM and Solana blockchains.\n- **Parameters**:\n  - `wallet_address` (str): The wallet address to query (e.g., '0x123...' for EVM chains or 'DYw8jCT...' for Solana).\n- **Returns**: An ASCII table with balance details (chain, token amount, USD value) or an error message.\n- **Supported Chains**: Solana,arbitrum,arbitrum,avalanche_c,base,berachain,bnb,ethereum and more.\n\n### `get_wallet_activity`\n\n- **Description**: Queries transaction activity for a specified wallet address on supported EVM blockchains.\n- **Parameters**:\n  - `wallet_address` (str): The EVM-compatible wallet address to query (e.g., '0x123...').\n- **Returns**: Formatted text with activity details (chain_id, block_time, tx_hash, type, asset_type, value, value_usd) or an error message.\n- **Supported Chains**: Arbitrum,arbitrum,avalanche_c,base,berachain,bnb,ethereum and more.\n\n### `get_wallet_transactions`\n\n- **Description**: Fetches the transaction history of a specified wallet address on supported EVM and Solana blockchains.\n- **Parameters**:\n  - `wallet_address` (str): The wallet address to query (e.g., '0x123...' for EVM chains or 'DYw8jCT...' for Solana).\n  - `limit` (int, optional): Maximum number of transactions to return (default: 100).\n- **Returns**: Formatted text with transaction details (chain, block_time, tx_hash, from, to, value) or an error message.\n- **Supported Chains**: Solana,arbitrum,arbitrum,avalanche_c,base,berachain,bnb,ethereum and more.\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Wallet Inspector": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/wallet-inspector-mcp", "run", "main.py"],
+        "env": {
+          "DUNE_SIM_API_KEY": "your_dune_sim_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "wallet-inspector-mcp",
+    "url": "https://github.com/kukapay/wallet-inspector-mcp",
+    "name": "wallet-inspector-mcp",
+    "path": null,
+    "stars": 4,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cdb72d22e4c9710f81538c5f7aedeaebd21f8995"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.984Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "tabulate",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"wallet-inspector-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.9.2\",\n    \"python-dotenv>=1.1.0\",\n    \"tabulate>=0.9.0\",\n]\n"
+}

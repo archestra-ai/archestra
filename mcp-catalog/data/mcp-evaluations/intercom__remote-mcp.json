@@ -1,0 +1,44 @@
+{
+  "name": "intercom__remote-mcp",
+  "display_name": "Intercom",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjk4ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI2MyI+PHBhdGggZD0iTTIyMS42NiAxNDQuNTYxYzAgMi4zNDItLjg5NyA0LjU4OC0yLjQ5MyA2LjI0NGMtMS41OTcgMS42NTYtMy43NjMgMi41ODYtNi4wMjEgMi41ODZzLTQuNDI0LS45My02LjAyMS0yLjU4NnMtMi40OTQtMy45MDItMi40OTQtNi4yNDRWNjUuNjc3YzAtMi4zNDIuODk3LTQuNTg4IDIuNDk0LTYuMjQzczMuNzYzLTIuNTg3IDYuMDItMi41ODdjMi4yNTkgMCA0LjQyNS45MyA2LjAyMiAyLjU4N2MxLjU5NiAxLjY1NSAyLjQ5MyAzLjkwMSAyLjQ5MyA2LjI0M3ptLTIuOTU1IDU0LjY1N2MtMS4xMjYgMS4xNjgtMzIuNzkyIDI4LjUzMy05MC44NDYgMjguNTMzcy04OS41MDgtMjcuMjItOTAuODQ1LTI4LjM4N2E4LjYgOC42IDAgMCAxLTIuMDQzLTIuNjU0YTkgOSAwIDAgMS0uNTMzLTYuNjM3YTguOCA4LjggMCAwIDEgMS41OS0yLjk2OWMxLjQ3LTEuNzYzIDMuNTUyLTIuODUyIDUuNzkzLTMuMDNhOC4zMiA4LjMyIDAgMCAxIDYuMTcgMi4wODJjLjQ5My4zNjUgMjguNzggMjQuMTU0IDc5Ljc5OCAyNC4xNTRzNzkuNTE2LTIzLjkzNSA3OS43OTgtMjQuMTU0YTguNDUgOC40NSAwIDAgMSA2LjIwMi0yLjA1OWMyLjI0Ny4xNzcgNC4zMzkgMS4yNTYgNS44MyAzLjAwN2E4LjkgOC45IDAgMCAxIDEuOTk1IDYuMjc0Yy0uMTU4IDIuMjgyLTEuMTc4IDQuNDA3LTIuODM5IDUuOTEzek0zMy45ODggNjUuNjc4Yy4xMjctMi4zNSAxLjE0Ni00LjU1MSAyLjgzNC02LjEyNHMzLjkwNy0yLjM4OCA2LjE3My0yLjI2OWE4LjM4IDguMzggMCAwIDEgNS41NjQgMi42YTkgOSAwIDAgMSAyLjQ1OCA1Ljc5MnY3OC43MzhjMCAyLjM0Mi0uODk3IDQuNTg4LTIuNDk0IDYuMjQ0Yy0xLjU5NiAxLjY1Ni0zLjc2MiAyLjU4Ni02LjAyIDIuNTg2Yy0yLjI1OSAwLTQuNDI0LS45My02LjAyMS0yLjU4NnMtMi40OTQtMy45MDItMi40OTQtNi4yNDR6TTc2LjcgNDguMTYzYy4xMjgtMi4zNSAxLjE0Ni00LjU1MSAyLjgzNC02LjEyNHMzLjkwOC0yLjM4OCA2LjE3NC0yLjI2OGE4LjM4IDguMzggMCAwIDEgNS41NjQgMi41OTlhOSA5IDAgMCAxIDIuNDU4IDUuNzkzVjE2NC45MmMwIDIuMzQxLS44OTggNC41ODctMi40OTQgNi4yNDNzLTMuNzYzIDIuNTg2LTYuMDIgMi41ODZjLTIuMjYgMC00LjQyNS0uOTMtNi4wMjItMi41ODZzLTIuNDk0LTMuOTAyLTIuNDk0LTYuMjQzem00Mi45MjUtNC4zNzljMC0yLjM0Mi44OTctNC41ODcgMi40OTQtNi4yNDNzMy43NjMtMi41ODcgNi4wMi0yLjU4N2MyLjI1OSAwIDQuNDI1LjkzIDYuMDIxIDIuNTg3YzEuNTk3IDEuNjU2IDIuNDk0IDMuOTAxIDIuNDk0IDYuMjQzdjEyNi45NzNjMCAyLjM0Mi0uODk3IDQuNTg4LTIuNDk0IDYuMjQ0Yy0xLjU5NiAxLjY1Ni0zLjc2MiAyLjU4Ni02LjAyIDIuNTg2cy00LjQyNC0uOTMtNi4wMjEtMi41ODZzLTIuNDk0LTMuOTAyLTIuNDk0LTYuMjQ0em00Mi4yMjEgNC4zNzljMC0yLjM0Mi44OTctNC41ODggMi40OTQtNi4yNDRzMy43NjMtMi41ODYgNi4wMi0yLjU4NmMyLjI1OSAwIDQuNDI1LjkzIDYuMDIxIDIuNTg2czIuNDk0IDMuOTAyIDIuNDk0IDYuMjQ0VjE2NC45MmMwIDIuMzQxLS44OTcgNC41ODctMi40OTQgNi4yNDNjLTEuNTk2IDEuNjU2LTMuNzYyIDIuNTg2LTYuMDIgMi41ODZzLTQuNDI0LS45My02LjAyMS0yLjU4NnMtMi40OTQtMy45MDItMi40OTQtNi4yNDN6TTIyMy45ODIgMEgzMi4wMThhMzAuOCAzMC44IDAgMCAwLTEyLjIwNSAyLjQzNEEzMS43IDMxLjcgMCAwIDAgOS40NCA5LjUzM0EzMy4xIDMzLjEgMCAwIDAgMi40ODIgMjAuMjFBMzQgMzQgMCAwIDAgMCAzMi44Mzl2MTk3LjAyOGEzNCAzNCAwIDAgMCAyLjQ4MiAxMi42MjhhMzMuMSAzMy4xIDAgMCAwIDYuOTU4IDEwLjY3OGEzMS43IDMxLjcgMCAwIDAgMTAuMzczIDcuMDk4YTMwLjggMzAuOCAwIDAgMCAxMi4yMDUgMi40MzRoMTkxLjk2NGEzMC44IDMwLjggMCAwIDAgMTIuMTg4LTIuNDI3YTMxLjcgMzEuNyAwIDAgMCAxMC4zNjUtNy4wOGEzMy4xIDMzLjEgMCAwIDAgNi45NjMtMTAuNjUyQTM0IDM0IDAgMCAwIDI1NiAyMjkuOTRWMzIuODRhMzQgMzQgMCAwIDAtMi40NzUtMTIuNjEyYTMzLjEgMzMuMSAwIDAgMC02Ljk0LTEwLjY3YTMxLjc1IDMxLjc1IDAgMCAwLTEwLjM1LTcuMTAyQTMwLjggMzAuOCAwIDAgMCAyMjQuMDUzLjAwMSIvPjwvc3ZnPg==",
+  "description": "Remote MCP server for Intercom - customer messaging and support platform",
+  "oauth_config": {
+    "name": "Intercom MCP",
+    "server_url": "https://mcp.intercom.com/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Intercom MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Support",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "intercom"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.intercom.com/mcp",
+    "docs_url": "https://developers.intercom.com/docs/guides/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

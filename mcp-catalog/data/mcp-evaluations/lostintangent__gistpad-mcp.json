@@ -1,0 +1,153 @@
+{
+  "name": "lostintangent__gistpad-mcp",
+  "display_name": "gistpad-mcp",
+  "description": "📓 An MCP server for managing your personal knowledge, daily notes, and re-usable prompts via GitHub Gists",
+  "author": {
+    "name": "lostintangent"
+  },
+  "server": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "gistpad-mcp",
+      "${user_config.archived}",
+      "${user_config.starred}",
+      "${user_config.daily}",
+      "${user_config.markdown}"
+    ],
+    "env": {
+      "GITHUB_TOKEN": "${user_config.github_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "github_token": {
+      "type": "string",
+      "title": "GitHub Personal Access Token",
+      "description": "A GitHub Personal Access Token that includes only the 'gist' scope.",
+      "sensitive": true,
+      "required": true
+    },
+    "archived": {
+      "type": "boolean",
+      "title": "Include Archived Gists as Resources",
+      "description": "Expose archived gists via the gist:/// URI scheme.",
+      "default": false,
+      "required": false
+    },
+    "starred": {
+      "type": "boolean",
+      "title": "Include Starred Gists as Resources",
+      "description": "Expose starred gists via the gist:/// URI scheme.",
+      "default": false,
+      "required": false
+    },
+    "daily": {
+      "type": "boolean",
+      "title": "Include Daily Notes as Resources",
+      "description": "Expose daily notes via the gist:/// URI scheme.",
+      "default": false,
+      "required": false
+    },
+    "markdown": {
+      "type": "boolean",
+      "title": "Filter Gists to Markdown Files Only",
+      "description": "Only list gists that are composed of Markdown files.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# 📓 GistPad MCP\n\nAn MCP server for managing and sharing your personal knowledge, daily notes, and reuseable prompts via GitHub Gists. It's a companion to the GistPad [VS Code extension](https://aka.ms/gistpad) and [GistPad.dev](https://gistpad.dev) (for web/mobile), which allows you to access and edit your gists from any MCP-enabled AI product (e.g. GitHub Copilot, Claude Desktop).\n\n- 🏃 [Getting started](#-getting-started)\n- 🛠️ [Included tools](#️-included-tools)\n- 📁 [Included resources](#-included-resources)\n- 💬 [Reusable prompts](#-reusable-prompts)\n- 💻 [CLI reference](#-cli-reference)\n\n## 🏃 Getting started\n\n1. Using VS Code?\n\n   1. Install the [GistPad extension](https://aka.ms/gistpad) and then reload VS Code\n\n      > _Note: This requires VS Code 1.101.0+, so if you're on an older version, it's time to upgrade!_\n\n   1. Open the `GistPad` tab and sign-in with your GitHub account. After that, you can begin using GistPad from Copilot chat (in `Agent` mode) without doing any extra setup or token management 💪\n\n1. Other MCP clients...\n\n   1. Generate a personal access token that includes _only_ the `gist` scope: https://github.com/settings/tokens/new\n   1. Add the equivalent of the following to your client's MCP config file (or via an \"Add MCP server\" GUI/TUI):\n\n      ```json\n      {\n        \"mcpServers\": {\n          \"gistpad\": {\n            \"command\": \"npx\",\n            \"args\": [\"-y\", \"gistpad-mcp\"],\n            \"env\": {\n              \"GITHUB_TOKEN\": \"<YOUR_PAT>\"\n            }\n          }\n        }\n      }\n      ```\n\nOnce your client it setup, you can start having fun with gists + MCP! 🥳 For example, try things like...\n\n1. **Exploring content**\n\n   - `How many gists have I edited this month?`\n   - `What's the summary of my <foo> gist?`\n\n1. **Creating content**\n\n   - `Create a new gist about <foo>`\n   - `Update my <foo> gist to call out <bar>`\n\n1. **Daily todos**\n\n   - `What are my unfinished todos for today?`\n   - `Add a new todo for <foo>`\n\n1. **Collaboration**\n\n   - `Add a comment to the <foo> gist saying <bar>`\n   - `Give me a share URL for the <foo> gist`\n   - `View my starred gists`\n\n1. **Gist organization**\n\n   - `Archive my gist about <foo>`\n   - `Add a new <foo> file to the <bar> gist and migrate the <baz> content into it`\n\n1. **Reusable prompts**\n\n   - `Create a new prompt that searches the web ofor a specified manga series and then provides a summary about it`\n   - `Delete my prompt about <foo>`\n\n## 🛠️ Included tools\n\n### Gist management\n\n- `list_gists` - List all of your gists (excluding daily notes and archived gists).\n- `get_gist` - Get the contents of a gist by ID.\n- `create_gist` - Create a new gist with a specified description and initial file contents.\n- `delete_gist` - Delete a gist by ID.\n- `update_gist_description` - Update a gist's description by ID.\n- `duplicate_gist` - Create a copy of an existing gist with all its files.\n- `refresh_gists` - Reload your gist lists, ignoring any cached data.\n\n### File management\n\n- `update_gist_file` - Update the contents of a specific file in a gist.\n- `add_gist_file` - Add a new file to an existing gist.\n- `delete_gist_file` - Delete a file from a gist.\n- `rename_gist_file` - Rename an existing file within a gist.\n\n### Daily notes\n\n- `get_todays_note` - Get or create today's daily note.\n- `update_todays_note` - Update the content of today's daily note.\n- `list_daily_notes` - List all of your daily notes.\n- `get_daily_note` - Get the contents of a specific daily note by date.\n- `delete_daily_note` - Delete a specific daily note by date.\n\n### Starring\n\n- `list_starred_gists` - List all your starred gists.\n- `star_gist` - Star a specific gist by ID.\n- `unstar_gist` - Unstar a starered gist by ID.\n\n### Archiving\n\n- `list_archived_gists` - List all of your archived gists.\n- `archive_gist` - Archive one of your gists.\n- `unarchive_gist` - Unarchive an archived gist.\n\n### Comments\n\n- `list_gist_comments` - List all comments for a specified gist.\n- `add_gist_comment` - Add a new comment to a gist.\n- `edit_gist_comment` - Update the content of an existing comment.\n- `delete_gist_comment` - Delete a comment from a gist.\n\n### Prompts\n\n- `list_gist_prompts` - List the prompts in your prompts collection.\n- `add_gist_prompt` - Add a new prompt to your prompts collection.\n- `delete_gist_prompt` - Delete a prompt from your collection.\n\n## 📁 Included resources\n\nIn addition to the above tools, the GistPad MCP server also exposes your gists as resources (using the `gist:///` URI scheme), which allows clients to read them without requiring tool execution.\n\nWhen you add/delete/duplicate a gist, or change a gist's description, then a notification will be provided to MCP clients, indicating that the list of resources have changed. And if your MCP client supports resource subscriptions, then you can subscribe to a specific gist and get notified when it's updated.\n\nAdditionally, for MCP clients that support resource templates, GistPad also exposes a resource at `gist:///{gistId}/comments`, which allows querying the comments for a gist (without needing to execute the `list_gist_comments` tool).\n\n### Resource configuration\n\nIf you'd like to expose either your archived gists, starred gists, and/or daily notes as resources, then simply update your MCP server config to pass the `--archived`, `--starred`, and/or `--daily` flags to the `gistpad-mcp` CLI.\n\n## 💬 Reusable prompts\n\nGistPad allows you to create and manage parameterized/reusable prompts that are stored as markdown files in a gist. You can manage prompts using the `add_prompt` and `delete_prompt` tool, by simply asking your MCP client to create/delete a prompt, with the specified contents/arguments you want.\n\nBehind the scenes, prompts are stored as markdown files in a gist called `💬 Prompts` (which is automatically created by the `add_prompt` tool). The prompt files include their prompt as the body, and optionally, a description and arguments using front-matter. And if the prompt makes use of arguments, the body of the prompt should include `{{argument}}` placeholders, which will be replaced when the MCP client retrieves it.\n\n## 💻 CLI Reference\n\nThe `gistpad-mcp` CLI accepts the following optional flags:\n\n- `--archived` - Include archived gists in the list of MCP resources _(Note: The `list_archived_gists` tool is always available)_\n- `--starred` - Include starred gists in the list of MCP resources _(Note: The `list_starred_gists` tool is always available)_\n- `--daily` - Include daily notes in the list of MCP resources _(Note: The `list_daily_notes` tool is always available)_\n- `--markdown` - Filter the list of gists that are returned, to only those that are composed of Markdown files.\n\n## 🧰 Troubleshooting\n\n- <u>Not seeing a gist in your list?</u> The GistPad MCP server caches your gist list and updates it 1) anytime you make a change through the MCP server, or 2) every hour. However, if you add/edit/delete a gist using an external client, you may need to tell GistPad MCP to refresh itself (assuming it hasn't performed its hourly refresh yet). You can do this by triggering the `refresh_gists` tool (e.g. running `#refresh_gists` in VS Code Copilot chat).\n",
+  "category": "Development",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gistpad-mcp": {
+        "command": "npx",
+        "args": ["-y", "gistpad-mcp"],
+        "env": {
+          "GITHUB_TOKEN": "<YOUR_PAT>"
+        }
+      },
+      "gistpad-mcp-archived": {
+        "command": "npx",
+        "args": ["-y", "gistpad-mcp", "--archived"],
+        "env": {
+          "GITHUB_TOKEN": "<YOUR_PAT>"
+        }
+      },
+      "gistpad-mcp-starred": {
+        "command": "npx",
+        "args": ["-y", "gistpad-mcp", "--starred"],
+        "env": {
+          "GITHUB_TOKEN": "<YOUR_PAT>"
+        }
+      },
+      "gistpad-mcp-daily": {
+        "command": "npx",
+        "args": ["-y", "gistpad-mcp", "--daily"],
+        "env": {
+          "GITHUB_TOKEN": "<YOUR_PAT>"
+        }
+      },
+      "gistpad-mcp-markdown": {
+        "command": "npx",
+        "args": ["-y", "gistpad-mcp", "--markdown"],
+        "env": {
+          "GITHUB_TOKEN": "<YOUR_PAT>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "lostintangent",
+    "repo": "gistpad-mcp",
+    "url": "https://github.com/lostintangent/gistpad-mcp",
+    "name": "gistpad-mcp",
+    "path": null,
+    "stars": 143,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "576d54978d9eda595600e5f9d8e75b0c9752fcb3"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:20.048Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "gray-matter",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"gistpad-mcp\",\n  \"version\": \"0.4.8\",\n  \"description\": \"An MCP server for managing your personal knowledge, daily notes, and reusable prompts via GitHub Gists.\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"gistpad-mcp\": \"./build/index.js\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/lostintangent/gistpad-mcp\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/lostintangent/gistpad-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/lostintangent/gistpad-mcp#readme\",\n  \"license\": \"MIT\",\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"axios\": \"^1.10.0\",\n    \"gray-matter\": \"^4.0.3\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

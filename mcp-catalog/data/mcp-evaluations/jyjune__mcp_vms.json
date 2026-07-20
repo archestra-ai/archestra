@@ -1,0 +1,142 @@
+{
+  "name": "jyjune__mcp_vms",
+  "display_name": "mcp_vms",
+  "description": "MCP server for controlling and accessing a video surveillance system",
+  "author": {
+    "name": "jyjune"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "mcp_vms.py"],
+    "env": {
+      "VMS_IMG_WIDTH": "${user_config.vms_img_width}",
+      "VMS_IMG_HEIGHT": "${user_config.vms_img_height}",
+      "VMS_PIXEL_FORMAT": "${user_config.vms_pixel_format}",
+      "VMS_URL": "${user_config.vms_url}",
+      "VMS_PORT": "${user_config.vms_port}",
+      "VMS_ACCESS_ID": "${user_config.vms_access_id}",
+      "VMS_ACCESS_PW": "${user_config.vms_access_pw}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "vms_img_width": {
+      "type": "number",
+      "title": "Image Width",
+      "description": "Width for retrieved images.",
+      "default": 320,
+      "required": false
+    },
+    "vms_img_height": {
+      "type": "number",
+      "title": "Image Height",
+      "description": "Height for retrieved images.",
+      "default": 240,
+      "required": false
+    },
+    "vms_pixel_format": {
+      "type": "string",
+      "title": "Pixel Format",
+      "description": "Pixel format for retrieved images (e.g., RGB, BGR).",
+      "default": "RGB",
+      "required": false
+    },
+    "vms_url": {
+      "type": "string",
+      "title": "VMS Server URL",
+      "description": "IP address or hostname of the VMS server.",
+      "default": "127.0.0.1",
+      "required": false
+    },
+    "vms_port": {
+      "type": "number",
+      "title": "VMS Server Port",
+      "description": "Port number for the VMS server connection.",
+      "default": 3300,
+      "required": false
+    },
+    "vms_access_id": {
+      "type": "string",
+      "title": "VMS Access ID",
+      "description": "Username for VMS server authentication.",
+      "default": "admin",
+      "sensitive": true,
+      "required": false
+    },
+    "vms_access_pw": {
+      "type": "string",
+      "title": "VMS Access Password",
+      "description": "Password for VMS server authentication.",
+      "default": "admin",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/jyjune-mcp-vms-badge.png)](https://mseep.ai/app/jyjune-mcp-vms)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/jyjune/mcp_vms)](https://archestra.ai/mcp-catalog/jyjune__mcp_vms)\n\n# MCP Server - VMS Integration\n\nA Model Context Protocol (MCP) server designed to connect to a CCTV recording program (VMS) to retrieve recorded and live video streams. It also provides tools to control the VMS software, such as showing live or playback dialogs for specific channels at specified times.\n\n![diagram](https://github.com/jyjune/mcp_vms/blob/main/mcp_vms_diagram.png?raw=true)\n\n## Features\n\n- Retrieve video channel information, including connection and recording status.\n- Fetch recording dates and times for specific channels.\n- Fetch live or recorded images from video channels.\n- Show live video streams or playback dialogs for specific channels and timestamps.\n- Control PTZ (Pan-Tilt-Zoom) cameras by moving them to preset positions.\n- Comprehensive error handling and logging.\n\n## Prerequisites\n\n- Python 3.12+\n- `vmspy` library (for VMS integration)\n- `Pillow` library (for image processing)\n\n## MCP-server Configuration\n\nIf you want to use `mcp-vms` with Claude desktop, you need to set up the `claude_desktop_config.json` file as follows:\n\n```json\n{\n  \"mcpServers\": {\n\t\"vms\": {\n\t  \"command\": \"uv\",\n\t  \"args\": [\n\t\t\"--directory\",\n\t\t\"X:\\\\path\\\\to\\\\mcp-vms\",\n\t\t\"run\",\n\t\t\"mcp_vms.py\"\n\t  ]\n\t}\n  }\n}\n```\n\n## VMS Connection Configuration\n\nThe server uses the following default configuration for connecting to the VMS:\n- mcp_vms_config.py\n```python\nvms_config = {\n    'img_width': 320,\n    'img_height': 240,\n    'pixel_format': 'RGB',\n    'url': '127.0.0.1',\n    'port': 3300,\n    'access_id': 'admin',\n    'access_pw': 'admin',\n}\n```\n\n## Installation\n\n### 1. Install UV Package Manager\nRun the following command in PowerShell to install `UV`:\n\n```shell\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n\nFor alternative installation methods, see the [official UV documentation](https://docs.astral.sh/uv/getting-started/installation/).\n\n### 2.Install VMS Server\n   Download and install the VMS server from:  \n   [http://surveillance-logic.com/en/download.html](http://surveillance-logic.com/en/download.html)\n   (Required before using this MCP server)\n\n### 3.Install Python Dependencies\n   Download the vmspy library:  \n   [vmspy1.4-python3.12-x64.zip](https://sourceforge.net/projects/security-vms/files/vmspy1.4-python3.12-x64.zip/download)\n   Extract the contents into your `mcp_vms` directory\n\nThe mcp-vms directory should look like this:\n\n```shell\nmcp-vms/\n├── .gitignore\n├── .python-version\n├── LICENSE\n├── README.md\n├── pyproject.toml\n├── uv.lock\n├── mcp_vms.py            # Main server implementation\n├── mcp_vms_config.py     # VMS connection configuration\n├── vmspy.pyd             # VMS Python library\n├── avcodec-61.dll        # FFmpeg libraries\n├── avutil-59.dll\n├── swresample-5.dll\n├── swscale-8.dll\n```\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/7027c4cd-a9c1-43dd-9e74-771fc7cc42da)\n",
+  "category": "Security",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "vms": {
+        "command": "uv",
+        "args": ["--directory", "X:\\path\\to\\mcp-vms", "run", "mcp_vms.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jyjune",
+    "repo": "mcp_vms",
+    "url": "https://github.com/jyjune/mcp_vms",
+    "name": "mcp_vms",
+    "path": null,
+    "stars": 6,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4983fb2a9024eb0ac067af97a26a8fcbebc5ceed"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:34.321Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 7
+    },
+    {
+      "name": "pillow",
+      "importance": 8
+    },
+    {
+      "name": "vmspy",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-vms\"\nversion = \"0.1.0\"\ndescription = \"VMS Video Fetch\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"mcp[cli]>=1.2.1\",\n    \"numpy>=2.2.4\",\n    \"pillow>=11.1.0\",\n]\n"
+}

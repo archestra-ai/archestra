@@ -1,0 +1,61 @@
+{
+  "name": "netdata__netdata__src__web__mcp__readme.md",
+  "display_name": "README.md",
+  "description": "The fastest path to AI-powered full stack observability, even for lean teams.",
+  "author": {
+    "name": "netdata"
+  },
+  "server": {
+    "command": "",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "readme": null,
+  "category": "Monitoring",
+  "quality_score": 50,
+  "programming_language": "C",
+  "framework": null,
+  "github_info": {
+    "owner": "netdata",
+    "repo": "netdata",
+    "url": "https://github.com/netdata/netdata/blob/master/src/web/mcp/README.md",
+    "name": "netdata__netdata__src__web__mcp__readme.md",
+    "path": "src/web/mcp/README.md",
+    "stars": 75677,
+    "contributors": 663,
+    "issues": 8117,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "31e1f6dd6089c87a8aeca06d792fbf0974531f04"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "user_config": {},
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": null,
+  "last_scraped_at": "2025-09-09T13:06:24.809Z"
+}

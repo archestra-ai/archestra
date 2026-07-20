@@ -1,0 +1,140 @@
+{
+  "name": "daisys-ai__daisys-mcp",
+  "display_name": "daisys-mcp",
+  "description": "The Daisys mcp server",
+  "author": {
+    "name": "daisys-ai"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["daisys-mcp"],
+    "env": {
+      "DAISYS_EMAIL": "${user_config.daisys_email}",
+      "DAISYS_PASSWORD": "${user_config.daisys_password}",
+      "DAISYS_BASE_STORAGE_PATH": "${user_config.daisys_base_storage_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "daisys_email": {
+      "type": "string",
+      "title": "Daisys Email",
+      "description": "Your email address for Daisys account",
+      "required": true,
+      "sensitive": false
+    },
+    "daisys_password": {
+      "type": "string",
+      "title": "Daisys Password",
+      "description": "Your password for Daisys account",
+      "required": true,
+      "sensitive": true
+    },
+    "daisys_base_storage_path": {
+      "type": "directory",
+      "title": "Daisys Base Storage Path",
+      "description": "Path where you want to store your audio files",
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/daisys-ai-daisys-mcp-badge.png)](https://mseep.ai/app/daisys-ai-daisys-mcp)\n\n# Daisys MCP server\n[![smithery badge](https://smithery.ai/badge/@daisys-ai/daisys-mcp)](https://smithery.ai/server/@daisys-ai/daisys-mcp)\n\nDaisys-mcp is a beta version and doesn't have a stable release yet. But you can try it out by doing the following:\n\n1. Get an account on [Daisys](https://www.daisys.ai/) and create an username and password.\n\n\nIf you run on mac os run the following command:\n```bash\nbrew install portaudio\n```\n\nIf you run on linux run the following command:\n```bash\nsudo apt install portaudio19-dev libjack-dev\n```\n\n2. Add the following configuration to the mcp config file in your MCP client ([Claude Desktop](https://claude.ai/download), [Cursor](https://www.cursor.com/), [mcp-cli](https://github.com/chrishayuk/mcp-cli), [mcp-vscode](https://code.visualstudio.com/docs/copilot/chat/mcp-servers), etc.):\n```json\n{\n  \"mcpServers\": {\n    \"daisys-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\"daisys-mcp\"],\n      \"env\": {\n        \"DAISYS_EMAIL\": \"{Your Daisys Email}\",\n        \"DAISYS_PASSWORD\": \"{Your Daisys Password}\",\n        \"DAISYS_BASE_STORAGE_PATH\": \"{Path where you want to store your audio files}\"\n      }\n    }\n  }\n}\n```\n\n## To build from source:\n\n1. clone the repository: `git clone https://github.com/daisys-ai/daisys-mcp.git`\n\n2. cd into the repository: `cd daisys-mcp`\n\n3. Install `uv` (Python package manager), install with `curl -LsSf https://astral.sh/uv/install.sh | sh` or see the `uv` [repo](https://github.com/astral-sh/uv) for additional install methods.\n\n4. Create a virtual environment and install dependencies [using uv](https://github.com/astral-sh/uv):\n\n```bash\nuv venv\n# source .venv/Scripts/activate (Windows)\nsource .venv/bin/activate (mac and linux)\nuv pip install -e .\n```\n\n5. Add the following to your config file in your MCP client ([Claude Desktop](https://claude.ai/download), [Cursor](https://www.cursor.com/), [mcp-cli](https://github.com/chrishayuk/mcp-cli), [mcp-vscode](https://code.visualstudio.com/docs/copilot/chat/mcp-servers), etc.):\n```json\n{\n    \"mcpServers\": {\n        \"daisys-mcp\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"{installation_path}/daisys-mcp\",\n                \"run\",\n                \"-m\",\n                \"daisys_mcp.server\"\n            ],\n            \"env\": {\n                \"DAISYS_EMAIL\": \"{Your Daisys Email}\",\n                \"DAISYS_PASSWORD\": \"{Your Daisys Password}\",\n                \"DAISYS_BASE_STORAGE_PATH\": \"{Path where you want to store your audio files}\"\n            }\n        }\n    }\n}\n```\n\n## Common Issues\n\nIf you get any issues with portaudio on linux, you can try installing it manually:\n```bash\nsudo apt-get update\nsudo apt-get install -y portaudio19-dev\n```\n\n## Contributing\n\nIf you want to contribute or run from source:\n\n1. Clone the repository:\n\n```bash\ngit clone https://github.com/daisys-ai/daisys-mcp.git\ncd daisys_mcp\n```\n\n2. Create a virtual environment and install dependencies [using uv](https://github.com/astral-sh/uv):\n\n```bash\nuv venv\nsource .venv/bin/activate\nuv pip install -e .\nuv pip install -e \".[dev]\"\n```\n\n3. Copy `.env.example` to `.env` and add your DAISYS username and password:\n\n```bash\ncp .env.example .env\n# Edit .env and add your DAISYS username and password\n```\n\n4. Test the server by running the tests:\n\n```bash\nuv run pytest\n```\n\nyou can also run a full integration test with:\n\n```bash\nuv run pytest -m 'requires_credentials' # ⚠️ Running full integration tests does costs tokens on the Daisys platform \n```\n\n5. Debug and test locally with MCP Inspector: `uv run mcp dev daisys_mcp/server.py`\n",
+  "category": "Development",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "daisys-mcp": {
+        "command": "uvx",
+        "args": ["daisys-mcp"],
+        "env": {
+          "DAISYS_EMAIL": "{Your Daisys Email}",
+          "DAISYS_PASSWORD": "{Your Daisys Password}",
+          "DAISYS_BASE_STORAGE_PATH": "{Path where you want to store your audio files}"
+        }
+      },
+      "daisys-mcp-from-source": {
+        "command": "uv",
+        "args": ["--directory", "{installation_path}/daisys-mcp", "run", "-m", "daisys_mcp.server"],
+        "env": {
+          "DAISYS_EMAIL": "{Your Daisys Email}",
+          "DAISYS_PASSWORD": "{Your Daisys Password}",
+          "DAISYS_BASE_STORAGE_PATH": "{Path where you want to store your audio files}"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "daisys-ai",
+    "repo": "daisys-mcp",
+    "url": "https://github.com/daisys-ai/daisys-mcp",
+    "name": "daisys-mcp",
+    "path": null,
+    "stars": 8,
+    "contributors": 4,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "93a6e5898e7f13b97fb6241f65a36b1432945fc6"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:37.462Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "daisys",
+      "importance": 9
+    },
+    {
+      "name": "httpx-ws",
+      "importance": 8
+    },
+    {
+      "name": "pyaudio",
+      "importance": 8
+    },
+    {
+      "name": "sounddevice",
+      "importance": 8
+    },
+    {
+      "name": "soundfile",
+      "importance": 8
+    },
+    {
+      "name": "wave",
+      "importance": 8
+    },
+    {
+      "name": "numpy",
+      "importance": 7
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"daisys-mcp\"\nversion = \"1.0.3\"\ndescription = \"Daisys MCP Server\"\nauthors = [\n    {name = \"Jasper Jumelet\", email = \"jasper@daisys.ai\"},\n]\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"daisys>=1.1.0\",\n    \"httpx-ws>=0.7.2\",\n    \"mcp>=1.6.0\",\n    \"mcp[cli]==1.6\",\n    \"numpy>=2.2.5\",\n    \"pyaudio>=0.2.14\",\n    \"pydantic>=2.10.6\",\n    \"sounddevice>=0.5.1\",\n    \"soundfile>=0.13.1\",\n    \"wave>=0.0.2\",\n]\n[project.scripts]\ndaisys-mcp = \"daisys_mcp.server:main\"\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=8.0.0\",\n    \"pytest-asyncio>=0.23.8\",\n    \"pre-commit==3.6.2\",\n    \"ruff==0.3.0\",\n    \"fastmcp==0.4.1\",\n    \"twine==6.1.0\",\n    \"pytest==8.0.0\",\n    \"build>=1.0.3\",\n]\n\n\n[build-system]\nrequires = [\"setuptools>=45\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n\n=== setup.py ===\nfrom setuptools import setup, find_packages\n\nsetup(\n    packages=find_packages(),\n    include_package_data=True,\n)\n"
+}

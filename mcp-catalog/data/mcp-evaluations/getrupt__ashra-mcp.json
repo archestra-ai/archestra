@@ -1,0 +1,84 @@
+{
+  "name": "getrupt__ashra-mcp",
+  "display_name": "ashra-mcp",
+  "description": "A Model Context Protocol server for Ashra",
+  "author": {
+    "name": "getrupt"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@ashra/mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Ashra MCP\n\nA Model Context Protocol server for Ashra.\n\n## Usage\n\nInstall dependencies:\n\n`yarn`\n\nBuild the project:\n\n`yarn build`\n\n## Claude Configuration\n\nDownload the latest version of [Claude](https://claude.ai/download).\n\nAdd to or create the following file `claude_desktop_config.json` in `cd ~/Library/Application\\ Support/Claude`:\n\n```json\n{\n  \"mcpServers\": {\n    \"ashra\": {\n      \"command\": \"node\",\n      // OR if you're using nvm and the version picked is not preferred/working\n      // \"command\": \"/Users/<user>/.nvm/versions/node/<version>/bin/node\",\n      \"args\": [\"<path/to/ashra-mcp>/build/index.js\"],\n      \"env\": {\n        \"ASHRA_API_KEY\": \"<YOUR-API-KEY>\"\n      }\n    }\n  }\n}\n```\n\n## Troubleshooting\n\nConsult the [MCP server documentation](https://modelcontextprotocol.io/quickstart/server) for more information.\n",
+  "category": "AI Tools",
+  "quality_score": 32,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ashra-mcp-configured": {
+        "command": "node",
+        "args": ["<path/to/ashra-mcp>/build/index.js"],
+        "env": {
+          "ASHRA_API_KEY": "<YOUR-API-KEY>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "getrupt",
+    "repo": "ashra-mcp",
+    "url": "https://github.com/getrupt/ashra-mcp",
+    "name": "getrupt__ashra-mcp",
+    "path": null,
+    "stars": 40,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "dae1ad6723ed1fc2c66131e7779ae612f432cf55"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.849Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "universal-user-agent",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"ashra-mcp\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"ashra\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"universal-user-agent\": \"^7.0.2\",\n    \"zod\": \"^3.24.2\",\n    \"zod-to-json-schema\": \"^3.24.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.10\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

@@ -1,0 +1,76 @@
+{
+  "name": "yamanoku__baseline-mcp-server",
+  "display_name": "baseline-mcp-server",
+  "description": "特定のWeb APIに関するBaselineの状況を提供するModel Context Protocolサーバー",
+  "author": {
+    "name": "yamanoku"
+  },
+  "server": {
+    "command": "deno",
+    "args": ["run", "--allow-net=api.webstatus.dev", "jsr:@yamanoku/baseline-mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<p align=\"center\">\n\t<img src=\"./logo.png\" alt=\"Baseline MCP Serverロゴ\" width=\"200\" height=\"200\">\n</p>\n\n<h1 align=\"center\">Baseline MCP Server</h1>\n\n[日本語版](./README.md) | [English Version](./README_EN.md)\n\nWeb Platform APIのサポート状況を提供するModel Context Protocolサーバーです。\n\n[![JSR Version](https://jsr.io/badges/@yamanoku/baseline-mcp-server)](https://jsr.io/@yamanoku/baseline-mcp-server)\n\n## 概要\n\nこのサーバーは、[Web Platform Dashboard](https://webstatus.dev/)のAPIを使用して、WebのAPI機能のBaselineステータス（サポート状況）を取得できるMCPサーバーを実装しています。クエリに基づいてWeb機能の情報を取得し、その結果をMCPクライアントに返します。\n\n![Claude Desktop上でdetails要素にまつわるBaseline情報を質問してMCPサーバーを経由してその結果が反映されている。内容は<details>要素、相互排他的な<details>要素、::details-content疑似要素のそれぞれをリストアップしてBaselineの情報を伝えている。](./screenshot_claude_desktop.png)\n\n## 機能\n\n- Web Platform DashboardのAPIを使用した機能検索\n- 機能のBaselineステータス（`widely`、`newly`、`limited`、`no_data`）の提供\n- ブラウザ実装状況（バージョンと実装日）の提供\n- 機能の使用状況データの提供\n- 特定のブラウザを除外した機能検索（`chrome`, `edge`, `firefox`, `safari`）\n- MCPを介した各種AIモデルとの連携\n\n## Baselineステータスについて\n\nBaselineステータスは、Web機能のブラウザサポート状況を示します：\n\n- **widely**:\n  広くサポートされているWeb標準機能。ほとんどのブラウザで安全に使用できます。\n- **newly**:\n  新しく標準化されたWeb機能。主要なブラウザでサポートされ始めていますが、まだ普及途上です。\n- **limited**:\n  限定的にサポートされているWeb機能。一部のブラウザでは使用できないか、フラグが必要な場合があります。\n- **no_data**:\n  現時点ではBaselineに含まれていないWeb機能。ブラウザのサポート状況を個別に確認する必要があります。\n\nBaselineについての詳細については「[Baseline (互換性) - MDN Web Docs 用語集](https://developer.mozilla.org/ja/docs/Glossary/Baseline/Compatibility)」を参照してください。\n\n## MCPクライアントでの設定\n\n- サーバーを起動するにあたり、Denoの使用を推奨します\n  - パーミッションとして`api.webstatus.dev`のみのアクセスを許可してください\n- [`@yamanoku/baseline-mcp-server`](https://jsr.io/@yamanoku/baseline-mcp-server)を指定するか、お手元のローカル環境にbaseline-mcp-server.tsを設置して読み取るように設定してください\n\n### Claude Desktop\n\nClaude\nDesktopのMCPクライアントで使用するには、以下のように`cline_mcp_settings.json`に設定を追加します。\n\n```json\n{\n  \"mcpServers\": {\n    \"baseline-mcp-server\": {\n      \"command\": \"deno\",\n      \"args\": [\n        \"run\",\n        \"--allow-net=api.webstatus.dev\",\n        \"jsr:@yamanoku/baseline-mcp-server\"\n      ]\n    }\n  }\n}\n```\n\n### Visual Studio Code\n\nVisual Studio\nCodeのMCPクライアントで使用するには、以下のように`settings.json`に設定を追加します。\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"baseline-mcp-server\": {\n        \"command\": \"deno\",\n        \"args\": [\n          \"run\",\n          \"--allow-net=api.webstatus.dev\",\n          \"jsr:@yamanoku/baseline-mcp-server\"\n        ]\n      }\n    }\n  }\n}\n```\n\n## Dockerによる起動\n\n最初にDockerイメージをビルドします。\n\n```shell\ndocker build -t baseline-mcp-server .\n```\n\nMCPクライアントの設定でDockerコンテナを実行するようにします。\n\n```json\n{\n  \"mcpServers\": {\n    \"baseline-mcp-server\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"baseline-mcp-server:latest\"\n      ]\n    }\n  }\n}\n```\n\n## 謝辞\n\nこのOSSはGPT-4o Image Generationによってロゴを製作、Claude 3.7\nSonnetによって実装、ドキュメントのサンプルを提案いただきました。感謝申し上げます。\n\n## ライセンス\n\n[MIT License](./LICENSE)\n",
+  "category": "Development",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "yamanoku-baseline-mcp-server": {
+        "command": "deno",
+        "args": ["run", "--allow-net=api.webstatus.dev", "jsr:@yamanoku/baseline-mcp-server"],
+        "env": {}
+      },
+      "baseline-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "baseline-mcp-server:latest"],
+        "env": {},
+        "docker_image": "baseline-mcp-server:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "yamanoku",
+    "repo": "baseline-mcp-server",
+    "url": "https://github.com/yamanoku/baseline-mcp-server",
+    "name": "baseline-mcp-server",
+    "path": null,
+    "stars": 33,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "09d5b60c6f961475c8a15e54140851ad654c17bb"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:31.897Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

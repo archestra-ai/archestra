@@ -1,0 +1,181 @@
+{
+  "name": "mmntm__weblate-mcp",
+  "display_name": "weblate-mcp",
+  "description": "MCP server from mmntm/weblate-mcp",
+  "author": {
+    "name": "mmntm"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mmntm/weblate-mcp"],
+    "env": {
+      "WEBLATE_API_URL": "${user_config.weblate_api_url}",
+      "WEBLATE_API_TOKEN": "${user_config.weblate_api_token}",
+      "PORT": "${user_config.port}",
+      "NODE_ENV": "${user_config.node_env}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "weblate_api_url": {
+      "type": "string",
+      "title": "Weblate API URL",
+      "description": "The base URL for your Weblate instance's API (e.g., https://your-weblate-instance.com/api)",
+      "sensitive": false,
+      "required": true,
+      "default": "https://your-weblate-instance.com/api"
+    },
+    "weblate_api_token": {
+      "type": "string",
+      "title": "Weblate API Token",
+      "description": "Your API token for authenticating with Weblate",
+      "sensitive": true,
+      "required": true
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port on which the MCP server will listen",
+      "sensitive": false,
+      "required": false,
+      "default": 3001
+    },
+    "node_env": {
+      "type": "string",
+      "title": "Node Environment",
+      "description": "The Node.js environment (e.g., 'production', 'development')",
+      "sensitive": false,
+      "required": false,
+      "default": "production"
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "The logging level for the server (e.g., 'info', 'debug', 'warn', 'error')",
+      "sensitive": false,
+      "required": false,
+      "default": "info"
+    }
+  },
+  "readme": "# Weblate MCP Server\n\nA [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that provides seamless integration with Weblate translation management platform. This server enables AI assistants to interact directly with your Weblate instance for comprehensive translation management.\n\n## 🌟 Features\n\n- **🔧 Complete Weblate API Access**: Full integration with Weblate's REST API\n- **🤖 AI-Powered Workflow**: Natural language interaction with your translation projects\n- **📊 Project Management**: Create, list, and manage translation projects\n- **🔍 Component Operations**: Handle translation components and configurations\n- **✏️ Translation Management**: Update, search, and manage translations\n- **🌐 Language Support**: Work with all supported languages in your Weblate instance\n- **🚀 Multiple Transports**: HTTP/SSE, Streamable HTTP, and STDIO support\n- **🛡️ Type Safety**: Full TypeScript implementation with comprehensive error handling\n- **⚡ LLM-Optimized**: Tools designed to guide AI models toward efficient usage patterns\n\n## 🎯 What is This?\n\nThis MCP server acts as a bridge between AI assistants (like Claude Desktop) and your Weblate translation management platform. Instead of manually navigating the Weblate web interface, you can use natural language to:\n\n- **\"List all projects in my Weblate instance\"**\n- **\"Show me the French translations for the frontend component\"**\n- **\"Update the welcome message translation\"**\n- **\"Create a new translation project\"**\n\n## 🚀 Quick Start\n\n### Option 1: Use with npx (Recommended)\n\nThe easiest way to use this MCP server is with npx - no installation required!\n\n**For Claude Desktop or other MCP clients:**\n```json\n{\n  \"mcpServers\": {\n    \"weblate\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@mmntm/weblate-mcp\"],\n      \"env\": {\n        \"WEBLATE_API_URL\": \"https://your-weblate-instance.com/api\",\n        \"WEBLATE_API_TOKEN\": \"your-weblate-api-token\"\n      }\n    }\n  }\n}\n```\n\n**Manual testing:**\n```bash\n# Test the server directly\nnpx @mmntm/weblate-mcp\n```\n\n### Option 2: Development Setup\n\n### Prerequisites\n- Node.js 18+\n- pnpm package manager\n- Weblate instance with API access\n\n### Installation\n```bash\n# Clone and install\ngit clone <this-repo>\ncd weblate-mcp\npnpm install\n\n# Configure environment\ncp .env.example .env\n# Edit .env with your Weblate API URL and token\n\n# Build and start\npnpm build\npnpm start\n```\n\nServer runs on `http://localhost:3001` by default.\n\n### Environment Configuration\n```env\nWEBLATE_API_URL=https://your-weblate-instance.com\nWEBLATE_API_TOKEN=your-api-token-here\nPORT=3001\nNODE_ENV=production\nLOG_LEVEL=info\n```\n\n## 🔗 MCP Client Configuration\n\n### Claude Desktop (npx method - Recommended)\nAdd to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):\n```json\n{\n  \"mcpServers\": {\n    \"weblate\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@mmntm/weblate-mcp\"],\n      \"env\": {\n        \"WEBLATE_API_URL\": \"https://your-weblate-instance.com/api\",\n        \"WEBLATE_API_TOKEN\": \"your-weblate-api-token\"\n      }\n    }\n  }\n}\n```\n\n### Claude Desktop (Development/Local)\nFor development or local builds:\n```json\n{\n  \"mcpServers\": {\n    \"weblate\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/weblate-mcp/dist/main.js\"],\n      \"env\": {\n        \"WEBLATE_API_URL\": \"https://your-weblate-instance.com/api\",\n        \"WEBLATE_API_TOKEN\": \"your-api-token\"\n      }\n    }\n  }\n}\n```\n\n### HTTP Clients (Cursor, VS Code, Web Apps)\n```json\n{\n  \"transport\": \"http\",\n  \"url\": \"http://localhost:3001/mcp\"\n}\n```\n\n## 🛠️ Available Tools\n\n### 📊 Project Management\n| Tool | Description |\n|------|-------------|\n| **`listProjects`** | List all available Weblate projects with URLs and metadata |\n\n### 🔧 Component Management\n| Tool | Description |\n|------|-------------|\n| **`listComponents`** | List components in a specific project with source language details |\n\n### ✏️ Translation Management\n| Tool | Description |\n|------|-------------|\n| **`searchUnitsWithFilters`** ⭐ | **Efficient search using Weblate's native filtering syntax** |\n| **`searchStringInProject`** | Search for translations containing specific text in a project |\n| **`getTranslationForKey`** | Get translation value for a specific key |\n| **`writeTranslation`** | Update or write translation values with approval support |\n| **`bulkWriteTranslations`** ⚡ | **Batch update multiple translations efficiently with error handling** |\n| **`findTranslationsForKey`** | Find all translations for a specific key across languages |\n\n#### 🚀 Why searchUnitsWithFilters is Recommended\n\nThe `searchUnitsWithFilters` tool uses Weblate's native filtering syntax, making it the most efficient way to find translations:\n\n- **❌ Inefficient**: Getting all keys then checking each one individually (can make thousands of API calls)\n- **✅ Efficient**: Single filtered search using Weblate's query syntax\n\n**Example efficient queries:**\n- `state:=0` - Find untranslated strings\n- `state:=10` - Find strings that need editing  \n- `source:\"login\"` - Find strings containing \"login\"\n- `component:common AND state:=0` - Complex filters\n\n### 🌐 Language Management\n| Tool | Description |\n|------|-------------|\n| **`listLanguages`** | List languages available in a specific project |\n\n### 📊 Translation Statistics Dashboard\n| Tool | Description |\n|------|-------------|\n| **`getProjectStatistics`** | Comprehensive project statistics with completion rates and string counts |\n| **`getComponentStatistics`** | Detailed statistics for a specific component |\n| **`getProjectDashboard`** | Complete dashboard overview with all component statistics |\n| **`getTranslationStatistics`** | Statistics for specific translation (project/component/language) |\n| **`getComponentLanguageProgress`** | Translation progress for all languages in a component with progress bars |\n| **`getLanguageStatistics`** | Statistics for a language across all projects |\n| **`getUserStatistics`** | User contribution statistics and activity metrics |\n\n### 📈 Change Tracking & History\n| Tool | Description |\n|------|-------------|\n| **`listRecentChanges`** | Recent changes across all projects with user and timestamp filtering |\n| **`getProjectChanges`** | Recent changes for a specific project |\n| **`getComponentChanges`** | Recent changes for a specific component |\n| **`getChangesByUser`** | Recent changes by a specific user |\n\n## 💡 Usage Examples\n\n### Project Operations\n```typescript\n// List all projects\nawait list_projects();\n\n// Get specific project details\nawait get_project({ slug: \"my-project\" });\n\n// Create a new project\nawait create_project({\n  name: \"New Project\",\n  slug: \"new-project\",\n  web: \"https://example.com\"\n});\n```\n\n### Translation Operations\n```typescript\n// List translations for a component\nawait list_translations({\n  project_slug: \"my-project\",\n  component_slug: \"frontend\"\n});\n\n// Get specific translation\nawait get_translation({\n  project_slug: \"my-project\",\n  component_slug: \"frontend\",\n  language_code: \"fr\"\n});\n\n// Update translations\nawait update_translation({\n  project_slug: \"my-project\",\n  component_slug: \"frontend\",\n  language_code: \"fr\",\n  translations: {\n    \"welcome\": \"Bienvenue\",\n    \"goodbye\": \"Au revoir\"\n  }\n});\n```\n\n## 📚 Documentation\n\n| Document | Description |\n|----------|-------------|\n| **[📖 Documentation Hub](./docs/README.md)** | Complete documentation overview and quick start |\n| **[🚀 Installation & Setup](./docs/MCP_SETUP.md)** | Installation, configuration, and Claude Desktop setup |\n| **[📋 API Reference](./docs/API.md)** | Complete API documentation with examples |\n| **[🛠️ Development Guide](./docs/DEVELOPMENT.md)** | Contributing, development setup, and testing |\n| **[🏗️ Architecture](./docs/ARCHITECTURE.md)** | Codebase structure, patterns, and design decisions |\n| **[📦 Release Process](./docs/RELEASE.md)** | Release management and publishing workflow |\n| **[🔄 Changesets Guide](./docs/CHANGESETS.md)** | Version management with changesets |\n\n## 🏗️ Architecture\n\n```\n┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐\n│   MCP Client    │───▶│  Weblate MCP     │───▶│  Weblate API    │\n│  (IDE/Editor)   │    │     Server       │    │   (REST API)    │\n└─────────────────┘    └──────────────────┘    └─────────────────┘\n                              │\n                              ▼\n                       ┌──────────────────┐\n                       │   MCP Tools      │\n                       │ • Projects       │\n                       │ • Components     │\n                       │ • Translations   │\n                       │ • Languages      │\n                       └──────────────────┘\n```\n\n**Technology Stack:**\n- **NestJS**: Modern Node.js framework with dependency injection\n- **TypeScript**: Full type safety and IntelliSense support\n- **Weblate REST API**: Comprehensive API wrapper with interfaces\n- **MCP Protocol**: Standard Model Context Protocol implementation\n- **Axios**: HTTP client for API communication\n\n## 🧪 Development\n\n### Development Setup\n```bash\n# Start development server with hot reload\npnpm run dev\n\n# Run tests\npnpm test\n\n# Run end-to-end tests\npnpm run test:e2e\n\n# Generate test coverage\npnpm run test:cov\n\n# Build for production\npnpm build\n```\n\n### Adding New Tools\n1. Create tool file in `src/tools/`\n2. Implement MCP tool interface\n3. Add to service providers\n4. Write tests\n5. Update documentation\n\nSee [Development Guide](./docs/DEVELOPMENT.md) for detailed instructions.\n\n## 🎯 Use Cases\n\n### Translation Management\n- **Project oversight**: Monitor translation progress across projects\n- **Content updates**: Update translations programmatically\n- **Quality assurance**: Review and approve translations\n- **Team coordination**: Manage translation workflows\n\n### Development Integration\n- **CI/CD pipelines**: Automate translation updates in deployment\n- **Content management**: Sync translations with content systems\n- **Localization testing**: Validate translations in different contexts\n- **Documentation**: Generate translation reports and statistics\n\n### AI-Assisted Workflows\n- **Natural language queries**: Ask about translation status in plain English\n- **Contextual operations**: AI understands your translation needs\n- **Batch operations**: Perform bulk updates with AI assistance\n- **Smart suggestions**: Get AI-powered translation recommendations\n\n## 🔒 Security & Production\n\n- **API Token Security**: Store tokens securely, use environment variables\n- **Rate Limiting**: Built-in request throttling and retry logic\n- **Error Handling**: Comprehensive error responses with debugging info\n- **Input Validation**: All inputs validated with Zod schemas\n- **HTTPS Support**: Secure communication with Weblate instances\n\n## 🤝 Contributing\n\nWe welcome contributions! Please see our [Contributing Guidelines](./docs/DEVELOPMENT.md#contributing):\n\n1. **Fork** the repository\n2. **Create** a feature branch from main\n3. **Implement** changes with tests\n4. **Update** documentation\n5. **Submit** a pull request\n\n### Code Style\n- Use TypeScript for type safety\n- Follow NestJS conventions\n- Add comprehensive tests\n- Update documentation\n\n## 📄 License\n\nMIT License - see [LICENSE](./LICENSE) file for details.\n\n## 🙏 Acknowledgments\n\n- **Weblate**: For providing an excellent translation management platform\n- **Model Context Protocol**: For the standardized protocol specification\n- **NestJS**: For the robust application framework\n- **Contributors**: Everyone who helps improve this project\n\n---\n\n**Built with ❤️ for the translation community**\n\n*Need help? Check our [documentation](./docs/) or create an [issue](https://github.com/mmntm/weblate-mcp/issues)!* ",
+  "category": "Translation",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mmntm-weblate-mcp-configured": {
+        "command": "npx",
+        "args": ["-y", "@mmntm/weblate-mcp"],
+        "env": {
+          "WEBLATE_API_URL": "https://your-weblate-instance.com/api",
+          "WEBLATE_API_TOKEN": "your-weblate-api-token"
+        }
+      },
+      "mmntm-weblate-mcp": {
+        "command": "npx",
+        "args": ["@mmntm/weblate-mcp"],
+        "env": {}
+      },
+      "weblate-mcp-dev": {
+        "command": "pnpm",
+        "args": ["start"],
+        "env": {}
+      },
+      "weblate-mcp-local": {
+        "command": "node",
+        "args": ["/path/to/weblate-mcp/dist/main.js"],
+        "env": {
+          "WEBLATE_API_URL": "https://your-weblate-instance.com/api",
+          "WEBLATE_API_TOKEN": "your-api-token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mmntm",
+    "repo": "weblate-mcp",
+    "url": "https://github.com/mmntm/weblate-mcp",
+    "name": "weblate-mcp",
+    "path": null,
+    "stars": 3,
+    "contributors": 2,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "5da243a0fb3dcce8f98491f48a3859c654c9a1e6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:37.446Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@nestjs/common",
+      "importance": 10
+    },
+    {
+      "name": "@nestjs/core",
+      "importance": 10
+    },
+    {
+      "name": "@nestjs/config",
+      "importance": 8
+    },
+    {
+      "name": "@nestjs/platform-express",
+      "importance": 10
+    },
+    {
+      "name": "@rekog/mcp-nest",
+      "importance": 10
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "class-transformer",
+      "importance": 7
+    },
+    {
+      "name": "class-validator",
+      "importance": 7
+    },
+    {
+      "name": "reflect-metadata",
+      "importance": 8
+    },
+    {
+      "name": "rxjs",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@mmntm/weblate-mcp\",\n  \"version\": \"1.2.0\",\n  \"description\": \"A Model Context Protocol (MCP) server for Weblate translation management\",\n  \"author\": \"Your Name\",\n  \"license\": \"MIT\",\n  \"main\": \"dist/main.js\",\n  \"bin\": {\n    \"weblate-mcp\": \"dist/main.js\"\n  },\n  \"files\": [\n    \"dist/**/*\",\n    \"docs/**/*\",\n    \"README.md\",\n    \"LICENSE\",\n    \"CHANGELOG.md\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"scripts\": {\n    \"build\": \"nest build && npm run postbuild\",\n    \"postbuild\": \"chmod +x dist/main.js\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\" \\\"test/**/*.ts\\\"\",\n    \"start\": \"nest start\",\n    \"dev\": \"nest start --watch\",\n    \"start:debug\": \"nest start --debug --watch\",\n    \"start:prod\": \"node dist/main\",\n    \"changeset\": \"changeset\",\n    \"changeset:version\": \"changeset version\",\n    \"changeset:publish\": \"pnpm run build && changeset publish\",\n    \"test\": \"jest\",\n    \"test:watch\": \"jest --watch\",\n    \"test:cov\": \"jest --coverage\",\n    \"test:debug\": \"node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand\",\n    \"test:e2e\": \"jest --config ./test/jest-e2e.json\"\n  },\n  \"dependencies\": {\n    \"@nestjs/common\": \"^10.0.0\",\n    \"@nestjs/core\": \"^10.0.0\",\n    \"@nestjs/config\": \"^3.0.0\",\n    \"@nestjs/platform-express\": \"^10.0.0\",\n    \"@rekog/mcp-nest\": \"^1.5.2\",\n    \"@modelcontextprotocol/sdk\": \"1.10.0\",\n    \"axios\": \"^1.6.0\",\n    \"class-transformer\": \"^0.5.1\",\n    \"class-validator\": \"^0.14.0\",\n    \"reflect-metadata\": \"^0.1.13\",\n    \"rxjs\": \"^7.8.1\",\n    \"zod\": \"^3.22.0\"\n  },\n  \"devDependencies\": {\n    \"@changesets/cli\": \"^2.27.0\",\n    \"@nestjs/cli\": \"^10.0.0\",\n    \"@nestjs/schematics\": \"^10.0.0\",\n    \"@nestjs/testing\": \"^10.0.0\",\n    \"@types/express\": \"^4.17.17\",\n    \"@types/jest\": \"^29.5.2\",\n    \"@types/node\": \"^20.3.1\",\n    \"@types/supertest\": \"^6.0.0\",\n    \"jest\": \"^29.5.0\",\n    \"prettier\": \"^3.0.0\",\n    \"source-map-support\": \"^0.5.21\",\n    \"supertest\": \"^6.3.3\",\n    \"ts-jest\": \"^29.1.0\",\n    \"ts-loader\": \"^9.4.3\",\n    \"ts-node\": \"^10.9.1\",\n    \"tsconfig-paths\": \"4.2.0\",\n    \"typescript\": \"^5.1.3\"\n  },\n  \"jest\": {\n    \"moduleFileExtensions\": [\n      \"js\",\n      \"json\",\n      \"ts\"\n    ],\n    \"rootDir\": \"src\",\n    \"testRegex\": \".*\\\\.spec\\\\.ts$\",\n    \"transform\": {\n      \"^.+\\\\.(t|j)s$\": \"ts-jest\"\n    },\n    \"collectCoverageFrom\": [\n      \"**/*.(t|j)s\"\n    ],\n    \"coverageDirectory\": \"../coverage\",\n    \"testEnvironment\": \"node\"\n  },\n  \"keywords\": [\n    \"weblate\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"translation\",\n    \"localization\",\n    \"nestjs\",\n    \"typescript\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/mmntm/weblate-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/mmntm/weblate-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/mmntm/weblate-mcp#readme\"\n}\n"
+}

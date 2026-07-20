@@ -1,0 +1,69 @@
+{
+  "name": "linked-api__linkedapi-mcp",
+  "display_name": "linkedapi-mcp",
+  "description": "MCP server that lets AI assistants control LinkedIn accounts and retrieve real-time data.",
+  "author": {
+    "name": "Linked-API"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "linkedapi-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "readme": "Linked API MCP server connects your LinkedIn account to AI assistants like Claude, Cursor, and VS Code. Ask them to search for leads, send messages, analyze profiles, and much more – they'll handle it through our cloud browser, safely and automatically.\n\n## Use cases\n- **Sales automation assistant**. Ask your AI to find leads, check their profiles, and draft personalized outreach. It can search for \"software engineers at companies with 50-200 employees in San Francisco\", analyze their backgrounds, and suggest connection messages that actually make sense.\n- **Recruitment assistant**. Let your assistant search for candidates with specific skills, review their experience, and send initial outreach. It handles the time-consuming parts while you focus on actually talking to people.\n- **Conversation assistant**. Your AI can read your existing LinkedIn conversations and help you respond naturally. It understands the context of your chats, suggests relevant replies, and can even send follow-up messages.\n- **Market research assistant**. Need competitor analysis? Your assistant can gather data about companies, their employees, and recent activities. Get insights about industry trends without spending hours on LinkedIn.\n\n## Get started\nTo start using Linked API MCP, spend 2 minutes reading these essential guides:\n\n1. [Installation](https://linkedapi.io/mcp/installation/) – set up MCP in Claude, Cursor, VS Code, or Windsurf.\n2. [Available tools](https://linkedapi.io/mcp/available-tools/) – explore all the LinkedIn tools your assistant can call.\n3. [Usage examples](https://linkedapi.io/mcp/usage-examples/) – see real-world examples to get you started quickly.\n\n## License\nThis project is licensed under the MIT – see the [LICENSE](https://github.com/Linked-API/linkedapi-mcp/blob/main/LICENSE) file for details.\n",
+  "category": "Browser Automation",
+  "quality_score": 38,
+  "programming_language": "TypeScript",
+  "framework": null,
+  "github_info": {
+    "owner": "Linked-API",
+    "repo": "linkedapi-mcp",
+    "url": "https://github.com/Linked-API/linkedapi-mcp",
+    "name": "linked-api__linkedapi-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e40c69a07780e15fb3650b4b648e6d53c1af2b07"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "linkedapi-node",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "user_config": {},
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"linkedapi-mcp\",\n  \"version\": \"0.3.1\",\n  \"description\": \"MCP server for Linked API\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"linkedapi-mcp\": \"dist/index.js\"\n  },\n  \"type\": \"commonjs\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"dev\": \"tsx src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"watch\": \"tsx watch src/index.ts\",\n    \"clean\": \"rm -rf dist\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"lint\": \"eslint src --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.ts\\\"\",\n    \"prepublishOnly\": \"npm run clean && npm run build\",\n    \"prepare\": \"husky\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"linkedapi\",\n    \"linkedin\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"Linked API\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.4\",\n    \"linkedapi-node\": \"^1.2.2\",\n    \"zod\": \"^4.1.1\"\n  },\n  \"devDependencies\": {\n    \"@eslint/compat\": \"^1.2.8\",\n    \"@eslint/eslintrc\": \"^3.3.1\",\n    \"@eslint/js\": \"^9.24.0\",\n    \"@trivago/prettier-plugin-sort-imports\": \"^5.2.2\",\n    \"@types/jest\": \"^29.5.12\",\n    \"@types/node\": \"^20.12.12\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.29.1\",\n    \"@typescript-eslint/parser\": \"^8.29.1\",\n    \"eslint\": \"^9.24.0\",\n    \"eslint-config-prettier\": \"^10.1.2\",\n    \"eslint-import-resolver-typescript\": \"^4.4.4\",\n    \"eslint-plugin-import\": \"^2.31.0\",\n    \"eslint-plugin-n\": \"^17.17.0\",\n    \"eslint-plugin-promise\": \"^7.2.1\",\n    \"eslint-plugin-unused-imports\": \"^4.1.4\",\n    \"husky\": \"^9.1.7\",\n    \"jest\": \"^29.7.0\",\n    \"prettier\": \"^3.5.3\",\n    \"ts-jest\": \"^29.1.2\",\n    \"ts-node\": \"^10.9.2\",\n    \"tsx\": \"^4.7.1\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"^8.38.0\"\n  }\n}\n",
+  "last_scraped_at": "2025-09-09T13:05:09.977Z"
+}

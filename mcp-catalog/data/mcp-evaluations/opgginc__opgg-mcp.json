@@ -1,0 +1,97 @@
+{
+  "name": "opgginc__opgg-mcp",
+  "display_name": "opgg-mcp",
+  "description": "MCP server from opgginc/opgg-mcp",
+  "author": {
+    "name": "opgginc"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@smithery/cli@latest", "run", "@opgginc/opgg-mcp", "--key", "${user_config.smithery_api_key}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "smithery_api_key": {
+      "type": "string",
+      "title": "Smithery API Key",
+      "description": "Your Smithery API key for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# OP.GG MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@opgginc/opgg-mcp)](https://smithery.ai/server/@opgginc/opgg-mcp)\n\nThe OP.GG MCP Server is a Model Context Protocol implementation that seamlessly connects OP.GG data with AI agents and platforms. This server enables AI agents to retrieve various OP.GG data via function calling.\n\n![opgg-mcp-lol-leaderboard](https://github.com/user-attachments/assets/e89a77e7-0b83-4e20-a660-b16aa2d03fe2)\n![opgg-mcp-esports](https://github.com/user-attachments/assets/4e134577-57b6-4369-bb71-b72f1bebcdd8)\n\n## Overview\n\nThis MCP server provides AI agents with access to OP.GG data through a standardized interface. It offers a simple way to connect to our remote server (https://mcp-api.op.gg/mcp), allowing for easy installation and immediate access to OP.GG data in a format that's easily consumable by AI models and agent frameworks.\n\n## Features\n\nThe OP.GG MCP Server currently supports the following tools:\n\n### League of Legends\n- **lol-champion-leader-board**: Get ranking board data for League of Legends champions.\n- **lol-champion-analysis**: Provides analysis data for League of Legends champions (counter and ban/pick data available in the \"weakCounters\" field).\n- **lol-champion-meta-data**: Retrieves meta data for a specific champion, including statistics and performance metrics.\n- **lol-champion-skin-sale**: Retrieves information about champion skins that are currently on sale.\n- **lol-summoner-search**: Search for League of Legends summoner information and stats.\n- **lol-champion-positions-data**: Retrieves position statistics data for League of Legends champions, including win rates and pick rates by position.\n- **lol-summoner-game-history**: Retrieve recent game history for a League of Legends summoner.\n- **lol-summoner-renewal**: Refresh and update League of Legends summoner match history and stats.\n\n### Esports (League of Legends)\n- **esports-lol-schedules**: Get upcoming LoL match schedules.\n- **esports-lol-team-standings**: Get team standings for a LoL league.\n\n### Teamfight Tactics (TFT)\n- **tft-meta-trend-deck-list**: TFT deck list tool for retrieving current meta decks.\n- **tft-meta-item-combinations**: TFT tool for retrieving information about item combinations and recipes.\n- **tft-champion-item-build**: TFT tool for retrieving champion item build information.\n- **tft-recommend-champion-for-item**: TFT tool for retrieving champion recommendations for a specific item.\n- **tft-play-style-comment**: This tool provides comments on the playstyle of TFT champions.\n\n### Valorant\n- **valorant-meta-maps**: Valorant map meta data.\n- **valorant-meta-characters**: Valorant character meta data.\n- **valorant-leaderboard**: Fetch Valorant leaderboard by region.\n- **valorant-agents-composition-with-map**: Retrieve agent composition data for a Valorant map.\n- **valorant-characters-statistics**: Retrieve character statistics data for Valorant, optionally filtered by map.\n- **valorant-player-match-history**: Retrieve match history for a Valorant player using their game name and tag line.\n\n## Usage\n\nThe OP.GG MCP Server can be used with any MCP-compatible client. The following content explains installation methods using Claude Desktop as an example.\n\n### Direct Connection via StreamableHttp\n\nIf you want to connect directly to our StreamableHttp endpoint, you can use the `supergateway` package. This provides a simple way to connect to our remote server without having to install the full OP.GG MCP Server.\n\nAdd the following to your `claude_desktop_config.json` file:\n\n#### Mac/Linux\n\n```json\n{\n  \"mcpServers\": {\n    \"opgg-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"supergateway\",\n        \"--streamableHttp\",\n        \"https://mcp-api.op.gg/mcp\"\n      ]\n    }\n  }\n}\n```\n\n#### Windows\n\n```json\n{\n  \"mcpServers\": {\n    \"opgg-mcp\": {\n      \"command\": \"cmd\",\n      \"args\": [\n        \"/c\",\n        \"npx\",\n        \"-y\",\n        \"supergateway\",\n        \"--streamableHttp\",\n        \"https://mcp-api.op.gg/mcp\"\n      ]\n    }\n  }\n}\n```\n\nThis configuration will use the `supergateway` package to establish a direct connection to our StreamableHttp endpoint, providing you with immediate access to all OP.GG data tools.\n\n### Installing via Smithery\n\nTo install OP.GG MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@opgginc/opgg-mcp):\n\n```bash\n$ npx -y @smithery/cli@latest install @opgginc/opgg-mcp --client claude --key {SMITHERY_API_KEY}\n```\n\n### Adding to MCP Configuration\n\nTo add this server to your Claude Desktop MCP configuration, add the following entry to your `claude_desktop_config.json` file:\n\n#### Mac/Linux\n\n```json\n{\n  \"mcpServers\": {\n    \"opgg-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@smithery/cli@latest\",\n        \"run\",\n        \"@opgginc/opgg-mcp\",\n        \"--key\",\n        \"{SMITHERY_API_KEY}\"\n      ]\n    }\n  }\n}\n```\n\n#### Windows\n\n```json\n{\n  \"mcpServers\": {\n    \"opgg-mcp\": {\n      \"command\": \"cmd\",\n      \"args\": [\n        \"/c\",\n        \"npx\",\n        \"-y\",\n        \"@smithery/cli@latest\",\n        \"run\",\n        \"@opgginc/opgg-mcp\",\n        \"--key\",\n        \"{SMITHERY_API_KEY}\"\n      ]\n    }\n  }\n}\n```\n\nAfter adding the configuration, restart Claude Desktop for the changes to take effect.\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Related Links\n\n- [Model Context Protocol](https://modelcontextprotocol.io)\n- [OP.GG](https://op.gg)\n",
+  "category": "Gaming",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "supergateway-streamable-http-mac-linux": {
+        "command": "npx",
+        "args": ["-y", "supergateway", "--streamableHttp", "https://mcp-api.op.gg/mcp"],
+        "env": {}
+      },
+      "supergateway-streamable-http-windows": {
+        "command": "cmd",
+        "args": ["/c", "npx", "-y", "supergateway", "--streamableHttp", "https://mcp-api.op.gg/mcp"],
+        "env": {}
+      },
+      "opgginc-opgg-mcp-smithery-mac-linux": {
+        "command": "npx",
+        "args": ["-y", "@smithery/cli@latest", "run", "@opgginc/opgg-mcp", "--key", "{SMITHERY_API_KEY}"],
+        "env": {}
+      },
+      "opgginc-opgg-mcp-smithery-windows": {
+        "command": "cmd",
+        "args": ["/c", "npx", "-y", "@smithery/cli@latest", "run", "@opgginc/opgg-mcp", "--key", "{SMITHERY_API_KEY}"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "opgginc",
+    "repo": "opgg-mcp",
+    "url": "https://github.com/opgginc/opgg-mcp",
+    "name": "opgg-mcp",
+    "path": null,
+    "stars": 26,
+    "contributors": 3,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "78b9a74e2351e5f52dfc89f171e7d4d86daa672b"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.670Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "eventsource",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"opgg-mcp\",\n  \"version\": \"1.0.1\",\n  \"main\": \"dist/index.js\",\n  \"scripts\": {\n    \"build\": \"tsup\",\n    \"test\": \"npx @modelcontextprotocol/inspector@latest node dist/index.js\"\n  },\n  \"bin\": {\n    \"opgg-mcp\": \"dist/index.js\"\n  },\n  \"keywords\": [\n    \"MCP\",\n    \"SSE\",\n    \"proxy\"\n  ],\n  \"type\": \"module\",\n  \"license\": \"MIT\",\n  \"module\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.0\",\n    \"eventsource\": \"^3.0.6\"\n  },\n  \"repository\": {\n    \"url\": \"https://github.com/opgginc/opgg-mcp\"\n  },\n  \"devDependencies\": {\n    \"@tsconfig/node22\": \"^22.0.1\",\n    \"@types/node\": \"^22.14.1\",\n    \"tsup\": \"^8.4.0\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"tsup\": {\n    \"entry\": [\n      \"src/index.ts\"\n    ],\n    \"format\": [\n      \"esm\"\n    ],\n    \"dts\": true,\n    \"splitting\": true,\n    \"sourcemap\": true,\n    \"clean\": true\n  }\n}\n"
+}

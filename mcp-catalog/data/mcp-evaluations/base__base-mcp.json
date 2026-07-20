@@ -1,0 +1,209 @@
+{
+  "name": "base__base-mcp",
+  "display_name": "base-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides onchain tools for LLMs, allowing them to interact with the Base network and Coinbase API.",
+  "author": {
+    "name": "base"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "base-mcp@latest"],
+    "env": {
+      "COINBASE_API_KEY_NAME": "${user_config.coinbase_api_key_name}",
+      "COINBASE_API_PRIVATE_KEY": "${user_config.coinbase_api_private_key}",
+      "SEED_PHRASE": "${user_config.seed_phrase}",
+      "COINBASE_PROJECT_ID": "${user_config.coinbase_project_id}",
+      "ALCHEMY_API_KEY": "${user_config.alchemy_api_key}",
+      "OPENROUTER_API_KEY": "${user_config.openrouter_api_key}",
+      "CHAIN_ID": "${user_config.chain_id}",
+      "NEYNAR_API_KEY": "${user_config.neynar_api_key}",
+      "PINATA_JWT": "${user_config.pinata_jwt}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "coinbase_api_key_name": {
+      "type": "string",
+      "title": "Coinbase API Key Name",
+      "description": "Your API Key Name from the Coinbase Developer Portal.",
+      "sensitive": true,
+      "required": true
+    },
+    "coinbase_api_private_key": {
+      "type": "string",
+      "title": "Coinbase API Private Key",
+      "description": "Your Private Key for the Coinbase API.",
+      "sensitive": true,
+      "required": true
+    },
+    "seed_phrase": {
+      "type": "string",
+      "title": "Wallet Seed Phrase",
+      "description": "The 12 or 24-word mnemonic phrase for your wallet.",
+      "sensitive": true,
+      "required": true
+    },
+    "coinbase_project_id": {
+      "type": "string",
+      "title": "Coinbase Project ID",
+      "description": "Your Coinbase Project ID for onramp functionality.",
+      "sensitive": true,
+      "required": true
+    },
+    "alchemy_api_key": {
+      "type": "string",
+      "title": "Alchemy API Key",
+      "description": "Your Alchemy API Key, required for NFT functionality.",
+      "sensitive": true,
+      "required": true
+    },
+    "openrouter_api_key": {
+      "type": "string",
+      "title": "OpenRouter API Key",
+      "description": "Your OpenRouter API Key (optional for buying OpenRouter credits).",
+      "sensitive": true,
+      "required": false
+    },
+    "chain_id": {
+      "type": "string",
+      "title": "Chain ID",
+      "description": "The Chain ID for the network (e.g., 84532 for Base Sepolia testnet). Optional for Base Mainnet.",
+      "sensitive": false,
+      "required": false
+    },
+    "neynar_api_key": {
+      "type": "string",
+      "title": "Neynar API Key",
+      "description": "Your Neynar API Key, required for Farcaster functionality.",
+      "sensitive": true,
+      "required": true
+    },
+    "pinata_jwt": {
+      "type": "string",
+      "title": "Pinata JWT",
+      "description": "Your Pinata JWT for IPFS services.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Base MCP Server 🔵\n\n![OpenRouter Integration](public/OpenRouter.gif)\n\n[![npm version](https://img.shields.io/npm/v/base-mcp.svg)](https://www.npmjs.com/package/base-mcp)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\nA Model Context Protocol (MCP) server that provides onchain tools for AI applications like Claude Desktop and Cursor, allowing them to interact with the Base Network and Coinbase API.\n\n## Overview\n\nThis MCP server extends any MCP client's capabilities by providing tools to do anything on Base:\n\n- Retrieve wallet addresses\n- List wallet balances\n- Transfer funds between wallets\n- Deploy smart contracts\n- Interact with Morpho vaults for onchain lending\n- Call contract functions\n- Onramp funds via [Coinbase](https://www.coinbase.com/developer-platform/products/onramp)\n- Manage ERC20 tokens\n- List and transfer NFTs (ERC721 and ERC1155)\n- Buy [OpenRouter](http://openrouter.ai/) credits with USDC\n- Resolve Farcaster usernames to Ethereum addresses\n\nThe server interacts with Base, powered by Base Developer Tools and [AgentKit](https://github.com/coinbase/agentkit).\n\n## Extending Base MCP with 3P Protocols, Tools, and Data Sources\n\nBase MCP is designed to be extensible, allowing you to add your own third-party protocols, tools, and data sources. This section provides an overview of how to extend the Base MCP server with new capabilities.\n\n### Adding New Tools\n\nIf you want to add a new tool to the Base MCP server, follow these steps:\n\n1. Create a new directory in the `src/tools` directory for your tool\n2. Implement the tool following the existing patterns:\n   - `index.ts`: Define and export your tools. Tools are defined as AgentKit ActionProviders.\n   - `schemas.ts`: Define input schemas for your tools\n   - `types.ts`: Define types required for your tools\n   - `utils.ts`: Utilities for your tools\n3. Add your tool to the list of available tools in `src/main.ts`\n4. Add documentation for your tool in the README.md\n5. Add examples of how to use your tool in examples.md\n6. Write tests for your tool\n\n### Project Structure\n\nThe Base MCP server follows this structure for tools:\n\n```\nsrc/\n├── tools/\n│   ├── [TOOL_NAME]/ <-------------------------- ADD DIR HERE\n│   │   ├── index.ts (defines and exports tools)\n│   │   ├── schemas.ts (defines input schema)\n│   └── utils/ (shared tool utilities)\n```\n\n### Best Practices for Tool Development\n\nWhen developing new tools for Base MCP:\n\n- Follow the existing code style and patterns\n- Ensure your tool has a clear, focused purpose\n- Provide comprehensive input validation\n- Include detailed error handling\n- Write thorough documentation\n- Add examples demonstrating how to use your tool\n- Include tests for your tool\n\nFor more detailed information on contributing to Base MCP, including adding new tools and protocols, see the [CONTRIBUTING.md](CONTRIBUTING.md) file.\n\n## Prerequisites\n\n- Node.js (v16 or higher)\n- npm or yarn\n- Coinbase API credentials (API Key Name and Private Key)\n- A wallet seed phrase\n- Coinbase Project ID (for onramp functionality)\n- Alchemy API Key (required for NFT functionality)\n- Optional: OpenRouter API Key (for buying OpenRouter credits)\n\n## Installation\n\n### Option 1: Install from npm (Recommended)\n\n```bash\n# Install globally\nnpm install -g base-mcp\n\n# Or install locally in your project\nnpm install base-mcp\n```\n\nOnce the package is installed, you can configure clients with the following command:\n\n```bash\nbase-mcp --init\n```\n\n### Option 2: Install from Source\n\n1. Clone this repository:\n\n   ```bash\n   git clone https://github.com/base/base-mcp.git\n   cd base-mcp\n   ```\n\n2. Install dependencies:\n\n   ```bash\n   npm install\n   ```\n\n3. Build the project:\n\n   ```bash\n   npm run build\n   ```\n\n4. Optionally, link it globally:\n   ```bash\n   npm link\n   ```\n\n## Configuration\n\nCreate a `.env` file with your credentials:\n\n```\n# Coinbase API credentials\n# You can obtain these from the Coinbase Developer Portal: https://cdp.coinbase.com/\nCOINBASE_API_KEY_NAME=your_api_key_name\nCOINBASE_API_PRIVATE_KEY=your_private_key\n\n# Wallet seed phrase (12 or 24 words)\n# This is the mnemonic phrase for your wallet\nSEED_PHRASE=your seed phrase here\n\n# Coinbase Project ID (for onramp functionality)\n# You can obtain this from the Coinbase Developer Portal\nCOINBASE_PROJECT_ID=your_project_id\n\n# Alchemy API Key (required for NFT functionality)\n# You can obtain this from https://alchemy.com\nALCHEMY_API_KEY=your_alchemy_api_key\n\n# OpenRouter API Key (optional for buying OpenRouter credits)\n# You can obtain this from https://openrouter.ai/keys\nOPENROUTER_API_KEY=your_openrouter_api_key\n\n# Chain ID (optional for Base Sepolia testnet)\n# Use 84532 for Base Sepolia testnet\n# You do not have to include this if you want to use Base Mainnet\nCHAIN_ID=your_chain_id\n\n# Neynar API Key (required for Farcaster functionality)\n# You can obtain this from https://neynar.com\nNEYNAR_API_KEY=your_neynar_api_key\n```\n\n## Testing\n\nTest the MCP server to verify it's working correctly:\n\n```bash\nnpm test\n```\n\nThis script will verify that your MCP server is working correctly by testing the connection and available tools.\n\n## Examples\n\nSee the [examples.md](examples.md) file for detailed examples of how to interact with the Base MCP tools through Claude.\n\n## Integration with Claude Desktop\n\nTo add this MCP server to Claude Desktop:\n\n1. Create or edit the Claude Desktop configuration file at:\n\n   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n   - Linux: `~/.config/Claude/claude_desktop_config.json`\n\nYou can easily access this file via the Claude Desktop app by navigating to Claude > Settings > Developer > Edit Config.\n\n2. Add the following configuration:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"base-mcp\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"base-mcp@latest\"],\n         \"env\": {\n           \"COINBASE_API_KEY_NAME\": \"your_api_key_name\",\n           \"COINBASE_API_PRIVATE_KEY\": \"your_private_key\",\n           \"SEED_PHRASE\": \"your seed phrase here\",\n           \"COINBASE_PROJECT_ID\": \"your_project_id\",\n           \"ALCHEMY_API_KEY\": \"your_alchemy_api_key\",\n           \"PINATA_JWT\": \"your_pinata_jwt\",\n           \"OPENROUTER_API_KEY\": \"your_openrouter_api_key\",\n           \"CHAIN_ID\": \"optional_for_base_sepolia_testnet\"\n         },\n         \"disabled\": false,\n         \"autoApprove\": []\n       }\n     }\n   }\n   ```\n\n3. Restart Claude Desktop for the changes to take effect.\n\n## Available Tools\n\n### get-address\n\nRetrieves the address for your wallet.\n\nExample query to Claude:\n\n> \"What's my wallet address?\"\n\n### list-balances\n\nLists all balances for your wallet.\n\nExample query to Claude:\n\n> \"Show me my wallet balances.\"\n\n### transfer-funds\n\nTransfers funds from your wallet to another address.\n\nParameters:\n\n- `destination`: The address to which to transfer funds\n- `assetId`: The asset ID to transfer\n- `amount`: The amount of funds to transfer\n\nExample query to Claude:\n\n> \"Transfer 0.01 ETH to 0x1234567890abcdef1234567890abcdef12345678.\"\n\n### deploy-contract\n\nDeploys a smart contract to the blockchain.\n\nParameters:\n\n- `constructorArgs`: The arguments for the contract constructor\n- `contractName`: The name of the contract to deploy\n- `solidityInputJson`: The JSON input for the Solidity compiler containing contract source and settings\n- `solidityVersion`: The version of the solidity compiler\n\nExample query to Claude:\n\n> \"Deploy a simple ERC20 token contract for me.\"\n\n### check-address-reputation\n\nChecks the reputation of an address.\n\nParameters:\n\n- `address`: The Ethereum address to check\n\nExample query to Claude:\n\n> \"What's the reputation of 0x1234567890abcdef1234567890abcdef12345678?\"\n\n### get_morpho_vaults\n\nGets the vaults for a given asset on Morpho.\n\nParameters:\n\n- `assetSymbol`: Asset symbol by which to filter vaults (optional)\n\nExample query to Claude:\n\n> \"Show me the available Morpho vaults for USDC.\"\n\n### call_contract\n\nCalls a contract function on the blockchain.\n\nParameters:\n\n- `contractAddress`: The address of the contract to call\n- `functionName`: The name of the function to call\n- `functionArgs`: The arguments to pass to the function\n- `abi`: The ABI of the contract\n- `value`: The value of ETH to send with the transaction (optional)\n\nExample query to Claude:\n\n> \"Call the balanceOf function on the contract at 0x1234567890abcdef1234567890abcdef12345678.\"\n\n### get_onramp_assets\n\nGets the assets available for onramping in a given country/subdivision.\n\nParameters:\n\n- `country`: ISO 3166-1 two-digit country code string representing the purchasing user's country of residence\n- `subdivision`: ISO 3166-2 two-digit country subdivision code (required for US)\n\nExample query to Claude:\n\n> \"What assets can I onramp in the US, specifically in New York?\"\n\n### onramp\n\nGets a URL for onramping funds via Coinbase.\n\nParameters:\n\n- `amountUsd`: The amount of funds to onramp\n- `assetId`: The asset ID to onramp\n\nExample query to Claude:\n\n> \"I want to onramp $100 worth of ETH.\"\n\n### erc20_balance\n\nGets the balance of an ERC20 token.\n\nParameters:\n\n- `contractAddress`: The address of the ERC20 contract\n\nExample query to Claude:\n\n> \"What's my balance of the token at 0x1234567890abcdef1234567890abcdef12345678?\"\n\n### erc20_transfer\n\nTransfers an ERC20 token to another address.\n\nParameters:\n\n- `contractAddress`: The address of the ERC20 contract\n- `toAddress`: The address of the recipient\n- `amount`: The amount of tokens to transfer\n\nExample query to Claude:\n\n> \"Transfer 10 USDC to 0x1234567890abcdef1234567890abcdef12345678.\"\n\n### list_nfts\n\nLists NFTs owned by a specific address.\n\nParameters:\n\n- `ownerAddress`: The address of the owner whose NFTs to list\n- `limit`: Maximum number of NFTs to return (default: 50)\n\nExample query to Claude:\n\n> \"Show me the NFTs owned by 0x89A93a48C6Ef8085B9d07e46AaA96DFDeC717040.\"\n\n### transfer_nft\n\nTransfers an NFT to another address. Supports both ERC721 and ERC1155 standards.\n\nParameters:\n\n- `contractAddress`: The address of the NFT contract\n- `tokenId`: The token ID of the NFT to transfer\n- `toAddress`: The address of the recipient\n- `amount`: The amount to transfer (only used for ERC1155, default: 1)\n\nExample query to Claude:\n\n> \"Transfer my NFT with contract 0x3F06FcF75f45F1bb61D56D68fA7b3F32763AA15c and token ID 56090175025510453004781233574040052668718235229192064098345825090519343038548 to 0x1234567890abcdef1234567890abcdef12345678.\"\n\n### buy_openrouter_credits\n\nBuys OpenRouter credits with USDC.\n\nParameters:\n\n- `amountUsd`: The amount of credits to buy, in USD\n\nExample query to Claude:\n\n> \"Buy $20 worth of OpenRouter credits.\"\n\n## Security Considerations\n\n- The configuration file contains sensitive information (API keys and seed phrases). Ensure it's properly secured and not shared.\n- Consider using environment variables or a secure credential manager instead of hardcoding sensitive information.\n- Be cautious when transferring funds or deploying contracts, as these operations are irreversible on the blockchain.\n- When using the onramp functionality, ensure you're on a secure connection.\n- Verify all transaction details before confirming, especially when transferring funds or buying credits.\n\n## Troubleshooting\n\nIf you encounter issues:\n\n1. Check that your Coinbase API credentials are correct\n2. Verify that your seed phrase is valid\n3. Ensure you're on the correct network (Base Mainnet)\n4. Check the Claude Desktop logs for any error messages\n\n## License\n\n[MIT License](LICENSE)\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\nFor detailed guidelines on contributing to Base MCP, including:\n\n- Reporting bugs\n- Suggesting enhancements\n- Development setup\n- Coding standards\n- **Adding new tools, protocols, and data sources** (see also the [Extending Base MCP](#extending-base-mcp-with-3p-protocols-tools-and-data-sources) section above)\n- Testing requirements\n- Documentation standards\n\nPlease refer to our comprehensive [CONTRIBUTING.md](CONTRIBUTING.md) guide.\n\nBasic contribution steps:\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\nPlease make sure your code follows the existing style and includes appropriate tests.\n",
+  "category": "Finance",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "base-mcp": {
+        "command": "npx",
+        "args": ["-y", "base-mcp@latest"],
+        "env": {
+          "COINBASE_API_KEY_NAME": "your_api_key_name",
+          "COINBASE_API_PRIVATE_KEY": "your_private_key",
+          "SEED_PHRASE": "your seed phrase here",
+          "COINBASE_PROJECT_ID": "your_project_id",
+          "ALCHEMY_API_KEY": "your_alchemy_api_key",
+          "PINATA_JWT": "your_pinata_jwt",
+          "OPENROUTER_API_KEY": "your_openrouter_api_key",
+          "CHAIN_ID": "optional_for_base_sepolia_testnet"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "base",
+    "repo": "base-mcp",
+    "url": "https://github.com/base/base-mcp",
+    "name": "base__base-mcp",
+    "path": null,
+    "stars": 282,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.587Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@clack/prompts",
+      "importance": 5
+    },
+    {
+      "name": "@coinbase/agentkit",
+      "importance": 9
+    },
+    {
+      "name": "@coinbase/agentkit-model-context-protocol",
+      "importance": 9
+    },
+    {
+      "name": "@coinbase/coinbase-sdk",
+      "importance": 8
+    },
+    {
+      "name": "@coinbase/onchainkit",
+      "importance": 8
+    },
+    {
+      "name": "@inquirer/prompts",
+      "importance": 5
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@privy-io/public-api",
+      "importance": 7
+    },
+    {
+      "name": "chalk",
+      "importance": 3
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "graphql",
+      "importance": 7
+    },
+    {
+      "name": "graphql-request",
+      "importance": 7
+    },
+    {
+      "name": "reflect-metadata",
+      "importance": 4
+    },
+    {
+      "name": "viem",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"base-mcp\",\n  \"version\": \"1.0.13\",\n  \"description\": \"A Model Context Protocol (MCP) server that provides onchain tools for Claude AI, allowing it to interact with the Base blockchain and Coinbase API\",\n  \"bin\": {\n    \"base-mcp\": \"build/index.js\"\n  },\n  \"type\": \"module\",\n  \"scripts\": {\n    \"run\": \"tsx src/index.ts\",\n    \"dev\": \"tsc --watch\",\n    \"build\": \"tsc && chmod +x ./build/index.js\",\n    \"lint\": \"eslint src\",\n    \"start\": \"node build/index.js\",\n    \"format\": \"prettier --write .\",\n    \"ci:format\": \"prettier --check .\",\n    \"changeset\": \"changeset\",\n    \"version-packages\": \"changeset version\",\n    \"release:publish\": \"yarn build && changeset publish\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/base/base-mcp.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"claude\",\n    \"base\",\n    \"blockchain\",\n    \"coinbase\",\n    \"ethereum\",\n    \"web3\",\n    \"ai\"\n  ],\n  \"author\": \"Dan Schlabach, Tina He\",\n  \"license\": \"MIT\",\n  \"packageManager\": \"yarn@4.5.1\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"dependencies\": {\n    \"@clack/prompts\": \"^0.10.0\",\n    \"@coinbase/agentkit\": \"^0.6.2\",\n    \"@coinbase/agentkit-model-context-protocol\": \"^0.2.0\",\n    \"@coinbase/coinbase-sdk\": \"^0.21.0\",\n    \"@coinbase/onchainkit\": \"^0.37.6\",\n    \"@inquirer/prompts\": \"^7.4.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n    \"@privy-io/public-api\": \"^2.20.5\",\n    \"chalk\": \"^5.4.1\",\n    \"dotenv\": \"^16.4.7\",\n    \"graphql\": \"^16.10.0\",\n    \"graphql-request\": \"^7.1.2\",\n    \"reflect-metadata\": \"^0.2.2\",\n    \"viem\": \"^2.23.9\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@changesets/cli\": \"^2.28.1\",\n    \"@eslint/js\": \"^9.22.0\",\n    \"@ianvs/prettier-plugin-sort-imports\": \"^4.4.1\",\n    \"@types/express\": \"^4\",\n    \"@types/node\": \"^22.13.9\",\n    \"@types/react\": \"^19\",\n    \"@types/react-dom\": \"^19\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.26.1\",\n    \"@typescript-eslint/parser\": \"^8.26.1\",\n    \"eslint\": \"^9.22.0\",\n    \"eslint-config-prettier\": \"^10.1.1\",\n    \"eslint-plugin-import\": \"^2.31.0\",\n    \"globals\": \"^16.0.0\",\n    \"prettier\": \"^3.5.3\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.8.2\",\n    \"typescript-eslint\": \"^8.26.1\",\n    \"zod-to-json-schema\": \"^3.24.4\"\n  }\n}\n"
+}

@@ -1,0 +1,114 @@
+{
+  "name": "zillow__auto-mobile",
+  "display_name": "auto-mobile",
+  "description": "Mobile automation suite of tools including an MCP and libraries for test authoring & execution",
+  "author": {
+    "name": "zillow"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "auto-mobile"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# AutoMobile\n\n![AutoMobile sticker](docs/img/auto_mobile_sticker_splash.png)\n\n<a href=\"https://glama.ai/mcp/servers/@zillow/auto-mobile\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@zillow/auto-mobile/badge\" alt=\"AutoMobile MCP server\" />\n</a>\n\nAutoMobile is a set of tools for mobile automation. You can use it for UI testing or as a development workflow\nassistant.\n\nThe first platform supported is Android with plans to extend to iOS.\n\n## How it works\n\n- 🔧 **[Powerful MCP Server](docs/features/mcp-server/index.md)**: AutoMobile provides comprehensive [actions](docs/features/mcp-server/actions.md) through MCP\n  tool calls with a fast [observations](docs/features/mcp-server/observation.md) to drive the\n  [interaction loop](docs/features/mcp-server/interaction-loop.md).\n- 🗺️ **Source Mapping**: Combining project path config with deep view hierarchy analysis we know exactly what code is being rendered.\n- ✍️ **[Automated Test Authoring](docs/features/test-authoring/index.md)**: When used in test authoring mode AutoMobile will write tests for you. It is the only way it writes tests.\n- 🧪 **[Test Execution](docs/features/test-execution/index.md)** - Run tests locally or on CI without extra infrastructure.\n- 📱 **Device Management**: Multi-device support with emulator control and app lifecycle management.\n\nAll together you get a system that looks like this:\n\n![automobile_system_design.png](docs/img/automobile_system_design.png)\n\n## Documentation\n\n- 💻 [Installation & Getting Started](docs/installation.md) - AutoMobile is [published on npm](https://www.npmjs.com/package/auto-mobile)\n  and we have instructions for agents we've tested with.\n- 📝 [Change Log](CHANGELOG.md) - coming soon\n\n## Contributing\n\n- [Code of Conduct](CODE_OF_CONDUCT.md)\n- [Responsible disclosure & use](SECURITY.md)\n- [Contributing](.github/CONTRIBUTING.md) - coming soon\n\n# Acknowledgement \n\nBy continuing to use AutoMobile, [you acknowledge and agree to the warnings and responsible use requirements](SECURITY.md).",
+  "category": "Development",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "auto-mobile": {
+        "command": "npx",
+        "args": ["-y", "auto-mobile"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zillow",
+    "repo": "auto-mobile",
+    "url": "https://github.com/zillow/auto-mobile",
+    "name": "zillow__auto-mobile",
+    "path": null,
+    "stars": 50,
+    "contributors": 8,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "902ba31d03d3f02afe8582e6397a25463b7267fc"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:45.259Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@types/js-yaml",
+      "importance": 3
+    },
+    {
+      "name": "fs-extra",
+      "importance": 5
+    },
+    {
+      "name": "glob",
+      "importance": 4
+    },
+    {
+      "name": "jimp",
+      "importance": 7
+    },
+    {
+      "name": "js-yaml",
+      "importance": 5
+    },
+    {
+      "name": "pixelmatch",
+      "importance": 8
+    },
+    {
+      "name": "pngjs",
+      "importance": 6
+    },
+    {
+      "name": "sharp",
+      "importance": 8
+    },
+    {
+      "name": "xml2js",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"auto-mobile\",\n  \"version\": \"0.0.5\",\n  \"description\": \"Mobile device interaction automation via MCP\",\n  \"scripts\": {\n    \"test\": \"mocha --require esbuild-register test/**/*.ts\",\n    \"test:coverage\": \"nyc mocha --require esbuild-register test/**/*.ts\",\n    \"lint\": \"eslint . --fix\",\n    \"watch\": \"tsc --watch\",\n    \"build\": \"tsc && node scripts/build-ios-assets.js && chmod +x dist/src/index.js\",\n    \"clean\": \"rm -rf dist\",\n    \"start\": \"npx tsx src/index.ts --transport streamable\",\n    \"dev\": \"ts-node-dev --respawn --transpile-only src/index.ts --transport streamable\",\n    \"dev:port\": \"ts-node-dev --respawn --transpile-only src/index.ts --transport streamable --port\",\n    \"dev:stdio\": \"npx tsx src/index.ts\",\n    \"dev:sse\": \"ts-node-dev --respawn --transpile-only src/index.ts --transport sse\",\n    \"dev:streamable\": \"ts-node-dev --respawn --transpile-only src/index.ts --transport streamable\",\n    \"dev:streamable:port\": \"ts-node-dev --respawn --transpile-only src/index.ts --transport streamable --port\",\n    \"prepublishOnly\": \"cp README.md README.md.backup && node scripts/npm/transform-readme.js\",\n    \"postpublish\": \"mv README.md.backup README.md || true\"\n  },\n  \"engines\": {\n    \"node\": \">=20\"\n  },\n  \"keywords\": [\n    \"adb\",\n    \"android\",\n    \"auto-mobile\",\n    \"automation\",\n    \"bridge\",\n    \"debug\",\n    \"mcp\",\n    \"mobile\",\n    \"ui-testing\"\n  ],\n  \"files\": [\n    \"dist\"\n  ],\n  \"main\": \"dist/src/index.js\",\n  \"bin\": {\n    \"auto-mobile\": \"dist/src/index.js\"\n  },\n  \"author\": \"Jason Pearson\",\n  \"license\": \"Apache-2.0\",\n  \"contributors\": [\n    {\n      \"name\": \"Jason Pearson\",\n      \"email\": \"jasonpe@zillowgroup.com\"\n    }\n  ],\n  \"homepage\": \"https://zillow.github.io/auto-mobile/\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.13.0\",\n    \"@types/js-yaml\": \"^4.0.9\",\n    \"fs-extra\": \"^11.1.1\",\n    \"glob\": \"^11.0.3\",\n    \"jimp\": \"^0.22.10\",\n    \"js-yaml\": \"^4.1.0\",\n    \"pixelmatch\": \"^7.1.0\",\n    \"pngjs\": \"^7.0.0\",\n    \"sharp\": \"^0.34.2\",\n    \"xml2js\": \"^0.6.2\",\n    \"zod\": \"^3.22.4\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@eslint/eslintrc\": \"^3.2.0\",\n    \"@eslint/js\": \"^9.19.0\",\n    \"@faker-js/faker\": \"^9.8.0\",\n    \"@stylistic/eslint-plugin\": \"^3.0.1\",\n    \"@types/chai\": \"^4.3.12\",\n    \"@types/chai-as-promised\": \"^8.0.2\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/fs-extra\": \"^11.0.4\",\n    \"@types/mocha\": \"^10.0.6\",\n    \"@types/node\": \"^20.10.5\",\n    \"@types/pixelmatch\": \"^5.2.6\",\n    \"@types/pngjs\": \"^6.0.5\",\n    \"@types/proxyquire\": \"^1.3.31\",\n    \"@types/sinon\": \"^17.0.2\",\n    \"@types/sinon-chai\": \"^4.0.0\",\n    \"@types/xml2js\": \"^0.4.14\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.28.0\",\n    \"@typescript-eslint/parser\": \"^8.26.1\",\n    \"@typescript-eslint/utils\": \"^8.26.1\",\n    \"chai\": \"^4.3.8\",\n    \"chai-as-promised\": \"^8.0.1\",\n    \"esbuild\": \"^0.25.4\",\n    \"esbuild-register\": \"^3.6.0\",\n    \"eslint\": \"^9.19.0\",\n    \"eslint-plugin\": \"^1.0.1\",\n    \"eslint-plugin-import\": \"^2.31.0\",\n    \"eslint-plugin-notice\": \"^1.0.0\",\n    \"mocha\": \"^11.1.0\",\n    \"nyc\": \"^17.1.0\",\n    \"proxyquire\": \"^2.1.3\",\n    \"sinon\": \"^16.0.0\",\n    \"sinon-chai\": \"^3.7.0\",\n    \"ts-node\": \"^10.9.2\",\n    \"ts-node-dev\": \"^2.0.0\",\n    \"tsx\": \"^4.19.4\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

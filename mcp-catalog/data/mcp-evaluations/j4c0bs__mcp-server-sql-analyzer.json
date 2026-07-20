@@ -1,0 +1,95 @@
+{
+  "name": "j4c0bs__mcp-server-sql-analyzer",
+  "display_name": "mcp-server-sql-analyzer",
+  "description": "MCP server for SQL static analysis.",
+  "author": {
+    "name": "j4c0bs"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/j4c0bs/mcp-server-sql-analyzer.git", "mcp-server-sql-analyzer"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# mcp-server-sql-analyzer\n\nA Model Context Protocol (MCP) server that provides SQL analysis, linting, and dialect conversion capabilities using [SQLGlot](https://sqlglot.com/sqlglot.html).\n\n## Overview\n\nThe SQL Analyzer MCP server provides tools for analyzing and working with SQL queries. It helps with:\n\n- SQL syntax validation and linting\n- Converting queries between different SQL dialects (e.g., MySQL to PostgreSQL)\n- Extracting and analyzing table references and dependencies\n- Identifying column usage and relationships\n- Discovering supported SQL dialects\n\n### How Claude Uses This Server\n\nAs an AI assistant, this server enhances my ability to help users work with SQL efficiently by:\n\n1. **Query Validation**: I can instantly validate SQL syntax before suggesting it to users, ensuring I provide correct and dialect-appropriate queries.\n\n2. **Dialect Conversion**: When users need to migrate queries between different database systems, I can accurately convert the syntax while preserving the query's logic.\n\n3. **Code Analysis**: The table and column reference analysis helps me understand complex queries, making it easier to explain query structure and suggest optimizations.\n\n4. **Compatibility Checking**: By knowing the supported dialects and their specific features, I can guide users toward database-specific best practices.\n\nThis toolset allows me to provide more accurate and helpful SQL-related assistance while reducing the risk of syntax errors or dialect-specific issues.\n\n### Tips\n\nUpdate your personal preferences in Claude Desktop settings to request that generated SQL is first validated using the `lint_sql` tool.\n\n## Tools\n\n1. lint_sql\n   - Validates SQL query syntax and returns any errors\n   - Input:\n     - sql (string): SQL query to analyze\n     - dialect (string, optional): SQL dialect (e.g., 'mysql', 'postgres')\n   - Returns: ParseResult containing:\n     - is_valid (boolean): Whether the SQL is valid\n     - message (string): Error message or \"No syntax errors\"\n     - position (object, optional): Line and column of error if present\n\n2. transpile_sql\n   - Converts SQL between different dialects\n   - Inputs:\n     - sql (string): SQL statement to transpile\n     - read_dialect (string): Source SQL dialect\n     - write_dialect (string): Target SQL dialect\n   - Returns: TranspileResult containing:\n     - is_valid (boolean): Whether transpilation succeeded\n     - message (string): Error message or success confirmation\n     - sql (string): Transpiled SQL if successful\n\n3. get_all_table_references\n   - Extracts table and CTE references from SQL\n   - Inputs:\n     - sql (string): SQL statement to analyze\n     - dialect (string, optional): SQL dialect\n   - Returns: TableReferencesResult containing:\n     - is_valid (boolean): Whether analysis succeeded\n     - message (string): Status message\n     - tables (array): List of table references with type, catalog, database, table name, alias, and fully qualified name\n\n4. get_all_column_references\n   - Extracts column references with table context\n   - Inputs:\n     - sql (string): SQL statement to analyze\n     - dialect (string, optional): SQL dialect\n   - Returns: ColumnReferencesResult containing:\n     - is_valid (boolean): Whether analysis succeeded\n     - message (string): Status message\n     - columns (array): List of column references with column name, table name, and fully qualified name\n\n## Resources\n\n### SQL Dialect Discovery\n\n```\ndialects://all\n```\n\nReturns a list of all supported SQL dialects for use in all tools.\n\n## Configuration\n\n### Using uvx (recommended)\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n      \"sql-analyzer\": {\n          \"command\": \"uvx\",\n          \"args\": [\n              \"--from\",\n              \"git+https://github.com/j4c0bs/mcp-server-sql-analyzer.git\",\n              \"mcp-server-sql-analyzer\"\n          ]\n      }\n  }\n}\n```\n\n### Using uv\n\nAfter cloning this repo, add this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n      \"sql-analyzer\": {\n          \"command\": \"uv\",\n          \"args\": [\n              \"--directory\",\n              \"/path/to/mcp-server-sql-analyzer\",\n              \"run\",\n              \"mcp-server-sql-analyzer\"\n          ]\n      }\n  }\n}\n```\n\n## Development\n\nTo run the server in development mode:\n\n```bash\n# Clone the repository\ngit clone git@github.com:j4c0bs/mcp-server-sql-analyzer.git\n\n# Run the server\nnpx @modelcontextprotocol/inspector uv --directory /path/to/mcp-server-sql-analyzer run mcp-server-sql-analyzer\n```\n\nTo run unit tests:\n\n```bash\nuv run pytest .\n```\n\n## License\n\nMIT\n",
+  "category": "Development",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-sql-analyzer": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/j4c0bs/mcp-server-sql-analyzer.git", "mcp-server-sql-analyzer"],
+        "env": {}
+      },
+      "mcp-server-sql-analyzer-local": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/mcp-server-sql-analyzer", "run", "mcp-server-sql-analyzer"],
+        "env": {}
+      },
+      "mcp-server-sql-analyzer-development": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "/path/to/mcp-server-sql-analyzer",
+          "run",
+          "mcp-server-sql-analyzer"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "j4c0bs",
+    "repo": "mcp-server-sql-analyzer",
+    "url": "https://github.com/j4c0bs/mcp-server-sql-analyzer",
+    "name": "j4c0bs__mcp-server-sql-analyzer",
+    "path": null,
+    "stars": 25,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d6d69c0c55826d6baa5033820078d1c72453ee33"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.701Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "sqlglot",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-sql-analyzer\"\nversion = \"0.1.0\"\ndescription = \"SQL analyzer server for MCP\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"mcp>=1.2.0\",\n    \"sqlglot>=26.2.1\",\n    \"pydantic>=2.10.6\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mcp_server_sql_analyzer\"]\n\n[project.scripts]\nmcp-server-sql-analyzer = \"mcp_server_sql_analyzer:main\"\n\n[tool.ruff]\nline-length = 88\nindent-width = 4\n\n[tool.ruff.lint]\nselect = [\"E4\", \"E7\", \"E9\", \"F\"]\nignore = []\nfixable = [\"ALL\"]\nunfixable = []\ndummy-variable-rgx = \"^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$\"\n\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\nline-ending = \"auto\"\ndocstring-code-format = false\n\n[dependency-groups]\ndev = [\n    \"pytest>=8.3.4\",\n]\nlint = [\n    \"ruff>=0.9.3\",\n]\n"
+}

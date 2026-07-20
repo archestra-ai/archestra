@@ -1,0 +1,102 @@
+{
+  "name": "bankless__onchain-mcp",
+  "display_name": "onchain-mcp",
+  "description": "Bringing the bankless onchain API to MCP",
+  "author": {
+    "name": "Bankless"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@bankless/onchain-mcp"],
+    "env": {
+      "BANKLESS_API_TOKEN": "${user_config.bankless_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bankless_api_token": {
+      "type": "string",
+      "title": "Bankless API Token",
+      "description": "Your API token for authentication with the Bankless API. Obtain it from https://docs.bankless.com/bankless-api/other-services/onchain-mcp",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Bankless Onchain MCP Server\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n![Version](https://img.shields.io/badge/version-0.6.2-blue)\n\nMCP (Model Context Protocol) server for blockchain data interaction through the Bankless API.\n\n## Overview\n\nThe Bankless Onchain MCP Server provides a framework for interacting with on-chain data via the Bankless API. It implements the Model Context Protocol (MCP) to allow AI models to access blockchain state and event data in a structured way.\n\n\nhttps://github.com/user-attachments/assets/95732dff-ae5f-45a6-928a-1ae17c0ddf9d\n\n\n## Features\n\nThe server provides the following onchain data operations:\n\n### Contract Operations\n\n- **Read Contract State** (`read_contract`): Read state from smart contracts on various blockchain networks.\n    - Parameters: network, contract address, method, inputs, outputs\n    - Returns: Contract call results with typed values\n\n- **Get Proxy** (`get_proxy`): Retrieve proxy implementation contract addresses.\n    - Parameters: network, contract address\n    - Returns: Implementation contract address\n\n- **Get ABI** (`get_abi`): Fetch the ABI (Application Binary Interface) for a contract.\n    - Parameters: network, contract address\n    - Returns: Contract ABI in JSON format\n\n- **Get Source** (`get_source`): Retrieve the source code for a verified contract.\n    - Parameters: network, contract address\n    - Returns: Source code, ABI, compiler version, and other contract metadata\n\n### Event Operations\n\n- **Get Events** (`get_events`): Fetch event logs for a contract based on topics.\n    - Parameters: network, addresses, topic, optional topics\n    - Returns: Filtered event logs\n\n- **Build Event Topic** (`build_event_topic`): Generate an event topic signature from event name and argument types.\n    - Parameters: network, event name, argument types\n    - Returns: Event topic hash\n\n### Transaction Operations\n\n- **Get Transaction History** (`get_transaction_history`): Retrieve transaction history for a user address.\n    - Parameters: network, user address, optional contract, optional method ID, optional start block, include data flag\n    - Returns: List of transactions with hash, data, network, and timestamp\n\n- **Get Transaction Info** (`get_transaction_info`): Get detailed information about a specific transaction.\n    - Parameters: network, transaction hash\n    - Returns: Transaction details including block number, timestamp, from/to addresses, value, gas info, status, and receipt data\n\n## Tools\n\n- **read_contract**\n    - Read contract state from a blockchain\n    - Input:\n        - `network` (string, required): The blockchain network (e.g., \"ethereum\", \"polygon\")\n        - `contract` (string, required): The contract address\n        - `method` (string, required): The contract method to call\n        - `inputs` (array, required): Input parameters for the method call, each containing:\n            - `type` (string): The type of the input parameter (e.g., \"address\", \"uint256\")\n            - `value` (any): The value of the input parameter\n        - `outputs` (array, required): Expected output types, each containing:\n            - `type` (string): The expected output type\n    - Returns an array of contract call results\n\n- **get_proxy**\n    - Gets the proxy address for a given network and contract\n    - Input:\n        - `network` (string, required): The blockchain network (e.g., \"ethereum\", \"base\")\n        - `contract` (string, required): The contract address\n    - Returns the implementation address for the proxy contract\n\n- **get_events**\n    - Fetches event logs for a given network and filter criteria\n    - Input:\n        - `network` (string, required): The blockchain network (e.g., \"ethereum\", \"base\")\n        - `addresses` (array, required): List of contract addresses to filter events\n        - `topic` (string, required): Primary topic to filter events\n        - `optionalTopics` (array, optional): Optional additional topics (can include null values)\n    - Returns an object containing event logs matching the filter criteria\n\n- **build_event_topic**\n    - Builds an event topic signature based on event name and arguments\n    - Input:\n        - `network` (string, required): The blockchain network (e.g., \"ethereum\", \"base\")\n        - `name` (string, required): Event name (e.g., \"Transfer(address,address,uint256)\")\n        - `arguments` (array, required): Event arguments types, each containing:\n            - `type` (string): The argument type (e.g., \"address\", \"uint256\")\n    - Returns a string containing the keccak256 hash of the event signature\n\n## Installation\n\n```bash\nnpm install @bankless/onchain-mcp\n```\n\n## Usage\n\n### Environment Setup\n\nBefore using the server, set your Bankless API token. For details on how to obtain your Bankless API token, head to https://docs.bankless.com/bankless-api/other-services/onchain-mcp\n\n```bash\nexport BANKLESS_API_TOKEN=your_api_token_here\n```\n\n### Running the Server\n\nThe server can be run directly from the command line:\n\n```bash\nnpx @bankless/onchain-mcp\n```\n\n### Usage with LLM Tools\n\nThis server implements the Model Context Protocol (MCP), which allows it to be used as a tool provider for compatible AI models. Here are some example calls for each tool:\n\n#### read_contract\n\n```javascript\n// Example call\n{\n  \"name\": \"read_contract\",\n  \"arguments\": {\n    \"network\": \"ethereum\",\n    \"contract\": \"0x1234...\",\n    \"method\": \"balanceOf\",\n    \"inputs\": [\n      { \"type\": \"address\", \"value\": \"0xabcd...\" }\n    ],\n    \"outputs\": [\n      { \"type\": \"uint256\" }\n    ]\n  }\n}\n\n// Example response\n[\n  {\n    \"value\": \"1000000000000000000\",\n    \"type\": \"uint256\"\n  }\n]\n```\n\n#### get_proxy\n\n```javascript\n// Example call\n{\n  \"name\": \"get_proxy\",\n  \"arguments\": {\n    \"network\": \"ethereum\",\n    \"contract\": \"0x1234...\"\n  }\n}\n\n// Example response\n{\n  \"implementation\": \"0xefgh...\"\n}\n```\n\n#### get_events\n\n```javascript\n// Example call\n{\n  \"name\": \"get_events\",\n  \"arguments\": {\n    \"network\": \"ethereum\",\n    \"addresses\": [\"0x1234...\"],\n    \"topic\": \"0xabcd...\",\n    \"optionalTopics\": [\"0xef01...\", null]\n  }\n}\n\n// Example response\n{\n  \"result\": [\n    {\n      \"removed\": false,\n      \"logIndex\": 5,\n      \"transactionIndex\": 2,\n      \"transactionHash\": \"0x123...\",\n      \"blockHash\": \"0xabc...\",\n      \"blockNumber\": 12345678,\n      \"address\": \"0x1234...\",\n      \"data\": \"0x...\",\n      \"topics\": [\"0xabcd...\", \"0xef01...\", \"0x...\"]\n    }\n  ]\n}\n```\n\n#### build_event_topic\n\n```javascript\n// Example call\n{\n  \"name\": \"build_event_topic\",\n  \"arguments\": {\n    \"network\": \"ethereum\",\n    \"name\": \"Transfer(address,address,uint256)\",\n    \"arguments\": [\n      { \"type\": \"address\" },\n      { \"type\": \"address\" },\n      { \"type\": \"uint256\" }\n    ]\n  }\n}\n\n// Example response\n\"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\"\n```\n\n## Development\n\n### Building from Source\n\n```bash\n# Clone the repository\ngit clone https://github.com/Bankless/onchain-mcp.git\ncd onchain-mcp\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n```\n\n### Debug Mode\n\n```bash\nnpm run debug\n```\n\n### Integration with AI Models\n\nTo integrate this server with AI applications that support MCP, add the following to your app's server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"bankless\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@bankless/onchain-mcp\"\n      ],\n      \"env\": {\n        \"BANKLESS_API_TOKEN\": \"your_api_token_here\"\n      }\n    }\n  }\n}\n```\n\n## Error Handling\n\nThe server provides specific error types for different scenarios:\n\n- `BanklessValidationError`: Invalid input parameters\n- `BanklessAuthenticationError`: API token issues\n- `BanklessResourceNotFoundError`: Requested resource not found\n- `BanklessRateLimitError`: API rate limit exceeded\n\n## Prompting Tips\n\nIn order to guide an LLM model to use the Bankless Onchain MCP Server, the following prompts can be used:\n\n```\nROLE:\n• You are Kompanion, a blockchain expert and EVM sleuth. \n• You specialize in navigating and analyzing smart contracts using your tools and resources.\n\nHOW KOMPANION CAN HANDLE PROXY CONTRACTS:\n• If a contract is a proxy, call your “get_proxy” tool to fetch the implementation contract.  \n• If that fails, try calling the “implementation” method on the proxy contract.  \n• If that also fails, try calling the “_implementation” function.  \n• After obtaining the implementation address, call “get_contract_source” with that address to fetch its source code.  \n• When reading or modifying the contract state, invoke implementation functions on the proxy contract address (not directly on the implementation).\n\nHOW KOMPANION CAN HANDLE EVENTS:\n• Get the ABI and Source of the relevant contracts\n• From the event types in the ABI, construct the correct topics for the event relevant to the question\n• use the \"get_event_logs\" tool to fetch logs for the contract\n\nKOMPANION'S RULES:\n• Do not begin any response with “Great,” “Certainly,” “Okay,” or “Sure.”  \n• Maintain a direct, technical style. Do not add conversational flourishes.  \n• If the user’s question is unrelated to smart contracts, do not fetch any contracts.  \n• If you navigate contracts, explain each step in bullet points.  \n• Solve tasks iteratively, breaking them into steps.  \n• Use bullet points for lists of steps.  \n• Never assume a contract’s functionality. Always verify with examples using your tools to read the contract state.  \n• Before responding, consider which tools might help you gather better information.  \n• Include as much relevant information as possible in your final answer, depending on your findings.\n\nHOW KOMPANION CAN USE TOOLS:\n• You can fetch contract source codes, ABIs, and read contract data by using your tools and functions.  \n• Always verify the source or ABI to understand the contract rather than making assumptions.  \n• If you need to read contract state, fetch its ABI (especially if the source is lengthy).  \n\nFINAL INSTRUCTION:\n• Provide the best possible, concise answer to the user’s request. If it's not an immediate question but an instruction, follow it directly.\n• Use your tools to gather any necessary clarifications or data.  \n• Offer a clear, direct response and add a summary of what you did (how you navigated the contracts) at the end.\n```\n\n## License\n\nMIT\n",
+  "category": "Finance",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bankless-onchain-mcp": {
+        "command": "npx",
+        "args": ["@bankless/onchain-mcp"],
+        "env": {
+          "BANKLESS_API_TOKEN": "your_api_token_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Bankless",
+    "repo": "onchain-mcp",
+    "url": "https://github.com/Bankless/onchain-mcp",
+    "name": "bankless__onchain-mcp",
+    "path": null,
+    "stars": 64,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.316Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "node-fetch",
+      "importance": 6
+    },
+    {
+      "name": "universal-user-agent",
+      "importance": 3
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": null
+}

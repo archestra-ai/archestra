@@ -1,0 +1,86 @@
+{
+  "name": "mobile-next__mobile-mcp",
+  "display_name": "mobile-mcp",
+  "description": "Model Context Protocol Server for Mobile Automation and Scraping (iOS, Android, Emulators, Simulators and Real Devices)",
+  "author": {
+    "name": "mobile-next"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mobilenext/mobile-mcp@latest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Mobile Next - MCP server for Mobile Development and Automation | iOS, Android, Simulator, Emulator, and Real Devices\n\nThis is a [Model Context Protocol (MCP) server](https://github.com/modelcontextprotocol) that enables scalable mobile automation, development through a platform-agnostic interface, eliminating the need for distinct iOS or Android knowledge. You can run it on emulators, simulators, and real devices (iOS and Android).\nThis server allows Agents and LLMs to interact with native iOS/Android applications and devices through structured accessibility snapshots or coordinate-based taps based on screenshots.\n\n<h4 align=\"center\">\n  <a href=\"https://github.com/mobile-next/mobile-mcp\">\n    <img src=\"https://img.shields.io/github/stars/mobile-next/mobile-mcp\" alt=\"Mobile Next Stars\" />\n  </a>\n  <a href=\"https://github.com/mobile-next/mobile-mcp\">\n    <img src=\"https://img.shields.io/github/contributors/mobile-next/mobile-mcp?color=green\" alt=\"Mobile Next Downloads\" />\n  </a>\n  <a href=\"https://www.npmjs.com/package/@mobilenext/mobile-mcp\">\n    <img src=\"https://img.shields.io/npm/dm/@mobilenext/mobile-mcp?logo=npm&style=flat&color=red\" alt=\"npm\" />\n  </a>\n  <a href=\"https://github.com/mobile-next/mobile-mcp/releases\">\n    <img src=\"https://img.shields.io/github/release/mobile-next/mobile-mcp\" />\n  </a>\n  <a href=\"https://github.com/mobile-next/mobile-mcp/blob/main/LICENSE\">\n    <img src=\"https://img.shields.io/badge/license-Apache 2.0-blue.svg\" alt=\"Mobile MCP is released under the Apache-2.0 License\" />\n  </a>\n  <a href=\"https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22mobile-mcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mobilenext%2Fmobile-mcp%40latest%22%5D%7D\">\n    <img src=\"https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Server&color=0098FF\" alt=\"Install in VS Code\" />\n  </a>\n</h4>\n\n<h4 align=\"center\">\n  <a href=\"http://mobilenexthq.com/join-slack\">\n    <img src=\"https://img.shields.io/badge/join-Slack-blueviolet?logo=slack&style=flat\" alt=\"Slack community channel\" />\n  </a>\n</h4>\n\nhttps://github.com/user-attachments/assets/c4e89c4f-cc71-4424-8184-bdbc8c638fa1\n\n<p align=\"center\">\n    <a href=\"https://github.com/mobile-next/\">\n        <img alt=\"mobile-mcp\" src=\"https://raw.githubusercontent.com/mobile-next/mobile-next-assets/refs/heads/main/mobile-mcp-banner.png\" width=\"600\" />\n    </a>\n</p>\n\n### 🚀 Mobile MCP Roadmap: Building the Future of Mobile\n\nJoin us on our journey as we continuously enhance Mobile MCP!\nCheck out our detailed roadmap to see upcoming features, improvements, and milestones. Your feedback is invaluable in shaping the future of mobile automation.\n\n👉 [Explore the Roadmap](https://github.com/orgs/mobile-next/projects/3)\n\n\n### Main use cases\n\nHow we help to scale mobile automation:\n\n- 📲 Native app automation (iOS and Android) for testing or data-entry scenarios.\n- 📝 Scripted flows and form interactions without manually controlling simulators/emulators or real devices (iPhone, Samsung, Google Pixel etc)\n- 🧭 Automating multi-step user journeys driven by an LLM\n- 👆 General-purpose mobile application interaction for agent-based frameworks\n- 🤖 Enables agent-to-agent communication for mobile automation usecases, data extraction\n\n## Main Features\n\n- 🚀 **Fast and lightweight**: Uses native accessibility trees for most interactions, or screenshot based coordinates where a11y labels are not available.\n- 🤖 **LLM-friendly**: No computer vision model required in Accessibility (Snapshot).\n- 🧿 **Visual Sense**: Evaluates and analyses what’s actually rendered on screen to decide the next action. If accessibility data or view-hierarchy coordinates are unavailable, it falls back to screenshot-based analysis.\n- 📊 **Deterministic tool application**: Reduces ambiguity found in purely screenshot-based approaches by relying on structured data whenever possible.\n- 📺 **Extract structured data**: Enables you to extract structred data from anything visible on screen.\n\n## 🏗️ Mobile MCP Architecture\n\n<p align=\"center\">\n    <a href=\"https://raw.githubusercontent.com/mobile-next/mobile-next-assets/refs/heads/main/mobile-mcp-arch-1.png\">\n        <img alt=\"mobile-mcp\" src=\"https://raw.githubusercontent.com/mobile-next/mobile-next-assets/refs/heads/main/mobile-mcp-arch-1.png\" width=\"600\">\n    </a>\n</p>\n\n\n## 📚 Wiki page\n\nMore details in our [wiki page](https://github.com/mobile-next/mobile-mcp/wiki) for setup, configuration and debugging related questions.\n\n\n## Installation and configuration\n\nSetup our MCP with Cline, Cursor, Claude, VS Code, Github Copilot:\n\n```json\n{\n  \"mcpServers\": {\n    \"mobile-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@mobilenext/mobile-mcp@latest\"]\n    }\n  }\n}\n\n```\n[Cline:](https://docs.cline.bot/mcp/configuring-mcp-servers) To setup Cline, just add the json above to your MCP settings file.\n[More in our wiki](https://github.com/mobile-next/mobile-mcp/wiki/Cline)\n\n[Claude Code:](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview)\n\n```\nclaude mcp add mobile -- npx -y @mobilenext/mobile-mcp@latest\n```\n\n[Read more in our wiki](https://github.com/mobile-next/mobile-mcp/wiki)! 🚀\n\n\n### 🛠️ How to Use 📝\n\nAfter adding the MCP server to your IDE/Client, you can instruct your AI assistant to use the available tools.\nFor example, in Cursor's agent mode, you could use the prompts below to quickly validate, test and iterate on UI intereactions, read information from screen, go through complex workflows.\nBe descriptive, straight to the point.\n\n### ✨ Example Prompts\n\n#### Workflows\n\nYou can specifiy detailed workflows in a single prompt, verify business logic, setup automations. You can go crazy:\n\n**Search for a video, comment, like and share it.**\n```\nFind the video called \" Beginner Recipe for Tonkotsu Ramen\" by Way of\nRamen, click on like video, after liking write a comment \" this was\ndelicious, will make it next Friday\", share the video with the first\ncontact in your whatsapp list.\n```\n\n**Download a successful step counter app, register, setup workout and 5-star the app**\n```\nFind and Download a free \"Pomodoro\" app that has more than 1k stars.\nLaunch the app, register with my email, after registration find how to\nstart a pomodoro timer. When the pomodoro timer started, go back to the\napp store and rate the app 5 stars, and leave a comment how useful the\napp is.\n```\n\n**Search in Substack, read, highlight, comment and save an article**\n```\nOpen Substack website, search for \"Latest trends in AI automation 2025\",\nopen the first article, highlight the section titled \"Emerging AI trends\",\nand save article to reading list for later review, comment a random\nparagraph summary.\n```\n\n**Reserve a workout class, set timer**\n```\nOpen ClassPass, search for yoga classes tomorrow morning within 2 miles,\nbook the highest-rated class at 7 AM, confirm reservation,\nsetup a timer for the booked slot in the phone\n```\n\n**Find a local event, setup calendar event**\n```\nOpen Eventbrite, search for AI startup meetup events happening this\nweekend in \"Austin, TX\", select the most popular one, register and RSVP\nyes to the event, setup a calendar event as a reminder.\n```\n\n**Check weather forecast and send a Whatsapp/Telegram/Slack message**\n```\nOpen Weather app, check tomorrow's weather forecast for \"Berlin\", and\nsend the summary via Whatsapp/Telegram/Slack to contact \"Lauren Trown\",\nthumbs up their response.\n```\n\n- **Schedule a meeting in Zoom and share invite via email**\n```\nOpen Zoom app, schedule a meeting titled \"AI Hackathon\" for tomorrow at\n10AM with a duration of 1 hour, copy the invitation link, and send it via\nGmail to contacts \"team@example.com\".\n```\n[More prompt examples can be found here.](https://github.com/mobile-next/mobile-mcp/wiki/Prompt-Example-repo-list)\n\n## Prerequisites\n\nWhat you will need to connect MCP with your agent and mobile devices:\n\n- [Xcode command line tools](https://developer.apple.com/xcode/resources/)\n- [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools)\n- [node.js](https://nodejs.org/en/download/) v22+\n- [MCP](https://modelcontextprotocol.io/introduction) supported foundational models or agents, like [Claude MCP](https://modelcontextprotocol.io/quickstart/server), [OpenAI Agent SDK](https://openai.github.io/openai-agents-python/mcp/), [Copilot Studio](https://www.microsoft.com/en-us/microsoft-copilot/blog/copilot-studio/introducing-model-context-protocol-mcp-in-copilot-studio-simplified-integration-with-ai-apps-and-agents/)\n\n### Simulators, Emulators, and Real Devices\n\nWhen launched, Mobile MCP can connect to:\n- iOS Simulators on macOS/Linux\n- Android Emulators on Linux/Windows/macOS\n- iOS or Android real devices (requires proper platform tools and drivers)\n\nMake sure you have your mobile platform SDKs (Xcode, Android SDK) installed and configured properly before running Mobile Next Mobile MCP.\n\n### Running in \"headless\" mode on Simulators/Emulators\n\nWhen you do not have a real device connected to your machine, you can run Mobile MCP with an emulator or simulator in the background.\n\nFor example, on Android:\n1. Start an emulator (avdmanager / emulator command).\n2. Run Mobile MCP with the desired flags\n\nOn iOS, you'll need Xcode and to run the Simulator before using Mobile MCP with that simulator instance.\n- `xcrun simctl list`\n- `xcrun simctl boot \"iPhone 16\"`\n\n# Thanks to all contributors ❤️\n\n### We appreciate everyone who has helped improve this project.\n\n  <a href = \"https://github.com/mobile-next/mobile-mcp/graphs/contributors\">\n   <img src = \"https://contrib.rocks/image?repo=mobile-next/mobile-mcp\"/>\n </a>\n\n",
+  "category": "AI Tools",
+  "quality_score": 81,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mobile-mcp": {
+        "command": "npx",
+        "args": ["-y", "@mobilenext/mobile-mcp@latest"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mobile-next",
+    "repo": "mobile-mcp",
+    "url": "https://github.com/mobile-next/mobile-mcp",
+    "name": "mobile-next__mobile-mcp",
+    "path": null,
+    "stars": 1966,
+    "contributors": 15,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e29290561834b5d1f2e782c6cc1e4a4e3ba41263"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.871Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "fast-xml-parser",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@mobilenext/mobile-mcp\",\n  \"version\": \"0.0.1\",\n  \"description\": \"Mobile MCP\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/mobile-next/mobile-mcp.git\"\n  },\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"license\": \"Apache-2.0\",\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x lib/index.js\",\n    \"lint\": \"eslint .\",\n    \"fixlint\": \"eslint . --fix\",\n    \"test\": \"nyc mocha --require ts-node/register test/*.ts\",\n    \"watch\": \"tsc --watch\",\n    \"clean\": \"rm -rf lib\",\n    \"prepare\": \"husky\"\n  },\n  \"files\": [\n    \"lib\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n    \"commander\": \"^14.0.0\",\n    \"express\": \"^5.1.0\",\n    \"fast-xml-parser\": \"^5.0.9\",\n    \"zod-to-json-schema\": \"^3.24.4\"\n  },\n  \"devDependencies\": {\n    \"@eslint/eslintrc\": \"^3.2.0\",\n    \"@eslint/js\": \"^9.19.0\",\n    \"@stylistic/eslint-plugin\": \"^3.0.1\",\n    \"@types/commander\": \"^2.12.0\",\n    \"@types/express\": \"^5.0.3\",\n    \"@types/mocha\": \"^10.0.10\",\n    \"@types/node\": \"^22.13.10\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.28.0\",\n    \"@typescript-eslint/parser\": \"^8.26.1\",\n    \"@typescript-eslint/utils\": \"^8.26.1\",\n    \"eslint\": \"^9.19.0\",\n    \"eslint-plugin\": \"^1.0.1\",\n    \"eslint-plugin-import\": \"^2.31.0\",\n    \"eslint-plugin-notice\": \"^1.0.0\",\n    \"husky\": \"^9.1.7\",\n    \"mocha\": \"^11.1.0\",\n    \"nyc\": \"^17.1.0\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"main\": \"index.js\",\n  \"bin\": {\n    \"mcp-server-mobile\": \"lib/index.js\"\n  },\n  \"directories\": {\n    \"lib\": \"lib\"\n  },\n  \"author\": \"\",\n  \"bugs\": {\n    \"url\": \"https://github.com/mobile-next/mobile-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/mobile-next/mobile-mcp#readme\"\n}\n"
+}

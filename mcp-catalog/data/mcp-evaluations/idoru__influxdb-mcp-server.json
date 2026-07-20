@@ -1,0 +1,137 @@
+{
+  "name": "idoru__influxdb-mcp-server",
+  "display_name": "influxdb-mcp-server",
+  "description": "An MCP Server for querying InfluxDB",
+  "author": {
+    "name": "idoru"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "influxdb-mcp-server"],
+    "env": {
+      "INFLUXDB_TOKEN": "${user_config.influxdb_token}",
+      "INFLUXDB_URL": "${user_config.influxdb_url}",
+      "INFLUXDB_ORG": "${user_config.influxdb_org}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "influxdb_token": {
+      "type": "string",
+      "title": "InfluxDB Token",
+      "description": "Authentication token for the InfluxDB API",
+      "sensitive": true,
+      "required": true
+    },
+    "influxdb_url": {
+      "type": "string",
+      "title": "InfluxDB URL",
+      "description": "URL of the InfluxDB instance",
+      "default": "http://localhost:8086",
+      "required": false
+    },
+    "influxdb_org": {
+      "type": "string",
+      "title": "InfluxDB Organization",
+      "description": "Default organization name for certain operations",
+      "required": false
+    }
+  },
+  "readme": "[![MseeP Badge](https://mseep.net/pr/idoru-influxdb-mcp-server-badge.jpg)](https://mseep.ai/app/idoru-influxdb-mcp-server)\n\n# InfluxDB MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@idoru/influxdb-mcp-server)](https://smithery.ai/server/@idoru/influxdb-mcp-server)\n\nA Model Context Protocol (MCP) server that exposes access to an InfluxDB instance using the InfluxDB OSS API v2. Mostly built with Claude Code.\n\n## Features\n\nThis MCP server provides:\n\n- **Resources**: Access to organization, bucket, and measurement data\n- **Tools**: Write data, execute queries, and manage database objects\n- **Prompts**: Templates for common Flux queries and Line Protocol format\n\n## Resources\n\nThe server exposes the following resources:\n\n1. **Organizations List**: `influxdb://orgs`\n   - Displays all organizations in the InfluxDB instance\n\n2. **Buckets List**: `influxdb://buckets`\n   - Shows all buckets with their metadata\n\n3. **Bucket Measurements**: `influxdb://bucket/{bucketName}/measurements`\n   - Lists all measurements within a specified bucket\n\n4. **Query Data**: `influxdb://query/{orgName}/{fluxQuery}`\n   - Executes a Flux query and returns results as a resource\n\n## Tools\n\nThe server provides these tools:\n\n1. `write-data`: Write time-series data in line protocol format\n   - Parameters: org, bucket, data, precision (optional)\n\n2. `query-data`: Execute Flux queries\n   - Parameters: org, query\n\n3. `create-bucket`: Create a new bucket\n   - Parameters: name, orgID, retentionPeriodSeconds (optional)\n\n4. `create-org`: Create a new organization\n   - Parameters: name, description (optional)\n\n## Prompts\n\nThe server offers these prompt templates:\n\n1. `flux-query-examples`: Common Flux query examples\n2. `line-protocol-guide`: Guide to InfluxDB line protocol format\n\n## Configuration\n\nThe server requires these environment variables:\n\n- `INFLUXDB_TOKEN` (required): Authentication token for the InfluxDB API\n- `INFLUXDB_URL` (optional): URL of the InfluxDB instance (defaults to `http://localhost:8086`)\n- `INFLUXDB_ORG` (optional): Default organization name for certain operations\n\n## Installation\n\n### Installing via Smithery\n\nTo install InfluxDB MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@idoru/influxdb-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @idoru/influxdb-mcp-server --client claude\n```\n\n### Option 1: Run with npx (recommended)\n\n```bash\n# Run directly with npx\nINFLUXDB_TOKEN=your_token npx influxdb-mcp-server\n```\n\n### Option 2: Install globally\n\n```bash\n# Install globally\nnpm install -g influxdb-mcp-server\n\n# Run the server\nINFLUXDB_TOKEN=your_token influxdb-mcp-server\n```\n\n### Option 3: From source\n\n```bash\n# Clone the repository\ngit clone https://github.com/idoru/influxdb-mcp-server.git\ncd influxdb-mcp-server\n\n# Install dependencies\nnpm install\n\n# Run the server\nINFLUXDB_TOKEN=your_token npm start\n```\n\n## Integration with Claude for Desktop\n\nAdd the server to your `claude_desktop_config.json`:\n\n### Using npx (recommended)\n\n```json\n{\n  \"mcpServers\": {\n    \"influxdb\": {\n      \"command\": \"npx\",\n      \"args\": [\"influxdb-mcp-server\"],\n      \"env\": {\n        \"INFLUXDB_TOKEN\": \"your_token\",\n        \"INFLUXDB_URL\": \"http://localhost:8086\",\n        \"INFLUXDB_ORG\": \"your_org\"\n      }\n    }\n  }\n}\n```\n\n### If installed locally\n\n```json\n{\n  \"mcpServers\": {\n    \"influxdb\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/influxdb-mcp-server/src/index.js\"],\n      \"env\": {\n        \"INFLUXDB_TOKEN\": \"your_token\",\n        \"INFLUXDB_URL\": \"http://localhost:8086\",\n        \"INFLUXDB_ORG\": \"your_org\"\n      }\n    }\n  }\n}\n```\n\n## Code Structure\n\nThe server code is organized into a modular structure:\n\n- `src/`\n  - `index.js` - Main server entry point\n  - `config/` - Configuration related files\n    - `env.js` - Environment variable handling\n  - `utils/` - Utility functions\n    - `influxClient.js` - InfluxDB API client\n    - `loggerConfig.js` - Console logger configuration\n  - `handlers/` - Resource and tool handlers\n    - `organizationsHandler.js` - Organizations listing\n    - `bucketsHandler.js` - Buckets listing\n    - `measurementsHandler.js` - Measurements listing\n    - `queryHandler.js` - Query execution\n    - `writeDataTool.js` - Data write tool\n    - `queryDataTool.js` - Query tool\n    - `createBucketTool.js` - Bucket creation tool\n    - `createOrgTool.js` - Organization creation tool\n  - `prompts/` - Prompt templates\n    - `fluxQueryExamplesPrompt.js` - Flux query examples\n    - `lineProtocolGuidePrompt.js` - Line protocol guide\n\nThis structure allows for better maintainability, easier testing, and clearer separation of concerns.\n\n## Testing\n\nThe repository includes comprehensive integration tests that:\n\n- Spin up a Docker container with InfluxDB\n- Populate it with sample data\n- Test all MCP server functionality\n\nTo run the tests:\n\n```bash\nnpm test\n```\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 72,
+  "archestra_config": {
+    "client_config_permutations": {
+      "influxdb-mcp-server": {
+        "command": "npx",
+        "args": ["influxdb-mcp-server"],
+        "env": {
+          "INFLUXDB_TOKEN": "your_token"
+        }
+      },
+      "influxdb-mcp-server-global": {
+        "command": "influxdb-mcp-server",
+        "args": [],
+        "env": {
+          "INFLUXDB_TOKEN": "your_token"
+        }
+      },
+      "influxdb-mcp-server-from-source": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {
+          "INFLUXDB_TOKEN": "your_token"
+        }
+      },
+      "influxdb-mcp-server-npx-configured": {
+        "command": "npx",
+        "args": ["influxdb-mcp-server"],
+        "env": {
+          "INFLUXDB_TOKEN": "your_token",
+          "INFLUXDB_URL": "http://localhost:8086",
+          "INFLUXDB_ORG": "your_org"
+        }
+      },
+      "influxdb-mcp-server-local-path-configured": {
+        "command": "node",
+        "args": ["/path/to/influxdb-mcp-server/src/index.js"],
+        "env": {
+          "INFLUXDB_TOKEN": "your_token",
+          "INFLUXDB_URL": "http://localhost:8086",
+          "INFLUXDB_ORG": "your_org"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "idoru",
+    "repo": "influxdb-mcp-server",
+    "url": "https://github.com/idoru/influxdb-mcp-server",
+    "name": "idoru__influxdb-mcp-server",
+    "path": null,
+    "stars": 26,
+    "contributors": 3,
+    "issues": 7,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "9c2b2aa527f61d11c404faee2ae028ae1ed4f325"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.086Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"influxdb-mcp-server\",\n  \"version\": \"0.1.1\",\n  \"main\": \"src/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"influxdb-mcp-server\": \"src/index.js\"\n  },\n  \"scripts\": {\n    \"test\": \"NODE_OPTIONS=--experimental-vm-modules jest --detectOpenHandles --runInBand\",\n    \"start\": \"node src/index.js\"\n  },\n  \"keywords\": [\n    \"influxdb\",\n    \"mcp\",\n    \"model context protocol\",\n    \"claude\",\n    \"anthropic\",\n    \"timeseries\"\n  ],\n  \"author\": \"Sam Coward <idoru42@gmail.com> (https://github.com/idoru)\",\n  \"license\": \"MIT\",\n  \"description\": \"A Model Context Protocol (MCP) server for InfluxDB that enables Claude and other AI assistants to work with time-series data\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/idoru/influxdb-mcp-server.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/idoru/influxdb-mcp-server/issues\"\n  },\n  \"homepage\": \"https://github.com/idoru/influxdb-mcp-server#readme\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n    \"node-fetch\": \"^3.3.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@jest/globals\": \"^29.7.0\",\n    \"@types/dockerode\": \"^3.3.23\",\n    \"@types/jest\": \"^29.5.5\",\n    \"@types/node\": \"^22.13.10\",\n    \"dockerode\": \"^4.0.0\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.1.1\",\n    \"typescript\": \"^5.8.2\",\n    \"wait-for-expect\": \"^3.0.2\"\n  },\n  \"engines\": {\n    \"node\": \">=14.16.0\"\n  }\n}\n"
+}

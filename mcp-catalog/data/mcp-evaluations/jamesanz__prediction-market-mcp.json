@@ -1,0 +1,78 @@
+{
+  "name": "jamesanz__prediction-market-mcp",
+  "display_name": "prediction-market-mcp",
+  "description": "A simple MCP server that grabs prediction market data ",
+  "author": {
+    "name": "JamesANZ"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# prediction-markets-mcp\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/JamesANZ/prediction-market-mcp)](https://archestra.ai/mcp-catalog/jamesanz__prediction-market-mcp)\n\nA Model Context Protocol (MCP) server that provides real-time prediction market data from multiple platforms. This server allows you to query prediction markets for current odds, prices, and market information through a unified interface.\n\n## Supported Platforms\n\n- **Polymarket** - Crypto-based prediction markets with percentage-based odds\n- **PredictIt** - Traditional prediction markets with dollar-based prices\n- **Kalshi** - Regulated US prediction markets\n\n## Features\n\n- **Multi-platform Support**: Query both crypto and traditional prediction markets\n- **Real-time Data**: Get current odds and prices from live markets\n- **Keyword Search**: Filter markets by specific keywords or topics\n- **Unified Interface**: Consistent data format across different platforms\n- **Error Handling**: Graceful handling of API failures and network issues\n- **Type Safety**: Full TypeScript support with comprehensive type definitions\n\n## Installation\n\n### Prerequisites\n\n- Node.js (v18 or higher)\n- npm or yarn\n\n### Setup\n\n1. Clone the repository:\n\n```bash\ngit clone <repository-url>\ncd prediction-markets-mcp\n```\n\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Build the project:\n\n```bash\nnpm run build\n```\n\n## Usage\n\n### Running the Server\n\nStart the MCP server:\n\n```bash\nnode build/index.js\n```\n\nThe server runs on stdio and can be integrated with MCP-compatible clients.\n\n### API Endpoints\n\nThe server provides a single tool: `get-prediction-markets`\n\n#### Parameters\n\n- `keyword` (string, required): Search term to filter markets\n  - Maximum length: 50 characters\n  - Examples: \"trump\", \"election\", \"supreme court\"\n\n#### Example Queries\n\n```\n// Search for Trump-related markets\n{\n  \"keyword\": \"trump\"\n}\n\n// Search for election markets\n{\n  \"keyword\": \"election\"\n}\n\n// Search for Supreme Court markets\n{\n  \"keyword\": \"supreme court\"\n}\n```\n\n### Response Format\n\nThe server returns prediction market data in the following format:\n\n#### Polymarket Markets\n\n```\n**Polymarket: Will Trump win the 2024 election?**\nYes: 45.2% | No: 54.8%\n```\n\n#### PredictIt Markets\n\n```\n**PredictIt: Which party will win the 2025 gubernatorial election in Virginia?**\nDemocratic: 89.0% | Republican: 11.0%\n```\n\n## Data Sources\n\n### Polymarket API\n\n- **Base URL**: `https://clob.polymarket.com/markets`\n- **Format**: JSON\n- **Odds Display**: Percentages (e.g., 65.2%)\n- **Data**: Market questions, active status, token prices\n\n### PredictIt API\n\n- **Base URL**: `https://www.predictit.org/api/marketdata/all/`\n- **Format**: JSON\n- **Odds Display**: Dollar amounts (e.g., $0.65)\n- **Data**: Market names, contracts, trade prices, status\n\n## Development\n\n### Project Structure\n\n```\nprediction-markets-mcp/\n├── src/\n│   └── index.ts          # Main server implementation\n├── build/                # Compiled JavaScript output\n├── package.json          # Dependencies and scripts\n├── tsconfig.json         # TypeScript configuration\n└── README.md            # This file\n```\n\n### Key Components\n\n#### Type Definitions\n\n```typescript\n// Polymarket types\ntype Market = {\n  question: string;\n  active: boolean;\n  archived: boolean;\n  tokens: Token[];\n};\n\n// PredictIt types\ntype PredictItMarket = {\n  id: number;\n  name: string;\n  shortName: string;\n  contracts: PredictItContract[];\n  status: string;\n};\n```\n\n#### Core Functions\n\n- `getPolymarketPredictionData()`: Fetches and processes Polymarket data\n- `getPredictItMarkets()`: Fetches all PredictIt markets\n- `makeApiRequest()`: Handles HTTP requests with proper headers\n\n### Building\n\n```bash\n# Development build\nnpm run build\n\n# Watch mode (if needed)\nnpm run dev\n```\n\n### Testing\n\nTo test the server manually:\n\n1. Start the server:\n\n```bash\nnode build/index.js\n```\n\n2. Send test requests through an MCP client or test the API endpoints directly.\n\n## Troubleshooting\n\n### Common Issues\n\n#### No Markets Found\n\n- **Cause**: Keyword too specific or no matching markets\n- **Solution**: Try broader keywords or check market availability\n- **Example**: Use \"election\" instead of \"specific candidate name\"\n\n### Development Setup\n\n1. Fork the repository\n2. Create a feature branch\n3. Make your changes\n4. Add tests if applicable\n5. Submit a pull request\n\n### Code Style\n\n- Use TypeScript for all new code\n- Follow existing naming conventions\n- Add JSDoc comments for public functions\n- Ensure all builds pass before submitting\n\n## License\n\nMIT License - see LICENSE file for details\n\n## Support\n\nFor issues and questions:\n\n1. Check the troubleshooting section\n2. Review existing GitHub issues\n3. Create a new issue with detailed information\n",
+  "category": "Aggregators",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "prediction-markets-mcp-stdio": {
+        "command": "node",
+        "args": ["build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JamesANZ",
+    "repo": "prediction-market-mcp",
+    "url": "https://github.com/JamesANZ/prediction-market-mcp",
+    "name": "prediction-market-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e72807b208b27909572c68face1e9e9627c1394a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:17.233Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "superagent",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"prediction-markets-mcp\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"prediction-markets\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"main\": \"index.js\",\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"superagent\": \"^10.2.2\",\n    \"zod\": \"^3.25.75\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.0.10\",\n    \"@types/superagent\": \"^8.1.9\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

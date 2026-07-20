@@ -1,0 +1,283 @@
+{
+  "name": "non906__omniparser-autogui-mcp",
+  "display_name": "omniparser-autogui-mcp",
+  "description": "Automatic operation of on-screen GUI.",
+  "author": {
+    "name": "NON906"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "omniparser-autogui-mcp"],
+    "env": {
+      "PYTHONIOENCODING": "utf-8",
+      "OCR_LANG": "${user_config.ocr_lang}",
+      "OMNI_PARSER_BACKEND_LOAD": "${user_config.omni_parser_backend_load}",
+      "TARGET_WINDOW_NAME": "${user_config.target_window_name}",
+      "OMNI_PARSER_SERVER": "${user_config.omni_parser_server}",
+      "SSE_HOST": "${user_config.sse_host}",
+      "SSE_PORT": "${user_config.sse_port}",
+      "SOM_MODEL_PATH": "${user_config.som_model_path}",
+      "CAPTION_MODEL_NAME": "${user_config.caption_model_name}",
+      "CAPTION_MODEL_PATH": "${user_config.caption_model_path}",
+      "OMNI_PARSER_DEVICE": "${user_config.omni_parser_device}",
+      "BOX_TRESHOLD": "${user_config.box_treshold}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ocr_lang": {
+      "type": "string",
+      "title": "OCR Language",
+      "description": "Language for Optical Character Recognition (e.g., 'en' for English).",
+      "default": "en",
+      "required": false
+    },
+    "omni_parser_backend_load": {
+      "type": "boolean",
+      "title": "OmniParser Backend Load",
+      "description": "Specify '1' (true) if OmniParser does not work with other clients (e.g., LibreChat).",
+      "default": false,
+      "required": false
+    },
+    "target_window_name": {
+      "type": "string",
+      "title": "Target Window Name",
+      "description": "Specify the name of the window to operate on. If not specified, operates on the entire screen.",
+      "required": false
+    },
+    "omni_parser_server": {
+      "type": "string",
+      "title": "OmniParser Server Address",
+      "description": "Address and port of an external OmniParser server (e.g., '127.0.0.1:8000').",
+      "required": false
+    },
+    "sse_host": {
+      "type": "string",
+      "title": "SSE Host",
+      "description": "Host for SSE communication instead of stdio.",
+      "required": false
+    },
+    "sse_port": {
+      "type": "number",
+      "title": "SSE Port",
+      "description": "Port for SSE communication instead of stdio.",
+      "required": false
+    },
+    "som_model_path": {
+      "type": "string",
+      "title": "SOM Model Path",
+      "description": "Path for OmniParser's SOM model configuration. Usually not necessary.",
+      "required": false
+    },
+    "caption_model_name": {
+      "type": "string",
+      "title": "Caption Model Name",
+      "description": "Name for OmniParser's caption model configuration. Usually not necessary.",
+      "required": false
+    },
+    "caption_model_path": {
+      "type": "string",
+      "title": "Caption Model Path",
+      "description": "Path for OmniParser's caption model configuration. Usually not necessary.",
+      "required": false
+    },
+    "omni_parser_device": {
+      "type": "string",
+      "title": "OmniParser Device",
+      "description": "Device for OmniParser processing (e.g., 'cpu', 'cuda'). Usually not necessary.",
+      "required": false
+    },
+    "box_treshold": {
+      "type": "number",
+      "title": "Box Threshold",
+      "description": "Box threshold for OmniParser configuration. Usually not necessary.",
+      "required": false
+    }
+  },
+  "readme": "# omniparser-autogui-mcp\n\n（[日本語版はこちら](README_ja.md)）\n\nThis is an [MCP server](https://modelcontextprotocol.io/introduction) that analyzes the screen with [OmniParser](https://github.com/microsoft/OmniParser) and automatically operates the GUI.  \nConfirmed on Windows.\n\n## License notes\n\nThis is MIT license, but Excluding submodules and sub packages.  \nOmniParser's repository is CC-BY-4.0.  \nEach OmniParser model has a different license ([reference](https://github.com/microsoft/OmniParser?tab=readme-ov-file#model-weights-license)).\n\n## Installation\n\n1. Please do the following:\n\n```\ngit clone --recursive https://github.com/NON906/omniparser-autogui-mcp.git\ncd omniparser-autogui-mcp\nuv sync\nset OCR_LANG=en\nuv run download_models.py\n```\n\n(Other than Windows, use ``export`` instead of ``set``.)  \n(If you want ``langchain_example.py`` to work, ``uv sync --extra langchain`` instead.)\n\n2. Add this to your ``claude_desktop_config.json``:\n\n```claude_desktop_config.json\n{\n  \"mcpServers\": {\n    \"omniparser_autogui_mcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"D:\\\\CLONED_PATH\\\\omniparser-autogui-mcp\",\n        \"run\",\n        \"omniparser-autogui-mcp\"\n      ],\n      \"env\": {\n        \"PYTHONIOENCODING\": \"utf-8\",\n        \"OCR_LANG\": \"en\"\n      }\n    }\n  }\n}\n```\n\n(Replace ``D:\\\\CLONED_PATH\\\\omniparser-autogui-mcp`` with the directory you cloned.)\n\n``env`` allows for the following additional configurations:\n\n- ``OMNI_PARSER_BACKEND_LOAD``  \nIf it does not work with other clients (such as [LibreChat](https://github.com/danny-avila/LibreChat)), specify ``1``.\n\n- ``TARGET_WINDOW_NAME``  \nIf you want to specify the window to operate, please specify the window name.  \nIf not specified, operates on the entire screen.\n\n- ``OMNI_PARSER_SERVER``  \nIf you want OmniParser processing to be done on another device, specify the server's address and port, such as ``127.0.0.1:8000``.  \nThe server can be started with ``uv run omniparserserver``.\n\n- ``SSE_HOST``, ``SSE_PORT``  \nIf specified, communication will be done via SSE instead of stdio.\n\n- ``SOM_MODEL_PATH``, ``CAPTION_MODEL_NAME``, ``CAPTION_MODEL_PATH``, ``OMNI_PARSER_DEVICE``, ``BOX_TRESHOLD``  \nThese are for OmniParser configuration.  \nUsually, they are not necessary.\n\n## Usage Examples\n\n- Search for \"MCP server\" in the on-screen browser.\n\netc.",
+  "category": "Browser Automation",
+  "quality_score": 33,
+  "archestra_config": {
+    "client_config_permutations": {
+      "omniparser_autogui_mcp": {
+        "command": "uv",
+        "args": ["--directory", "D:\\CLONED_PATH\\omniparser-autogui-mcp", "run", "omniparser-autogui-mcp"],
+        "env": {
+          "PYTHONIOENCODING": "utf-8",
+          "OCR_LANG": "en"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "NON906",
+    "repo": "omniparser-autogui-mcp",
+    "url": "https://github.com/NON906/omniparser-autogui-mcp",
+    "name": "omniparser-autogui-mcp",
+    "path": null,
+    "stars": 52,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e35c6bba5715b8f8c79bebc32300c6b3c38f0474"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:50.718Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "accelerate",
+      "importance": 8
+    },
+    {
+      "name": "anthropic",
+      "importance": 7
+    },
+    {
+      "name": "azure-identity",
+      "importance": 6
+    },
+    {
+      "name": "boto3",
+      "importance": 7
+    },
+    {
+      "name": "dashscope",
+      "importance": 7
+    },
+    {
+      "name": "dill",
+      "importance": 4
+    },
+    {
+      "name": "easyocr",
+      "importance": 8
+    },
+    {
+      "name": "einops",
+      "importance": 6
+    },
+    {
+      "name": "google-auth",
+      "importance": 6
+    },
+    {
+      "name": "gradio",
+      "importance": 7
+    },
+    {
+      "name": "groq",
+      "importance": 7
+    },
+    {
+      "name": "jsonschema",
+      "importance": 4
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 6
+    },
+    {
+      "name": "openai",
+      "importance": 7
+    },
+    {
+      "name": "opencv-python",
+      "importance": 9
+    },
+    {
+      "name": "opencv-python-headless",
+      "importance": 9
+    },
+    {
+      "name": "paddleocr",
+      "importance": 8
+    },
+    {
+      "name": "paddlepaddle",
+      "importance": 8
+    },
+    {
+      "name": "pandas",
+      "importance": 6
+    },
+    {
+      "name": "pyperclip",
+      "importance": 5
+    },
+    {
+      "name": "pyautogui",
+      "importance": 9
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "screeninfo",
+      "importance": 7
+    },
+    {
+      "name": "streamlit",
+      "importance": 7
+    },
+    {
+      "name": "supervision",
+      "importance": 8
+    },
+    {
+      "name": "timm",
+      "importance": 8
+    },
+    {
+      "name": "torch",
+      "importance": 9
+    },
+    {
+      "name": "torchvision",
+      "importance": 9
+    },
+    {
+      "name": "transformers",
+      "importance": 9
+    },
+    {
+      "name": "uiautomation",
+      "importance": 9
+    },
+    {
+      "name": "ultralytics",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"omniparser-autogui-mcp\"\nversion = \"0.1.0\"\ndescription = \"Automatic operation of on-screen GUI.\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"accelerate>=1.4.0\",\n    \"anthropic[bedrock,vertex]>=0.37.1\",\n    \"azure-identity>=1.20.0\",\n    \"boto3>=1.28.57\",\n    \"dashscope>=1.22.1\",\n    \"dill>=0.3.9\",\n    \"easyocr>=1.7.2\",\n    \"einops==0.8.0\",\n    \"google-auth>=2,<3\",\n    \"gradio>=5.13.2\",\n    \"groq>=0.18.0\",\n    \"jsonschema==4.22.0\",\n    \"numpy==1.26.4\",\n    \"openai>=1.58.1\",\n    \"opencv-python>=4.11.0.86\",\n    \"opencv-python-headless>=4.11.0.86\",\n    \"paddleocr>=2.9.1\",\n    \"paddlepaddle>=2.6.2\",\n    \"pre-commit==3.8.0\",\n    \"pyautogui==0.9.54\",\n    \"pytest==8.3.3\",\n    \"pytest-asyncio==0.23.6\",\n    \"ruff==0.6.7\",\n    \"screeninfo>=0.8.1\",\n    \"streamlit>=1.38.0\",\n    \"supervision==0.18.0\",\n    \"timm>=1.0.14\",\n    \"torch>=2.6.0\",\n    \"torchvision>=0.21.0\",\n    \"transformers>=4.49.0\",\n    \"uiautomation>=2.0.20\",\n    \"ultralytics==8.3.70\",\n    \"uvicorn>=0.34.0\",\n    \"pandas>=2.2.3\",\n    \"setuptools>=75.6.0\",\n    \"pyperclip>=1.9.0\",\n    \"mcp[cli]>=1.3.0\",\n    \"requests>=2.32.3\",\n]\nlicense = {text = \"MIT License\"}\nlicense-files = [\"LICENSE\"]\n\n[project.scripts]\nomniparser-autogui-mcp = \"mcp_autogui:main\"\nomniparserserver = \"omniparserserver:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\n  \"src/mcp_autogui\",\n  \"src/omniparserserver\"\n]\n\n[project.optional-dependencies]\nlangchain = [\n    \"langchain-mcp\",\n    \"langchain\",\n    \"langchain-community\",\n    \"langchain-google-genai\",\n    \"langchain-openai>=0.3.6\",\n    \"langgraph\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv.sources]\ntorch = [\n  { index = \"pytorch-cu118\", marker = \"sys_platform == 'linux' or sys_platform == 'win32'\" },\n]\ntorchvision = [\n  { index = \"pytorch-cu118\", marker = \"sys_platform == 'linux' or sys_platform == 'win32'\" },\n]\nlangchain-mcp = { git = \"https://github.com/NON906/langchain-mcp.git\", branch = \"main\" }\n\n[[tool.uv.index]]\nname = \"pytorch-cu118\"\nurl = \"https://download.pytorch.org/whl/cu118\"\nexplicit = true\n"
+}

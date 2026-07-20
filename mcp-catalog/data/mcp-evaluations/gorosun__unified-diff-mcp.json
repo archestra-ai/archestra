@@ -1,0 +1,113 @@
+{
+  "name": "gorosun__unified-diff-mcp",
+  "display_name": "unified-diff-mcp",
+  "description": "MCP server from gorosun/unified-diff-mcp",
+  "author": {
+    "name": "gorosun"
+  },
+  "server": {
+    "command": "bun",
+    "args": ["run", "${__dirname}/src/index.ts"],
+    "env": {
+      "GITHUB_TOKEN": "${user_config.github_token}",
+      "DEFAULT_AUTO_OPEN": "${user_config.default_auto_open}",
+      "DEFAULT_OUTPUT_MODE": "${user_config.default_output_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "github_token": {
+      "type": "string",
+      "title": "GitHub Personal Access Token",
+      "description": "GitHub Personal Access Token (for Gist integration). Required for sharing diffs via GitHub Gist.",
+      "sensitive": true,
+      "required": true
+    },
+    "default_auto_open": {
+      "type": "boolean",
+      "title": "Auto-open generated files",
+      "description": "Automatically open generated files (HTML/PNG) in your browser after creation.",
+      "default": false,
+      "required": false
+    },
+    "default_output_mode": {
+      "type": "string",
+      "title": "Default output format",
+      "description": "Choose the default format for local file output ('html' or 'image').",
+      "default": "html",
+      "required": false
+    }
+  },
+  "readme": "# Unified Diff MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@gorosun/unified-diff-mcp)](https://smithery.ai/server/@gorosun/unified-diff-mcp)\n\nBeautiful diff visualization for Claude Desktop. Transform code diffs into stunning visual comparisons with GitHub Gist integration and local file output.\n\n<img src=\"examples/screenshot.png\" alt=\"Unified Diff Visualization Screenshot\" width=\"800\" style=\"max-width: 100%; height: auto;\">\n\n## ✨ Features\n\n- 🎨 **Beautiful HTML diff visualization** using diff2html\n- 🌐 **GitHub Gist integration** for instant sharing\n- 📁 **Local file output** (PNG/HTML) \n- 🔄 **Auto-delete functionality** for temporary diffs\n- 🖥️ **Cross-platform support** (Windows, macOS, Linux)\n- ⚡ **High-performance** with Bun runtime\n- 🛡️ **Enhanced Security** with multi-level protection for shared diffs\n- 🔒 **Multi-level security** (Low/Medium/High) for different use cases\n\n## 🚀 Quick Start\n\n### Installing via Smithery\n\n```bash\nbunx @smithery/cli install @gorosun/unified-diff-mcp --client claude --config '{\n  \"defaultAutoOpen\": true,\n  \"defaultOutputMode\": \"html\",\n  \"githubUsername\": \"your_actual_github_username\",\n  \"githubToken\": \"ghp_your_actual_token_here\"\n}'\n```\n\n### Manual Installation\n\n1. **Install [Claude Desktop](https://claude.ai/download)** and **[Bun](https://bun.sh)**\n2. **Clone and build:**\n   ```bash\n   git clone https://github.com/gorosun/unified-diff-mcp.git\n   cd unified-diff-mcp\n   bun install\n   ```\n3. **Configure Claude Desktop** - see [Configuration](#configuration) below\n\n## 🛠️ Tools Overview\n\n| Tool | Purpose | Output | Best For |\n|------|---------|--------|----------|\n| **`visualize_diff_html_content`** | Browser display & sharing | GitHub Gist + HTML preview URL | Quick sharing, instant viewing |\n| **`visualize_diff_output_file`** | Local file storage | PNG/HTML files | Local storage, presentations |\n\n## 📖 Usage Examples\n\n### 🎯 Optimal Prompts by Purpose\n\n| Purpose | Recommended Prompt | Tool Used | Output |\n|---------|-------------------|-----------|--------|\n| **Quick Preview** | `Please visualize and preview the following diff:`<br>`以下のdiffを可視化してプレビューしてください` | `visualize_diff_html_content` | GitHub Gist + HTML preview URL |\n| **Local Storage** | `Please visualize and save the following diff to a file:`<br>`以下のdiffを可視化してファイルに保存してください` | `visualize_diff_output_file` | Local HTML/PNG file |\n| **Share with Others** | `Please visualize the following diff and create a shareable link:`<br>`以下のdiffを可視化して共有リンクを作成してください` | `visualize_diff_html_content` | GitHub Gist with shareable URL |\n| **Image Export** | `Please visualize and save the following diff as a PNG image:`<br>`以下のdiffを可視化してPNG画像で保存してください` | `visualize_diff_output_file` | Local PNG image |\n| **Code Review** | `Please visualize the following diff in side-by-side format:`<br>`以下のdiffをside-by-side形式で可視化してください` | Either tool | Side-by-side comparison |\n| **Documentation** | `Please visualize and save the following diff as an HTML file:`<br>`以下のdiffを可視化してHTMLファイルで保存してください` | `visualize_diff_output_file` | Local HTML file |\n| **🔒 Secure Sharing** | `Please visualize this diff with high security:`<br>`以下のdiffを高セキュリティで可視化してください` | `visualize_diff_html_content` | Secret Gist with auto-delete |\n\n### Share diff instantly (GitHub Gist)\n```\nvisualize_diff_html_content:\n- Creates temporary GitHub Gist\n- Auto-deletes after 30 minutes\n- Instant browser-ready URLs\n- Perfect for code reviews\n```\n\n### Save diff locally\n```\nvisualize_diff_output_file:\n- Saves PNG or HTML to local disk\n- Auto-opens in browser (optional)\n- Perfect for documentation\n```\n\n## 🎛️ Configuration\n\n### Environment Variables\n\n| Variable | Description | Default |\n|----------|-------------|---------|\n| `GITHUB_TOKEN` | GitHub Personal Access Token (for Gist integration) | Required for `visualize_diff_html_content` |\n| `DEFAULT_AUTO_OPEN` | Auto-open generated files | `false` |\n| `DEFAULT_OUTPUT_MODE` | Default output format (`html` or `image`) | `html` |\n\n### GitHub Token Setup\n\n1. Go to [GitHub Settings > Personal Access Tokens](https://github.com/settings/tokens)\n2. Generate new token with `gist` scope\n3. Add to your environment:\n   ```bash\n   export GITHUB_TOKEN=\"your_token_here\"\n   ```\n\n### Claude Desktop Configuration\n\n**macOS:**\n```bash\ncode ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n**Windows:**\n```bash\ncode %APPDATA%\\Claude\\claude_desktop_config.json\n```\n\n**Configuration template:**\n```json\n{\n  \"mcpServers\": {\n    \"unified-diff-mcp\": {\n      \"command\": \"bun\",\n      \"args\": [\"run\", \"/path/to/unified-diff-mcp/src/index.ts\"],\n      \"env\": {\n        \"GITHUB_TOKEN\": \"your_github_token_here\",\n        \"DEFAULT_AUTO_OPEN\": \"true\",\n        \"DEFAULT_OUTPUT_MODE\": \"html\"\n      }\n    }\n  }\n}\n```\n\n## 📋 Parameters Reference\n\n### Common Parameters\n\n| Parameter | Type | Default | Description |\n|-----------|------|---------|-------------|\n| `diff` | string | *(required)* | Unified diff text |\n| `format` | string | `side-by-side` | Display format (`line-by-line` or `side-by-side`) |\n| `showFileList` | boolean | `true` | Show file list summary |\n| `highlight` | boolean | `true` | Enable syntax highlighting |\n| `oldPath` | string | `file.txt` | Original file path |\n| `newPath` | string | `file.txt` | Modified file path |\n| `autoOpen` | boolean | `false` | Auto-open in browser |\n\n### GitHub Gist Specific\n\n| Parameter | Type | Default | Description |\n|-----------|------|---------|-------------|\n| `expiryMinutes` | number | `30` | Auto-delete time (1-1440 minutes) |\n| `public` | boolean | `false` | Public vs secret gist |\n\n### Local File Specific\n\n| Parameter | Type | Default | Description |\n|-----------|------|---------|-------------|\n| `outputType` | string | `html` | Output format (`html` or `image`) |\n\n## 🌍 Platform Support\n\n| Platform | Auto-Open | Commands |\n|----------|-----------|----------|\n| **Windows** | ✅ | `start` (primary), `explorer` (fallback) |\n| **macOS** | ✅ | `open` (primary), AppleScript (fallback) |\n| **Linux** | ✅ | `xdg-open` |\n\n## 🔧 Development\n\n**Development mode (with hot reload):**\n```json\n{\n  \"command\": \"bun\",\n  \"args\": [\"--watch\", \"/path/to/unified-diff-mcp/src/index.ts\"]\n}\n```\n\n**Production mode:**\n```json\n{\n  \"command\": \"bun\",\n  \"args\": [\"run\", \"/path/to/unified-diff-mcp/src/index.ts\"]\n}\n```\n\n## 📚 Advanced Usage\n\n### 🔒 Enhanced Security Levels\n\nWhen GitHub Token isn't available or for secure sharing, you can choose from multiple security levels:\n\n| Security Level | Configuration | Features | Use Cases |\n|---------|---------|--------|--------|\n| **🟢 Low** | Secret Gist + 60min auto-delete | URL-only access | Code examples, learning |\n| **🟡 Medium** | Secret Gist + Password + 30min auto-delete | URL + Access code required | Team reviews |\n| **🔴 High** | Secret Gist + Password + 15min auto-delete | URL + Access code + Short duration | Sensitive code |\n\n### Usage Example\n```\nPlease visualize this diff with high security:\n--- a/config.js\n+++ b/config.js\n@@ -1,3 +1,4 @@\n const config = {\n-  apiKey: 'old-key'\n+  apiKey: 'new-secure-key',\n+  timeout: 5000\n };\n```\n\n**Response Example**:\n```\n🔒 **Secure Diff Visualization**\n\n🔴 **Security Level**: High Security - Secret Gist + Password (15min auto-delete)\n📋 **Preview Link**: https://htmlpreview.github.io/?...\n🔑 **Access Code**: `a7x9k2`\n⏰ **Auto-delete**: 15 minutes\n```\n\n### 🔄 Fallback Functionality\n\nWhen GitHub Token is unavailable, the system falls back to local files:\n- HTML saved as temporary file\n- Automatic browser opening\n- Security-based file management\n\nFor detailed setup and integration guides:\n\n- 🇺🇸 **English**: [CLAUDE_CODE_INTEGRATION.md](CLAUDE_CODE_INTEGRATION.md)\n- 🇯🇵 **日本語**: [CLAUDE_CODE_INTEGRATION_JP.md](CLAUDE_CODE_INTEGRATION_JP.md)\n\n## 🤝 Supported Clients\n\n- **Claude Desktop** (Primary)\n- **Claude Code** (CLI)\n- **VS Code + MCP Extension**\n- **Cline** and other MCP clients\n\n## 📄 License\n\nMIT License - see [LICENSE](LICENSE) file for details.\n\n### Dependencies\n\n| Library | License | Purpose |\n|---------|---------|---------|\n| **diff2html** | MIT | HTML diff generation |\n| **playwright-core** | Apache 2.0 | Browser automation |\n| **@modelcontextprotocol/sdk** | MIT | MCP integration |\n\n---\n\n**Made with ❤️ for the Claude Desktop community**\n",
+  "category": "Development",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "unified-diff-mcp": {
+        "command": "bun",
+        "args": ["run", "/path/to/unified-diff-mcp/src/index.ts"],
+        "env": {
+          "GITHUB_TOKEN": "your_github_token_here",
+          "DEFAULT_AUTO_OPEN": "true",
+          "DEFAULT_OUTPUT_MODE": "html"
+        }
+      },
+      "unified-diff-mcp-dev": {
+        "command": "bun",
+        "args": ["--watch", "/path/to/unified-diff-mcp/src/index.ts"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gorosun",
+    "repo": "unified-diff-mcp",
+    "url": "https://github.com/gorosun/unified-diff-mcp",
+    "name": "gorosun__unified-diff-mcp",
+    "path": null,
+    "stars": 5,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f25af3adf10b9e3e51f502d085e22e1337eec476"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.054Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "playwright-core",
+      "importance": 8
+    },
+    {
+      "name": "diff2html",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"unified-diff-mcp\",\n  \"version\": \"1.2.0\",\n  \"description\": \"Beautiful diff visualization for Claude Desktop - Remote MCP Server\",\n  \"main\": \"workers-entry.js\",\n  \"scripts\": {\n    \"start\": \"bun run src/index.ts\",\n    \"dev\": \"wrangler dev --local\",\n    \"workers:dev\": \"wrangler dev\",\n    \"workers:deploy\": \"wrangler deploy\",\n    \"deploy:staging\": \"wrangler deploy --env staging\",\n    \"deploy:production\": \"wrangler deploy --env production\",\n    \"test\": \"bun test\",\n    \"test:fix\": \"bun run test-fix.js\",\n    \"build\": \"bun run build:workers\",\n    \"build:workers\": \"echo 'No build step required for Workers'\",\n    \"lint\": \"eslint *.js *.ts src/**/*.ts\",\n    \"format\": \"prettier --write *.js *.ts src/**/*.ts\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"playwright-core\": \"^1.40.0\",\n    \"diff2html\": \"^3.4.0\"\n  },\n  \"devDependencies\": {\n    \"@cloudflare/workers-types\": \"^4.20241218.0\",\n    \"@types/node\": \"^20.0.0\",\n    \"wrangler\": \"^3.87.0\",\n    \"eslint\": \"^8.57.0\",\n    \"prettier\": \"^3.1.0\",\n    \"typescript\": \"^5.0.0\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"claude\",\n    \"diff\",\n    \"visualization\",\n    \"cloudflare-workers\",\n    \"remote-mcp\"\n  ],\n  \"author\": \"gorosun\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/gorosun/unified-diff-mcp.git\"\n  }\n}\n"
+}

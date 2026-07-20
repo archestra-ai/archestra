@@ -1,0 +1,83 @@
+{
+  "name": "johannesbrandenburger__typst-mcp",
+  "display_name": "typst-mcp",
+  "description": "Typst MCP Server is an MCP (Model Context Protocol) implementation that helps AI models interact with Typst, a markup-based typesetting system. The server provides tools for converting between LaTeX and Typst, validating Typst syntax, and generating images from Typst code.",
+  "author": {
+    "name": "johannesbrandenburger"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Typst MCP Server\n\nTypst MCP Server is an [MCP (Model Context Protocol)](https://github.com/modelcontextprotocol) implementation that helps AI models interact with [Typst](https://github.com/typst/typst), a markup-based typesetting system. The server provides tools for converting between LaTeX and Typst, validating Typst syntax, and generating images from Typst code.\n\n## Available Tools\n\n>⚠️ Currently all the functionality is implemented as `tools`, because Cursor and VS Code are not able to handle the other primitives yet.\n\nThe server provides the following tools:\n\n1. **`list_docs_chapters()`**: Lists all chapters in the Typst documentation.\n   - Lets the LLM get an overview of the documentation and select a chapter to read.\n   - The LLM should select the relevant chapter to read based on the task at hand.\n\n2. **`get_docs_chapter(route)`**: Retrieves a specific chapter from the Typst documentation.\n   - Based on the chapter selected by the LLM, this tool retrieves the content of the chapter.\n   - Also available as `get_docs_chapters(routes: list)` for retrieving multiple chapters at once.\n\n3. **`latex_snippet_to_typst(latex_snippet)`**: Converts LaTeX code to Typst using Pandoc.\n   - LLMs are better at writing LaTeX than Typst, so this tool helps convert LaTeX code to Typst.\n   - Also available as `latex_snippets_to_typst(latex_snippets: list)` for converting multiple LaTeX snippets at once.\n\n4. **`check_if_snippet_is_valid_typst_syntax(typst_snippet)`**: Validates Typst code.\n   - Before sending Typst code to the user, the LLM should check if the code is valid.\n   - Also available as `check_if_snippets_are_valid_typst_syntax(typst_snippets: list)` for validating multiple Typst snippets at once.\n\n5. **`typst_to_image(typst_snippet)`**: Renders Typst code to a PNG image.\n   - Before sending complex Typst illustrations to the user, the LLM should render the code to an image and check if it looks correct.\n   - Only relevant for multi modal models.\n\n## Getting Started\n\n- Clone this repository\n  - `git clone https://github.com/johannesbrandenburger/typst-mcp.git`\n- Clone the [typst repository](https://github.com/typst/typst.git)\n  - `git clone https://github.com/typst/typst.git`\n- Run the docs generation in the typst repository\n  - `cargo run --package typst-docs -- --assets-dir ../typst-mcp/typst-docs --out-file ../typst-mcp/typst-docs/main.json`\n    - Make sure to adjust the path to your local clone of the typst-mcp repository\n    - This will generate the `main.json` and the assets in the `typst-docs` folder\n- Install required dependencies: `uv sync` (install [uv](https://github.com/astral-sh/uv) if not already installed)\n  \n- Install Typst\n\n## Running the Server\n\nExecute the server script:\n\n```bash\npython server.py\n```\n\nOr install it in Claude Desktop with MCP:\n\n```bash\nmcp install server.py\n```\n\nOr use the new agent mode in VS Code:\n\n[Agent mode: available to all users and supports MCP](https://code.visualstudio.com/blogs/2025/04/07/agentMode)\n\n## JSON Schema of the Typst Documentation\n\n>⚠️ The schema of the typst documentation is not stable and may change at any time. The schema is generated from the typst source code and is not guaranteed to be complete or correct. If the schema changes, this repository will need to be updated accordingly, so that the docs functionality works again.",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "typst-mcp-server": {
+        "command": "python",
+        "args": ["server.py"],
+        "env": {}
+      },
+      "typst-mcp-server-mcp-install": {
+        "command": "mcp",
+        "args": ["install", "server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "johannesbrandenburger",
+    "repo": "typst-mcp",
+    "url": "https://github.com/johannesbrandenburger/typst-mcp",
+    "name": "typst-mcp",
+    "path": null,
+    "stars": 51,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9527cbd4707af7cade3f3be867b2c05a605e9ca0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.913Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 8
+    },
+    {
+      "name": "pillow",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"typst-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n    \"numpy>=2.2.4\",\n    \"pillow>=11.2.1\",\n]\n"
+}

@@ -1,0 +1,116 @@
+{
+  "name": "jetbrains__mcpproxy",
+  "display_name": "mcpProxy",
+  "description": "A model context protocol server to work with JetBrains IDEs: IntelliJ, PyCharm, WebStorm, etc. Also, works with Android Studio",
+  "author": {
+    "name": "JetBrains"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@jetbrains/mcp-proxy"],
+    "env": {
+      "IDE_PORT": "${user_config.ide_port}",
+      "HOST": "${user_config.host}",
+      "LOG_ENABLED": "${user_config.log_enabled}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ide_port": {
+      "type": "string",
+      "title": "IDE Port",
+      "description": "Port of IDE's built-in webserver",
+      "required": false
+    },
+    "host": {
+      "type": "string",
+      "title": "IDE Host",
+      "description": "Host/address of IDE's built-in webserver",
+      "default": "127.0.0.1",
+      "required": false
+    },
+    "log_enabled": {
+      "type": "boolean",
+      "title": "Enable Logging",
+      "description": "Enable logging for the MCP server",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "[![official JetBrains project](http://jb.gg/badges/incubator-flat-square.svg)](https://github.com/JetBrains#jetbrains-on-github)\n\n# ⚠️ Deprecated\n\n**This repository is no longer maintained.** The core functionality has been integrated into all IntelliJ-based IDEs since version 2025.2.\nThe built-in functionality works with SSE and JVM-based proxy (for STDIO) so this NPM package is no longer required.\n\n**Migration:** Please refer to the [official documentation](https://www.jetbrains.com/help/idea/mcp-server.html) for details on using the built-in functionality.\n\n**Issues & Support:** For bugs or feature requests related to the built-in MCP functionality, please use the [JetBrains YouTrack](https://youtrack.jetbrains.com/issues?q=project:%20IJPL%20Subsystem:%20%7BMCP%20(Model%20Context%20Protocol)%7D%20).\n\n# JetBrains MCP Proxy Server\n\nThe server proxies requests from client to JetBrains IDE.\n\n## Install MCP Server plugin\n\nhttps://plugins.jetbrains.com/plugin/26071-mcp-server\n\n## VS Code Installation\n\nFor one-click installation, click one of the install buttons below:\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=jetbrains&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40jetbrains%2Fmcp-proxy%22%5D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=jetbrains&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40jetbrains%2Fmcp-proxy%22%5D%7D&quality=insiders)\n\n### Manual Installation\n\nAdd the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"jetbrains\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"@jetbrains/mcp-proxy\"]\n      }\n    }\n  }\n}\n```\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace:\n\n```json\n{\n  \"servers\": {\n    \"jetbrains\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@jetbrains/mcp-proxy\"]\n    }\n  }\n}\n```\n\n## Usage with Claude Desktop\n\nTo use this with Claude Desktop, add the following to your `claude_desktop_config.json`.\nThe full path on MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`, on Windows: `%APPDATA%/Claude/claude_desktop_config.json`.\n\n```json\n{\n  \"mcpServers\": {\n    \"jetbrains\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@jetbrains/mcp-proxy\"]\n    }\n  }\n}\n```\n\nAfter installing the MCP Server Plugin, and adding the JSON to the config file, restart Claude Desktop, and make sure the Jetbrains product is open before restarting Claude Desktop. \n\n## Configuration\n\nIf you're running multiple IDEs with MCP server and want to connect to the specific one, add to the MCP server configuration:\n```json\n\"env\": {\n  \"IDE_PORT\": \"<port of IDE's built-in webserver>\"\n}\n```\n\nBy default, we connect to IDE on  127.0.0.1 but you can specify a different address/host:\n```json\n\"env\": {\n  \"HOST\": \"<host/address of IDE's built-in webserver>\"\n}\n```\n\nTo enable logging add:\n```json\n\"env\": {\n  \"LOG_ENABLED\": \"true\"\n}\n```\n\n## Troubleshooting\n\n### Node.js Version Requirements\n**Problem:** Error message: `Cannot find module 'node:path'`\n\n**Solution:**\nMCP Proxy doesn't work on Node 16.\nUpgrade your Node.js installation to version 18 or later. Make sure that `command` in config points to the correct Node.js version.\nTry to use the full path to the latest version of NodeJS.\n\n### \n\n### MacOS: Plugin Unable to Detect Node.js Installed via nvm\n**Problem:** On MacOS, if you have Node.js installed through nvm (Node Version Manager), the MCP Server Plugin might be unable to detect your Node.js installation.\n\n**Solution:** Create a symbolic link in `/usr/local/bin` pointing to your nvm npx executable:\n```bash\nwhich npx &>/dev/null && sudo ln -sf \"$(which npx)\" /usr/local/bin/npx\n```\nThis one-liner checks if npx exists in your path and creates the necessary symbolic link with proper permissions.\n\n### Using MCP with External Clients or Docker Containers (LibreChat, Cline, etc.)\n\n**Problem:** When attempting to connect to the JetBrains MCP proxy from external clients, Docker containers, or third-party applications (like LibreChat), requests to endpoints such as http://host.docker.internal:6365/api/mcp/list_tools may return 404 errors or fail to connect.\n**Solution:** There are two key issues to address:\n1. Enable External Connections:\n\nIn your JetBrains IDE, enable \"Can accept external connections\" in the _Settings | Build, Execution, Deployment | Debugger_.\n\n2. Configure with LAN IP and Port:\n\nUse your machine's LAN IP address instead of `host.docker.internal`\nExplicitly set the IDE_PORT and HOST in your configuration\nExample configuration for LibreChat or similar external clients:\n```yaml\nmcpServers:\n  intellij:\n    type: stdio\n    command: sh\n    args:\n      - \"-c\"\n      - \"IDE_PORT=YOUR_IDEA_PORT HOST=YOUR_IDEA_LAN_IP npx -y @jetbrains/mcp-proxy\"\n```\nReplace:\n\n`YOUR_IDEA_PORT` with your IDE's debug port (found in IDE settings)\n`YOUR_IDEA_LAN_IP` with your computer's local network IP (e.g., 192.168.0.12)\n\n\n## How to build\n1. Tested on macOS\n2. `brew install node pnpm`\n3. Run `pnpm build` to build the project\n\n",
+  "category": "Development",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "jetbrains-mcp-proxy": {
+        "command": "npx",
+        "args": ["-y", "@jetbrains/mcp-proxy"],
+        "env": {}
+      },
+      "jetbrains-mcp-proxy-configured": {
+        "command": "npx",
+        "args": ["-y", "@jetbrains/mcp-proxy"],
+        "env": {
+          "IDE_PORT": "<port of IDE's built-in webserver>",
+          "HOST": "<host/address of IDE's built-in webserver>",
+          "LOG_ENABLED": "true"
+        }
+      },
+      "jetbrains-mcp-proxy-external-client": {
+        "command": "sh",
+        "args": ["-c", "IDE_PORT=YOUR_IDEA_PORT HOST=YOUR_IDEA_LAN_IP npx -y @jetbrains/mcp-proxy"],
+        "env": {
+          "IDE_PORT": "YOUR_IDEA_PORT",
+          "HOST": "YOUR_IDEA_LAN_IP"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JetBrains",
+    "repo": "mcpProxy",
+    "url": "https://github.com/JetBrains/mcpProxy",
+    "name": "jetbrains__mcpproxy",
+    "path": null,
+    "stars": 921,
+    "contributors": 6,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c8c2b85bc6f029130542fdddc3daf066e404df41"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.270Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@jetbrains/mcp-proxy\",\n  \"version\": \"1.8.0\",\n  \"description\": \"A MCP proxy to redirect requests to JetBrains IDEs\",\n  \"main\": \"dist/src/index.js\",\n  \"type\": \"module\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/JetBrains/mcp-jetbrains.git\"\n  },\n  \"bin\": {\n    \"mcp-jetbrains-proxy\": \"dist/src/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/src/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.9.0\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"shx\": \"^0.4.0\",\n    \"typescript\": \"^5.8.3\"\n  }\n}"
+}

@@ -1,0 +1,321 @@
+{
+  "name": "benborla__mcp-server-mysql",
+  "display_name": "mcp-server-mysql",
+  "description": "A Model Context Protocol server that provides read-only access to MySQL databases. This server enables LLMs to inspect database schemas and execute read-only queries.",
+  "author": {
+    "name": "benborla"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@benborla29/mcp-server-mysql"],
+    "env": {
+      "MYSQL_HOST": "${user_config.mysql_host}",
+      "MYSQL_PORT": "${user_config.mysql_port}",
+      "MYSQL_USER": "${user_config.mysql_user}",
+      "MYSQL_PASS": "${user_config.mysql_pass}",
+      "MYSQL_DB": "${user_config.mysql_db}",
+      "ALLOW_INSERT_OPERATION": "${user_config.allow_insert_operation}",
+      "ALLOW_UPDATE_OPERATION": "${user_config.allow_update_operation}",
+      "ALLOW_DELETE_OPERATION": "${user_config.allow_delete_operation}",
+      "MYSQL_SOCKET_PATH": "${user_config.mysql_socket_path}",
+      "MULTI_DB_WRITE_MODE": "${user_config.multi_db_write_mode}",
+      "MYSQL_POOL_SIZE": "${user_config.mysql_pool_size}",
+      "MYSQL_QUERY_TIMEOUT": "${user_config.mysql_query_timeout}",
+      "MYSQL_CACHE_TTL": "${user_config.mysql_cache_ttl}",
+      "MYSQL_RATE_LIMIT": "${user_config.mysql_rate_limit}",
+      "MYSQL_SSL": "${user_config.mysql_ssl}",
+      "MYSQL_ENABLE_LOGGING": "${user_config.mysql_enable_logging}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mysql_host": {
+      "type": "string",
+      "title": "MySQL Host",
+      "description": "The hostname or IP address of the MySQL server.",
+      "default": "127.0.0.1",
+      "required": false
+    },
+    "mysql_port": {
+      "type": "number",
+      "title": "MySQL Port",
+      "description": "The port number for the MySQL server connection.",
+      "default": 3306,
+      "required": false,
+      "min": 1,
+      "max": 65535
+    },
+    "mysql_user": {
+      "type": "string",
+      "title": "MySQL User",
+      "description": "The username for connecting to the MySQL server.",
+      "required": true
+    },
+    "mysql_pass": {
+      "type": "string",
+      "title": "MySQL Password",
+      "description": "The password for the MySQL user.",
+      "sensitive": true,
+      "required": true
+    },
+    "mysql_db": {
+      "type": "string",
+      "title": "MySQL Database",
+      "description": "The default database to connect to. Omit for multi-database mode.",
+      "required": false
+    },
+    "allow_insert_operation": {
+      "type": "boolean",
+      "title": "Allow Insert Operations",
+      "description": "Enable or disable INSERT operations through the server.",
+      "default": false,
+      "required": false
+    },
+    "allow_update_operation": {
+      "type": "boolean",
+      "title": "Allow Update Operations",
+      "description": "Enable or disable UPDATE operations through the server.",
+      "default": false,
+      "required": false
+    },
+    "allow_delete_operation": {
+      "type": "boolean",
+      "title": "Allow Delete Operations",
+      "description": "Enable or disable DELETE operations through the server.",
+      "default": false,
+      "required": false
+    },
+    "mysql_socket_path": {
+      "type": "string",
+      "title": "MySQL Socket Path",
+      "description": "Path to the Unix socket for local MySQL connections (alternative to host/port).",
+      "required": false
+    },
+    "multi_db_write_mode": {
+      "type": "boolean",
+      "title": "Multi-DB Write Mode",
+      "description": "Enable write operations in multi-database mode.",
+      "default": false,
+      "required": false
+    },
+    "mysql_pool_size": {
+      "type": "number",
+      "title": "MySQL Connection Pool Size",
+      "description": "The maximum number of connections in the MySQL connection pool.",
+      "default": 10,
+      "required": false,
+      "min": 1
+    },
+    "mysql_query_timeout": {
+      "type": "number",
+      "title": "MySQL Query Timeout (ms)",
+      "description": "The maximum time in milliseconds for a query to execute.",
+      "default": 30000,
+      "required": false,
+      "min": 1000
+    },
+    "mysql_cache_ttl": {
+      "type": "number",
+      "title": "MySQL Cache TTL (ms)",
+      "description": "Time-to-live in milliseconds for schema cache entries.",
+      "default": 60000,
+      "required": false,
+      "min": 0
+    },
+    "mysql_rate_limit": {
+      "type": "number",
+      "title": "MySQL Rate Limit",
+      "description": "Maximum number of queries allowed per time unit (e.g., per second).",
+      "default": 100,
+      "required": false,
+      "min": 0
+    },
+    "mysql_ssl": {
+      "type": "boolean",
+      "title": "Enable MySQL SSL",
+      "description": "Enable SSL/TLS encryption for the MySQL connection.",
+      "default": false,
+      "required": false
+    },
+    "mysql_enable_logging": {
+      "type": "boolean",
+      "title": "Enable MySQL Logging",
+      "description": "Enable detailed logging for MySQL operations.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# MCP Server for MySQL - Claude Code Edition\n\n> **🚀 This is a modified version optimized for Claude Code with SSH tunnel support**  \n> **Original Author:** [@benborla29](https://github.com/benborla)  \n> **Original Repository:** https://github.com/benborla/mcp-server-mysql  \n> **License:** MIT  \n\n# MCP Server for MySQL based on NodeJS\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/benborla/mcp-server-mysql)](https://archestra.ai/mcp-catalog/benborla__mcp-server-mysql)\n\n\n### Key Features of This Fork:\n- ✅ **Claude Code Integration** - Optimized for use with Anthropic's Claude Code CLI\n- ✅ **SSH Tunnel Support** - Built-in support for SSH tunnels to remote databases\n- ✅ **Auto-start/stop Hooks** - Automatic tunnel management with Claude start/stop\n- ✅ **DDL Operations** - Added `MYSQL_DISABLE_READ_ONLY_TRANSACTIONS` for CREATE TABLE support\n- ✅ **Multi-Project Setup** - Easy configuration for multiple projects with different databases\n\n### Quick Start for Claude Code Users:\n1. **Read the Setup Guide**: See [PROJECT_SETUP_GUIDE.md](PROJECT_SETUP_GUIDE.md) for detailed instructions\n2. **Configure SSH Tunnels**: Set up automatic SSH tunnels for remote databases\n3. **Use with Claude**: Integrated MCP server works seamlessly with Claude Code\n\nA Model Context Protocol server that provides access to MySQL databases through SSH tunnels. This server enables Claude and other LLMs to inspect database schemas and execute SQL queries securely.\n\n## Table of Contents\n\n- [Requirements](#requirements)\n- [Installation](#installation)\n  - [Smithery](#using-smithery)\n  - [Clone to Local Repository](#running-from-local-repository)\n  - [Remote mode](#run-in-remote-mode)\n- [Components](#components)\n- [Configuration](#configuration)\n- [Environment Variables](#environment-variables)\n- [Multi-DB Mode](#multi-db-mode)\n- [Schema-Specific Permissions](#schema-specific-permissions)\n- [Testing](#testing)\n- [Troubleshooting](#troubleshooting)\n- [Contributing](#contributing)\n- [License](#license)\n\n## Requirements\n\n- Node.js v20 or higher\n- MySQL 5.7 or higher (MySQL 8.0+ recommended)\n- MySQL user with appropriate permissions for the operations you need\n- For write operations: MySQL user with INSERT, UPDATE, and/or DELETE privileges\n\n## Installation\n\n### Using Smithery\n\nThere are several ways to install and configure the MCP server but the most common would be checking this website [https://smithery.ai/server/@benborla29/mcp-server-mysql](https://smithery.ai/server/@benborla29/mcp-server-mysql)\n\n### Cursor\n\nFor Cursor IDE, you can install this MCP server with the following command in your project:\n\n1. Visit [https://smithery.ai/server/@benborla29/mcp-server-mysql](https://smithery.ai/server/@benborla29/mcp-server-mysql)\n2. Follow the instruction for Cursor\n\nMCP Get provides a centralized registry of MCP servers and simplifies the installation process.\n\n### Claude Code\n\n#### Option 1: Import from Claude Desktop (Recommended if already configured)\n\nIf you already have this MCP server configured in Claude Desktop, you can import it automatically:\n\n```bash\nclaude mcp add-from-claude-desktop\n```\n\nThis will show an interactive dialog where you can select your `mcp_server_mysql` server to import with all existing configuration.\n\n#### Option 2: Manual Configuration\n\n**Using NPM/PNPM Global Installation:**\n\nFirst, install the package globally:\n\n```bash\n# Using npm\nnpm install -g @benborla29/mcp-server-mysql\n\n# Using pnpm\npnpm add -g @benborla29/mcp-server-mysql\n```\n\nThen add the server to Claude Code:\n\n```bash\nclaude mcp add mcp_server_mysql \\\n  -e MYSQL_HOST=\"127.0.0.1\" \\\n  -e MYSQL_PORT=\"3306\" \\\n  -e MYSQL_USER=\"root\" \\\n  -e MYSQL_PASS=\"your_password\" \\\n  -e MYSQL_DB=\"your_database\" \\\n  -e ALLOW_INSERT_OPERATION=\"false\" \\\n  -e ALLOW_UPDATE_OPERATION=\"false\" \\\n  -e ALLOW_DELETE_OPERATION=\"false\" \\\n  -- npx @benborla29/mcp-server-mysql\n```\n\n**Using Local Repository (for development):**\n\nIf you're running from a cloned repository:\n\n```bash\nclaude mcp add mcp_server_mysql \\\n  -e MYSQL_HOST=\"127.0.0.1\" \\\n  -e MYSQL_PORT=\"3306\" \\\n  -e MYSQL_USER=\"root\" \\\n  -e MYSQL_PASS=\"your_password\" \\\n  -e MYSQL_DB=\"your_database\" \\\n  -e ALLOW_INSERT_OPERATION=\"false\" \\\n  -e ALLOW_UPDATE_OPERATION=\"false\" \\\n  -e ALLOW_DELETE_OPERATION=\"false\" \\\n  -e PATH=\"/path/to/node/bin:/usr/bin:/bin\" \\\n  -e NODE_PATH=\"/path/to/node/lib/node_modules\" \\\n  -- /path/to/node /full/path/to/mcp-server-mysql/dist/index.js\n```\n\nReplace:\n\n- `/path/to/node` with your Node.js binary path (find with `which node`)\n- `/full/path/to/mcp-server-mysql` with the full path to your cloned repository\n- Update MySQL credentials to match your environment\n\n**Using Unix Socket Connection:**\n\nFor local MySQL instances using Unix sockets:\n\n```bash\nclaude mcp add mcp_server_mysql \\\n  -e MYSQL_SOCKET_PATH=\"/tmp/mysql.sock\" \\\n  -e MYSQL_USER=\"root\" \\\n  -e MYSQL_PASS=\"your_password\" \\\n  -e MYSQL_DB=\"your_database\" \\\n  -e ALLOW_INSERT_OPERATION=\"false\" \\\n  -e ALLOW_UPDATE_OPERATION=\"false\" \\\n  -e ALLOW_DELETE_OPERATION=\"false\" \\\n  -- npx @benborla29/mcp-server-mysql\n```\n\n#### Choosing the Right Scope\n\nConsider which scope to use based on your needs:\n\n```bash\n# Local scope (default) - only available in current project\nclaude mcp add mcp_server_mysql [options...]\n\n# User scope - available across all your projects\nclaude mcp add mcp_server_mysql -s user [options...]\n\n# Project scope - shared with team members via .mcp.json\nclaude mcp add mcp_server_mysql -s project [options...]\n```\n\nFor database servers with credentials, **local** or **user** scope is recommended to keep credentials private.\n\n#### Verification\n\nAfter adding the server, verify it's configured correctly:\n\n```bash\n# List all configured servers\nclaude mcp list\n\n# Get details for your MySQL server\nclaude mcp get mcp_server_mysql\n\n# Check server status within Claude Code\n/mcp\n```\n\n#### Multi-Database Configuration\n\nFor multi-database mode, omit the `MYSQL_DB` environment variable:\n\n```bash\nclaude mcp add mcp_server_mysql_multi \\\n  -e MYSQL_HOST=\"127.0.0.1\" \\\n  -e MYSQL_PORT=\"3306\" \\\n  -e MYSQL_USER=\"root\" \\\n  -e MYSQL_PASS=\"your_password\" \\\n  -e MULTI_DB_WRITE_MODE=\"false\" \\\n  -- npx @benborla29/mcp-server-mysql\n```\n\n#### Advanced Configuration\n\nFor advanced features, add additional environment variables:\n\n```bash\nclaude mcp add mcp_server_mysql \\\n  -e MYSQL_HOST=\"127.0.0.1\" \\\n  -e MYSQL_PORT=\"3306\" \\\n  -e MYSQL_USER=\"root\" \\\n  -e MYSQL_PASS=\"your_password\" \\\n  -e MYSQL_DB=\"your_database\" \\\n  -e MYSQL_POOL_SIZE=\"10\" \\\n  -e MYSQL_QUERY_TIMEOUT=\"30000\" \\\n  -e MYSQL_CACHE_TTL=\"60000\" \\\n  -e MYSQL_RATE_LIMIT=\"100\" \\\n  -e MYSQL_SSL=\"true\" \\\n  -e ALLOW_INSERT_OPERATION=\"false\" \\\n  -e ALLOW_UPDATE_OPERATION=\"false\" \\\n  -e ALLOW_DELETE_OPERATION=\"false\" \\\n  -e MYSQL_ENABLE_LOGGING=\"true\" \\\n  -- npx @benborla29/mcp-server-mysql\n```\n\n#### Troubleshooting Claude Code Setup\n\n1. **Server Connection Issues**: Use `/mcp` command in Claude Code to check server status and authenticate if needed.\n\n2. **Path Issues**: If using a local repository, ensure Node.js paths are correctly set:\n\n   ```bash\n   # Find your Node.js path\n   which node\n\n   # For PATH environment variable\n   echo \"$(which node)/../\"\n\n   # For NODE_PATH environment variable\n   echo \"$(which node)/../../lib/node_modules\"\n   ```\n\n3. **Permission Errors**: Ensure your MySQL user has appropriate permissions for the operations you've enabled.\n\n4. **Server Not Starting**: Check Claude Code logs or run the server directly to debug:\n\n   ```bash\n   # Test the server directly\n   npx @benborla29/mcp-server-mysql\n   ```\n\n### Using NPM/PNPM\n\nFor manual installation:\n\n```bash\n# Using npm\nnpm install -g @benborla29/mcp-server-mysql\n\n# Using pnpm\npnpm add -g @benborla29/mcp-server-mysql\n```\n\nAfter manual installation, you'll need to configure your LLM application to use the MCP server (see Configuration section below).\n\n### Running from Local Repository\n\nIf you want to clone and run this MCP server directly from the source code, follow these steps:\n\n1. **Clone the repository**\n\n   ```bash\n   git clone https://github.com/benborla/mcp-server-mysql.git\n   cd mcp-server-mysql\n   ```\n\n2. **Install dependencies**\n\n   ```bash\n   npm install\n   # or\n   pnpm install\n   ```\n\n3. **Build the project**\n\n   ```bash\n   npm run build\n   # or\n   pnpm run build\n   ```\n\n4. **Configure Claude Desktop**\n\n   Add the following to your Claude Desktop configuration file (`claude_desktop_config.json`):\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"mcp_server_mysql\": {\n         \"command\": \"/path/to/node\",\n         \"args\": [\n           \"/full/path/to/mcp-server-mysql/dist/index.js\"\n         ],\n         \"env\": {\n           \"MYSQL_HOST\": \"127.0.0.1\",\n           \"MYSQL_PORT\": \"3306\",\n           \"MYSQL_USER\": \"root\",\n           \"MYSQL_PASS\": \"your_password\",\n           \"MYSQL_DB\": \"your_database\",\n           \"ALLOW_INSERT_OPERATION\": \"false\",\n           \"ALLOW_UPDATE_OPERATION\": \"false\",\n           \"ALLOW_DELETE_OPERATION\": \"false\",\n           \"PATH\": \"/Users/atlasborla/Library/Application Support/Herd/config/nvm/versions/node/v22.9.0/bin:/usr/bin:/bin\", // <--- Important to add the following, run in your terminal `echo \"$(which node)/../\"` to get the path\n           \"NODE_PATH\": \"/Users/atlasborla/Library/Application Support/Herd/config/nvm/versions/node/v22.9.0/lib/node_modules\" // <--- Important to add the following, run in your terminal `echo \"$(which node)/../../lib/node_modules\"`\n         }\n       }\n     }\n   }\n   ```\n\n   Replace:\n   - `/path/to/node` with the full path to your Node.js binary (find it with `which node`)\n   - `/full/path/to/mcp-server-mysql` with the full path to where you cloned the repository\n   - Set the MySQL credentials to match your environment\n\n5. **Test the server**\n\n   ```bash\n   # Run the server directly to test\n   node dist/index.js\n   ```\n\n   If it connects to MySQL successfully, you're ready to use it with Claude Desktop.\n\n### Run in remote mode\n\nTo run in remote mode, you'll need to provide [environment variables](https://github.com/benborla/mcp-server-mysql?tab=readme-ov-file#environment-variables) to the npx script.\n\n1. Create env file in preferred directory\n\n   ```bash\n   # create .env file\n   touch .env\n   ```\n\n2. Copy-paste [example file](https://github.com/benborla/mcp-server-mysql/blob/main/.env) from this repository\n3. Set the MySQL credentials to match your environment\n4. Set `IS_REMOTE_MCP=true`\n5. Set `REMOTE_SECRET_KEY` to a secure string.\n6. Provide custom `PORT` if needed. Default is 3000.\n7. Load variables in current session:\n\n   ```bash\n   source .env\n   ```\n\n8. Run the server\n\n   ```bash\n   npx @benborla29/mcp-server-mysql\n   ```\n\n9. Configure your agent to connect to the MCP with the next configuration:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"mysql\": {\n         \"url\": \"http://your-host:3000/mcp\",\n         \"type\": \"streamableHttp\",\n         \"headers\": {\n           \"Authorization\": \"Bearer <REMOTE_SECRET_KEY>\"\n         }\n       }\n     }\n   }\n   ```\n\n## Components\n\n### Tools\n\n- **mysql_query**\n  - Execute SQL queries against the connected database\n  - Input: `sql` (string): The SQL query to execute\n  - By default, limited to READ ONLY operations\n  - Optional write operations (when enabled via configuration):\n    - INSERT: Add new data to tables (requires `ALLOW_INSERT_OPERATION=true`)\n    - UPDATE: Modify existing data (requires `ALLOW_UPDATE_OPERATION=true`)\n    - DELETE: Remove data (requires `ALLOW_DELETE_OPERATION=true`)\n  - All operations are executed within a transaction with proper commit/rollback handling\n  - Supports prepared statements for secure parameter handling\n  - Configurable query timeouts and result pagination\n  - Built-in query execution statistics\n\n### Resources\n\nThe server provides comprehensive database information:\n\n- **Table Schemas**\n  - JSON schema information for each table\n  - Column names and data types\n  - Index information and constraints\n  - Foreign key relationships\n  - Table statistics and metrics\n  - Automatically discovered from database metadata\n\n### Security Features\n\n- SQL injection prevention through prepared statements\n- Query whitelisting/blacklisting capabilities\n- Rate limiting for query execution\n- Query complexity analysis\n- Configurable connection encryption\n- Read-only transaction enforcement\n\n### Performance Optimizations\n\n- Optimized connection pooling\n- Query result caching\n- Large result set streaming\n- Query execution plan analysis\n- Configurable query timeouts\n\n### Monitoring and Debugging\n\n- Comprehensive query logging\n- Performance metrics collection\n- Error tracking and reporting\n- Health check endpoints\n- Query execution statistics\n\n## Configuration\n\n### Automatic Configuration with Smithery\n\nIf you installed using Smithery, your configuration is already set up. You can view or modify it with:\n\n```bash\nsmithery configure @benborla29/mcp-server-mysql\n```\n\nWhen reconfiguring, you can update any of the MySQL connection details as well as the write operation settings:\n\n- **Basic connection settings**:\n  - MySQL Host, Port, User, Password, Database\n  - SSL/TLS configuration (if your database requires secure connections)\n\n- **Write operation permissions**:\n  - Allow INSERT Operations: Set to true if you want to allow adding new data\n  - Allow UPDATE Operations: Set to true if you want to allow updating existing data\n  - Allow DELETE Operations: Set to true if you want to allow deleting data\n\nFor security reasons, all write operations are disabled by default. Only enable these settings if you specifically need Claude to modify your database data.\n\n### Advanced Configuration Options\n\nFor more control over the MCP server's behavior, you can use these advanced configuration options:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp_server_mysql\": {\n      \"command\": \"/path/to/npx/binary/npx\",\n      \"args\": [\n        \"-y\",\n        \"@benborla29/mcp-server-mysql\"\n      ],\n      \"env\": {\n        // Basic connection settings\n        \"MYSQL_HOST\": \"127.0.0.1\",\n        \"MYSQL_PORT\": \"3306\",\n        \"MYSQL_USER\": \"root\",\n        \"MYSQL_PASS\": \"\",\n        \"MYSQL_DB\": \"db_name\",\n        \"PATH\": \"/path/to/node/bin:/usr/bin:/bin\",\n\n        // Performance settings\n        \"MYSQL_POOL_SIZE\": \"10\",\n        \"MYSQL_QUERY_TIMEOUT\": \"30000\",\n        \"MYSQL_CACHE_TTL\": \"60000\",\n\n        // Security settings\n        \"MYSQL_RATE_LIMIT\": \"100\",\n        \"MYSQL_MAX_QUERY_COMPLEXITY\": \"1000\",\n        \"MYSQL_SSL\": \"true\",\n\n        // Monitoring settings\n        \"ENABLE_LOGGING\": \"true\",\n        \"MYSQL_LOG_LEVEL\": \"info\",\n        \"MYSQL_METRICS_ENABLED\": \"true\",\n\n        // Write operation flags\n        \"ALLOW_INSERT_OPERATION\": \"false\",\n        \"ALLOW_UPDATE_OPERATION\": \"false\",\n        \"ALLOW_DELETE_OPERATION\": \"false\"\n      }\n    }\n  }\n}\n```\n\n## Environment Variables\n\n### Basic Connection\n\n- `MYSQL_SOCKET_PATH`: Unix socket path for local connections (e.g., \"/tmp/mysql.sock\")\n- `MYSQL_HOST`: MySQL server host (default: \"127.0.0.1\") - ignored if MYSQL_SOCKET_PATH is set\n- `MYSQL_PORT`: MySQL server port (default: \"3306\") - ignored if MYSQL_SOCKET_PATH is set\n- `MYSQL_USER`: MySQL username (default: \"root\")\n- `MYSQL_PASS`: MySQL password\n- `MYSQL_DB`: Target database name (leave empty for multi-DB mode)\n\n### Performance Configuration\n\n- `MYSQL_POOL_SIZE`: Connection pool size (default: \"10\")\n- `MYSQL_QUERY_TIMEOUT`: Query timeout in milliseconds (default: \"30000\")\n- `MYSQL_CACHE_TTL`: Cache time-to-live in milliseconds (default: \"60000\")\n\n### Security Configuration\n\n- `MYSQL_RATE_LIMIT`: Maximum queries per minute (default: \"100\")\n- `MYSQL_MAX_QUERY_COMPLEXITY`: Maximum query complexity score (default: \"1000\")\n- `MYSQL_SSL`: Enable SSL/TLS encryption (default: \"false\")\n- `ALLOW_INSERT_OPERATION`: Enable INSERT operations (default: \"false\")\n- `ALLOW_UPDATE_OPERATION`: Enable UPDATE operations (default: \"false\")\n- `ALLOW_DELETE_OPERATION`: Enable DELETE operations (default: \"false\")\n- `ALLOW_DDL_OPERATION`: Enable DDL operations (default: \"false\")\n- `MYSQL_DISABLE_READ_ONLY_TRANSACTIONS`: **[NEW]** Disable read-only transaction enforcement (default: \"false\") ⚠️ **Security Warning:** Only enable this if you need full write capabilities and trust the LLM with your database\n- `SCHEMA_INSERT_PERMISSIONS`: Schema-specific INSERT permissions\n- `SCHEMA_UPDATE_PERMISSIONS`: Schema-specific UPDATE permissions\n- `SCHEMA_DELETE_PERMISSIONS`: Schema-specific DELETE permissions\n- `SCHEMA_DDL_PERMISSIONS`: Schema-specific DDL permissions\n- `MULTI_DB_WRITE_MODE`: Enable write operations in multi-DB mode (default: \"false\")\n\n### Monitoring Configuration\n\n- `MYSQL_ENABLE_LOGGING`: Enable query logging (default: \"false\")\n- `MYSQL_LOG_LEVEL`: Logging level (default: \"info\")\n- `MYSQL_METRICS_ENABLED`: Enable performance metrics (default: \"false\")\n\n### Remote MCP Configuration\n\n- `IS_REMOTE_MCP`: Enable remote MCP mode (default: \"false\")\n- `REMOTE_SECRET_KEY`: Secret key for remote MCP authentication (default: \"\"). If not provided, remote MCP mode will be disabled.\n- `PORT`: Port number for the remote MCP server (default: 3000)\n\n## Multi-DB Mode\n\nMCP-Server-MySQL supports connecting to multiple databases when no specific database is set. This allows the LLM to query any database the MySQL user has access to. For full details, see [README-MULTI-DB.md](./README-MULTI-DB.md).\n\n### Enabling Multi-DB Mode\n\nTo enable multi-DB mode, simply leave the `MYSQL_DB` environment variable empty. In multi-DB mode, queries require schema qualification:\n\n```sql\n-- Use fully qualified table names\nSELECT * FROM database_name.table_name;\n\n-- Or use USE statements to switch between databases\nUSE database_name;\nSELECT * FROM table_name;\n```\n\n## Schema-Specific Permissions\n\nFor fine-grained control over database operations, MCP-Server-MySQL now supports schema-specific permissions. This allows different databases to have different levels of access (read-only, read-write, etc.).\n\n### Configuration Example\n\n```txt\nSCHEMA_INSERT_PERMISSIONS=development:true,test:true,production:false\nSCHEMA_UPDATE_PERMISSIONS=development:true,test:true,production:false\nSCHEMA_DELETE_PERMISSIONS=development:false,test:true,production:false\nSCHEMA_DDL_PERMISSIONS=development:false,test:true,production:false\n```\n\nFor complete details and security recommendations, see [README-MULTI-DB.md](./README-MULTI-DB.md).\n\n## Testing\n\n### Database Setup\n\nBefore running tests, you need to set up the test database and seed it with test data:\n\n1. **Create Test Database and User**\n\n   ```sql\n   -- Connect as root and create test database\n   CREATE DATABASE IF NOT EXISTS mcp_test;\n\n   -- Create test user with appropriate permissions\n   CREATE USER IF NOT EXISTS 'mcp_test'@'localhost' IDENTIFIED BY 'mcp_test_password';\n   GRANT ALL PRIVILEGES ON mcp_test.* TO 'mcp_test'@'localhost';\n   FLUSH PRIVILEGES;\n   ```\n\n2. **Run Database Setup Script**\n\n   ```bash\n   # Run the database setup script\n   pnpm run setup:test:db\n   ```\n\n   This will create the necessary tables and seed data. The script is located in `scripts/setup-test-db.ts`\n\n3. **Configure Test Environment**\n   Create a `.env.test` file in the project root (if not existing):\n\n   ```env\n   MYSQL_HOST=127.0.0.1\n   MYSQL_PORT=3306\n   MYSQL_USER=mcp_test\n   MYSQL_PASS=mcp_test_password\n   MYSQL_DB=mcp_test\n   ```\n\n4. **Update package.json Scripts**\n   Add these scripts to your package.json:\n\n   ```json\n   {\n     \"scripts\": {\n       \"setup:test:db\": \"ts-node scripts/setup-test-db.ts\",\n       \"pretest\": \"pnpm run setup:test:db\",\n       \"test\": \"vitest run\",\n       \"test:watch\": \"vitest\",\n       \"test:coverage\": \"vitest run --coverage\"\n     }\n   }\n   ```\n\n### Running Tests\n\nThe project includes a comprehensive test suite to ensure functionality and reliability:\n\n```bash\n# First-time setup\npnpm run setup:test:db\n\n# Run all tests\npnpm test\n```\n\n## Running evals\n\nThe evals package loads an mcp client that then runs the index.ts file, so there is no need to rebuild between tests. You can load environment variables by prefixing the npx command. Full documentation can be found at [MCP Evals](https://www.mcpevals.io/docs).\n\n```bash\nOPENAI_API_KEY=your-key  npx mcp-eval evals.ts index.ts\n```\n\n## Troubleshooting\n\n### Common Issues\n\n1. **Connection Issues**\n   - Verify MySQL server is running and accessible\n   - Check credentials and permissions\n   - Ensure SSL/TLS configuration is correct if enabled\n   - Try connecting with a MySQL client to confirm access\n\n2. **Performance Issues**\n   - Adjust connection pool size\n   - Configure query timeout values\n   - Enable query caching if needed\n   - Check query complexity settings\n   - Monitor server resource usage\n\n3. **Security Restrictions**\n   - Review rate limiting configuration\n   - Check query whitelist/blacklist settings\n   - Verify SSL/TLS settings\n   - Ensure the user has appropriate MySQL permissions\n\n4. **Path Resolution**\n   If you encounter an error \"Could not connect to MCP server mcp-server-mysql\", explicitly set the path of all required binaries:\n\n   ```json\n   {\n     \"env\": {\n       \"PATH\": \"/path/to/node/bin:/usr/bin:/bin\"\n     }\n   }\n   ```\n\n   *Where can I find my `node` bin path*\n   Run the following command to get it:\n\n   For **PATH**\n\n   ```bash\n   echo \"$(which node)/../\"\n   ```\n\n   For **NODE_PATH**\n\n   ```bash\n   echo \"$(which node)/../../lib/node_modules\"\n   ```\n\n5. **Claude Desktop Specific Issues**\n   - If you see \"Server disconnected\" logs in Claude Desktop, check the logs at `~/Library/Logs/Claude/mcp-server-mcp_server_mysql.log`\n   - Ensure you're using the absolute path to both the Node binary and the server script\n   - Check if your `.env` file is being properly loaded; use explicit environment variables in the configuration\n   - Try running the server directly from the command line to see if there are connection issues\n   - If you need write operations (INSERT, UPDATE, DELETE), set the appropriate flags to \"true\" in your configuration:\n\n     ```json\n     \"env\": {\n       \"ALLOW_INSERT_OPERATION\": \"true\",  // Enable INSERT operations\n       \"ALLOW_UPDATE_OPERATION\": \"true\",  // Enable UPDATE operations\n       \"ALLOW_DELETE_OPERATION\": \"true\"   // Enable DELETE operations\n     }\n     ```\n\n   - Ensure your MySQL user has the appropriate permissions for the operations you're enabling\n   - For direct execution configuration, use:\n\n     ```json\n     {\n       \"mcpServers\": {\n         \"mcp_server_mysql\": {\n           \"command\": \"/full/path/to/node\",\n           \"args\": [\n             \"/full/path/to/mcp-server-mysql/dist/index.js\"\n           ],\n           \"env\": {\n             \"MYSQL_HOST\": \"127.0.0.1\",\n             \"MYSQL_PORT\": \"3306\",\n             \"MYSQL_USER\": \"root\",\n             \"MYSQL_PASS\": \"your_password\",\n             \"MYSQL_DB\": \"your_database\"\n           }\n         }\n       }\n     }\n     ```\n\n6. **Authentication Issues**\n   - For MySQL 8.0+, ensure the server supports the `caching_sha2_password` authentication plugin\n   - Check if your MySQL user is configured with the correct authentication method\n   - Try creating a user with legacy authentication if needed:\n\n     ```sql\n     CREATE USER 'user'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';\n     ```\n\n     @lizhuangs\n\n7. I am encountering `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'dotenv' imported from` error\n   try this workaround:\n\n   ```bash\n   npx -y -p @benborla29/mcp-server-mysql -p dotenv mcp-server-mysql\n   ```\n\n   Thanks to @lizhuangs\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request to\n[https://github.com/benborla/mcp-server-mysql](https://github.com/benborla/mcp-server-mysql)\n\n## Many Thanks to the following Contributors\n\n[![Contributors](https://contrib.rocks/image?repo=benborla/mcp-server-mysql)](https://github.com/benborla/mcp-server-mysql/graphs/contributors)\n\n### Development Setup\n\n1. Clone the repository\n2. Install dependencies: `pnpm install`\n3. Build the project: `pnpm run build`\n4. Run tests: `pnpm test`\n\n### Project Roadmap\n\nWe're actively working on enhancing this MCP server. Check our [CHANGELOG.md](./CHANGELOG.md) for details on planned features, including:\n\n- Enhanced query capabilities with prepared statements\n- Advanced security features\n- Performance optimizations\n- Comprehensive monitoring\n- Expanded schema information\n\nIf you'd like to contribute to any of these areas, please check the issues on GitHub or open a new one to discuss your ideas.\n\n### Submitting Changes\n\n1. Fork the repository\n2. Create a feature branch: `git checkout -b feature/your-feature-name`\n3. Commit your changes: `git commit -am 'Add some feature'`\n4. Push to the branch: `git push origin feature/your-feature-name`\n5. Submit a pull request\n\n## License\n\nThis MCP server is licensed under the MIT License. See the LICENSE file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "benborla29-mcp-server-mysql-npx-default": {
+        "command": "npx",
+        "args": ["@benborla29/mcp-server-mysql"],
+        "env": {
+          "MYSQL_HOST": "127.0.0.1",
+          "MYSQL_PORT": "3306",
+          "MYSQL_USER": "root",
+          "MYSQL_PASS": "your_password",
+          "MYSQL_DB": "your_database",
+          "ALLOW_INSERT_OPERATION": "false",
+          "ALLOW_UPDATE_OPERATION": "false",
+          "ALLOW_DELETE_OPERATION": "false"
+        }
+      },
+      "benborla29-mcp-server-mysql-local-repo-node": {
+        "command": "node",
+        "args": ["/full/path/to/mcp-server-mysql/dist/index.js"],
+        "env": {
+          "MYSQL_HOST": "127.0.0.1",
+          "MYSQL_PORT": "3306",
+          "MYSQL_USER": "root",
+          "MYSQL_PASS": "your_password",
+          "MYSQL_DB": "your_database",
+          "ALLOW_INSERT_OPERATION": "false",
+          "ALLOW_UPDATE_OPERATION": "false",
+          "ALLOW_DELETE_OPERATION": "false",
+          "PATH": "/path/to/node/bin:/usr/bin:/bin",
+          "NODE_PATH": "/path/to/node/lib/node_modules"
+        }
+      },
+      "benborla29-mcp-server-mysql-unix-socket": {
+        "command": "npx",
+        "args": ["@benborla29/mcp-server-mysql"],
+        "env": {
+          "MYSQL_SOCKET_PATH": "/tmp/mysql.sock",
+          "MYSQL_USER": "root",
+          "MYSQL_PASS": "your_password",
+          "MYSQL_DB": "your_database",
+          "ALLOW_INSERT_OPERATION": "false",
+          "ALLOW_UPDATE_OPERATION": "false",
+          "ALLOW_DELETE_OPERATION": "false"
+        }
+      },
+      "benborla29-mcp-server-mysql-multi-db": {
+        "command": "npx",
+        "args": ["@benborla29/mcp-server-mysql"],
+        "env": {
+          "MYSQL_HOST": "127.0.0.1",
+          "MYSQL_PORT": "3306",
+          "MYSQL_USER": "root",
+          "MYSQL_PASS": "your_password",
+          "MULTI_DB_WRITE_MODE": "false"
+        }
+      },
+      "benborla29-mcp-server-mysql-advanced": {
+        "command": "npx",
+        "args": ["@benborla29/mcp-server-mysql"],
+        "env": {
+          "MYSQL_HOST": "127.0.0.1",
+          "MYSQL_PORT": "3306",
+          "MYSQL_USER": "root",
+          "MYSQL_PASS": "your_password",
+          "MYSQL_DB": "your_database",
+          "MYSQL_POOL_SIZE": "10",
+          "MYSQL_QUERY_TIMEOUT": "30000",
+          "MYSQL_CACHE_TTL": "60000",
+          "MYSQL_RATE_LIMIT": "100",
+          "MYSQL_SSL": "true",
+          "ALLOW_INSERT_OPERATION": "false",
+          "ALLOW_UPDATE_OPERATION": "false",
+          "ALLOW_DELETE_OPERATION": "false",
+          "MYSQL_ENABLE_LOGGING": "true"
+        }
+      },
+      "benborla29-mcp-server-mysql-npx-troubleshoot": {
+        "command": "npx",
+        "args": ["@benborla29/mcp-server-mysql"],
+        "env": {}
+      },
+      "benborla29-mcp-server-mysql-claude-desktop-local-repo-json": {
+        "command": "node",
+        "args": ["/full/path/to/mcp-server-mysql/dist/index.js"],
+        "env": {
+          "MYSQL_HOST": "127.0.0.1",
+          "MYSQL_PORT": "3306",
+          "MYSQL_USER": "root",
+          "MYSQL_PASS": "your_password",
+          "MYSQL_DB": "your_database",
+          "ALLOW_INSERT_OPERATION": "false",
+          "ALLOW_UPDATE_OPERATION": "false",
+          "ALLOW_DELETE_OPERATION": "false",
+          "PATH": "/Users/atlasborla/Library/Application Support/Herd/config/nvm/versions/node/v22.9.0/bin:/usr/bin:/bin",
+          "NODE_PATH": "/Users/atlasborla/Library/Application Support/Herd/config/nvm/versions/node/v22.9.0/lib/node_modules"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "benborla",
+    "repo": "mcp-server-mysql",
+    "url": "https://github.com/benborla/mcp-server-mysql",
+    "name": "benborla__mcp-server-mysql",
+    "path": null,
+    "stars": 768,
+    "contributors": 16,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b612bb2ebf39de1fb9b1c7424f09e3bca9e917d9"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:26.071Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@ai-sdk/openai",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 8
+    },
+    {
+      "name": "mysql2",
+      "importance": 9
+    },
+    {
+      "name": "node-sql-parser",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@benborla29/mcp-server-mysql\",\n  \"version\": \"2.0.5\",\n  \"description\": \"MCP server for interacting with MySQL databases based on Node\",\n  \"license\": \"MIT\",\n  \"author\": \"Ben Borla (https://github.com/benborla)\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"module\": \"index.ts\",\n  \"preferGlobal\": true,\n  \"bin\": {\n    \"mcp-server-mysql\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"assets\"\n  ],\n  \"scripts\": {\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"ts-node index.ts\",\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"setup:test:db\": \"tsx scripts/setup-test-db.ts\",\n    \"pretest\": \"pnpm run setup:test:db\",\n    \"test\": \"pnpm run setup:test:db && vitest run\",\n    \"test:socket\": \"pnpm run setup:test:db && vitest run tests/integration/socket-connection.test.ts\",\n    \"test:watch\": \"pnpm run setup:test:db && vitest\",\n    \"test:coverage\": \"vitest run --coverage\",\n    \"test:unit\": \"vitest run --config vitest.unit.config.ts\",\n    \"test:integration\": \"vitest run --config vitest.integration.config.ts\",\n    \"test:e2e\": \"vitest run --config vitest.e2e.config.ts\",\n    \"stdio\": \"node dist/index.js --stdio\",\n    \"exec\": \" pnpm build && npx node --env-file=.env dist/index.js\",\n    \"lint\": \"eslint .\"\n  },\n  \"dependencies\": {\n    \"@ai-sdk/openai\": \"^1.3.22\",\n    \"@modelcontextprotocol/sdk\": \"1.15.1\",\n    \"dotenv\": \"^16.5.0\",\n    \"express\": \"^5.1.0\",\n    \"mcp-evals\": \"^1.0.18\",\n    \"mysql2\": \"^3.14.1\",\n    \"node-sql-parser\": \"^5.3.9\",\n    \"zod\": \"^3.25.67\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.3\",\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^20.17.50\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.35.0\",\n    \"@typescript-eslint/parser\": \"^8.35.0\",\n    \"eslint\": \"^9.27.0\",\n    \"shx\": \"^0.3.4\",\n    \"ts-node\": \"^10.9.2\",\n    \"tslib\": \"^2.8.1\",\n    \"tsx\": \"^4.19.4\",\n    \"typescript\": \"^5.8.3\",\n    \"vitest\": \"^1.6.1\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"keywords\": [\n    \"node\",\n    \"mcp\",\n    \"ai\",\n    \"cursor\",\n    \"mcp-server\",\n    \"modelcontextprotocol\",\n    \"smithery\",\n    \"mcp-get\",\n    \"mcp-put\",\n    \"mcp-post\",\n    \"mcp-delete\",\n    \"mcp-patch\",\n    \"mcp-options\",\n    \"mcp-head\"\n  ]\n}\n"
+}

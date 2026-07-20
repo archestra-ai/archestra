@@ -1,0 +1,19 @@
+{
+  "name": "@archestra/mcp-catalog",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Archestra MCP server catalog: evaluation data and the open-source scoring script. Standalone; not part of the platform pnpm workspace.",
+  "scripts": {
+    "evaluate": "tsx scripts/evaluate-catalog.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "zod": "^4.4.3",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4",
+    "typescript": "^6"
+  }
+}

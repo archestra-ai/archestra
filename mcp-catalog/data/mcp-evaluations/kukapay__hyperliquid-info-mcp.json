@@ -1,0 +1,90 @@
+{
+  "name": "kukapay__hyperliquid-info-mcp",
+  "display_name": "hyperliquid-info-mcp",
+  "description": "An MCP server that provides real-time data and insights from the Hyperliquid perp DEX for use in bots, dashboards, and analytics.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "hyperliquid_account_address": {
+      "type": "string",
+      "title": "Hyperliquid Account Address",
+      "description": "Your Hyperliquid account address (e.g., 0xYourAddress) for user-specific queries.",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "# Hyperliquid Info MCP Server\n\nAn MCP server that provides real-time data and insights from the Hyperliquid perp DEX for use in bots, dashboards, and analytics.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/hyperliquid-info-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **User Data Queries**:\n  - `get_user_state`: Fetch user positions, margin, and withdrawable balance for perpetuals or spot markets.\n  - `get_user_open_orders`: Retrieve all open orders for a user account.\n  - `get_user_trade_history`: Get trade fill history with details like symbol, size, and price.\n  - `get_user_funding_history`: Query funding payment history with customizable time ranges.\n  - `get_user_fees`: Fetch user-specific fee structures (maker/taker rates).\n  - `get_user_staking_summary` & `get_user_staking_rewards`: Access staking details and rewards.\n  - `get_user_order_by_oid` & `get_user_order_by_cloid`: Retrieve specific order details by order ID or client order ID.\n  - `get_user_sub_accounts`: List sub-accounts associated with a main account.\n\n- **Market Data Tools**:\n  - `get_all_mids`: Get mid prices for all trading pairs.\n  - `get_l2_snapshot`: Fetch Level 2 order book snapshots for a specific coin.\n  - `get_candles_snapshot`: Retrieve candlestick data with customizable intervals and time ranges.\n  - `get_coin_funding_history`: Query funding rate history for a specific coin.\n  - `get_perp_dexs`: Fetch metadata about perpetual markets (using `meta`).\n  - `get_perp_metadata` & `get_spot_metadata`: Get detailed metadata for perpetual and spot markets, with optional asset contexts.\n\n- **Analysis Prompt**:\n  - `analyze_positions`: A guided prompt to analyze user trading activity using relevant tools.\n\n- **ISO 8601 Support**: Time-based queries (`get_candles_snapshot`, `get_coin_funding_history`, `get_user_funding_history`) accept ISO 8601 time strings for precise data filtering.\n\n## Installation\n\n### Prerequisites\n- **Python 3.10**: Required by the Hyperliquid Python SDK.\n- A valid Hyperliquid account address for user-specific queries.\n- [uv](https://github.com/astral-sh/uv) or [pip](https://pip.pypa.io/en/stable/) for package management.\n\n### Steps\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/hyperliquid-info-mcp.git\n   cd hyperliquid-info-mcp\n   ```\n\n2. **Install Dependencies**:\n   Using `uv`:\n   ```bash\n   uv sync\n   ```\n\n## Usage\n\n### Running the Server\nRun the server in development mode with MCP Inspector:\n```bash\nmcp dev main.py\n```\nOr install it for use in Claude Desktop:\n```bash\nmcp install main.py --name \"Hyperliquid Info\"\n```\n\n### Example Usage\n\nUsing the MCP Inspector or Claude Desktop, you can interact with the server using natural language prompts. Below are examples of how to trigger the `analyze_positions` prompt and individual tools conversationally.\n\n1. **Analyze Trading Positions**:\n   - **Prompt**:  \n     \"Please analyze the trading activity for my Hyperliquid account with address 0xYourAddress. Provide insights on my positions, open orders, and recent trades.\"\n   - **Behavior**:  \n     This triggers the `analyze_positions` prompt, which uses `get_user_state`, `get_user_open_orders`, `get_user_trade_history`, `get_user_funding_history`, and `get_user_fees` to fetch data and generate a risk/performance analysis.\n   - **Example Output**:  \n     ```\n     For account 0xYourAddress:\n     - Current Positions: 0.1 BTC long at $50,000, unrealized PNL +$500.\n     - Open Orders: 1 limit order to sell 0.05 BTC at $52,000.\n     - Recent Trades: Bought 0.1 BTC at $50,000 on 2025-05-30.\n     - Funding Payments: Paid $10 in funding fees last week.\n     - Fees: Maker fee 0.02%, taker fee 0.05%.\n     Recommendation: Monitor BTC price closely due to high leverage.\n     ```\n\n2. **Fetch User State**:\n   - **Prompt**:  \n     \"Show me the current state of my Hyperliquid account 0xYourAddress, including my positions and margin details for perpetuals.\"\n   - **Behavior**:  \n     Invokes `get_user_state(account_address=\"0xYourAddress\", check_spot=False)`.\n   - **Example Output**:  \n     ```\n     {\n       \"assetPositions\": [\n         {\n           \"position\": {\n             \"coin\": \"BTC\",\n             \"szi\": \"0.1\",\n             \"entryPx\": \"50000.0\",\n             \"markPx\": \"50500.0\",\n             \"unrealizedPnl\": \"500.0\"\n           }\n         }\n       ],\n       \"marginSummary\": {\n         \"accountValue\": \"10000.0\",\n         \"totalMarginUsed\": \"2000.0\"\n       },\n       \"withdrawable\": \"8000.0\"\n     }\n     ```\n\n3. **Get Candlestick Data**:\n   - **Prompt**:  \n     \"Can you get the 1-minute candlestick data for ETH on Hyperliquid from January 1, 2025, to January 2, 2025?\"\n   - **Behavior**:  \n     Invokes `get_candles_snapshot(coin_name=\"ETH\", interval=\"1m\", start_time=\"2025-01-01T00:00:00Z\", end_time=\"2025-01-02T00:00:00Z\")`.\n   - **Example Output**:  \n     ```\n     [\n       {\n         \"t\": 1672531200000,\n         \"o\": \"3000.0\",\n         \"h\": \"3010.0\",\n         \"l\": \"2995.0\",\n         \"c\": \"3005.0\",\n         \"v\": \"1000.0\"\n       },\n       ...\n     ]\n     ```\n\n4. **Check Trade History**:\n   - **Prompt**:  \n     \"What are the recent trades for my account 0xYourAddress on Hyperliquid?\"\n   - **Behavior**:  \n     Invokes `get_user_trade_history(account_address=\"0xYourAddress\")`.\n   - **Example Output**:  \n     ```\n     [\n       {\n         \"coin\": \"ETH\",\n         \"px\": \"3000.0\",\n         \"sz\": \"0.5\",\n         \"time\": 1672531200000,\n         \"tid\": \"123456\"\n       },\n       ...\n     ]\n     ```\n\n5. **Fetch Market Metadata**:\n   - **Prompt**:  \n     \"Tell me about the perpetual markets available on Hyperliquid, including trading pairs.\"\n   - **Behavior**:  \n     Invokes `get_perp_metadata(include_asset_ctxs=False)`.\n   - **Example Output**:  \n     ```\n     {\n       \"universe\": [\n         {\n           \"name\": \"BTC-PERP\",\n           \"maxLeverage\": 50,\n           \"szDecimals\": 4,\n           \"tickSz\": \"0.1\"\n         },\n         ...\n       ]\n     }\n     ```\n\n\n## License\nThis project is licensed under the [MIT License](LICENSE).\n\n",
+  "category": "Finance",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "hyperliquid-info": {
+        "command": "mcp",
+        "args": ["dev", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "hyperliquid-info-mcp",
+    "url": "https://github.com/kukapay/hyperliquid-info-mcp",
+    "name": "hyperliquid-info-mcp",
+    "path": null,
+    "stars": 10,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "56bd18458f6f86ce14419ac8fffdfe329334a01a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.375Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "hyperliquid-python-sdk",
+      "importance": 9
+    },
+    {
+      "name": "iso8601",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pillow",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"hyperliquid-info-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"hyperliquid-python-sdk>=0.15.0\",\n    \"iso8601>=2.1.0\",\n    \"mcp[cli]>=1.9.1\",\n    \"pillow>=11.2.1\",\n]\n"
+}

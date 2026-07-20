@@ -1,0 +1,82 @@
+{
+  "name": "jjsantos01__qgis_mcp",
+  "display_name": "qgis_mcp",
+  "description": "Model Context Protocol (MCP) that allows LLMs to use QGIS Desktop",
+  "author": {
+    "name": "jjsantos01"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${user_config.qgis_mcp_repo_path}/src/qgis_mcp", "run", "qgis_mcp_server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "qgis_mcp_repo_path": {
+      "type": "directory",
+      "title": "QGIS MCP Repository Path",
+      "description": "Absolute path to the cloned QGIS MCP repository folder (e.g., C:/Users/USER/GitHub/qgis_mcp or ~/qgis_mcp). This is the parent folder containing 'src' and 'qgis_mcp_plugin'.",
+      "required": true
+    }
+  },
+  "readme": "# QGISMCP - QGIS Model Context Protocol Integration\n\nQGISMCP connects [QGIS](https://qgis.org/) to [Claude AI](https://claude.ai/chat) through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro), allowing Claude to directly interact with and control QGIS. This integration enables prompt assisted project creation, layer loading, code execution and more.\n\nThis project is strongly based on the [BlenderMCP](https://github.com/ahujasid/blender-mcp/tree/main) project by [Siddharth Ahuja](https://x.com/sidahuj)\n\n## Features\n\n- **Two-way communication**: Connect Claude AI to QGIS through a socket-based server.\n- **Project manipulation**: Create, load and save projects in QGIS.\n- **Layer manipulation**: Add and remove vector or raster layers to a project.\n- **Execute processing**: Execute processing algorithms ([Processing Toolbox](https://docs.qgis.org/3.40/en/docs/user_manual/processing/toolbox.html)).\n- **Code execution**: Run arbitrary Python code in QGIS from Claude. Very powerful, but also be very cautious using this tool.\n\n## Components\n\nThe system consists of two main components:\n\n1. **[QGIS plugin](/qgis_mcp_plugin/)**: A QGIS plugin that creates a socket server within QGIS to receive and execute commands.\n2. **[MCP Server](/src/qgis_mcp/qgis_mcp_server.py)**: A Python server that implements the Model Context Protocol and connects to the QGIS plugin.\n\n## Installation\n\n### Prerequisites\n\n- QGIS 3.X (only tested on 3.22)\n- Cloud desktop\n- Python 3.10 or newer\n- uv package manager:\n\nIf you're on Mac, please install uv as\n\n```bash\nbrew install uv\n```\n\nOn Windows Powershell\n\n```bash\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n\nOtherwise installation instructions are on their website: [Install uv](https://docs.astral.sh/uv/getting-started/installation/)\n\n**⚠️ Do not proceed before installing UV**\n\n### Download code\n\nDownload this repo to your computer. You can clone it with:\n\n```bash\ngit clone git@github.com:jjsantos01/qgis_mcp.git\n```\n\n### QGIS plugin\n\nYou need to copy the folder [qgis_mcp_plugin](/qgis_mcp_plugin/) and its content on your QGIS profile plugins folder.\n\nYou can get your profile folder in QGIS going to menu `Settings` -> `User profiles` -> `Open active profile folder` Then, go to `Python/plugins` and paste the folder `qgis_mcp_plugin`.\n\n> On a Windows machine the plugins folder is usually located at:\n    `C:\\Users\\USER\\AppData\\Roaming\\QGIS\\QGIS3\\profiles\\default\\python\\plugins` and on MacOS:\n    `~/Library/Application\\ Support/QGIS/QGIS3/profiles/default/python/plugins`\n\n Then close QGIS and open it again. Go to the menu option `Plugins` -> `Installing and Managing Plugins`, select the `All` tab and search for \"QGIS MCP\", then mark the QGIS MCP checkbox.\n\n### Claude for Desktop Integration\n\nGo to `Claude` > `Settings` > `Developer` > `Edit Config` > `claude_desktop_config.json` to include the following:\n\n> If you can't find the \"Developers tab\" or the `claude_desktop_config.json` look at this [documentation](https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server).\n\n```json\n{\n    \"mcpServers\": {\n        \"qgis\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"/ABSOLUTE/PATH/TO/PARENT/REPO/FOLDER/qgis_mcp/src/qgis_mcp\",\n                \"run\",\n                \"qgis_mcp_server.py\"\n            ]\n        }\n\n    }\n}\n```\n\n## Usage\n\n### Starting the Connection\n\n1. In QGIS, go to `plugins` -> `QGIS MCP`-> `QGIS MCP`\n    ![plugins menu](/assets/imgs/qgis-plugins-menu.png)\n2. Click \"Start Server\"\n    ![start server](/assets/imgs/qgis-mcp-start-server.png)\n\n### Using with Claude\n\nOnce the config file has been set on Claude, and the server is running on QGIS, you will see a hammer icon with tools for the QGIS MCP.\n\n![Claude tools](assets/imgs/claude-available-tools.png)\n\n#### Tools\n\n- `ping` - Simple ping command to check server connectivity\n- `get_qgis_info` - Get QGIS information about the current installation\n- `load_project` - Load a QGIS project from the specified path\n- `create_new_project` - Create a new project and save it\n- `get_project_info` - Get current project information\n- `add_vector_layer` - Add a vector layer to the project\n- `add_raster_layer` - Add a raster layer to the project\n- `get_layers` - Retrieve all layers in the current project\n- `remove_layer` - Remove a layer from the project by its ID\n- `zoom_to_layer` - Zoom to the extent of a specified layer\n- `get_layer_features` - Retrieve features from a vector layer with an optional limit\n- `execute_processing` - Execute a processing algorithm with the given parameters\n- `save_project` - Save the current project to the given path\n- `render_map` - Render the current map view to an image file\n- `execute_code` - Execute arbitrary PyQGIS code provided as a string\n\n### Example Commands\n\nThis is the example I used for the [demo](https://x.com/jjsantoso/status/1900293848271667395):\n\n```plain\nYou have access to the tools to work with QGIS. You will do the following:\n\t1. Ping to check the connection. If it works, continue with the following steps.\n\t2. Create a new project and save it at: \"C:/Users/USER/GitHub/qgis_mcp/data/cdmx.qgz\"\n\t3. Load the vector layer: \"\"C:/Users/USER/GitHub/qgis_mcp/data/cdmx/mgpc_2019.shp\" and name it \"Colonias\".\n\t4. Load the raster layer: \"C:/Users/USER/GitHub/qgis_mcp/data/09014.tif\" and name it \"BJ\"\n\t5. Zoom to the \"BJ\" layer.\n\t6. Execute the centroid algorithm on the \"Colonias\" layer. Skip the geometry check. Save the output to \"colonias_centroids.geojson\".\n\t7. Execute code to create a choropleth map using the \"POB2010\" field in the \"Colonias\" layer. Use the quantile classification method with 5 classes and the Spectral color ramp.\n\t8. Render the map to \"C:/Users/USER/GitHub/qgis_mcp/data/cdmx.png\"\n\t9. Save the project.\n```\n",
+  "category": "Location",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "qgis-mcp": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/ABSOLUTE/PATH/TO/PARENT/REPO/FOLDER/qgis_mcp/src/qgis_mcp",
+          "run",
+          "qgis_mcp_server.py"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jjsantos01",
+    "repo": "qgis_mcp",
+    "url": "https://github.com/jjsantos01/qgis_mcp",
+    "name": "qgis_mcp",
+    "path": null,
+    "stars": 576,
+    "contributors": 1,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1de15a3aeddf3bd6be6bcf77b605af7c3da05f7b"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.017Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"qgis-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"mcp[cli]>=1.3.0\",\n]\n"
+}

@@ -1,0 +1,105 @@
+{
+  "name": "burtthecoder__mcp-virustotal",
+  "display_name": "mcp-virustotal",
+  "description": "A Model Context Protocol (MCP) server for querying the VirusTotal API.",
+  "author": {
+    "name": "BurtTheCoder"
+  },
+  "server": {
+    "command": "node",
+    "args": ["--experimental-modules", "${__dirname}/build/index.js"],
+    "env": {
+      "VIRUSTOTAL_API_KEY": "${user_config.virustotal_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "virustotal_api_key": {
+      "type": "string",
+      "title": "VirusTotal API Key",
+      "description": "Your VirusTotal API key for authentication",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# VirusTotal MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@burtthecoder/mcp-virustotal)](https://smithery.ai/server/@burtthecoder/mcp-virustotal)\n\nA Model Context Protocol (MCP) server for querying the [VirusTotal API](https://www.virustotal.com/). This server provides comprehensive security analysis tools with automatic relationship data fetching. It integrates seamlessly with MCP-compatible applications like [Claude Desktop](https://claude.ai).\n\n<a href=\"https://glama.ai/mcp/servers/rcbu34kp5c\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/rcbu34kp5c/badge\" /></a>\n\n## Quick Start (Recommended)\n\n### Installing via Smithery\n\nTo install VirusTotal Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@burtthecoder/mcp-virustotal):\n\n```bash\nnpx -y @smithery/cli install @burtthecoder/mcp-virustotal --client claude\n```\n\n### Installing Manually\n\n1. Install the server globally via npm:\n```bash\nnpm install -g @burtthecoder/mcp-virustotal\n```\n\n2. Add to your Claude Desktop configuration file:\n```json\n{\n  \"mcpServers\": {\n    \"virustotal\": {\n      \"command\": \"mcp-virustotal\",\n      \"env\": {\n        \"VIRUSTOTAL_API_KEY\": \"your-virustotal-api-key\"\n      }\n    }\n  }\n}\n```\n\nConfiguration file location:\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n3. Restart Claude Desktop\n\n## Alternative Setup (From Source)\n\nIf you prefer to run from source or need to modify the code:\n\n1. Clone and build:\n```bash\ngit clone <repository_url>\ncd mcp-virustotal\nnpm install\nnpm run build\n```\n\n2. Add to your Claude Desktop configuration:\n```json\n{\n  \"mcpServers\": {\n    \"virustotal\": {\n      \"command\": \"node\",\n      \"args\": [\"--experimental-modules\", \"/absolute/path/to/mcp-virustotal/build/index.js\"],\n      \"env\": {\n        \"VIRUSTOTAL_API_KEY\": \"your-virustotal-api-key\"\n      }\n    }\n  }\n}\n```\n\n## Features\n\n- **Comprehensive Analysis Reports**: Each analysis tool automatically fetches relevant relationship data along with the basic report, providing a complete security overview in a single request\n- **URL Analysis**: Security reports with automatic fetching of contacted domains, downloaded files, and threat actors\n- **File Analysis**: Detailed analysis of file hashes including behaviors, dropped files, and network connections\n- **IP Analysis**: Security reports with historical data, resolutions, and related threats\n- **Domain Analysis**: DNS information, WHOIS data, SSL certificates, and subdomains\n- **Detailed Relationship Analysis**: Dedicated tools for querying specific types of relationships with pagination support\n- **Rich Formatting**: Clear categorization and presentation of analysis results and relationship data\n\n## Tools\n\n### Report Tools (with Automatic Relationship Fetching)\n\n### 1. URL Report Tool\n- Name: `get_url_report`\n- Description: Get a comprehensive URL analysis report including security scan results and key relationships (communicating files, contacted domains/IPs, downloaded files, redirects, threat actors)\n- Parameters:\n  * `url` (required): The URL to analyze\n\n### 2. File Report Tool\n- Name: `get_file_report`\n- Description: Get a comprehensive file analysis report using its hash (MD5/SHA-1/SHA-256). Includes detection results, file properties, and key relationships (behaviors, dropped files, network connections, embedded content, threat actors)\n- Parameters:\n  * `hash` (required): MD5, SHA-1 or SHA-256 hash of the file\n\n### 3. IP Report Tool\n- Name: `get_ip_report`\n- Description: Get a comprehensive IP address analysis report including geolocation, reputation data, and key relationships (communicating files, historical certificates/WHOIS, resolutions)\n- Parameters:\n  * `ip` (required): IP address to analyze\n\n### 4. Domain Report Tool\n- Name: `get_domain_report`\n- Description: Get a comprehensive domain analysis report including DNS records, WHOIS data, and key relationships (SSL certificates, subdomains, historical data)\n- Parameters:\n  * `domain` (required): Domain name to analyze\n  * `relationships` (optional): Array of specific relationships to include in the report\n\n### Relationship Tools (for Detailed Analysis)\n\n### 1. URL Relationship Tool\n- Name: `get_url_relationship`\n- Description: Query a specific relationship type for a URL with pagination support. Choose from 17 relationship types including analyses, communicating files, contacted domains/IPs, downloaded files, graphs, referrers, redirects, and threat actors\n- Parameters:\n  * `url` (required): The URL to get relationships for\n  * `relationship` (required): Type of relationship to query\n    - Available relationships: analyses, comments, communicating_files, contacted_domains, contacted_ips, downloaded_files, graphs, last_serving_ip_address, network_location, referrer_files, referrer_urls, redirecting_urls, redirects_to, related_comments, related_references, related_threat_actors, submissions\n  * `limit` (optional, default: 10): Maximum number of related objects to retrieve (1-40)\n  * `cursor` (optional): Continuation cursor for pagination\n\n### 2. File Relationship Tool\n- Name: `get_file_relationship`\n- Description: Query a specific relationship type for a file with pagination support. Choose from 41 relationship types including behaviors, network connections, dropped files, embedded content, execution chains, and threat actors\n- Parameters:\n  * `hash` (required): MD5, SHA-1 or SHA-256 hash of the file\n  * `relationship` (required): Type of relationship to query\n    - Available relationships: analyses, behaviours, bundled_files, carbonblack_children, carbonblack_parents, ciphered_bundled_files, ciphered_parents, clues, collections, comments, compressed_parents, contacted_domains, contacted_ips, contacted_urls, dropped_files, email_attachments, email_parents, embedded_domains, embedded_ips, embedded_urls, execution_parents, graphs, itw_domains, itw_ips, itw_urls, memory_pattern_domains, memory_pattern_ips, memory_pattern_urls, overlay_children, overlay_parents, pcap_children, pcap_parents, pe_resource_children, pe_resource_parents, related_references, related_threat_actors, similar_files, submissions, screenshots, urls_for_embedded_js, votes\n  * `limit` (optional, default: 10): Maximum number of related objects to retrieve (1-40)\n  * `cursor` (optional): Continuation cursor for pagination\n\n### 3. IP Relationship Tool\n- Name: `get_ip_relationship`\n- Description: Query a specific relationship type for an IP address with pagination support. Choose from 12 relationship types including communicating files, historical SSL certificates, WHOIS records, resolutions, and threat actors\n- Parameters:\n  * `ip` (required): IP address to analyze\n  * `relationship` (required): Type of relationship to query\n    - Available relationships: comments, communicating_files, downloaded_files, graphs, historical_ssl_certificates, historical_whois, related_comments, related_references, related_threat_actors, referrer_files, resolutions, urls\n  * `limit` (optional, default: 10): Maximum number of related objects to retrieve (1-40)\n  * `cursor` (optional): Continuation cursor for pagination\n\n### 4. Domain Relationship Tool\n- Name: `get_domain_relationship`\n- Description: Query a specific relationship type for a domain with pagination support. Choose from 21 relationship types including SSL certificates, subdomains, historical data, and DNS records\n- Parameters:\n  * `domain` (required): Domain name to analyze\n  * `relationship` (required): Type of relationship to query\n    - Available relationships: caa_records, cname_records, comments, communicating_files, downloaded_files, historical_ssl_certificates, historical_whois, immediate_parent, mx_records, ns_records, parent, referrer_files, related_comments, related_references, related_threat_actors, resolutions, soa_records, siblings, subdomains, urls, user_votes\n  * `limit` (optional, default: 10): Maximum number of related objects to retrieve (1-40)\n  * `cursor` (optional): Continuation cursor for pagination\n\n## Requirements\n\n- Node.js (v18 or later)\n- A valid [VirusTotal API Key](https://www.virustotal.com/gui/my-apikey)\n\n## Troubleshooting\n\n### API Key Issues\n\nIf you see \"Wrong API key\" errors:\n\n1. Check the log file at `/tmp/mcp-virustotal-server.log` (on macOS) for API key status\n2. Verify your API key:\n   - Should be a valid VirusTotal API key (usually 64 characters)\n   - No extra spaces or quotes around the key\n   - Must be from the API Keys section in your VirusTotal account\n3. After any configuration changes:\n   - Save the config file\n   - Restart Claude Desktop\n   - Check logs for new API key status\n\n### Module Loading Issues\n\nIf you see ES module loading warnings:\n1. For global installation: Use the simple configuration shown in Quick Start\n2. For source installation: Ensure you include `--experimental-modules` in the args\n\n## Development\n\nTo run in development mode with hot reloading:\n```bash\nnpm run dev\n```\n\n## Error Handling\n\nThe server includes comprehensive error handling for:\n- Invalid API keys\n- Rate limiting\n- Network errors\n- Invalid input parameters\n- Invalid hash formats\n- Invalid IP formats\n- Invalid URL formats\n- Invalid relationship types\n- Pagination errors\n\n## Version History\n\n- v1.0.0: Initial release with core functionality\n- v1.1.0: Added relationship analysis tools for URLs, files, and IP addresses\n- v1.2.0: Added improved error handling and logging\n- v1.3.0: Added pagination support for relationship queries\n- v1.4.0: Added automatic relationship fetching in report tools and domain analysis support\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Security",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "burtthecoder-mcp-virustotal": {
+        "command": "mcp-virustotal",
+        "args": [],
+        "env": {
+          "VIRUSTOTAL_API_KEY": "your-virustotal-api-key"
+        }
+      },
+      "burtthecoder-mcp-virustotal-from-source": {
+        "command": "node",
+        "args": ["--experimental-modules", "/absolute/path/to/mcp-virustotal/build/index.js"],
+        "env": {
+          "VIRUSTOTAL_API_KEY": "your-virustotal-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "BurtTheCoder",
+    "repo": "mcp-virustotal",
+    "url": "https://github.com/BurtTheCoder/mcp-virustotal",
+    "name": "mcp-virustotal",
+    "path": null,
+    "stars": 74,
+    "contributors": 4,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "b9406fa5edfdbb3c29a1f67ea1c0c57554c07cf7"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.869Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@burtthecoder/mcp-virustotal\",\n  \"version\": \"1.0.10\",\n  \"description\": \"MCP server for VirusTotal API integration\",\n  \"type\": \"module\",\n  \"main\": \"build/index.js\",\n  \"bin\": {\n    \"mcp-virustotal\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc -w\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"virustotal\",\n    \"security\"\n  ],\n  \"author\": \"BurtTheCoder\",\n  \"license\": \"MIT\",\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/BurtTheCoder/mcp-virustotal.git\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.3\",\n    \"axios\": \"^1.4.0\",\n    \"dotenv\": \"^16.4.5\",\n    \"zod\": \"^3.22.2\",\n    \"zod-to-json-schema\": \"^3.23.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

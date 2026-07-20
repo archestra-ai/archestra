@@ -1,0 +1,89 @@
+{
+  "name": "horw__esp-mcp",
+  "display_name": "esp-mcp",
+  "description": "Centralize ESP32 related commands and simplify getting started with seamless, LLM-driven interaction and help.",
+  "author": {
+    "name": "horw"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${user_config.mcp_repository_path}/main.py"],
+    "env": {
+      "IDF_PATH": "${user_config.idf_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_repository_path": {
+      "type": "directory",
+      "title": "ESP-MCP Repository Path",
+      "description": "Absolute path to where you cloned the esp-mcp repository.",
+      "required": true,
+      "default": "${HOME}/esp-mcp"
+    },
+    "idf_path": {
+      "type": "directory",
+      "title": "ESP-IDF Directory",
+      "description": "The root directory of your ESP-IDF installation.",
+      "required": true,
+      "default": "${HOME}/esp/esp-idf"
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/horw-esp-mcp-badge.png)](https://mseep.ai/app/horw-esp-mcp)\n\n### Goal\nThe goal of this MCP is to:\n- Consolidate ESP-IDF and related project commands in one place.\n- Simplify getting started using only LLM communication.\n\n### How to contribute to the project\n\nSimply find a command that is missing from this MCP and create a PR for it!\n\nIf you want someone to help you with this implementation, just open an issue.\n\n\n### Notice\nThis project is currently a **Proof of Concept (PoC)** for an MCP server tailored for ESP-IDF workflows. \n\n**Current Capabilities:**\n*   Supports basic ESP-IDF project build commands.\n*   Flash built firmware to connected ESP devices with optional port specification.\n*   Includes experimental support for automatic issue fixing based on build logs.\n\n**Vision & Future Work:**\nThe long-term vision is to expand this MCP into a comprehensive toolkit for interacting with embedded devices, potentially integrating with home assistant platforms, and streamlining documentation access for ESP-IDF and related technologies. \n\nWe envision features such as:\n*   Broader ESP-IDF command support (e.g., `monitor`, `menuconfig` interaction if feasible).\n*   Device management and information retrieval.\n*   Integration with other embedded development tools and platforms.\n\nYour ideas and contributions are welcome! Please feel free to discuss them by opening an issue.\n\n\n### Install  \n\nFirst, clone this MCP repository:  \n\n```bash\ngit clone git@github.com:horw/esp-mcp.git\n```  \n\nThen, configure it in your chatbot. \n\nThe JSON snippet below is an example of how you might configure this `esp-mcp` server within a chatbot or an agent system that supports the Model Context Protocol (MCP). The exact configuration steps and format may vary depending on the specific chatbot system you are using. Refer to your chatbot's documentation for details on how to integrate MCP servers.\n\n```json\n{\n    \"mcpServers\": {\n        \"esp-run\": { // \"esp-run\" is an arbitrary name you can assign to this server configuration.\n            \"command\": \"<path_to_uv_or_python_executable>\",\n            \"args\": [\n                \"--directory\",\n                \"<path_to_cloned_esp-mcp_repository>\", // e.g., /path/to/your/cloned/esp-mcp\n                \"run\",\n                \"main.py\" // If using python directly, this might be just \"main.py\" and `command` would be your python interpreter\n            ],\n            \"env\": {\n                \"IDF_PATH\": \"<path_to_your_esp-idf_directory>\" // e.g., ~/esp/esp-idf or C:\\\\Espressif\\\\frameworks\\\\esp-idf\n            }\n        }\n    }\n}\n```\n\nA few notes on the configuration:\n\n*   **`command`**: This should be the full path to your `uv` executable if you are using it, or your Python interpreter (e.g., `/usr/bin/python3` or `C:\\\\Python39\\\\python.exe`) if you plan to run `main.py` directly.\n*   **`args`**:\n    *   The first argument to `--directory` should be the absolute path to where you cloned the `esp-mcp` repository.\n    *   If you're using `uv`, the arguments `run main.py` are appropriate. If you're using Python directly, you might only need `main.py` in the `args` list, and ensure your `command` points to the Python executable.\n*   **`IDF_PATH`**: This environment variable must point to the root directory of your ESP-IDF installation. ESP-IDF is Espressif's official IoT Development Framework. If you haven't installed it, please refer to the [official ESP-IDF documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html) for installation instructions.\n\n### Usage\n\nOnce the `esp-mcp` server is configured and running, your LLM or chatbot can interact with it using the tools defined in this MCP. For example, you could ask your chatbot to:\n\n*   \"Build the project located at `/path/to/my/esp-project` using the `esp-mcp`.\"\n*   \"Clean the build files for the ESP32 project in the `examples/hello_world` directory.\"\n*   \"Flash the firmware to my connected ESP32 device for the project in `my_app`.\"\n\nThe MCP server will then execute the corresponding ESP-IDF commands (like `idf.py build`, `idf.py fullclean`, `idf.py flash`) based on the tools implemented in `main.py`.\n\nThe `result.gif` below shows an example interaction:\n\n![Result](./result.gif)\n\n\n### Examples \n\n\n1. Build and Flash\n<img src=\"./examples/build-flash.png\">\n\n### Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=horw/esp-mcp&type=Date)](https://star-history.com/#horw/esp-mcp&Date)\n\n\n\n\n\n",
+  "category": "IoT",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "esp-mcp": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/cloned/esp-mcp", "run", "main.py"],
+        "env": {
+          "IDF_PATH": "/path/to/esp-idf"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "horw",
+    "repo": "esp-mcp",
+    "url": "https://github.com/horw/esp-mcp",
+    "name": "horw__esp-mcp",
+    "path": null,
+    "stars": 102,
+    "contributors": 4,
+    "issues": 35,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5b2de472e789d019b88a04d383cef52adffbf845"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.194Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"esp-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11.0\"\ndependencies = [\n    \"mcp[cli]>=1.5.0\",\n]\n"
+}

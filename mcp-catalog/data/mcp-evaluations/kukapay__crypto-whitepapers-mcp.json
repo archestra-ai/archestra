@@ -1,0 +1,98 @@
+{
+  "name": "kukapay__crypto-whitepapers-mcp",
+  "display_name": "crypto-whitepapers-mcp",
+  "description": "An MCP server serving as a structured knowledge base of crypto whitepapers.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "crypto-whitepapers-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto Whitepapers MCP Server\n\nAn MCP server serving as a structured knowledge base of crypto whitepapers for AI agents to access, analyze, and learn from.\n\n[![Discord](https://img.shields.io/discord/1353556181251133481?cacheSeconds=3600)](https://discord.gg/aRnuu2eJ)\n![GitHub License](https://img.shields.io/github/license/kukapay/crypto-whitepapers-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Search Whitepapers**: Use DuckDuckGo to find whitepaper PDFs for cryptocurrency projects.\n- **Load Whitepapers**: Download and index whitepaper PDFs into the knowledge base.\n- **Query Knowledge Base**: Query whitepaper content with optional project filtering.\n- **List Projects**: View all projects available in the knowledge base.\n- **Claude Desktop Integration**: Access tools and prompts via MCP in Claude Desktop.\n\n## Prerequisites\n\n- Python 3.10+\n- [uv](https://github.com/astral-sh/uv) for dependency management and running\n- Internet access.\n- [Claude Desktop](https://claude.ai/download) for MCP integration (optional)\n\n## Setup\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/crypto-whitepapers-mcp.git\n   cd crypto-whitepapers-mcp\n   ```\n\n2. **Install Dependencies with uv**:\n   ```bash\n   uv sync\n   ```\n\n5. **Integrate with Claude Desktop** (Optional):\n   - Edit the Claude Desktop configuration file:\n     - **MacOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n     - **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n   - Add the following configuration:\n     ```json\n     {\n         \"mcpServers\": {\n             \"crypto-whitepapers\": {\n                 \"command\": \"uv\",\n                 \"args\": [\n                     \"--directory\",\n                     \"/absolute/path/to/crypto-whitepapers-mcp\"   \n                     \"run\",\n                     \"crypto-whitepapers-mcp\"\n                 ]\n             }\n         }\n     }\n     ```\n     Replace `/absolute/path/to/crypto-whitepapers-mcp` with the absolute path to the repository.\n   - Restart Claude Desktop and verify the server is loaded (look for the hammer icon in the input box).\n\n## Usage\n\n### Tools\nThe following tools are available via the MCP server:\n\n- **`list_available_projects()`**: Lists all projects in the knowledge base (derived from PDF filenames).\n  - Example: `list_available_projects()`\n  - Returns: JSON list of project names.\n  \n- **`search_whitepaper(project_name: str)`**: Searches for a project's whitepaper PDF using DuckDuckGo.\n  - Example: `search_whitepaper(\"bitcoin\")`\n  - Returns: JSON list of up to 5 results with title, URL, and snippet.\n\n- **`load_whitepaper(project_name: str, url: str)`**: Downloads a whitepaper PDF from a URL and loads it into the knowledge base.\n  - Example: `load_whitepaper(\"bitcoin\", \"https://bitcoin.org/bitcoin.pdf\")`\n  - Returns: Success or error message.\n\n- **`ask_whitepapers(query: str, project_name: str = None)`**: Searches the knowledge base for a query, optionally filtered by project.\n  - Example: `ask_whitepapers(\"blockchain technology\", \"bitcoin\")`\n  - Returns: Up to 5 matching text snippets.\n\n\n\n### Prompts\n- **`analyze_tokenomics(project_name: str)`**: Analyzes tokenomics (distribution, supply, incentives) in a project's whitepaper using the `ask_whitepapers` tool.\n  - Example: In Claude Desktop, run \"Analyze the tokenomics of Ethereum.\"\n\n### Examples\n1. List available projects:\n   ```\n   List all available projects.\n   ```\n2. Search for a whitepaper:\n   ```\n   Search for the Bitcoin whitepaper PDF.\n   ```\n3. Load a whitepaper:\n   ```\n   Load the Bitcoin whitepaper from https://bitcoin.org/bitcoin.pdf.\n   ```\n4. Query the knowledge base:\n   ```\n   Ask the knowledge base about blockchain technology in the Bitcoin whitepaper.\n   ```\n   \n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "AI Tools",
+  "quality_score": 35,
+  "archestra_config": {
+    "client_config_permutations": {
+      "crypto-whitepapers": {
+        "command": "uv",
+        "args": ["--directory", "/absolute/path/to/crypto-whitepapers-mcp", "run", "crypto-whitepapers-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-whitepapers-mcp",
+    "url": "https://github.com/kukapay/crypto-whitepapers-mcp",
+    "name": "crypto-whitepapers-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.867Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "agno",
+      "importance": 9
+    },
+    {
+      "name": "duckduckgo-search",
+      "importance": 8
+    },
+    {
+      "name": "fastembed",
+      "importance": 8
+    },
+    {
+      "name": "lancedb",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "numpy",
+      "importance": 6
+    },
+    {
+      "name": "pandas",
+      "importance": 6
+    },
+    {
+      "name": "pypdf",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

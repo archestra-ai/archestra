@@ -1,0 +1,178 @@
+{
+  "name": "mongodb-js__mongodb-mcp-server",
+  "display_name": "MongoDB",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjQ3ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDU0OSI+PHBhdGggZmlsbD0iIzAxZWM2NCIgZD0iTTE3NS42MjIgNjEuMTA4QzE1Mi42MTIgMzMuODA3IDEzMi43OTcgNi4wNzggMTI4Ljc0OS4zMmExLjAzIDEuMDMgMCAwIDAtMS40OTIgMGMtNC4wNDggNS43NTktMjMuODYzIDMzLjQ4Ny00Ni44NzQgNjAuNzg4Yy0xOTcuNTA3IDI1MS44OTYgMzEuMTA4IDQyMS44OSAzMS4xMDggNDIxLjg5bDEuOTE3IDEuMjhjMS43MDQgMjYuMjM0IDUuOTY2IDYzLjk4OCA1Ljk2NiA2My45ODhoMTcuMDQ1czQuMjYtMzcuNTQgNS45NjUtNjMuOTg3bDEuOTE4LTEuNDk0Yy4yMTMuMjE0IDIyOC44MjgtMTY5Ljc4IDMxLjMyLTQyMS42NzdtLTQ3LjcyNiA0MTguMDVzLTEwLjIyNy04Ljc0NC0xMi45OTctMTMuMjIydi0uNDI4bDEyLjM1OC0yNzQuMjkyYzAtLjg1MyAxLjI3OS0uODUzIDEuMjc5IDBsMTIuMzU3IDI3NC4yOTJ2LjQyOGMtMi43NyA0LjQ3OC0xMi45OTcgMTMuMjIzLTEyLjk5NyAxMy4yMjMiLz48L3N2Zz4=",
+  "description": "Official MongoDB MCP server that enables AI assistants to interact with MongoDB databases and Atlas deployments. Supports CRUD operations, aggregation pipelines, collection management, indexing, and Atlas cluster administration.",
+  "instructions": "Archestra supports two authentication methods:\n\n**1. Connection String**\n\nSet `MDB_MCP_CONNECTION_STRING` with your MongoDB connection string.\n\n**2. X.509 Auth**\n\nRequires a connection string plus `tls_certificate_key` and `tls_certificate_ca` secrets. See [MongoDB X.509 docs](https://www.mongodb.com/docs/manual/tutorial/configure-x509-client-authentication/).",
+  "author": {
+    "name": "MongoDB"
+  },
+  "server": {
+    "command": "docker",
+    "args": ["run", "-i", "--rm", "mongodb/mongodb-mcp-server:1.4.1"],
+    "docker_image": "mongodb/mongodb-mcp-server:1.4.1",
+    "env": {
+      "MDB_MCP_CONNECTION_STRING": "${user_config.connection_string}",
+      "MDB_MCP_TLS_CERTIFICATE_KEY_FILE": "/secrets/tls_certificate_key",
+      "MDB_MCP_TLS_CERTIFICATE_CA_FILE": "/secrets/tls_certificate_ca"
+    },
+    "type": "local"
+  },
+  "tools": [
+    {
+      "name": "find",
+      "description": "Query documents in a collection"
+    },
+    {
+      "name": "aggregate",
+      "description": "Execute aggregation pipelines"
+    },
+    {
+      "name": "insertOne",
+      "description": "Insert a single document"
+    },
+    {
+      "name": "insertMany",
+      "description": "Insert multiple documents"
+    },
+    {
+      "name": "updateOne",
+      "description": "Update a single document"
+    },
+    {
+      "name": "updateMany",
+      "description": "Update multiple documents"
+    },
+    {
+      "name": "deleteOne",
+      "description": "Delete a single document"
+    },
+    {
+      "name": "deleteMany",
+      "description": "Delete multiple documents"
+    },
+    {
+      "name": "count",
+      "description": "Count documents matching a filter"
+    },
+    {
+      "name": "listCollections",
+      "description": "List all collections in a database"
+    },
+    {
+      "name": "listDatabases",
+      "description": "List all databases"
+    },
+    {
+      "name": "createIndex",
+      "description": "Create an index on a collection"
+    },
+    {
+      "name": "dropIndex",
+      "description": "Drop an index from a collection"
+    },
+    {
+      "name": "listIndexes",
+      "description": "List indexes on a collection"
+    },
+    {
+      "name": "createCollection",
+      "description": "Create a new collection"
+    },
+    {
+      "name": "dropCollection",
+      "description": "Drop a collection"
+    },
+    {
+      "name": "renameCollection",
+      "description": "Rename a collection"
+    },
+    {
+      "name": "explain",
+      "description": "Explain query execution plan"
+    },
+    {
+      "name": "collectionSchema",
+      "description": "Infer schema from collection documents"
+    },
+    {
+      "name": "connect",
+      "description": "Connect to a MongoDB instance"
+    }
+  ],
+  "keywords": ["mongodb", "database", "nosql", "document-database", "atlas", "crud", "aggregation"],
+  "user_config": {
+    "connection_string": {
+      "type": "string",
+      "title": "",
+      "description": "MongoDB connection string (e.g., mongodb://admin:password@localhost:27017)",
+      "default": "",
+      "required": true,
+      "sensitive": true
+    },
+    "tls_certificate_key": {
+      "type": "string",
+      "title": "TLS certificate key for the X.509 auth",
+      "description": "Paste your TLS certificate key here. Creates secret at the /secrets/tls_certificate_key path, which is referenced by MDB_MCP_TLS_CERTIFICATE_KEY_FILE",
+      "sensitive": true,
+      "mounted": true
+    },
+    "tls_certificate_ca": {
+      "type": "string",
+      "title": "CA certificate for the X.509 auth.",
+      "description": "Paste your CA certificate here. Creates secret at the /secrets/tls_certificate_ca path, which is referenced by MDB_MCP_TLS_CERTIFICATE_CA_FILE",
+      "sensitive": true,
+      "mounted": true
+    }
+  },
+  "readme": "# MongoDB MCP Server\n\nThe official MongoDB MCP server provides tools for interacting with MongoDB databases and Atlas deployments through AI assistants.\n\n## Features\n\n- **CRUD Operations**: Find, insert, update, and delete documents\n- **Aggregation**: Execute aggregation pipelines for data analysis\n- **Collection Management**: Create, drop, and rename collections\n- **Index Management**: Create, drop, and list indexes\n- **Schema Inference**: Analyze collection schemas\n- **Atlas Integration**: Manage Atlas clusters, users, and access lists\n\n## Environment Variables\n\n- `MDB_MCP_CONNECTION_STRING`: MongoDB connection string for database access\n- `MDB_MCP_READ_ONLY`: Enable read-only mode (optional)\n- `MDB_MCP_API_CLIENT_ID`: Atlas API client ID (optional)\n- `MDB_MCP_API_CLIENT_SECRET`: Atlas API client secret (optional)\n",
+  "category": "Data",
+  "quality_score": 85,
+  "last_scraped_at": "2026-01-13T00:00:00.000Z",
+  "evaluation_model": "manual",
+  "raw_dependencies": "",
+  "github_info": {
+    "owner": "mongodb-js",
+    "repo": "mongodb-mcp-server",
+    "url": "https://github.com/mongodb-js/mongodb-mcp-server",
+    "name": "mongodb-js__mongodb-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mongodb",
+      "importance": 10
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 9
+    }
+  ],
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  }
+}

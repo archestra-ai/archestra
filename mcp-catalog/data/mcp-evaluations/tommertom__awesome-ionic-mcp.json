@@ -1,0 +1,78 @@
+{
+  "name": "tommertom__awesome-ionic-mcp",
+  "display_name": "awesome-ionic-mcp",
+  "description": "An Awesome MCP Server to help building mobile apps in React/Vue/Angular/VanillaJS using Capacitor and Ionic",
+  "author": {
+    "name": "Tommertom"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "awesome-ionic-mcp@latest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Awesome Ionic MCP server\nYour comprehensive Ionic coding companion powered by the Model Context Protocol (MCP). This intelligent server provides seamless access to Ionic Framework components, Capacitor plugins, and developer resources to accelerate your mobile app development workflow. Whether you're building cross-platform applications with React, Angular, Vue, or Vanilla JavaScript, this MCP server delivers real-time component definitions, API documentation, code examples, and plugin information directly to your AI assistant, enabling faster development and better code quality.\n\nData is sourced from the package `@ionic/core`, ionicframework.com, docs-demo.ionic.io, capacitorjs.com, capawesome.io, capacitor-community, and capgo.live to ensure accuracy and completeness.\n\n## Tools available\n| Tool Name | Feature Group | Description |\n| --------- | ------------- | ----------- |\n| get_ionic_component_definition | @ionic/core.json | Retrieves the typescript definition of an Ionic component based on its HTML tag. |\n| get_all_ionic_components | @ionic/core.json | Retrieves the list of all Ionic components available for this tool |\n| get_component_api | ionicframework.com | Retrieves the component API on from the IonicFramework page using its HTML tag. |\n| get_component_demo | docs-demo.ionic.io | Returns the component demo from the GitHub repository based on its HTML tag. |\n| get_official_plugin_api | capacitorjs.com | Retrieves the official plugin API on from the Capacitor page using its HTML tag. |\n| get_all_official_plugins | capacitorjs.com | Retrieves list of all Official Capacitor plugins. |\n| get_all_plugins | capawesome.io | Retrieves list of all Capawesome Capacitor plugins (free and insider versions). |\n| get_all_free_plugins | capawesome.io | Retrieves list of all Capawesome Capacitor free plugins - intensively curated and up-to-date. |\n| get_all_insider_plugins | capawesome.io | Retrieves list of all Capawesome Capacitor insider plugins - intensively curated and up-to-date. |\n| get_plugin_api | capawesome.io | Retrieves API documentation for a specific Capawesome Capacitor plugin. |\n| get_capacitor_community_plugin_api | capacitor-community | Retrieves API documentation for a specific Capacitor Community plugin. |\n| get_all_capacitor_community_plugins | capacitor-community | Retrieves list of all Capacitor Community plugins. |\n| get_capgo_plugin_api | capgo | Retrieves API documentation for a specific CapGo plugin. |\n| get_all_capgo_plugins | capgo | Retrieves list of all CapGo plugins. |\n| get_all_capacitor_plugins | all-capacitor-plugins | Superlist of all Capacitor plugings from different publishers you can use to retrieve API information through this MCP tool. If you are lost about which plugin to use, this tool will help you find the right one. |\n\n## Getting started & upfront warning\nThe Awesome Ionic MCP server can work with any MCP client that supports standard I/O (stdio) as the transport medium. Here are specific instructions for some popular tools:\n\nJust to let you know - for some data the MCP server will run Puppeteer to open a browser and get the data. So you will see a browser window spanwed and closed.\n\n### Basic configuration\n\n#### Claude Desktop\nTo configure Claude Desktop to use the Awesome Ionic MCP server, edit the `claude_desktop_config.json` file. You can open or create this file from the Claude > Settings menu. Select the Developer tab, then click Edit Config.\n\n```json\n{\n  \"mcpServers\": {\n    \"awesome-ionic-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"awesome-ionic-mcp@latest\"]\n    }\n  }\n}\n```\n\n---\n\n#### Cline\nTo configure Cline to use the Awesome Ionic MCP server, edit the `cline_mcp_settings.json` file. You can open or create this file by clicking the MCP Servers icon at the top of the Cline pane, then clicking the Configure MCP Servers button.\n\n```json\n{\n  \"mcpServers\": {\n    \"awesome-ionic-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"awesome-ionic-mcp@latest\"],\n      \"disabled\": false\n    }\n  }\n}\n```\n\n---\n\n#### Cursor\nTo configure Cursor to use the Awesome Ionic MCP server, edit either the file `.cursor/mcp.json` (to configure only a specific project) or the file `~/.cursor/mcp.json` (to make the MCP server available in all projects):\n\n```json\n{\n  \"mcpServers\": {\n    \"awesome-ionic-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"awesome-ionic-mcp@latest\"]\n    }\n  }\n}\n```\n\n---\n\n#### Visual Studio Code Copilot\nTo configure a single project, edit the `.vscode/mcp.json` file in your workspace:\n\n```json\n{\n  \"servers\": {\n    \"awesome-ionic-mcp\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"awesome-ionic-mcp@latest\"]\n    }\n  }\n}\n```\n\nTo make the server available in every project you open, edit your user settings:\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"awesome-ionic-mcp\": {\n        \"type\": \"stdio\",\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"awesome-ionic-mcp@latest\"]\n      }\n    }\n  }\n}\n```\n\n---\n\n#### Windsurf Editor\nTo configure Windsurf Editor, edit the file `~/.codeium/windsurf/mcp_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"awesome-ionic-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"awesome-ionic-mcp@latest\"]\n    }\n  }\n}\n```\n\n## Credits\nCredits go to Firebase team- for using their code of their Firebase MCP server.\nhttps://firebase.google.com/docs/cli/mcp-server\n",
+  "category": "Development",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "awesome-ionic-mcp": {
+        "command": "npx",
+        "args": ["-y", "awesome-ionic-mcp@latest"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Tommertom",
+    "repo": "awesome-ionic-mcp",
+    "url": "https://github.com/Tommertom/awesome-ionic-mcp",
+    "name": "tommertom__awesome-ionic-mcp",
+    "path": null,
+    "stars": 13,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "375e695518c14bfdffc808799f35a4c7e033c190"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:43.319Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "puppeteer",
+      "importance": 8
+    },
+    {
+      "name": "js-yaml",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"awesome-ionic-mcp\",\n  \"version\": \"0.1.22\",\n  \"description\": \"A Model Context Protocol server for Ionic and Capacitor\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"awesome-ionic-mcp\": \"./bin/mcp-server.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"bin\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"start\": \"node build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.0\",\n    \"js-yaml\": \"^4.1.0\",\n    \"puppeteer\": \"^24.9.0\"\n  },\n  \"devDependencies\": {\n    \"@types/js-yaml\": \"^4.0.9\",\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

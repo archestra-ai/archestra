@@ -1,0 +1,44 @@
+{
+  "name": "plaid__remote-mcp",
+  "display_name": "Plaid MCP",
+  "icon": "data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjUxMnB0IiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWlkWU1pZCBtZWV0IiB2aWV3Qm94PSIwIDAgNTEyIDUxMiIgd2lkdGg9IjUxMnB0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Im0xNDM2IDQ1MTFjLTQwNy0xMDUtNjUzLTE3My02NTgtMTgyLTQtOC04Mi0zMDYtMTczLTY2M2wtMTY2LTY1MCAyMjgtMjI4IDIyOC0yMjgtMjI4LTIyOC0yMjgtMjI4IDE2Ny02NTVjOTItMzYwIDE3Mi02NTkgMTc4LTY2NXMzMDUtODYgNjY1LTE3OGw2NTUtMTY3IDIyOCAyMjggMjI4IDIyOCAyMjgtMjI4IDIyOC0yMjggNjU1IDE2N2MzNjAgOTIgNjU5IDE3MiA2NjUgMTc4czg2IDMwNSAxNzggNjY1bDE2NyA2NTUtMjI4IDIyOC0yMjggMjI4IDIyOCAyMjggMjI4IDIyOC0xNjcgNjU1Yy05MiAzNjAtMTcyIDY1OS0xNzggNjY1cy0zMDUgODYtNjY1IDE3OGwtNjU1IDE2Ny0yMjgtMjI4LTIyOC0yMjgtMjI4IDIyOGMtMTI1IDEyNS0yMzIgMjI3LTIzNyAyMjYtNiAwLTMwMi03Ni02NTktMTY4em03MTQtNDA2IDE0NS0xNDUtMjE4LTIxOC0yMTctMjE3LTI3NSAyNzVjLTE1MSAxNTEtMjczIDI3Ni0yNzEgMjc4IDYgNiA2NTAgMTcwIDY3MSAxNzEgMTMgMSA3MC00OSAxNjUtMTQ0em0xMzA5IDY1YzE3NC00NSAzMjQtODQgMzM0LTg4IDE0LTYtMzctNjEtMjU4LTI4MmwtMjc1LTI3NS0yMTcgMjE3LTIxOCAyMTggMTQ1IDE0NWM4MCA4MCAxNTEgMTQ1IDE1OCAxNDUgOCAwIDE1Ny0zNiAzMzEtODB6bS0yMDgyLTExMjctMjE3LTIxOC0xNDcgMTQ4LTE0OCAxNDcgNzkgMzEzYzQ0IDE3MSA4NCAzMjcgODkgMzQ2bDkgMzQgMjc2LTI3NiAyNzctMjc3em0yNzk0IDQxMCA4NC0zMzMtMTQ4LTE0Ny0xNDctMTQ4LTIxNyAyMTgtMjE4IDIxNyAyNzUgMjc1YzE3MCAxNzAgMjc3IDI3MCAyODEgMjYyIDMtNiA0NC0xNjIgOTAtMzQ0em0tMTM5MSAyMiAyMTUtMjE1LTIxOC0yMTgtMjE3LTIxNy0yMTcgMjE3LTIxOCAyMTggMjE1IDIxNWMxMTggMTE4IDIxNyAyMTUgMjIwIDIxNXMxMDItOTcgMjIwLTIxNXptLTcwMC03MDAgMjE1LTIxNS0yMTgtMjE4LTIxNy0yMTctMjE3IDIxNy0yMTggMjE4IDIxNSAyMTVjMTE4IDExOCAyMTcgMjE1IDIyMCAyMTVzMTAyLTk3IDIyMC0yMTV6bTE0MDAgMCAyMTUtMjE1LTIxOC0yMTgtMjE3LTIxNy0yMTcgMjE3LTIxOCAyMTggMjE1IDIxNWMxMTggMTE4IDIxNyAyMTUgMjIwIDIxNXMxMDItOTcgMjIwLTIxNXptLTIxMDAtNzAwIDIxNS0yMTUtMjc1LTI3NWMtMTcwLTE3MC0yNzctMjcwLTI4MS0yNjItMyA2LTQ0IDE2Mi05MCAzNDRsLTg0IDMzMyAxNDUgMTQ1YzgwIDgwIDE0NyAxNDUgMTUwIDE0NXMxMDItOTcgMjIwLTIxNXptMTQwMCAwIDIxNS0yMTUtMjE4LTIxOC0yMTctMjE3LTIxNyAyMTctMjE4IDIxOCAyMTUgMjE1YzExOCAxMTggMjE3IDIxNSAyMjAgMjE1czEwMi05NyAyMjAtMjE1em0xMzMwIDcwIDE0NS0xNDUtODQtMzMzYy00Ni0xODItODctMzM4LTkwLTM0NC00LTgtMTExIDkyLTI4MSAyNjJsLTI3NSAyNzUgMjE1IDIxNWMxMTggMTE4IDIxNyAyMTUgMjIwIDIxNXM3MC02NSAxNTAtMTQ1em0tMjAzMC03NzAgMjE1LTIxNS0xNDgtMTQ4LTE0Ny0xNDctMzEzIDc5Yy0xNzEgNDQtMzI3IDg0LTM0NiA4OWwtMzQgOSAyNzQgMjc0YzE1MSAxNTEgMjc2IDI3NCAyNzkgMjc0czEwMi05NyAyMjAtMjE1em0xNDU5LTU5IDI3NC0yNzQtMzQtOWMtMTktNS0xNzUtNDUtMzQ2LTg5bC0zMTMtNzktMTQ3IDE0Ny0xNDggMTQ4IDIxNSAyMTVjMTE4IDExOCAyMTcgMjE1IDIyMCAyMTVzMTI4LTEyMyAyNzktMjc0eiIgdHJhbnNmb3JtPSJtYXRyaXgoLjEgMCAwIC0uMSAwIDUxMikiLz48L3N2Zz4=",
+  "description": "Remote MCP server for Plaid - financial data aggregation and banking APIs",
+  "oauth_config": {
+    "name": "Plaid MCP",
+    "server_url": "https://api.dashboard.plaid.com/mcp/sse",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Plaid MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Finance",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "plaid"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://api.dashboard.plaid.com/mcp/sse",
+    "docs_url": "https://plaid.com/blog/plaid-mcp-ai-assistant-claude/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

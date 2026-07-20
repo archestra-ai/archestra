@@ -1,0 +1,137 @@
+{
+  "name": "isnow890__naver-search-mcp",
+  "display_name": "naver-search-mcp",
+  "description": "MCP server for Naver Search API integration. Provides comprehensive search capabilities across Naver services (web, news, blog, shopping, etc) and data trend analysis tools via DataLab API.",
+  "author": {
+    "name": "isnow890"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@isnow890/naver-search-mcp"],
+    "env": {
+      "NAVER_CLIENT_ID": "${user_config.naver_client_id}",
+      "NAVER_CLIENT_SECRET": "${user_config.naver_client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "naver_client_id": {
+      "type": "string",
+      "title": "Naver Client ID",
+      "description": "Your Naver Developers API Client ID",
+      "sensitive": true,
+      "required": true
+    },
+    "naver_client_secret": {
+      "type": "string",
+      "title": "Naver Client Secret",
+      "description": "Your Naver Developers API Client Secret",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Naver Search MCP Server\n\n[![한국어](https://img.shields.io/badge/한국어-README-yellow)](README-ko.md)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/isnow890/naver-search-mcp)](https://archestra.ai/mcp-catalog/isnow890__naver-search-mcp)\n[![smithery badge](https://smithery.ai/badge/@isnow890/naver-search-mcp)](https://smithery.ai/server/@isnow890/naver-search-mcp)\n[![MCP.so](https://img.shields.io/badge/MCP.so-Naver%20Search%20MCP-blue)](https://mcp.so/server/naver-search-mcp/isnow890)\n\nMCP server for Naver Search API and DataLab API integration, enabling comprehensive search across various Naver services and data trend analysis.\n\n> ⚠️ **Smithery Installation Notice**: Due to compatibility issues with the Smithery platform, **npx installation is recommended starting from version 1.0.40**. Smithery installation is only supported up to version 1.0.30.\n\n#### Version History\n\n###### 1.0.44 (2025-08-31)\n\n- `get_current_korean_time` tool added - Essential time context tool for Korean timezone\n- Enhanced all existing tool descriptions to reference time tool for temporal queries\n- Improved temporal context handling for \"today\", \"now\", \"current\" searches\n- Comprehensive Korean time formatting with multiple output formats\n\n###### 1.0.4 (2025-08-21)\n\n- `find_category` tool added - with fuzzy matching and ranking system support\n- Enhanced parameter validation with Zod schema\n- Improved category search workflow\n\n###### 1.0.30 (2025-08-04)\n\n- MCP SDK upgraded to 1.17.1\n- Fixed compatibility issues with Smithery specification changes\n- Added comprehensive DataLab shopping category code documentation\n\n###### 1.0.2 (2025-04-26)\n\n- README updated: cafe article search tool and version history section improved\n\n###### 1.0.1 (2025-04-26)\n\n- Cafe article search feature added\n- Shopping category info added to zod\n- Source code refactored\n\n###### 1.0.0 (2025-04-08)\n\n- Initial release\n\n#### Prerequisites\n\n- Naver Developers API Key (Client ID and Secret)\n- Node.js 18 or higher\n- NPM 8 or higher\n- Docker (optional, for container deployment)\n\n#### Getting API Keys\n\n1. Visit [Naver Developers](https://developers.naver.com/apps/#/register)\n2. Click \"Register Application\"\n3. Enter application name and select ALL of the following APIs:\n   - Search (for blog, news, book search, etc.)\n   - DataLab (Search Trends)\n   - DataLab (Shopping Insight)\n4. Set the obtained Client ID and Client Secret as environment variables\n\n## Tool Details\n\n### Available tools:\n\n#### 🕐 Time & Context Tools\n\n- **get_current_korean_time**: Get current Korean time (KST) with comprehensive date/time information. Essential for understanding \"today\", \"now\", or \"current\" context in Korean timezone. Always use this tool when temporal context is needed for searches or analysis.\n\n#### 🆕 Category Search\n\n- **find_category**: Category search tool - No more need to manually check category numbers via URL for trend and shopping insight searches. The LLM will find it out as you say.\n\n#### Search Tools\n\n- **search_webkr**: Search Naver web documents\n- **search_news**: Search Naver news\n- **search_blog**: Search Naver blogs\n- **search_cafearticle**: Search Naver cafe articles\n- **search_shop**: Search Naver shopping\n- **search_image**: Search Naver images\n- **search_kin**: Search Naver KnowledgeiN\n- **search_book**: Search Naver books\n- **search_encyc**: Search Naver encyclopedia\n- **search_academic**: Search Naver academic papers\n- **search_local**: Search Naver local places\n\n#### DataLab Tools\n\n- **datalab_search**: Analyze search term trends\n- **datalab_shopping_category**: Analyze shopping category trends\n- **datalab_shopping_by_device**: Analyze shopping trends by device\n- **datalab_shopping_by_gender**: Analyze shopping trends by gender\n- **datalab_shopping_by_age**: Analyze shopping trends by age group\n- **datalab_shopping_keywords**: Analyze shopping keyword trends\n- **datalab_shopping_keyword_by_device**: Analyze shopping keyword trends by device\n- **datalab_shopping_keyword_by_gender**: Analyze shopping keyword trends by gender\n- **datalab_shopping_keyword_by_age**: Analyze shopping keyword trends by age group\n\n#### Complete Category List:\n\nFor a complete list of category codes, you can download from Naver Shopping Partner Center or extract them by browsing Naver Shopping categories.\n\n### 🎯 Business Use Cases & Scenarios\n\n#### 🛍️ E-commerce Market Research\n\n```javascript\n// Fashion trend discovery\nfind_category(\"fashion\") → Check top fashion categories and codes\ndatalab_shopping_category → Analyze seasonal fashion trends\ndatalab_shopping_age → Identify fashion target demographics\ndatalab_shopping_keywords → Compare \"dress\" vs \"jacket\" vs \"coat\"\n```\n\n#### 📱 Digital Marketing Strategy\n\n```javascript\n// Beauty industry analysis\nfind_category(\"cosmetics\") → Find beauty categories\ndatalab_shopping_gender → 95% female vs 5% male shoppers\ndatalab_shopping_device → Mobile dominance in beauty shopping\ndatalab_shopping_keywords → \"tint\" vs \"lipstick\" keyword performance\n```\n\n#### 🏢 Business Intelligence & Competitive Analysis\n\n```javascript\n// Tech product insights\nfind_category(\"smartphone\") → Check electronics categories\ndatalab_shopping_category → Track iPhone vs Galaxy trends\ndatalab_shopping_age → 20-30s as main smartphone buyers\ndatalab_shopping_device → PC vs mobile shopping behavior\n```\n\n#### 📊 Seasonal Business Planning\n\n```javascript\n// Holiday shopping analysis\nfind_category(\"gift\") → Gift categories\ndatalab_shopping_category → Black Friday, Christmas trends\ndatalab_shopping_keywords → \"Mother's Day gift\" vs \"birthday gift\"\ndatalab_shopping_age → Age-based gift purchasing patterns\n```\n\n#### 🎯 Customer Persona Development\n\n```javascript\n// Fitness market analysis\nfind_category(\"exercise\") → Sports/fitness categories\ndatalab_shopping_gender → Male vs female fitness spending\ndatalab_shopping_age → Primary fitness demographics (20-40s)\ndatalab_shopping_keywords → \"home workout\" vs \"gym\" trend analysis\n```\n\n### 📈 Advanced Analysis Scenarios\n\n#### Market Entry Strategy\n\n1. **Category Discovery**: Use `find_category` to explore market segments\n2. **Trend Analysis**: Identify growing vs declining categories\n3. **Demographic Targeting**: Age/gender analysis for customer targeting\n4. **Competitive Intelligence**: Keyword performance comparison\n5. **Device Strategy**: Mobile vs PC shopping optimization\n\n#### Product Launch Planning\n\n1. **Market Validation**: Category growth trends and seasonality\n2. **Target Customers**: Demographic analysis for product positioning\n3. **Marketing Channels**: Device preferences for advertising strategy\n4. **Competitive Landscape**: Keyword competition and opportunities\n5. **Pricing Strategy**: Category performance and price correlation\n\n#### Performance Monitoring\n\n1. **Category Health**: Monitor product category trends\n2. **Keyword Tracking**: Track brand and product keyword performance\n3. **Demographic Shifts**: Monitor changing customer demographics\n4. **Seasonal Patterns**: Plan inventory and marketing campaigns\n5. **Competitive Benchmarking**: Compare performance against category averages\n\n### Quick Reference: Popular Category Codes\n\n| Category            | Code     | Korean        |\n| ------------------- | -------- | ------------- |\n| Fashion/Clothing    | 50000000 | 패션의류      |\n| Cosmetics/Beauty    | 50000002 | 화장품/미용   |\n| Digital/Electronics | 50000003 | 디지털/가전   |\n| Sports/Leisure      | 50000004 | 스포츠/레저   |\n| Food/Beverages      | 50000008 | 식품/음료     |\n| Health/Medical      | 50000009 | 건강/의료용품 |\n\n💡 **Tip**: Use `find_category` with fuzzy searches like \"beauty\", \"fashion\", \"electronics\" to easily find categories.\n\n## Installation\n\n### Method 1: NPX Installation (Recommended)\n\nThe easiest way to use this MCP server is through NPX. For detailed package information, see the [NPM package page](https://www.npmjs.com/package/@isnow890/naver-search-mcp).\n\n#### Claude Desktop Configuration\n\nAdd to Claude Desktop config file (`%APPDATA%\\Claude\\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS/Linux):\n\n```json\n{\n  \"mcpServers\": {\n    \"naver-search\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@isnow890/naver-search-mcp\"],\n      \"env\": {\n        \"NAVER_CLIENT_ID\": \"your_client_id\",\n        \"NAVER_CLIENT_SECRET\": \"your_client_secret\"\n      }\n    }\n  }\n}\n```\n\n#### Cursor AI Configuration\n\nAdd to `mcp.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"naver-search\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@isnow890/naver-search-mcp\"],\n      \"env\": {\n        \"NAVER_CLIENT_ID\": \"your_client_id\",\n        \"NAVER_CLIENT_SECRET\": \"your_client_secret\"\n      }\n    }\n  }\n}\n```\n\n### Method 2: Local Installation\n\nFor local development or custom modifications:\n\n#### Step 1: Download and Build Source Code\n\n##### Clone with Git\n\n```bash\ngit clone https://github.com/isnow890/naver-search-mcp.git\ncd naver-search-mcp\nnpm install\nnpm run build\n```\n\n##### Or Download ZIP File\n\n1. Download the latest version from [GitHub Releases](https://github.com/isnow890/naver-search-mcp/releases)\n2. Extract the ZIP file to your desired location\n3. Navigate to the extracted folder in terminal:\n\n```bash\ncd /path/to/naver-search-mcp\nnpm install\nnpm run build\n```\n\n⚠️ **Important**: You must run `npm run build` after installation to generate the `dist` folder that contains the compiled JavaScript files.\n\n#### Step 2: Claude Desktop Configuration\n\nAfter building, you'll need the following information:\n\n- **NAVER_CLIENT_ID**: Client ID from Naver Developers\n- **NAVER_CLIENT_SECRET**: Client Secret from Naver Developers\n- **Installation Path**: Absolute path to the downloaded folder\n\n##### Windows Configuration\n\nAdd to Claude Desktop config file (`%APPDATA%\\Claude\\claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"naver-search\": {\n      \"type\": \"stdio\",\n      \"command\": \"cmd\",\n      \"args\": [\n        \"/c\",\n        \"node\",\n        \"C:\\\\path\\\\to\\\\naver-search-mcp\\\\dist\\\\src\\\\index.js\"\n      ],\n      \"cwd\": \"C:\\\\path\\\\to\\\\naver-search-mcp\",\n      \"env\": {\n        \"NAVER_CLIENT_ID\": \"your-naver-client-id\",\n        \"NAVER_CLIENT_SECRET\": \"your-naver-client-secret\"\n      }\n    }\n  }\n}\n```\n\n##### macOS/Linux Configuration\n\nAdd to Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"naver-search\": {\n      \"type\": \"stdio\",\n      \"command\": \"node\",\n      \"args\": [\"/path/to/naver-search-mcp/dist/src/index.js\"],\n      \"cwd\": \"/path/to/naver-search-mcp\",\n      \"env\": {\n        \"NAVER_CLIENT_ID\": \"your-naver-client-id\",\n        \"NAVER_CLIENT_SECRET\": \"your-naver-client-secret\"\n      }\n    }\n  }\n}\n```\n\n##### Path Configuration Important Notes\n\n⚠️ **Important**: You must change the following paths in the above configuration to your actual installation paths:\n\n- **Windows**: Change `C:\\\\path\\\\to\\\\naver-search-mcp` to your actual downloaded folder path\n- **macOS/Linux**: Change `/path/to/naver-search-mcp` to your actual downloaded folder path\n- **Build Path**: Make sure the path points to `dist/src/index.js` (not just `index.js`)\n\nFinding your path:\n\n```bash\n# Check current location\npwd\n\n# Absolute path examples\n# Windows: C:\\Users\\username\\Downloads\\naver-search-mcp\n# macOS: /Users/username/Downloads/naver-search-mcp\n# Linux: /home/username/Downloads/naver-search-mcp\n```\n\n#### Step 3: Restart Claude Desktop\n\nAfter completing the configuration, completely close and restart Claude Desktop to activate the Naver Search MCP server.\n\n---\n\n## Alternative Installation Methods\n\n### Method 3: Legacy Smithery Installation (Only for v1.0.30 and below)\n\n⚠️ **Note**: This method only works for versions 1.0.30 and below due to platform compatibility issues.\n\n#### For Claude Desktop:\n```bash\nnpx -y @smithery/cli@latest install @isnow890/naver-search-mcp --client claude\n```\n\n#### For other AI clients:\n```bash\n# Cursor\nnpx -y @smithery/cli@latest install @isnow890/naver-search-mcp --client cursor\n\n# Windsurf\nnpx -y @smithery/cli@latest install @isnow890/naver-search-mcp --client windsurf\n\n# Cline\nnpx -y @smithery/cli@latest install @isnow890/naver-search-mcp --client cline\n```\n\n### Method 4: Docker Installation\n\nFor containerized deployment:\n\n```bash\ndocker run -i --rm \\\n  -e NAVER_CLIENT_ID=your_client_id \\\n  -e NAVER_CLIENT_SECRET=your_client_secret \\\n  mcp/naver-search\n```\n\nDocker configuration for Claude Desktop:\n\n```json\n{\n  \"mcpServers\": {\n    \"naver-search\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"NAVER_CLIENT_ID=your_client_id\",\n        \"-e\",\n        \"NAVER_CLIENT_SECRET=your_client_secret\",\n        \"mcp/naver-search\"\n      ]\n    }\n  }\n}\n```\n\n## Build\n\nDocker build:\n\n```bash\ndocker build -t mcp/naver-search .\n```\n\n## License\n\nMIT License\n",
+  "category": "Search",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "isnow890-naver-search-mcp": {
+        "command": "npx",
+        "args": ["@isnow890/naver-search-mcp"],
+        "env": {
+          "NAVER_CLIENT_ID": "your_client_id",
+          "NAVER_CLIENT_SECRET": "your_client_secret"
+        }
+      },
+      "isnow890-naver-search-mcp-configured": {
+        "command": "npx",
+        "args": ["-y", "@isnow890/naver-search-mcp"],
+        "env": {
+          "NAVER_CLIENT_ID": "your_client_id",
+          "NAVER_CLIENT_SECRET": "your_client_secret"
+        }
+      },
+      "mcp-naver-search-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "NAVER_CLIENT_ID=your_client_id",
+          "-e",
+          "NAVER_CLIENT_SECRET=your_client_secret",
+          "mcp/naver-search"
+        ],
+        "env": {
+          "NAVER_CLIENT_ID": "your_client_id",
+          "NAVER_CLIENT_SECRET": "your_client_secret"
+        },
+        "docker_image": "mcp/naver-search"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "isnow890",
+    "repo": "naver-search-mcp",
+    "url": "https://github.com/isnow890/naver-search-mcp",
+    "name": "naver-search-mcp",
+    "path": null,
+    "stars": 31,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "25bd33ce1e64dd1bef3a1be039357eb23031242e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.090Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 6
+    },
+    {
+      "name": "sharp",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@isnow890/naver-search-mcp\",\n  \"version\": \"1.0.18\",\n  \"description\": \"Naver Search MCP Server\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"prebuild\": \"shx rm -rf dist\",\n    \"build\": \"tsc\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"start\": \"node dist/src/index.js\"\n  },\n  \"engines\": {\n    \"node\": \">=18\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.10.2\",\n    \"axios\": \"^1.6.7\",\n    \"zod\": \"^3.22.4\",\n    \"zod-to-json-schema\": \"^3.23.5\",\n    \"sharp\": \"^0.33.2\",\n    \"dotenv\": \"^16.4.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"author\": \"isnow890\",\n  \"license\": \"MIT\",\n  \"bin\": {\n    \"naver-search-mcp\": \"dist/src/index.js\"\n  },\n  \"type\": \"module\"\n}\n"
+}

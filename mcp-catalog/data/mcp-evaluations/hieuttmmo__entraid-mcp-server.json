@@ -1,0 +1,112 @@
+{
+  "name": "hieuttmmo__entraid-mcp-server",
+  "display_name": "entraid-mcp-server",
+  "description": "MCP server for interacting with EntraID through Microsoft Graph API.",
+  "author": {
+    "name": "hieuttmmo"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/msgraph_mcp_server/server.py"],
+    "env": {
+      "TENANT_ID": "${user_config.tenant_id}",
+      "CLIENT_ID": "${user_config.client_id}",
+      "CLIENT_SECRET": "${user_config.client_secret}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "tenant_id": {
+      "type": "string",
+      "title": "Azure AD Tenant ID",
+      "description": "The unique identifier for your Azure Active Directory tenant.",
+      "sensitive": true,
+      "required": true
+    },
+    "client_id": {
+      "type": "string",
+      "title": "Azure AD Client ID",
+      "description": "The Application (client) ID for your registered Azure AD application.",
+      "sensitive": true,
+      "required": true
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "Azure AD Client Secret",
+      "description": "The client secret for your registered Azure AD application.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# EntraID MCP Server (Microsoft Graph FastMCP)\n\nThis project provides a modular, resource-oriented FastMCP server for interacting with Microsoft Graph API. It is designed for extensibility, maintainability, and security, supporting advanced queries for users, sign-in logs, MFA status, and privileged users.\n\n## Features\n\n- **Modular Resource Structure:**\n  - Each resource (users, sign-in logs, MFA, etc.) is implemented in its own module under `src/msgraph_mcp_server/resources/`.\n  - Easy to extend with new resources (e.g., groups, devices).\n- **Centralized Graph Client:**\n  - Handles authentication and client initialization.\n  - Shared by all resource modules.\n- **Comprehensive User Operations:**\n  - Search users by name/email.\n  - Get user by ID.\n  - List all privileged users (directory role members).\n- **Full Group Lifecycle & Membership Management:**\n  - Create, read, update, and delete groups.\n  - Add/remove group members and owners.\n  - Search and list groups and group members.\n- **Application & Service Principal Management:**\n  - List, create, update, and delete applications (app registrations).\n  - List, create, update, and delete service principals.\n  - View app role assignments and delegated permissions for both applications and service principals.\n- **Sign-in Log Operations:**\n  - Query sign-in logs for a user for the last X days.\n- **MFA Operations:**\n  - Get MFA status for a user.\n  - Get MFA status for all members of a group.\n- **Password Management:**\n  - Reset user passwords directly with custom or auto-generated secure passwords.\n  - Option to require password change on next sign-in.\n- **Permissions Helper:**\n  - Suggest appropriate Microsoft Graph permissions for common tasks.\n  - Search and explore available Graph permissions.\n  - Helps implement the principle of least privilege by recommending only necessary permissions.\n- **Error Handling & Logging:**\n  - Consistent error handling and progress reporting via FastMCP context.\n  - Detailed logging for troubleshooting.\n- **Security:**\n  - `.env` and secret files are excluded from version control.\n  - Uses Microsoft best practices for authentication.\n\n## Project Structure\n\n```\nsrc/msgraph_mcp_server/\n├── auth/           # Authentication logic (GraphAuthManager)\n├── resources/      # Resource modules (users, signin_logs, mfa, ...)\n│   ├── users.py            # User operations (search, get by ID, etc.)\n│   ├── signin_logs.py      # Sign-in log operations\n│   ├── mfa.py              # MFA status operations\n│   ├── permissions_helper.py # Graph permissions utilities and suggestions\n│   ├── applications.py       # Application (app registration) operations\n│   ├── service_principals.py # Service principal operations\n│   └── ...                 # Other resource modules\n├── utils/          # Core GraphClient and other ultilities tool, such as password generator..\n├── server.py       # FastMCP server entry point (registers tools/resources)\n├── __init__.py     # Package marker\n```\n\n## Usage\n\n### 1. Setup\n- Clone the repo.\n- Create a `config/.env` file with your Azure AD credentials:\n  ```\n  TENANT_ID=your-tenant-id\n  CLIENT_ID=your-client-id\n  CLIENT_SECRET=your-client-secret\n  ```\n- (Optional) Set up certificate-based auth if needed.\n\n### 2. Testing & Development\n\nYou can test and develop your MCP server directly using the FastMCP CLI:\n\n```bash\nfastmcp dev '/path/to/src/msgraph_mcp_server/server.py'\n```\n\nThis launches an interactive development environment with the MCP Inspector. For more information and advanced usage, see the [FastMCP documentation](https://github.com/jlowin/fastmcp).\n\n### 3. Available Tools\n\n#### User Tools\n- `search_users(query, ctx, limit=10)` — Search users by name/email\n- `get_user_by_id(user_id, ctx)` — Get user details by ID\n- `get_privileged_users(ctx)` — List all users in privileged directory roles\n- `get_user_roles(user_id, ctx)` — Get all directory roles assigned to a user\n- `get_user_groups(user_id, ctx)` — Get all groups (including transitive memberships) for a user\n\n#### Group Tools\n- `get_all_groups(ctx, limit=100)` — Get all groups (with paging)\n- `get_group_by_id(group_id, ctx)` — Get a specific group by its ID\n- `search_groups_by_name(name, ctx, limit=50)` — Search for groups by display name\n- `get_group_members(group_id, ctx, limit=100)` — Get members of a group by group ID\n- `create_group(ctx, group_data)` — Create a new group (see below for group_data fields)\n- `update_group(group_id, ctx, group_data)` — Update an existing group (fields: displayName, mailNickname, description, visibility)\n- `delete_group(group_id, ctx)` — Delete a group by its ID\n- `add_group_member(group_id, member_id, ctx)` — Add a member (user, group, device, etc.) to a group\n- `remove_group_member(group_id, member_id, ctx)` — Remove a member from a group\n- `add_group_owner(group_id, owner_id, ctx)` — Add an owner to a group\n- `remove_group_owner(group_id, owner_id, ctx)` — Remove an owner from a group\n\n**Group Creation/Update Example:**\n- `group_data` for `create_group` and `update_group` should be a dictionary with keys such as:\n  - `displayName` (required for create)\n  - `mailNickname` (required for create)\n  - `description` (optional)\n  - `groupTypes` (optional, e.g., `[\"Unified\"]`)\n  - `mailEnabled` (optional)\n  - `securityEnabled` (optional)\n  - `visibility` (optional, \"Private\" or \"Public\")\n  - `owners` (optional, list of user IDs)\n  - `members` (optional, list of IDs)\n  - `membershipRule` (required for dynamic groups)\n  - `membershipRuleProcessingState` (optional, \"On\" or \"Paused\")\n\nSee the `groups.py` docstrings for more details on supported fields and behaviors.\n\n#### Sign-in Log Tools\n- `get_user_sign_ins(user_id, ctx, days=7)` — Get sign-in logs for a user\n\n#### MFA Tools\n- `get_user_mfa_status(user_id, ctx)` — Get MFA status for a user\n- `get_group_mfa_status(group_id, ctx)` — Get MFA status for all group members\n\n#### Device Tools\n- `get_all_managed_devices(filter_os=None)` — Get all managed devices (optionally filter by OS)\n- `get_managed_devices_by_user(user_id)` — Get all managed devices for a specific user\n\n#### Conditional Access Policy Tools\n- `get_conditional_access_policies(ctx)` — Get all conditional access policies\n- `get_conditional_access_policy_by_id(policy_id, ctx)` — Get a single conditional access policy by its ID\n\n#### Audit Log Tools\n- `get_user_audit_logs(user_id, days=30)` — Get all relevant directory audit logs for a user by user_id within the last N days\n\n#### Password Management Tools\n- `reset_user_password_direct(user_id, password=None, require_change_on_next_sign_in=True, generate_password=False, password_length=12)` — Reset a user's password with a specific password value or generate a secure random password\n\n#### Permissions Helper Tools\n- `suggest_permissions_for_task(task_category, task_name)` — Suggest Microsoft Graph permissions for a specific task based on common mappings\n- `list_permission_categories_and_tasks()` — List all available categories and tasks for permission suggestions\n- `get_all_graph_permissions()` — Get all Microsoft Graph permissions directly from the Microsoft Graph API\n- `search_permissions(search_term, permission_type=None)` — Search for Microsoft Graph permissions by keyword\n\n#### Application Tools\n- `list_applications(ctx, limit=100)` — List all applications (app registrations) in the tenant, with paging\n- `get_application_by_id(app_id, ctx)` — Get a specific application by its object ID (includes app role assignments and delegated permissions)\n- `create_application(ctx, app_data)` — Create a new application (see below for app_data fields)\n- `update_application(app_id, ctx, app_data)` — Update an existing application (fields: displayName, signInAudience, tags, identifierUris, web, api, requiredResourceAccess)\n- `delete_application(app_id, ctx)` — Delete an application by its object ID\n\n**Application Creation/Update Example:**\n- `app_data` for `create_application` and `update_application` should be a dictionary with keys such as:\n  - `displayName` (required for create)\n  - `signInAudience` (optional)\n  - `tags` (optional)\n  - `identifierUris` (optional)\n  - `web` (optional)\n  - `api` (optional)\n  - `requiredResourceAccess` (optional)\n\n#### Service Principal Tools\n- `list_service_principals(ctx, limit=100)` — List all service principals in the tenant, with paging\n- `get_service_principal_by_id(sp_id, ctx)` — Get a specific service principal by its object ID (includes app role assignments and delegated permissions)\n- `create_service_principal(ctx, sp_data)` — Create a new service principal (see below for sp_data fields)\n- `update_service_principal(sp_id, ctx, sp_data)` — Update an existing service principal (fields: displayName, accountEnabled, tags, appRoleAssignmentRequired)\n- `delete_service_principal(sp_id, ctx)` — Delete a service principal by its object ID\n\n**Service Principal Creation/Update Example:**\n- `sp_data` for `create_service_principal` and `update_service_principal` should be a dictionary with keys such as:\n  - `appId` (required for create)\n  - `accountEnabled` (optional)\n  - `tags` (optional)\n  - `appRoleAssignmentRequired` (optional)\n  - `displayName` (optional)\n\n#### Example Resource\n- `greeting://{name}` — Returns a personalized greeting\n\n## Extending the Server\n- Add new resource modules under `resources/` (e.g., `groups.py`, `devices.py`).\n- Register new tools in `server.py` using the FastMCP `@mcp.tool()` decorator.\n- Use the shared `GraphClient` for all API calls.\n\n## Security & Best Practices\n- **Never commit secrets:** `.env` and other sensitive files are gitignored.\n- **Use least privilege:** Grant only the necessary Microsoft Graph permissions to your Azure AD app.\n- **Audit & monitor:** Use the logging output for troubleshooting and monitoring.\n\n## Required Graph API Permissions\n| API / Permission            | Type        | Description                               |\n|-----------------------------|-------------|-------------------------------------------|\n| AuditLog.Read.All           | Application | Read all audit log data                   |\n| AuthenticationContext.Read.All | Application | Read all authentication context information |\n| DeviceManagementManagedDevices.Read.All | Application | Read Microsoft Intune devices |\n| Directory.Read.All          | Application | Read directory data                       |\n| Group.Read.All              | Application | Read all groups                           |\n| GroupMember.Read.All        | Application | Read all group memberships                |\n| Group.ReadWrite.All         | Application | Create, update, delete groups; manage group members and owners |\n| Policy.Read.All             | Application | Read your organization's policies         |\n| RoleManagement.Read.Directory | Application | Read all directory RBAC settings        |\n| User.Read.All               | Application | Read all users' full profiles             |\n| User-PasswordProfile.ReadWrite.All | Application | Least privileged permission to update the passwordProfile property |\n| UserAuthenticationMethod.Read.All | Application | Read all users' authentication methods |\n| Application.ReadWrite.All   | Application | Create, update, and delete applications (app registrations) and service principals |\n\n**Note:** `Group.ReadWrite.All` is required for group creation, update, deletion, and for adding/removing group members or owners. `Group.Read.All` and `GroupMember.Read.All` are sufficient for read-only group and membership queries.\n\n## Advanced: Using with Claude or Cursor\n\n### Using with Claude (Anthropic)\nTo install and run this server as a Claude MCP tool, use:\n\n```bash\nfastmcp install '/path/to/src/msgraph_mcp_server/server.py' \\\n  --with msgraph-sdk --with azure-identity --with azure-core --with msgraph-core \\\n  -f /path/to/.env\n```\n- Replace `/path/to/` with your actual project path.\n- The `-f` flag points to your `.env` file (never commit secrets!).\n\n### Using with Cursor\nAdd the following to your `.cursor/mcp.json` (do **not** include actual secrets in version control):\n\n```json\n{\n  \"EntraID MCP Server\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"run\",\n      \"--with\", \"azure-core\",\n      \"--with\", \"azure-identity\",\n      \"--with\", \"fastmcp\",\n      \"--with\", \"msgraph-core\",\n      \"--with\", \"msgraph-sdk\",\n      \"fastmcp\",\n      \"run\",\n      \"/path/to/src/msgraph_mcp_server/server.py\"\n    ],\n    \"env\": {\n      \"TENANT_ID\": \"<your-tenant-id>\",\n      \"CLIENT_ID\": \"<your-client-id>\",\n      \"CLIENT_SECRET\": \"<your-client-secret>\"\n    }\n  }\n}\n```\n- Replace `/path/to/` and the environment variables with your actual values.\n- **Never commit real secrets to your repository!**\n\n## License\n\nMIT\n",
+  "category": "Enterprise",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "msgraph-mcp-server": {
+        "command": "fastmcp",
+        "args": ["dev", "/path/to/src/msgraph_mcp_server/server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hieuttmmo",
+    "repo": "entraid-mcp-server",
+    "url": "https://github.com/hieuttmmo/entraid-mcp-server",
+    "name": "entraid-mcp-server",
+    "path": null,
+    "stars": 13,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1e0de42f615124ddc76d462185b9c3614cf23be1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:33.613Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "azure-core",
+      "importance": 8
+    },
+    {
+      "name": "azure-identity",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "msgraph-core",
+      "importance": 9
+    },
+    {
+      "name": "msgraph-sdk",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"entraid-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"azure-core>=1.33.0\",\n    \"azure-identity>=1.21.0\",\n    \"mcp[cli]>=1.6.0\",\n    \"msgraph-core>=1.3.3\",\n    \"msgraph-sdk>=1.28.0\",\n]\n"
+}

@@ -1,0 +1,143 @@
+{
+  "name": "heurist-network__heurist-mesh-mcp-server",
+  "display_name": "heurist-mesh-mcp-server",
+  "description": "MCP server from heurist-network/heurist-mesh-mcp-server",
+  "author": {
+    "name": "heurist-network"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Mesh Agent MCP Server\n\n![mesh-2](https://github.com/user-attachments/assets/da67c0e6-0709-4f28-ab82-8abfc0c0734c)\n\nA Model Context Protocol (MCP) server that connects to [Heurist Mesh](https://github.com/heurist-network/heurist-agent-framework/tree/main/mesh) APIs, providing Claude with access to various blockchain and web3 tools.\n\nHeurist Mesh is an open network of purpose-built AI agents and tools, each specialized in particular web3 domains such as blockchain data analysis, smart contract security, token metrics, and blockchain interaction. We are actively growing the Heurist Mesh ecosystem, continuously integrating more tools to expand its capabilities.\n\n<a href=\"https://glama.ai/mcp/servers/@heurist-network/heurist-mesh-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@heurist-network/heurist-mesh-mcp-server/badge\" alt=\"Mesh Agent Server MCP server\" />\n</a>\n\n## Features\n- Connects to the Heurist Mesh API \n- Loads tools for cryptocurrency data and Web3 use cases\n- Supports both SSE and stdio transports\n- Works with Claude in Cursor, Claude Desktop, and other MCP-compatible interfaces\n- Use one API key to access multiple services (e.g. CoinGecko crypto market data, GoPlus token security review)\n\n## 🔥 Just In: Customize Your Agents and Create Managed MCP Servers On-Demand\nYou can use [Heurist Mesh MCP Portal](https://mcp.heurist.ai/) to create SSE MCP Servers. Select your agents and compose a personalized swarm for your tasks!\n\n## Hosted SSE Endpoint\nWe provide a hosted SSE endpoint at https://sequencer-v2.heurist.xyz/mcp/sse. This includes all the tools from the following commonly used agents: `CoingeckoTokenInfoAgent`, `ElfaTwitterIntelligenceAgent`, `ExaSearchAgent`, `DexScreenerTokenInfoAgent`, `ZerionWalletAnalysisAgent`. This is a shared server and the performance may be unstable.\n\nCursor can directly access SSE servers. For Claude Desktop users, we recommend installing [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) to connect to the SSE server.\n\n## Prerequisites\n\n- Python 3.10 or higher\n- UV package manager (recommended)\n- OR Docker\n- [Get a Heurist API key](https://docs.heurist.ai/protocol-overview/credits) or you can [claim free API credits](https://dev-api-form.heurist.ai/) with invite code \"claude\"\n\n## Installation\n### Using UV (Recommended)\n```bash\n# Clone the repository\ngit clone https://github.com/heurist-network/heurist-mesh-mcp-server.git\ncd heurist-mesh-mcp-server\n\n# Install the package\nuv pip install -e .\n```\n\n### Using Docker\n```bash\n# Clone the repository\ngit clone https://github.com/heurist-network/heurist-mesh-mcp-server.git\ncd heurist-mesh-mcp-server\n\n# Build the Docker image\ndocker build -t mesh-tool-server .\n```\n## Usage\n### Option 1: Run with stdio Transport (for Claude Desktop)\n#### Using UV\nTo use this with Claude Desktop, add the following to your `claude_desktop_config.json`:\n```bash\n{\n  \"mcpServers\": {\n    \"heurist-mesh-agent\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/heurist-mesh-mcp-server/mesh_mcp_server\",  // Update this path\n        \"run\",\n        \"mesh-tool-server\"\n      ],\n      \"env\": {\n        \"HEURIST_API_KEY\": \"your-api-key-here\"  // Update this key\n      }\n    }\n  }\n}\n```\n#### Using Docker\nAlternatively, you can use Docker with Claude Desktop by adding this to your `claude_desktop_config.json`:\n```bash\n{\n  \"mcpServers\": {\n    \"mesh-agent\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\", \"TRANSPORT=stdio\",\n        \"-e\", \"HEURIST_API_KEY=your-api-key-here\",  // Update this key\n        \"mesh-tool-server\"\n      ]\n    }\n  }\n}\n```\n\nReplace `/path/to/heurist-mesh-mcp-server` with the actual path to the repository and `your-api-key-here` with your Heurist API key.\n\n### Option 2: Run with SSE Transport (for Cursor)\n#### Setting up Environment Variables in `.env`\n```bash\ncp .env.example .env\nHEURIST_API_KEY=your-api-key-here\n```\n#### Using UV:\n```bash\nuv run mesh-tool-server --transport sse --port 8000\n```\n#### Using Docker:\n```bash\ndocker run -p 8000:8000 -e PORT=8000 mesh-tool-server\n```\nThen, in Cursor, add the MCP Server URL: **http://0.0.0.0:8000/sse**\n\n## Available Tools\nVisit https://mesh.heurist.ai/metadata.json or https://mcp.heurist.ai/ to view all available tools.\n\n## Featured tools\n| Tool Name | Description | Agent | Parameters | Required Params |\n|-----------|-------------|-------|------------|----------------|\n| get_coingecko_id | Search for a token by name to get its CoinGecko ID | CoinGeckoTokenInfoAgent | **token_name** (string): The token name to search for | token_name |\n| get_token_info | Get detailed token information and market data using CoinGecko ID (you can't use the token address or name or symbol) | CoinGeckoTokenInfoAgent | **coingecko_id** (string): The CoinGecko ID of the token | coingecko_id |\n| get_trending_coins | Get the current top trending cryptocurrencies on CoinGecko | CoinGeckoTokenInfoAgent | - | None |\n| get_specific_pair_info | Get trading pair info by chain and pair address on DexScreener | DexScreenerTokenInfoAgent | **chain** (string): Chain identifier (e.g., solana, bsc, ethereum, base)<br>**pair_address** (string): The pair contract address to look up | chain, pair_address |\n| get_token_pairs | Get the trading pairs by chain and token address on DexScreener | DexScreenerTokenInfoAgent | **chain** (string): Chain identifier (e.g., solana, bsc, ethereum, base)<br>**token_address** (string): The token contract address to look up all pairs for | chain, token_address |\n| get_token_profiles | Get the basic info of the latest tokens from DexScreener | DexScreenerTokenInfoAgent | - | None |\n| search_pairs | Search for trading pairs on DexScreener by token name, symbol, or address | DexScreenerTokenInfoAgent | **search_term** (string): Search term (token name, symbol, or address) | search_term |\n| get_trending_tokens | Get current trending tokens on Twitter | ElfaTwitterIntelligenceAgent | **time_window** (string): Time window to analyze | None |\n| search_account | Analyze a Twitter account with both mention search and account stats | ElfaTwitterIntelligenceAgent | **username** (string): Twitter username to analyze (without @)<br>**days_ago** (integer): Number of days to look back for mentions<br>**limit** (integer): Maximum number of mention results | username |\n| search_mentions | Search for mentions of specific tokens or topics on Twitter | ElfaTwitterIntelligenceAgent | **keywords** (array): List of keywords to search for<br>**days_ago** (integer): Number of days to look back<br>**limit** (integer): Maximum number of results (minimum: 20) | keywords |\n| answer | Get a direct answer to a question using Exa's answer API | ExaSearchAgent | **question** (string): The question to answer | question |\n| search | Search for webpages related to a query | ExaSearchAgent | **search_term** (string): The search term<br>**limit** (integer): Maximum number of results to return (default: 10) | search_term |\n| search_and_answer | Perform both search and answer operations for a query | ExaSearchAgent | **topic** (string): The topic to search for and answer | topic |\n| execute_search | Execute a web search query by reading the web pages | FirecrawlSearchAgent | **search_term** (string): The search term to execute | search_term |\n| generate_queries | Generate related search queries for a topic that can expand the research | FirecrawlSearchAgent | **topic** (string): The main topic to research<br>**num_queries** (integer): Number of queries to generate | topic |\n| fetch_security_details | Fetch security details of a blockchain token contract | GoplusAnalysisAgent | **contract_address** (string): The token contract address<br>**chain_id** (['integer', 'string']): The blockchain chain ID or 'solana' for Solana tokens. Supported chains: Ethereum (1), Optimism (10), Cronos (25), BSC (56), Gnosis (100), HECO (128), Polygon (137), Fantom (250), KCC (321), zkSync Era (324), ETHW (10001), FON (201022), Arbitrum (42161), Avalanche (43114), Linea Mainnet (59144), Base (8453), Tron (tron), Scroll (534352), opBNB (204), Mantle (5000), ZKFair (42766), Blast (81457), Manta Pacific (169), Berachain Artio Testnet (80085), Merlin (4200), Bitlayer Mainnet (200901), zkLink Nova (810180), X Layer Mainnet (196), Solana (solana) | contract_address |\n\n## Customizing Supported Agents\nThe server comes with a default set of agents. To modify which agents are available:\n1. Open the `server.py` file and locate the `Config` class.\n2. Edit the `DEFAULT_AGENTS` list to add or remove agents listed [at Heurist Metadata](https://mesh.heurist.ai/metadata.json)\n```python\nDEFAULT_AGENTS = [\n    \"CoinGeckoTokenInfoAgent\",\n    \"DexScreenerTokenInfoAgent\",\n    \"ElfaTwitterIntelligenceAgent\",\n    \"ExaSearchAgent\",\n    \"FirecrawlSearchAgent\",\n    \"GoplusAnalysisAgent\",\n    # Add agents here\n    \"NewAgent\"\n]\n```\n\n## License\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License.",
+  "category": "Finance",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mesh-tool-server-stdio-configured": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/heurist-mesh-mcp-server/mesh_mcp_server", "run", "mesh-tool-server"],
+        "env": {
+          "HEURIST_API_KEY": "your-api-key-here"
+        }
+      },
+      "mesh-tool-server-stdio-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-e",
+          "TRANSPORT=stdio",
+          "-e",
+          "HEURIST_API_KEY=your-api-key-here",
+          "mesh-tool-server"
+        ],
+        "env": {
+          "TRANSPORT": "stdio",
+          "HEURIST_API_KEY": "your-api-key-here"
+        },
+        "docker_image": "mesh-tool-server"
+      },
+      "mesh-tool-server-sse-uv": {
+        "command": "uv",
+        "args": ["run", "mesh-tool-server", "--transport", "sse", "--port", "8000"],
+        "env": {}
+      },
+      "mesh-tool-server-sse-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "8000:8000", "-e", "PORT=8000", "mesh-tool-server"],
+        "env": {
+          "PORT": "8000"
+        },
+        "docker_image": "mesh-tool-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "heurist-network",
+    "repo": "heurist-mesh-mcp-server",
+    "url": "https://github.com/heurist-network/heurist-mesh-mcp-server",
+    "name": "heurist-mesh-mcp-server",
+    "path": null,
+    "stars": 55,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "88bc540caf9a96e5504a2fc24abfa5f26831a7ea"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:10.344Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "anyio",
+      "importance": 7
+    },
+    {
+      "name": "click",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 9
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "colorlog",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mesh-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"MCP server for accessing mesh agents through Claude\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nauthors = [{ name = \"Heurist AI\" }]\nmaintainers = [\n    { name = \"Heurist AI\", email = \"team@heurist.xyz\" },\n]\nkeywords = [\"mcp\", \"llm\", \"automation\", \"mesh\", \"agents\"]\nlicense = { text = \"MIT\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n]\ndependencies = [\n    \"anyio>=4.5\",\n    \"click>=8.1.0\",\n    \"httpx>=0.27\",\n    \"mcp\",\n    \"fastapi>=0.104.0\",\n    \"uvicorn>=0.24.0\",\n    \"pydantic>=2.0.0\",\n    \"aiohttp>=3.9.0\",\n    \"python-dotenv>=1.0.0\",\n    \"requests>=2.28.0\",\n    \"colorlog>=6.7.0\"\n]\n\n[project.scripts]\nmesh-tool-server = \"mesh_mcp_server.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mesh_mcp_server\"]\n\n[tool.pyright]\ninclude = [\"mesh_mcp_server\"]\nvenvPath = \".\"\nvenv = \".venv\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\"]\nignore = []\n\n[tool.ruff]\nline-length = 88\ntarget-version = \"py310\"\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.378\", \"pytest>=8.3.3\", \"ruff>=0.6.9\", \"pytest-asyncio>=0.23.0\"]\n"
+}

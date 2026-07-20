@@ -1,0 +1,112 @@
+{
+  "name": "hyperb1iss__droidmind",
+  "display_name": "droidmind",
+  "description": "Control your Android devices with AI using Model Context Protocol",
+  "author": {
+    "name": "hyperb1iss"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/hyperb1iss/droidmind", "droidmind", "--transport", "stdio"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<div align=\"center\">\n\n# 🤖 DroidMind 🧠\n\n<img src=\"docs/assets/images/logo_neon_glow_icon.png\" alt=\"DroidMind Logo\" width=\"180\" />\n\n[![Python 3.13+](https://img.shields.io/badge/python-3.13+-9D00FF.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)\n[![License](https://img.shields.io/badge/license-Apache_2.0-FF00FF.svg?style=for-the-badge&logo=apache&logoColor=white)](LICENSE)\n[![Status](https://img.shields.io/badge/status-active_development-39FF14.svg?style=for-the-badge&logo=githubactions&logoColor=white)](docs/plan.md)\n[![Code Style](https://img.shields.io/badge/code_style-ruff-00FFFF.svg?style=for-the-badge&logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)\n[![Type Check](https://img.shields.io/badge/type_check-pyright-FFBF00.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://github.com/microsoft/pyright)\n[![MCP](https://img.shields.io/badge/protocol-MCP-E6E6FA.svg?style=for-the-badge&logo=anthropic&logoColor=white)](https://modelcontextprotocol.io/)\n[![Android](https://img.shields.io/badge/platform-android-A4C639.svg?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com/)\n[![Docs](https://img.shields.io/badge/docs-online-FF9E80.svg?style=for-the-badge&logo=gitbook&logoColor=white)](https://hyperb1iss.github.io/droidmind/)\n\n**Control Android devices with AI through the Model Context Protocol**\n\n</div>\n\nDroidMind is a powerful bridge between AI assistants and Android devices, enabling control, debugging, and system analysis through natural language. By implementing the Model Context Protocol (MCP), DroidMind allows AI models to directly interact with Android devices via ADB in a secure, structured way. When used as part of an agentic coding workflow, DroidMind can enable your assistant to build and debug with your device directly in the loop.\n\n## 💫 Core Features\n\nDroidMind empowers AI assistants to:\n\n- 📱 **Manage Devices**: Connect via USB/TCP-IP, list devices, view properties, and reboot.\n- 📊 **Analyze Systems**: Access logs (logcat, ANR, crash, battery), capture bug reports, and dump heap.\n- 📂 **Handle Files**: Browse, read, write, push, pull, delete, and manage device files/directories.\n- 📦 **Control Apps**: Install, uninstall, start, stop, clear data, and inspect app details (manifest, permissions, activities).\n- 🖼️ **Automate UI**: Perform taps, swipes, text input, and key presses.\n- 🐚 **Execute Shell Commands**: Run ADB shell commands with a security-conscious framework.\n- 🔒 **Operate Securely**: Benefit from command validation, risk assessment, and sanitization.\n- 💬 **Integrate Seamlessly**: Connect with any MCP-compatible client (Claude, Cursor, Cline, etc.).\n\nFor a detailed list of capabilities, see the **[User Manual](docs/user_manual/index.md)** and **[MCP Reference](docs/mcp-reference.md)**.\n\n## 🚀 Getting Started\n\n### Quickstart for IDEs (Zero Install with `uvx`)\n\nFor the fastest way to integrate DroidMind with an MCP-compatible IDE (like Cursor), you can configure it to run DroidMind directly from its GitHub repository using `uvx`. This method **does not require you to manually clone or install DroidMind first**.\n\nAdd the following to your IDE's MCP configuration (e.g., `.cursor/mcp.json` for Cursor):\n\n```json\n{\n  \"mcpServers\": {\n    \"droidmind\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"--from\",\n        \"git+https://github.com/hyperb1iss/droidmind\",\n        \"droidmind\",\n        \"--transport\",\n        \"stdio\" // The default and preferred mode for most IDE integrations\n      ]\n    }\n  }\n}\n```\n\nYour IDE will be configured to launch DroidMind on demand. Full instructions for this setup are in the **[Quick Start Guide](docs/quickstart.md#1-configure-your-ide-to-run-droidmind-via-uvx)**.\n\n### Prerequisites\n\n- Python 3.13 or higher\n- `uv` (Python package manager)\n- Android device with USB debugging enabled\n- ADB (Android Debug Bridge) installed and in your system's PATH\n\n### Installation\n\nFor detailed instructions on setting up DroidMind, including the quick IDE integration with `uvx` (covered in the Quick Start), manual installation from source, or using Docker, please see our comprehensive **[Installation Guide](docs/installation.md)**.\n\n### Running DroidMind\n\nHow you run DroidMind depends on your setup:\n\n- **IDE Integration (via `uvx`)**: Your IDE automatically manages running DroidMind as configured in its MCP settings (e.g., `mcp.json`). See the [Quick Start Guide](docs/quickstart.md).\n- **Manual Installation**: After installing from source, you can run DroidMind directly.\n  - **Stdio (for direct terminal interaction or some IDE setups):**\n    ```bash\n    droidmind --transport stdio\n    ```\n  - **SSE (for web UIs or AI assistants like Claude Desktop):**\n    ```bash\n    droidmind --transport sse\n    ```\n    This usually starts a server at `sse://localhost:4256/sse`.\n- **Docker**: Refer to the [Docker Guide](docs/docker.md) for commands to run DroidMind in a container.\n\nRefer to the **[Installation Guide](docs/installation.md)** for more details on running DroidMind in different environments.\n\n## 🐳 Running with Docker\n\nDroidMind can also be run using Docker for a consistent, containerized environment. This is particularly useful for deployment and isolating dependencies.\n\nFor comprehensive instructions on building the Docker image and running DroidMind in a container with `stdio` or `SSE` transport, including notes on ADB device access, please refer to our **[Docker Guide](docs/docker.md)**.\n\n## 🔮 Example AI Assistant Queries\n\nWith an AI assistant connected to DroidMind, you can make requests like:\n\n- \"List all connected Android devices and show their properties.\"\n- \"Take a screenshot of my Pixel.\"\n- \"Install this APK on `emulator-5554`.\"\n- \"Show me the recent crash logs from `your_device_serial`.\"\n- \"Tap the 'Next' button on the current screen of `emulator-5554`.\"\n\nFor more inspiration, check out our **[Example Queries and Workflows](docs/user_manual/example_queries.md)** in the User Manual.\n\n## 🔒 Security\n\nDroidMind incorporates a security framework to protect your devices:\n\n- **Command Validation & Sanitization**\n- **Risk Assessment Categorization**\n- **Protected Path Operations**\n- **Comprehensive Logging**\n\nHigh-risk operations are flagged, and critical ones are blocked by default. Learn more in our **[Security Considerations](docs/user_manual/security.md)** chapter.\n\n## 💻 Development\n\nDroidMind uses `uv` for dependency management and development workflows.\n\n```bash\n# Install/update dependencies (after cloning and activating .venv)\nuv pip install -e .[dev,sse]\n\n# Run tests\npytest\n\n# Run linting\nruff check .\n\n# Run type checking\npyright # Ensure pyright is installed or use ruff's type checking capabilities\n```\n\n## 🤝 Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n1.  Fork the repository.\n2.  Create your feature branch (`git checkout -b feature/amazing-feature`).\n3.  Set up your development environment with `uv`.\n4.  Make your changes.\n5.  Run tests, linting, and type checking.\n6.  Commit your changes (`git commit -m 'Add some amazing feature'`).\n7.  Push to the branch (`git push origin feature/amazing-feature`).\n8.  Open a Pull Request.\n\n## 📝 License\n\nThis project is licensed under the Apache License - see the [LICENSE](LICENSE) file for details.\n\n---\n\n<div align=\"center\">\n\nCreated by [Stefanie Jane 🌠](https://github.com/hyperb1iss)\n\nIf you find DroidMind useful, [buy me a Monster Ultra Violet ⚡️](https://ko-fi.com/hyperb1iss)\n\n</div>\n",
+  "category": "Development",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "droidmind-uvx-stdio": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/hyperb1iss/droidmind", "droidmind", "--transport", "stdio"],
+        "env": {}
+      },
+      "droidmind-stdio": {
+        "command": "droidmind",
+        "args": ["--transport", "stdio"],
+        "env": {}
+      },
+      "droidmind-sse": {
+        "command": "droidmind",
+        "args": ["--transport", "sse"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hyperb1iss",
+    "repo": "droidmind",
+    "url": "https://github.com/hyperb1iss/droidmind",
+    "name": "hyperb1iss__droidmind",
+    "path": null,
+    "stars": 228,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "bdf54d1c715bceb35665a03bfeecee0923516db9"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.856Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "rich",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 8
+    },
+    {
+      "name": "starlette",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "rich-gradient",
+      "importance": 6
+    },
+    {
+      "name": "aiofiles",
+      "importance": 7
+    },
+    {
+      "name": "pillow",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"droidmind\"\nversion = \"0.3.1\"\ndescription = \"Control Android devices with MCP\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\nlicense = { file = \"LICENSE\" }\nauthors = [{ name = \"Stefanie Jane\", email = \"stef@hyperbliss.tech\" }]\nkeywords = [\"mcp\", \"android\", \"ai\", \"llm\", \"claude\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: Apache Software License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.13\",\n]\n# Dependencies organized by category\ndependencies = [\n    # Core MCP protocol\n    \"mcp[cli]>=1.8.1\",\n    # UI and display\n    \"rich>=14.0.0\",\n    # Networking and HTTP\n    \"httpx>=0.28.1\",\n    # Server components\n    \"sse-starlette>=2.3.5\",\n    \"starlette>=0.46.1\",\n    \"uvicorn>=0.34.2\",\n    \"rich-gradient>=0.2.0\",\n    # Async file operations\n    \"aiofiles>=23.2.1\",\n    \"pillow>=11.2.1\",\n]\n\n[dependency-groups]\ndev = [\n    # Testing\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=0.26.0\",\n    \"pytest-cov>=6.1.1\",\n    # Linting and type checking\n    \"pylint>=3.3.7\",\n    \"ruff>=0.11.9\",\n    \"wcwidth>=0.2.13\",\n    \"tomlkit>=0.13.2\",\n    \"colorama>=0.4.6\",\n    \"pyright>=1.1.400\",\n    \"mkdocs>=1.6.1\",\n    \"mkdocs-material>=9.6.14\",\n    \"mkdocstrings[python]>=0.29.1\",\n    \"mkdocs-awesome-pages-plugin>=2.10.1\",\n    \"mkdocs-roamlinks-plugin>=0.3.2\",\n    \"mkdocs-mermaid2-plugin>=1.2.1\",\n]\nsse = [\"uvicorn>=0.27.0\", \"starlette>=0.46.0\"]\n\n[project.urls]\nHomepage = \"https://github.com/hyperb1iss/droidmind\"\nIssues = \"https://github.com/hyperb1iss/droidmind/issues\"\nDocumentation = \"https://github.com/hyperb1iss/droidmind#readme\"\n\n[project.scripts]\ndroidmind = \"droidmind.server:main\"\ndroidmind-client = \"droidmind.client:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"droidmind\"]\n\n# Testing configuration\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\naddopts = \"\"\"\n    -v\n    --tb=short\n\"\"\"\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\n\n# Type checking configuration\n[tool.pyright]\ninclude = [\"droidmind\", \"tests\", \"scripts\"]\nexclude = [\".venv\", \"docs\", \"**/__pycache__\", \"**/node_modules\", \"**/.*\"]\npythonVersion = \"3.13\"\npythonPlatform = \"All\"\ntypeCheckingMode = \"standard\"\n\n# Code formatting and linting configuration\n[tool.ruff]\n# General settings\nline-length = 120\ntarget-version = \"py312\"\nsrc = [\"droidmind\", \"tests\", \"scripts\"]\nextend-exclude = [\".venv\", \"docs\"]\n\n[tool.ruff.lint]\n# Rules to enable\nselect = [\n    # Core rules\n    \"E\",   # pycodestyle errors\n    \"W\",   # pycodestyle warnings\n    \"F\",   # pyflakes\n    \"I\",   # isort\n    \"C\",   # flake8-comprehensions\n    \"B\",   # flake8-bugbear\n    \"N\",   # pep8-naming\n    \"UP\",  # pyupgrade\n    \"RUF\", # ruff-specific rules\n    \"PT\",  # pytest style\n    \"SIM\", # simplify\n\n    # Additional valuable rules for a server application\n    \"ASYNC\", # async/await best practices\n    \"BLE\",   # blind except handling\n    \"DTZ\",   # datetime handling\n    \"G\",     # logging format string issues\n    \"ICN\",   # import conventions\n    \"PGH\",   # pygrep hooks\n    \"PIE\",   # misc. linting\n    \"PL\",    # pylint rules ported to ruff\n    \"RET\",   # return value consistency\n    \"RSE\",   # raise statement formatting\n    \"S\",     # bandit (security) - important for command execution!\n    \"SLF\",   # private member access\n    \"TRY\",   # try-except best practices\n    \"COM\",   # trailing comma enforcement (except COM812 which conflicts with formatter)\n    \"ERA\",   # eradicate (commented out code)\n    \"T20\",   # print statements\n    \"ARG\",   # unused arguments\n]\n\n# Rules to ignore\nignore = [\n    # Complexity - handled by pylint\n    \"C901\",    # Function is too complex\n    \"PLR0911\", # Too many return statements\n    \"PLR0912\", # Too many branches\n    \"PLR0913\", # Too many arguments\n    \"PLR0915\", # Too many statements\n    \"PLR2004\", # Magic value in comparison\n\n    # Stylistic preferences\n    \"RUF012\", # Mutable class attributes should be annotated with typing.ClassVar\n\n    # Noise reduction - warnings that often produce false positives\n    \"PLC0414\", # Import alias does not rename variable\n    \"PLR0904\", # Too many public methods\n    \"PLW0603\", # Global statement usage\n    \"PLW2901\", # Outer loop variable overwritten\n    \"PT011\",   # Too broad pytest.raises without match\n    \"SIM102\",  # Nested if-statements (sometimes better for readability)\n    \"SIM108\",  # Use ternary instead of if-else (often less readable)\n    \"TRY003\",  # Avoid long messages in exceptions\n\n    # User-requested suppressions\n    \"G004\",   # Don't warn about f-strings in logging\n    \"PGH003\", # Don't warn about unspecific # type: ignore comments\n    \"RET502\", # Don't warn about implicit return None\n    \"RET503\", # Don't warn about missing explicit return\n    \"RET505\", # Don't warn about elif after return\n    \"TRY300\", # Don't suggest moving return to else block\n    \"TRY301\", # Don't suggest abstracting raise to inner function\n    \"TRY401\", # Don't warn about redundant exception in logging.exception\n\n    # Security exceptions that make sense for this project\n    \"S101\", # Use of assert detected (fine for tests)\n\n    # Rule that conflicts with the formatter\n    \"COM812\", # Missing trailing comma in collection of items\n]\n\n# Import organization settings\n[tool.ruff.lint.isort]\ncombine-as-imports = true\nforce-sort-within-sections = true\nknown-first-party = [\"droidmind\"]\nsection-order = [\n    \"future\",\n    \"standard-library\",\n    \"third-party\",\n    \"first-party\",\n    \"local-folder\",\n]\n\n# File-specific rule adjustments\n[tool.ruff.lint.per-file-ignores]\n# Ignore unused imports in __init__ files\n\"__init__.py\" = [\"F401\", \"E402\"]\n\n# Allow catching blind exceptions in prompts, resources, and tools \n\"droidmind/adb.py\" = [\"BLE001\", \"ARG001\"]\n\"droidmind/prompts.py\" = [\"BLE001\", \"ARG001\"]\n\"droidmind/resources/**/*.py\" = [\"BLE001\", \"ARG001\"]\n\"droidmind/tools/**/*.py\" = [\"BLE001\", \"ARG001\"]\n\n# Allow accessing private members in server.py for MCP server access\n\"droidmind/server.py\" = [\"SLF001\"]\n\n# More relaxed rules for tests\n\"tests/**/*.py\" = [\n    \"ARG001\",  # Unused function arguments (common for fixtures)\n    \"ARG002\",  # Unused function arguments (common for fixtures)\n    \"ARG005\",  # Unused lambda arguments (common for fixtures)\n    \"E501\",    # Allow longer lines in tests (assertions can get verbose)\n    \"PIE790\",  # Allow unnecessary 'pass' statements in mocks\n    \"PLR2004\", # Allow magic numbers in tests\n    \"PT018\",   # Allow complex assertions (common in tests to check multiple conditions)\n    \"RET504\",  # Allow unnecessary assignment before return (clearer in tests)\n    \"S101\",    # Allow asserts in tests\n    \"S105\",    # Allow hardcoded passwords in variable assignments (it's just test data!)\n    \"S106\",    # Allow hardcoded passwords as arguments (it's just test data!)\n    \"S108\",    # Ignore insecure usage of temporary files\n    \"SLF001\",  # Allow private member access in tests\n    \"BLE001\",  # Allow catching blind exceptions in tests\n]\n\n# Module-specific rules\n\"droidmind/security/**/*.py\" = [\n    # Enable all security rules for security modules\n]\n\n\"droidmind/adb/**/*.py\" = [\n    # Extra security for command execution\n]\n\n\"droidmind/server/**/*.py\" = [\n    # Enable stricter async rules\n]\n\n# Format settings for consistency\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nline-ending = \"auto\"\ndocstring-code-format = true\ndocstring-code-line-length = 80\n\n# Pylint configuration - only for things Ruff can't handle\n[tool.pylint]\npy-version = \"3.13\"\njobs = 2\nmax-line-length = 120\ndisable = [\n    # Covered by Ruff\n    \"bad-indentation\",\n    \"line-too-long\",\n    \"missing-final-newline\",\n    \"trailing-whitespace\",\n    \"unnecessary-semicolon\",\n    \"missing-docstring\",\n    \"invalid-name\",\n    \"abstract-class-instantiated\",\n    \"abstract-method\",\n    \"arguments-differ\",\n    \"assignment-from-none\",\n    \"attribute-defined-outside-init\",\n    \"protected-access\",\n    \"signature-differs\",\n    \"too-few-public-methods\",\n    \"import-error\",\n    \"no-member\",\n    \"no-name-in-module\",\n    \"unused-import\",\n    \"redefined-outer-name\",\n    \"unused-argument\",\n    \"unused-variable\",\n    \"wrong-import-position\",\n    \"import-outside-toplevel\",\n    \"too-many-positional-arguments\",\n    \"fixme\",\n\n    # Additional suppressions for practicality\n    \"broad-except\",\n]\n\n# Enable only the high-value checks that Ruff doesn't cover\nenable = [\n    \"use-symbolic-message-instead\",\n    \"useless-suppression\",\n    \"duplicate-code\",\n]\n\n[tool.pylint.basic]\ngood-names = [\"i\", \"j\", \"k\", \"ex\", \"id\", \"fd\", \"_\"]\n\n[tool.pylint.design]\nmax-parents = 15\nmax-returns = 30\nmax-branches = 30\nmax-statements = 60\nmax-attributes = 20\nmax-locals = 25\nmax-args = 10\nmax-nested-blocks = 8\n"
+}

@@ -1,0 +1,152 @@
+{
+  "name": "mladensu__cli-mcp-server",
+  "display_name": "cli-mcp-server",
+  "description": "Command line interface for MCP clients with secure execution and customizable security policies",
+  "author": {
+    "name": "MladenSU"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["cli-mcp-server"],
+    "env": {
+      "ALLOWED_DIR": "${user_config.allowed_dir}",
+      "ALLOWED_COMMANDS": "${user_config.allowed_commands}",
+      "ALLOWED_FLAGS": "${user_config.allowed_flags}",
+      "MAX_COMMAND_LENGTH": "${user_config.max_command_length}",
+      "COMMAND_TIMEOUT": "${user_config.command_timeout}",
+      "ALLOW_SHELL_OPERATORS": "${user_config.allow_shell_operators}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "allowed_dir": {
+      "type": "directory",
+      "title": "Allowed Directory",
+      "description": "Base directory for command execution.",
+      "required": true
+    },
+    "allowed_commands": {
+      "type": "string",
+      "title": "Allowed Commands",
+      "description": "Comma-separated list of allowed commands or 'all'.",
+      "required": false,
+      "default": "ls,cat,pwd"
+    },
+    "allowed_flags": {
+      "type": "string",
+      "title": "Allowed Flags",
+      "description": "Comma-separated list of allowed flags or 'all'.",
+      "required": false,
+      "default": "-l,-a,--help"
+    },
+    "max_command_length": {
+      "type": "number",
+      "title": "Maximum Command Length",
+      "description": "Maximum command string length.",
+      "required": false,
+      "default": 1024,
+      "min": 1
+    },
+    "command_timeout": {
+      "type": "number",
+      "title": "Command Timeout (seconds)",
+      "description": "Command execution timeout in seconds.",
+      "required": false,
+      "default": 30,
+      "min": 1
+    },
+    "allow_shell_operators": {
+      "type": "boolean",
+      "title": "Allow Shell Operators",
+      "description": "Allow shell operators (&&, ||, |, >, etc.).",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# CLI MCP Server\n\n---\n\nA secure Model Context Protocol (MCP) server implementation for executing controlled command-line operations with\ncomprehensive security features.\n\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)\n![MCP Protocol](https://img.shields.io/badge/MCP-Compatible-green)\n[![smithery badge](https://smithery.ai/badge/cli-mcp-server)](https://smithery.ai/protocol/cli-mcp-server)\n[![Python Tests](https://github.com/MladenSU/cli-mcp-server/actions/workflows/python-tests.yml/badge.svg)](https://github.com/MladenSU/cli-mcp-server/actions/workflows/python-tests.yml)\n\n<a href=\"https://glama.ai/mcp/servers/q89277vzl1\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/q89277vzl1/badge\" /></a>\n\n---\n\n# Table of Contents\n\n1. [Overview](#overview)\n2. [Features](#features)\n3. [Configuration](#configuration)\n4. [Available Tools](#available-tools)\n    - [run_command](#run_command)\n    - [show_security_rules](#show_security_rules)\n5. [Usage with Claude Desktop](#usage-with-claude-desktop)\n    - [Development/Unpublished Servers Configuration](#developmentunpublished-servers-configuration)\n    - [Published Servers Configuration](#published-servers-configuration)\n6. [Security Features](#security-features)\n7. [Error Handling](#error-handling)\n8. [Development](#development)\n    - [Prerequisites](#prerequisites)\n    - [Building and Publishing](#building-and-publishing)\n    - [Debugging](#debugging)\n9. [License](#license)\n\n---\n\n## Overview\n\nThis MCP server enables secure command-line execution with robust security measures including command whitelisting, path\nvalidation, and execution controls. Perfect for providing controlled CLI access to LLM applications while maintaining security.\n\n## Features\n\n- 🔒 Secure command execution with strict validation\n- ⚙️ Configurable command and flag whitelisting with 'all' option\n- 🛡️ Path traversal prevention and validation\n- 🚫 Shell operator injection protection\n- ⏱️ Execution timeouts and length limits\n- 📝 Detailed error reporting\n- 🔄 Async operation support\n- 🎯 Working directory restriction and validation\n\n## Configuration\n\nConfigure the server using environment variables:\n\n| Variable             | Description                                          | Default            |\n|---------------------|------------------------------------------------------|-------------------|\n| `ALLOWED_DIR`       | Base directory for command execution (Required)      | None (Required)   |\n| `ALLOWED_COMMANDS`  | Comma-separated list of allowed commands or 'all'    | `ls,cat,pwd`      |\n| `ALLOWED_FLAGS`     | Comma-separated list of allowed flags or 'all'       | `-l,-a,--help`    |\n| `MAX_COMMAND_LENGTH`| Maximum command string length                        | `1024`            |\n| `COMMAND_TIMEOUT`   | Command execution timeout (seconds)                  | `30`              |\n| `ALLOW_SHELL_OPERATORS` | Allow shell operators (&&, \\|\\|, \\|, >, etc.)    | `false`           |\n\nNote: Setting `ALLOWED_COMMANDS` or `ALLOWED_FLAGS` to 'all' will allow any command or flag respectively.\n\n## Installation\n\nTo install CLI MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/cli-mcp-server):\n\n```bash\nnpx @smithery/cli install cli-mcp-server --client claude\n```\n\n## Available Tools\n\n### run_command\n\nExecutes whitelisted CLI commands within allowed directories.\n\n**Input Schema:**\n```json\n{\n  \"command\": {\n    \"type\": \"string\",\n    \"description\": \"Single command to execute (e.g., 'ls -l' or 'cat file.txt')\"\n  }\n}\n```\n\n**Security Notes:**\n- Shell operators (&&, |, >, >>) are not supported by default, but can be enabled with `ALLOW_SHELL_OPERATORS=true`\n- Commands must be whitelisted unless ALLOWED_COMMANDS='all'\n- Flags must be whitelisted unless ALLOWED_FLAGS='all'\n- All paths are validated to be within ALLOWED_DIR\n\n### show_security_rules\n\nDisplays current security configuration and restrictions, including:\n- Working directory\n- Allowed commands\n- Allowed flags\n- Security limits (max command length and timeout)\n\n## Usage with Claude Desktop\n\nAdd to your `~/Library/Application\\ Support/Claude/claude_desktop_config.json`:\n\n> Development/Unpublished Servers Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"cli-mcp-server\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"<path/to/the/repo>/cli-mcp-server\",\n        \"run\",\n        \"cli-mcp-server\"\n      ],\n      \"env\": {\n        \"ALLOWED_DIR\": \"</your/desired/dir>\",\n        \"ALLOWED_COMMANDS\": \"ls,cat,pwd,echo\",\n        \"ALLOWED_FLAGS\": \"-l,-a,--help,--version\",\n        \"MAX_COMMAND_LENGTH\": \"1024\",\n        \"COMMAND_TIMEOUT\": \"30\",\n        \"ALLOW_SHELL_OPERATORS\": \"false\"\n      }\n    }\n  }\n}\n```\n\n> Published Servers Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"cli-mcp-server\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"cli-mcp-server\"\n      ],\n      \"env\": {\n        \"ALLOWED_DIR\": \"</your/desired/dir>\",\n        \"ALLOWED_COMMANDS\": \"ls,cat,pwd,echo\",\n        \"ALLOWED_FLAGS\": \"-l,-a,--help,--version\",\n        \"MAX_COMMAND_LENGTH\": \"1024\",\n        \"COMMAND_TIMEOUT\": \"30\",\n        \"ALLOW_SHELL_OPERATORS\": \"false\"\n      }\n    }\n  }\n}\n```\n> In case it's not working or showing in the UI, clear your cache via `uv clean`.\n\n## Security Features\n\n- ✅ Command whitelist enforcement with 'all' option\n- ✅ Flag validation with 'all' option\n- ✅ Path traversal prevention and normalization\n- ✅ Shell operator blocking (with opt-in support via `ALLOW_SHELL_OPERATORS=true`)\n- ✅ Command length limits\n- ✅ Execution timeouts\n- ✅ Working directory restrictions\n- ✅ Symlink resolution and validation\n\n## Error Handling\n\nThe server provides detailed error messages for:\n\n- Security violations (CommandSecurityError)\n- Command timeouts (CommandTimeoutError)\n- Invalid command formats\n- Path security violations\n- Execution failures (CommandExecutionError)\n- General command errors (CommandError)\n\n## Development\n\n### Prerequisites\n\n- Python 3.10+\n- MCP protocol library\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n    ```bash\n    uv sync\n    ```\n\n2. Build package distributions:\n    ```bash\n    uv build\n    ```\n\n   > This will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n   ```bash\n   uv publish --token {{YOUR_PYPI_API_TOKEN}}\n   ```\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with\nthis command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory {{your source code local directory}}/cli-mcp-server run cli-mcp-server\n```\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n---\n\nFor more information or support, please open an issue on the project repository.",
+  "category": "CLI Tools",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cli-mcp-server-dev": {
+        "command": "uv",
+        "args": ["--directory", "<path/to/the/repo>/cli-mcp-server", "run", "cli-mcp-server"],
+        "env": {
+          "ALLOWED_DIR": "</your/desired/dir>",
+          "ALLOWED_COMMANDS": "ls,cat,pwd,echo",
+          "ALLOWED_FLAGS": "-l,-a,--help,--version",
+          "MAX_COMMAND_LENGTH": "1024",
+          "COMMAND_TIMEOUT": "30",
+          "ALLOW_SHELL_OPERATORS": "false"
+        }
+      },
+      "cli-mcp-server-published": {
+        "command": "uvx",
+        "args": ["cli-mcp-server"],
+        "env": {
+          "ALLOWED_DIR": "</your/desired/dir>",
+          "ALLOWED_COMMANDS": "ls,cat,pwd,echo",
+          "ALLOWED_FLAGS": "-l,-a,--help,--version",
+          "MAX_COMMAND_LENGTH": "1024",
+          "COMMAND_TIMEOUT": "30",
+          "ALLOW_SHELL_OPERATORS": "false"
+        }
+      },
+      "cli-mcp-server-inspector": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "{{your source code local directory}}/cli-mcp-server",
+          "run",
+          "cli-mcp-server"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "MladenSU",
+    "repo": "cli-mcp-server",
+    "url": "https://github.com/MladenSU/cli-mcp-server",
+    "name": "mladensu__cli-mcp-server",
+    "path": null,
+    "stars": 142,
+    "contributors": 4,
+    "issues": 7,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "5d30d7024f9e2da40ca09d270a710292bc0b8029"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.928Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"cli-mcp-server\"\nversion = \"0.2.5\"\ndescription = \"Command line interface for MCP clients with secure execution and customizable security policies\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\"mcp>=1.10.1\"]\nauthors = [\n    { name = \"Mladen\", email = \"fangs-lever6n@icloud.com\" },\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\ncli-mcp-server = \"cli_mcp_server:main\"\n\n[project.urls]\nHomepage = \"https://github.com/MladenSU/cli-mcp-server\"\nDocumentation = \"https://github.com/MladenSU/cli-mcp-server#readme\"\nRepository = \"https://github.com/MladenSU/cli-mcp-server.git\"\n\"Bug Tracker\" = \"https://github.com/MladenSU/cli-mcp-server/issues\""
+}

@@ -1,0 +1,210 @@
+{
+  "name": "coding",
+  "display_name": "Archestra coding mcp server",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCA5OTQgOTUzIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgogIDxyZWN0IHdpZHRoPSI5OTMuOTU4IiBoZWlnaHQ9Ijk1Mi41NDMiIHJ4PSIyMDQuOTIiIGZpbGw9ImJsYWNrIi8+CiAgPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0zOTAuODcxIDY2NC44MThDNDI3LjY4IDY2NC44MTggNDYwLjYyOSA2NDEuOTg1IDQ3My41NTMgNjA3LjUxOUw1NjUuMjM4IDM2My4wMjZDNTg2Ljg4NyAzMDUuMjk2IDU0NC4yMTEgMjQzLjcxNSA0ODIuNTU2IDI0My43MTVDNDQ1Ljc0NyAyNDMuNzE1IDQxMi43OTggMjY2LjU0OCAzOTkuODc0IDMwMS4wMTRMMzA4LjE4OSA1NDUuNTA3QzI4Ni41NCA2MDMuMjM3IDMyOS4yMTYgNjY0LjgxOCAzOTAuODcxIDY2NC44MThaIiBmaWxsPSJ3aGl0ZSIvPgogIDxlbGxpcHNlIGN4PSI2MzguNDg3IiBjeT0iNTc3LjA5NSIgcng9Ijg3LjcyOTgiIHJ5PSI4MS4xNTAxIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K",
+  "description": "An MCP server combining semantic code editing with Git/GitHub capabilities.",
+  "author": {
+    "name": "archestra-ai"
+  },
+  "server": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/archestra-coding-agent:0.0.2"
+    ],
+    "docker_image": "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/archestra-coding-agent:0.0.2",
+    "env": {
+      "GITHUB_TOKEN": "${user_config.github_token}"
+    },
+    "type": "local"
+  },
+  "tools": [
+    {
+      "name": "activate_project",
+      "description": "Activates a project by name or path"
+    },
+    {
+      "name": "check_onboarding_performed",
+      "description": "Checks if project onboarding was completed"
+    },
+    {
+      "name": "onboarding",
+      "description": "Performs project onboarding"
+    },
+    {
+      "name": "get_current_config",
+      "description": "Print current agent configuration"
+    },
+    {
+      "name": "prepare_for_new_conversation",
+      "description": "Prepares for a new conversation"
+    },
+    {
+      "name": "find_symbol",
+      "description": "Retrieves symbols/code entities by name path pattern"
+    },
+    {
+      "name": "find_referencing_symbols",
+      "description": "Finds references to a symbol"
+    },
+    {
+      "name": "get_symbols_overview",
+      "description": "Get high-level overview of code symbols in a file"
+    },
+    {
+      "name": "rename_symbol",
+      "description": "Renames a symbol throughout the codebase"
+    },
+    {
+      "name": "replace_symbol_body",
+      "description": "Replaces the body of a symbol"
+    },
+    {
+      "name": "insert_after_symbol",
+      "description": "Inserts content after a symbol definition"
+    },
+    {
+      "name": "insert_before_symbol",
+      "description": "Inserts content before a symbol definition"
+    },
+    {
+      "name": "create_text_file",
+      "description": "Write or overwrite files"
+    },
+    {
+      "name": "read_file",
+      "description": "Reads a file or a chunk of it"
+    },
+    {
+      "name": "list_dir",
+      "description": "Lists files and directories"
+    },
+    {
+      "name": "find_file",
+      "description": "Finds files matching a file mask"
+    },
+    {
+      "name": "replace_content",
+      "description": "Replaces content matching a pattern in a file"
+    },
+    {
+      "name": "search_for_pattern",
+      "description": "Flexible search for patterns in the codebase"
+    },
+    {
+      "name": "execute_shell_command",
+      "description": "Run system commands and retrieve output"
+    },
+    {
+      "name": "list_memories",
+      "description": "List available memory files"
+    },
+    {
+      "name": "read_memory",
+      "description": "Read content from a memory file"
+    },
+    {
+      "name": "write_memory",
+      "description": "Write content to a memory file"
+    },
+    {
+      "name": "edit_memory",
+      "description": "Edit an existing memory file"
+    },
+    {
+      "name": "delete_memory",
+      "description": "Delete a memory file"
+    },
+    {
+      "name": "git_clone",
+      "description": "Clone a git repository"
+    },
+    {
+      "name": "git_status",
+      "description": "Show working tree status"
+    },
+    {
+      "name": "git_diff",
+      "description": "Show changes between commits, commit and working tree, etc"
+    },
+    {
+      "name": "git_commit",
+      "description": "Record changes to the repository"
+    },
+    {
+      "name": "git_push",
+      "description": "Update remote refs along with associated objects"
+    },
+    {
+      "name": "git_branch",
+      "description": "List, create, or delete branches"
+    },
+    {
+      "name": "github_create_pr",
+      "description": "Create a pull request on GitHub"
+    },
+    {
+      "name": "github_list_prs",
+      "description": "List pull requests in a repository"
+    },
+    {
+      "name": "github_get_issue",
+      "description": "Retrieve issue details via GitHub API"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["coding", "git", "github", "semantic-editing", "lsp", "pull-requests", "code-editing"],
+  "user_config": {
+    "github_token": {
+      "type": "string",
+      "title": "",
+      "description": "GitHub personal access token for API operations. IMPORTANT: your PAT must have the repo scope granted (for the MCP server to be able to open PRs on your behalf)",
+      "default": "",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "## Archestra Coding Agent MCP Server\n\nA custom MCP (Model Context Protocol) server combining semantic code editing with Git/GitHub operations, packaged as a Docker image for Kubernetes deployment.\n\n### Key Features\n\n#### Semantic Code Operations (from Serena)\n- Symbol-level retrieval: `find_symbol`, `find_referencing_symbols`\n- Symbol editing: `replace_symbol_body`, `insert_after_symbol`, `insert_before_symbol`\n- File operations: `create_text_file`, `read_file`\n- Shell execution: `execute_shell_command`\n- Language server support for 30+ languages via LSP\n\n#### Git Tools\n- Repository cloning and status checking\n- Diff viewing and commit staging\n- Branch creation and switching\n- Push operations to remote repositories\n\n#### GitHub Integration\n- Pull request creation and listing\n- Issue detail retrieval\n\n### Configuration\n\nRequires `GITHUB_TOKEN` environment variable for API operations. Optional `WORKSPACE_DIR` (defaults to `/workspace`) specifies the cloned repository location.\n\n### Building & Deployment\n\nThe project uses `make build` for Docker image compilation and `make push` for registry deployment. Local testing via Docker requires exposing port 9121 and mounting a workspace volume.\n\n### Installation in Archestra\n\nUsers add the server via the internal MCP catalog, create an associated profile, configure GitHub authentication, then begin development work.\n\n### Development\n\nTesting involves standard Python tooling—install requirements, run pytest, and validate MCP connectivity on the designated port.",
+  "category": "Development",
+  "quality_score": 85,
+  "github_info": {
+    "owner": "archestra-ai",
+    "repo": "archestra-coding-agent",
+    "url": "https://github.com/archestra-ai/archestra-coding-agent",
+    "name": "archestra-ai__archestra-coding-agent",
+    "path": null,
+    "stars": 0,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": "",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  }
+}

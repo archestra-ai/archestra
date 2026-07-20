@@ -1,0 +1,127 @@
+{
+  "name": "ivanamador__vercel-ai-docs-mcp",
+  "display_name": "vercel-ai-docs-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides AI-powered search and querying capabilities for the Vercel AI SDK documentation. This project enables developers to ask questions about the Vercel AI SDK and receive accurate, contextualized responses based on the official documentation.",
+  "author": {
+    "name": "IvanAmador"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/main.js"],
+    "env": {
+      "GOOGLE_GENERATIVE_AI_API_KEY": "${user_config.google_generative_ai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "google_generative_ai_api_key": {
+      "type": "string",
+      "title": "Google Generative AI API Key",
+      "description": "Your Google API key for Gemini model access.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Vercel AI SDK Documentation MCP Agent\n\nA Model Context Protocol (MCP) server that provides AI-powered search and querying capabilities for the Vercel AI SDK documentation. This project enables developers to ask questions about the Vercel AI SDK and receive accurate, contextualized responses based on the official documentation.\n\n[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green)](https://modelcontextprotocol.io)\n[![TypeScript](https://img.shields.io/badge/TypeScript-4.9+-blue.svg)](https://www.typescriptlang.org/)\n[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)\n\n## Features\n\n- **Direct Documentation Search**: Query the Vercel AI SDK documentation index directly using similarity search\n- **AI-Powered Agent**: Ask natural language questions about the Vercel AI SDK and receive comprehensive answers\n- **Session Management**: Maintain conversation context across multiple queries\n- **Automated Indexing**: Includes tools to fetch, process, and index the latest Vercel AI SDK documentation\n\n## Architecture\n\nThis system consists of several key components:\n\n1. **MCP Server**: Exposes tools via the Model Context Protocol for integration with AI assistants\n2. **DocumentFetcher**: Crawls and processes the Vercel AI SDK documentation\n3. **VectorStoreManager**: Creates and manages the FAISS vector index for semantic search\n4. **AgentService**: Provides AI-powered answers to questions using the Google Gemini model\n5. **DirectQueryService**: Offers direct semantic search of the documentation\n\n## Setup Instructions\n\n### Prerequisites\n\n- Node.js 18+\n- npm\n- A Google API key for Gemini model access\n\n### Environment Variables\n\nCreate a `.env` file in the project root with the following variables:\n\n```\nGOOGLE_GENERATIVE_AI_API_KEY=your-google-api-key-here\n```\n\nYou'll need to obtain a Google Gemini API key from the [Google AI Studio](https://makersuite.google.com/app/apikey).\n\n### Installation\n\n1. Clone the repository\n   ```\n   git clone https://github.com/IvanAmador/vercel-ai-docs-mcp.git\n   cd vercel-ai-docs-mcp-agent\n   ```\n\n2. Install dependencies\n   ```\n   npm install\n   ```\n\n3. Build the project\n   ```\n   npm run build\n   ```\n\n4. Build the documentation index\n   ```\n   npm run build:index\n   ```\n\n5. Start the MCP server\n   ```\n   npm run start\n   ```\n\n## Integration with Claude Desktop\n\n[Claude Desktop](https://www.anthropic.com/claude/download) is a powerful AI assistant that supports MCP servers. To connect the Vercel AI SDK Documentation MCP agent with Claude Desktop:\n\n1. First, install [Claude Desktop](https://www.anthropic.com/claude/download) if you don't have it already.\n\n2. Open Claude Desktop settings (via the application menu, not within the chat interface).\n\n3. Navigate to the \"Developer\" tab and click \"Edit Config\".\n\n4. Add the Vercel AI Docs MCP server to your configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"vercel-ai-docs\": {\n      \"command\": \"node\",  \n      \"args\": [\"ABSOLUTE_PATH_TO_PROJECT/dist/main.js\"],\n      \"env\": {\n        \"GOOGLE_GENERATIVE_AI_API_KEY\": \"your-google-api-key-here\"\n      }\n    }\n  }\n}\n```\n\nMake sure to replace:\n- `ABSOLUTE_PATH_TO_PROJECT` with the actual path to your project folder\n- `your-google-api-key-here` with your Google Gemini API key\n\n5. Save the config file and restart Claude Desktop.\n\n6. To verify the server is connected, look for the hammer 🔨 icon in the Claude chat interface.\n\nFor more detailed information about setting up MCP servers with Claude Desktop, visit the [MCP Quickstart Guide](https://modelcontextprotocol.io/quickstart/user).\n\n## Integration with Other MCP Clients\n\nThis MCP server is compatible with any client that implements the Model Context Protocol. Here are a few examples:\n\n### Cursor\n\n[Cursor](https://cursor.sh/) is an AI-powered code editor that supports MCP servers. To integrate with Cursor:\n\n1. Add a `.cursor/mcp.json` file to your project directory (for project-specific configuration) or a `~/.cursor/mcp.json` file in your home directory (for global configuration).\n\n2. Add the following to your configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"vercel-ai-docs\": {\n      \"command\": \"node\",  \n      \"args\": [\"ABSOLUTE_PATH_TO_PROJECT/dist/main.js\"],\n      \"env\": {\n        \"GOOGLE_GENERATIVE_AI_API_KEY\": \"your-google-api-key-here\"\n      }\n    }\n  }\n}\n```\n\nFor more information about using MCP with Cursor, refer to the [Cursor MCP documentation](https://modelcontextprotocol.io/example-clients/).\n\n## Usage\n\nThe MCP server exposes three primary tools:\n\n### 1. agent-query\n\nQuery the Vercel AI SDK documentation using an AI agent that can search and synthesize information.\n\n```json\n{\n  \"name\": \"agent-query\",\n  \"arguments\": {\n    \"query\": \"How do I use the streamText function?\",\n    \"sessionId\": \"unique-session-id\"\n  }\n}\n```\n\n### 2. direct-query\n\nPerform a direct similarity search against the Vercel AI SDK documentation index.\n\n```json\n{\n  \"name\": \"direct-query\",\n  \"arguments\": {\n    \"query\": \"streamText usage\",\n    \"limit\": 5\n  }\n}\n```\n\n### 3. clear-memory\n\nClears the conversation memory for a specific session or all sessions.\n\n```json\n{\n  \"name\": \"clear-memory\",\n  \"arguments\": {\n    \"sessionId\": \"unique-session-id\"\n  }\n}\n```\n\nTo clear all sessions, omit the sessionId parameter.\n\n## Development\n\n### Project Structure\n\n```\n├── config/              # Configuration settings\n├── core/                # Core functionality\n│   ├── indexing/        # Document indexing and vector store\n│   └── query/           # Query services (agent and direct)\n├── files/               # Storage directories\n│   ├── docs/            # Processed documentation\n│   ├── faiss_index/     # Vector index files\n│   └── sessions/        # Session data\n├── mcp/                 # MCP server and tools\n│   ├── server.ts        # MCP server implementation\n│   └── tools/           # MCP tool definitions\n├── scripts/             # Build and utility scripts\n└── utils/               # Helper utilities\n```\n\n### Build Scripts\n\n- `npm run build`: Compile TypeScript files\n- `npm run build:index`: Build the documentation index\n- `npm run dev:index`: Build and index in development mode\n- `npm run dev`: Build and start in development mode\n\n## Troubleshooting\n\n### Common Issues\n\n1. **Index not found or failed to load**\n   \n   Run `npm run build:index` to create the index before starting the server.\n\n2. **API rate limits**\n   \n   When exceeding Google API rate limits, the agent service may return errors. Implement appropriate backoff strategies.\n\n3. **Model connection issues**\n\n   Ensure your Google API key is valid and has access to the specified Gemini model.\n\n4. **Claude Desktop not showing MCP server**\n\n   - Check your configuration file for syntax errors.\n   - Make sure the path to the server is correct and absolute.\n   - Check Claude Desktop logs for errors.\n   - Restart Claude Desktop after making configuration changes.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 37,
+  "archestra_config": {
+    "client_config_permutations": {
+      "vercel-ai-docs-npm-start": {
+        "command": "npm",
+        "args": ["run", "start"],
+        "env": {}
+      },
+      "vercel-ai-docs": {
+        "command": "node",
+        "args": ["ABSOLUTE_PATH_TO_PROJECT/dist/main.js"],
+        "env": {
+          "GOOGLE_GENERATIVE_AI_API_KEY": "your-google-api-key-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "IvanAmador",
+    "repo": "vercel-ai-docs-mcp",
+    "url": "https://github.com/IvanAmador/vercel-ai-docs-mcp",
+    "name": "ivanamador__vercel-ai-docs-mcp",
+    "path": null,
+    "stars": 32,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "074f961ff84fbe160de4186d17e8bf7856cdf627"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.615Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@ai-sdk/google",
+      "importance": 9
+    },
+    {
+      "name": "@langchain/community",
+      "importance": 8
+    },
+    {
+      "name": "@langchain/core",
+      "importance": 9
+    },
+    {
+      "name": "@xenova/transformers",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "ai",
+      "importance": 9
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "cheerio",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 3
+    },
+    {
+      "name": "faiss-node",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"vercel-ai-docs-mcp\",\n    \"version\": \"0.0.1\",\n    \"description\": \"MCP Server to query Vercel AI SDK documentation\",\n    \"main\": \"dist/main.js\",\n    \"type\": \"module\",\n    \"scripts\": {\n      \"build\": \"tsc\",\n      \"build:index\": \"node dist/scripts/buildIndex.js\",\n      \"start\": \"node dist/main.js\",\n      \"dev:index\": \"npm run build && npm run build:index\",\n      \"dev\": \"npm run build && npm start\"\n    },\n    \"keywords\": [\n      \"mcp\",\n      \"ai\",\n      \"vercel\",\n      \"langchain\",\n      \"faiss\",\n      \"agent\"\n    ],\n    \"author\": \"Ivan Amador\",\n    \"license\": \"MIT\",\n    \"dependencies\": {\n      \"@ai-sdk/google\": \"^1.2.5\",\n      \"@langchain/community\": \"^0.3.38\",\n      \"@langchain/core\": \"^0.3.43\",\n      \"@xenova/transformers\": \"^2.17.2\",\n      \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n      \"ai\": \"^4.2.10\",\n      \"axios\": \"^1.8.4\",\n      \"cheerio\": \"^1.0.0\",\n      \"dotenv\": \"^16.4.7\",\n      \"faiss-node\": \"^0.5.1\",\n      \"zod\": \"^3.24.2\"\n    },\n    \"devDependencies\": {\n      \"@types/node\": \"^20.14.10\",\n      \"typescript\": \"^5.5.3\"\n    }\n  }"
+}

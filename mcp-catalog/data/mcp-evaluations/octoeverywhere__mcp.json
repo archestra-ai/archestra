@@ -1,0 +1,79 @@
+{
+  "name": "octoeverywhere__mcp",
+  "display_name": "mcp",
+  "description": "A free 3D Printing MCP server that allows for getting live printer state, webcam snapshots, and printer control.",
+  "author": {
+    "name": "OctoEverywhere"
+  },
+  "server": {
+    "command": "",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "server_url": {
+      "type": "string",
+      "title": "OctoEverywhere MCP Server URL",
+      "description": "The endpoint URL for the OctoEverywhere cloud MCP server.",
+      "required": true,
+      "default": "https://octoeverywhere.com/mcp"
+    },
+    "access_token": {
+      "type": "string",
+      "title": "Access Token",
+      "description": "Your unique access token, available from the OctoEverywhere MCP setup page.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "<p align=\"center\"><img src=\"https://octoeverywhere.com/img/logo.png\" alt=\"OctoEverywhere's Logo\" style=\"width:100px\" /></p>\n<h1 align=\"center\" style=\"margin-bottom:20px\"><a href=\"https://octoeverywhere.com/mcp?utm_campaign=mcp_repo&utm_content=header&utm_source=github\">MCP For 3D Printing</a></h1>\n\n[A free, private, and secure cloud MCP server for 3D printer access, monitoring, and control.](https://octoeverywhere.com/mcp?utm_campaign=mcp_repo&utm_content=intro&utm_source=github) OctoEverywhere's 3D printing MCP server enables access to your 3D printers via the Model Context Protocol (MCP) for AI chatbots, agents, and workflows. Link your 3D printer to OctoEverywhere, grab your MCP access token, and you're ready to chat!\n\n## Features\n\n- 🚀 Live 3D printer status and print information, including:\n    - Printer state and status information.\n    - Print progress, elapsed time, and estimated time to completion.\n    - [Gadget AI](https://octoeverywhere.com/gadget?utm_campaign=mcp_repo&utm_content=gadget&utm_source=github) print failure detection status.\n    - Hotend, bed, and chamber temperatures.\n    - Print file information, including the file name.\n    - Current layer and total layer information.\n- 📷 Live webcam snapshots\n    - Supports multi-camera setups.\n- ⏸️ Printer control including:\n    - Pausing, resuming, and canceling print jobs.\n- ❤️ Works with any 3D printer, including:\n    - OctoPrint\n    - Klipper\n    - Bambu Lab\n    - Creality\n    - Prusa\n    - AnyCubic\n    - Elegoo\n    - And more\n- 🔒 Secure cloud MCP server:\n    - Accessible from anywhere, in your  home or over the internet.\n    - Easy setup - no local setup required.\n    - Secure and private remote access.\n- 😍 Free for the entire 3D printing community:\n    - [OctoEverywhere](https://octoeverywhere.com/?utm_campaign=mcp_repo&utm_content=community&utm_source=github) builds awesome cloud tools free for the entire community!\n\n\n## Try It Now\n\n1) [Create an OctoEverywhere account](https://octoeverywhere.com/getstarted?utm_campaign=mcp_repo&utm_content=try_it_now&utm_source=github) and link your 3D printer.\n2) [Visit the OctoEverywhere MCP setup page](https://octoeverywhere.com/mcp?utm_campaign=mcp_repo&utm_content=mcp_setup&utm_source=github) to get your Access Token.\n3) Use the OctoEverywhere MCP server URL and Access Token with any AI agent!\n\n## What's OctoEverywhere?\n\nOctoEverywhere cloud empowers your [OctoPrint](https://octoeverywhere.com/?utm_campaign=mcp_repo&utm_content=octoprint&utm_source=github), [Klipper](https://octoeverywhere.com/klipper?utm_campaign=mcp_repo&utm_content=klipper&utm_source=github), [Bambu Lab](https://octoeverywhere.com/bambu?utm_campaign=mcp_repo&utm_content=bambu&utm_source=github), and [Elegoo Centauri](https://octoeverywhere.com/elegoo-centauri?utm_campaign=mcp_repo&utm_content=elegoo&utm_source=github) 3D printers with **free, private, unlimited remote access, AI print failure detection, and more!** OctoEverywhere is developed by the maker community for the maker community.\n\n[Learn More About OctoEverywhere](https://octoeverywhere.com/?utm_campaign=mcp_repo&utm_content=learn_more&utm_source=github)\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OctoEverywhere",
+    "repo": "mcp",
+    "url": "https://github.com/OctoEverywhere/mcp",
+    "name": "octoeverywhere__mcp",
+    "path": null,
+    "stars": 9,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "6db5e68d1acf72a42600a68f665a832fa5181479"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.321Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

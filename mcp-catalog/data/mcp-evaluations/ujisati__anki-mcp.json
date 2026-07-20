@@ -1,0 +1,79 @@
+{
+  "name": "ujisati__anki-mcp",
+  "display_name": "anki-mcp",
+  "description": "the best anki mcp",
+  "author": {
+    "name": "ujisati"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "anki-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# anki-mcp\n\nA Model Context Protocol (MCP) server for interacting with Anki flashcards via the AnkiConnect add-on. This server exposes AnkiConnect actions as MCP tools, organized into logical services.\n\n## Prerequisites\n\n- Anki desktop application\n- AnkiConnect add-on installed and configured in Anki\n- Python 3.8+\n- `uv` (for running and installing dependencies, optional but recommended)\n\n## Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/ujisati/anki-mcp.git\ncd anki-mcp\n\n# Install dependencies (using uv)\nuv pip install -e .\n```\n\n## Usage\n\nTo run the MCP server:\n\n```bash\nuv run anki-mcp\n```\n\nThe server will start and listen for MCP requests, typically interfacing with AnkiConnect at `http://127.0.0.1:8765`.\n\n### Inspecting the Server\n\nYou can use the MCP Inspector to view the available tools:\n\n```bash\nnpx @modelcontextprotocol/inspector uv run anki-mcp\n```\n\n## Configuration for MCP Clients\n\nIf you're integrating this with an MCP client (like an AI assistant framework), you'll need to configure it to find this server. Here's an example configuration snippet:\n\n```json\n{\n    \"mcpServers\": {\n        \"anki\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"run\", // uv will find anki-mcp if run from project root\n                \"anki-mcp\"\n            ],\n            // If running from outside the project directory, specify the path:\n            // \"args\": [\n            //     \"--directory\",\n            //     \"/ABSOLUTE/PATH/TO/anki-mcp\", // Replace with actual path\n            //     \"run\",\n            //     \"anki-mcp\"\n            // ]\n        }\n    }\n}\n```\n\n## Available MCP Tools\n\nThis MCP server provides access to Anki functionality through tools grouped by services. The tool names correspond directly to AnkiConnect actions.\n\n### Deck Service (`deck.*`)\n- **`deck.deckNamesAndIds`**: Gets the complete list of deck names and their respective IDs.\n- **`deck.getDeckConfig`**: Gets the configuration group object for a given deck name.\n- **`deck.deckNames`**: Gets the complete list of deck names for the current user.\n- **`deck.createDeck`**: Creates a new empty deck.\n- **`deck.deleteDecks`**: Deletes specified decks.\n- **`deck.changeDeck`**: Moves cards to a different deck.\n- **`deck.saveDeckConfig`**: Saves a deck configuration group.\n\n### Note Service (`note.*`)\n- **`note.findNotes`**: Returns note IDs for a given Anki search query.\n- **`note.notesInfo`**: Returns information for specified note IDs.\n- **`note.getNoteTags`**: Gets the tags for a specific note ID.\n- **`note.addNote`**: Creates a new note.\n- **`note.updateNoteFields`**: Modifies the fields of an existing note.\n- **`note.deleteNotes`**: Deletes specified notes.\n- **`note.addNotes`**: Creates multiple notes.\n- **`note.addTags`**: Adds tags to specified notes.\n- **`note.removeTags`**: Removes tags from specified notes.\n- **`note.updateNote`**: Modifies the fields and/or tags of an existing note.\n\n### Card Service (`card.*`)\n- **`card.findCards`**: Returns card IDs for a given Anki search query.\n- **`card.cardsInfo`**: Returns information for specified card IDs.\n- **`card.cardsToNotes`**: Returns note IDs for given card IDs.\n- **`card.areSuspended`**: Checks if specified cards are suspended.\n- **`card.cardsModTime`**: Returns modification time for specified card IDs.\n- **`card.suspended`**: Checks if a single card is suspended.\n- **`card.suspend`**: Suspends specified cards.\n- **`card.unsuspend`**: Unsuspends specified cards.\n- **`card.setSpecificValueOfCard`**: Sets specific values of a single card (use with caution).\n\n### Model Service (`model.*`) (Note Types)\n- **`model.modelNamesAndIds`**: Gets the complete list of model (note type) names and their IDs.\n- **`model.findModelsByName`**: Gets model definitions for provided model names.\n- **`model.modelFieldNames`**: Gets field names for a given model name.\n- **`model.modelTemplates`**: Gets template content for each card of a specified model.\n- **`model.modelStyling`**: Gets CSS styling for a given model name.\n- **`model.createModel`**: Creates a new model (note type).\n- **`model.updateModelTemplates`**: Modifies templates of an existing model.\n- **`model.updateModelStyling`**: Modifies CSS styling of an existing model.\n- **`model.modelFieldAdd`**: Adds a new field to an existing model.\n- **`model.modelFieldRemove`**: Removes a field from an existing model.\n\n### Media Service (`media.*`)\n- **`media.retrieveMediaFile`**: Retrieves the base64-encoded contents of a media file.\n- **`media.getMediaFilesNames`**: Gets names of media files matching a glob pattern.\n- **`media.storeMediaFile`**: Stores a media file (from base64, path, or URL).\n- **`media.deleteMediaFile`**: Deletes a specified media file.\n\n## Development\n\nTo set up for development:\n\n```bash\nuv sync\nsource .venv/bin/activate\n\nuv pip install -e .\n```\n\n### Running Tests\n\n```bash\npytest\n```\n\n## Todo\n\n- [ ] Finish adding all AnkiConnect tools\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "anki-mcp": {
+        "command": "uv",
+        "args": ["run", "anki-mcp"],
+        "env": {}
+      },
+      "anki-mcp-with-directory": {
+        "command": "uv",
+        "args": ["--directory", "/ABSOLUTE/PATH/TO/anki-mcp", "run", "anki-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ujisati",
+    "repo": "anki-mcp",
+    "url": "https://github.com/ujisati/anki-mcp",
+    "name": "anki-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "45cbcf7086cfb915f7a1e5b5dc6ecb5afee6bda2"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:53.253Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"anki-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"ujisati\", email = \"98663233+ujisati@users.noreply.github.com\" }\n]\nrequires-python = \">=3.11\"\ndependencies = [\n    \"fastmcp>=2.3.3\",\n    \"httpx>=0.28.1\",\n]\n\n[project.scripts]\nanki-mcp = \"anki_mcp:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=0.26.0\",\n]\n\n[tool.pytest.ini_options]\npythonpath = [\n  \".\"\n]\nasyncio_default_fixture_loop_scope = \"function\"\n"
+}

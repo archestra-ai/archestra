@@ -1,0 +1,115 @@
+{
+  "name": "kukapay__jupiter-mcp",
+  "display_name": "jupiter-mcp",
+  "description": "An MCP server for executing token swaps on the Solana blockchain using Jupiter's new Ultra API.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {
+      "SOLANA_RPC_URL": "${user_config.solana_rpc_url}",
+      "PRIVATE_KEY": "${user_config.private_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "solana_rpc_url": {
+      "type": "string",
+      "title": "Solana RPC URL",
+      "description": "The URL of the Solana RPC node to connect to.",
+      "required": true,
+      "default": "https://api.mainnet-beta.solana.com"
+    },
+    "private_key": {
+      "type": "string",
+      "title": "Solana Wallet Private Key",
+      "description": "Your base58-encoded private key for signing transactions.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Jupiter MCP Server\n\nAn MCP server for executing token swaps on the Solana blockchain using Jupiter's new Ultra API. \n\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- Fetch swap orders from Jupiter's Ultra API, combining DEX routing and RFQ (Request for Quote) for optimal pricing.\n- Execute swaps via Jupiter's Ultra API, handling slippage, priority fees, and transaction landing.\n\n\n## Prerequisites\n\n- **Node.js**: Version 18 or higher (for native `fetch` support).\n- **Solana Wallet**: A private key (base58-encoded) for signing transactions.\n- **RPC Endpoint**: Access to a Solana RPC node (e.g., `https://api.mainnet-beta.solana.com`).\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/jupiter-mcp.git\n   cd jupiter-mcp\n   ```\n\n2. **Install Dependencies**:\n   Ensure you have the MCP Server package installed along with other required dependencies:\n   ```bash\n   npm install\n   ```\n\n3. **Client Configuration**:\n\n```json\n{\n  \"mcpServers\": {\n    \"Jupiter-MCP\": {\n      \"command\": \"node\",\n      \"args\": [\"path/to/jupiter-mcp/server/index.js\"],\n      \"env\": {\n        \"SOLANA_RPC_URL\": \"solana rpc url you can access\",\n        \"PRIVATE_KEY\": \"your private key\"\n      }\n    }\n  }\n}\n```\n\n## Tools\n\n### Ultra API Tools\n- **`get-ultra-order`**:\n  - **Description**: Fetches a swap order from Jupiter's Ultra API, leveraging both DEX routing and RFQ for optimal pricing.\n  - **Inputs**: \n    - `inputMint`: Input token mint address (e.g., SOL or token pubkey).\n    - `outputMint`: Output token mint address (e.g., USDC or token pubkey).\n    - `amount`: Input amount as a string (e.g., \"1.23\").\n    - `slippageBps`: Slippage tolerance in basis points (e.g., 50 for 0.5%). \n  - **Output**: JSON with `requestId`, `transaction` (base64-encoded), `inputMint`, `outputMint`, `inAmount`, `outAmount`, `price`.\n\n- **`execute-ultra-order`**:\n  - **Description**: Requests Jupiter to execute the swap transaction on behalf of the wallet owner, handling slippage, priority fees, and transaction landing.\n  - **Inputs**: \n    - `requestId`: Unique identifier from `get-ultra-order`.\n    - `transaction`: Base64-encoded transaction from `get-ultra-order`.\n  - **Output**: JSON with `status`, `transactionId`, `slot`, `inputAmountResult`, `outputAmountResult`, `swapEvents`.\n\n## Example Interaction\n\nBelow are examples of interacting with the server using natural language prompts and expected responses:\n\n### Fetching a Swap Order\n- **Prompt**: \"Get a swap order to trade 1.23 SOL for USDC.\"\n- **Input**: \n  - Tool: `get-ultra-order`\n  - Arguments: \n    - `inputMint`: \"So11111111111111111111111111111111111111112\" (SOL)\n    - `outputMint`: \"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\" (USDC)\n    - `amount`: \"1.23\"\n    - `slippageBps`: 50\n- **Response**:\n  ```\n  {\n    \"requestId\": \"a770110b-82c9-46c8-ba61-09d955b27503\",\n    \"transaction\": \"AQAAAA...base64-encoded-transaction...==\",\n    \"inputMint\": \"So11111111111111111111111111111111111111112\",\n    \"outputMint\": \"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\",\n    \"inAmount\": \"1230000000\",\n    \"outAmount\": \"19950000\",\n    \"price\": 0.01621951219512195\n  }\n  ```\n\n### Executing a Swap\n- **Prompt**: \"Execute the swap order with request ID 'a770110b-82c9-46c8-ba61-09d955b27503' using the transaction provided.\"\n- **Input**: \n  - Tool: `execute-ultra-order`\n  - Arguments: \n    - `requestId`: \"a770110b-82c9-46c8-ba61-09d955b27503\"\n    - `transaction`: \"AQAAAA...base64-encoded-transaction...==\"\n- **Response**:\n  ```\n  {\n    \"status\": \"Success\",\n    \"transactionId\": \"5x...solana-transaction-signature...\",\n    \"slot\": 299283763,\n    \"inputAmountResult\": \"1230000000\",\n    \"outputAmountResult\": \"19950000\",\n    \"swapEvents\": [\n      {\n        \"type\": \"swap\",\n        \"inputMint\": \"So11111111111111111111111111111111111111112\",\n        \"outputMint\": \"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\",\n        \"inAmount\": \"1230000000\",\n        \"outAmount\": \"19950000\"\n      }\n    ]\n  }\n  ```\n\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n\n",
+  "category": "Finance",
+  "quality_score": 36,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Jupiter-MCP": {
+        "command": "node",
+        "args": ["path/to/jupiter-mcp/server/index.js"],
+        "env": {
+          "SOLANA_RPC_URL": "solana rpc url you can access",
+          "PRIVATE_KEY": "your private key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "jupiter-mcp",
+    "url": "https://github.com/kukapay/jupiter-mcp",
+    "name": "jupiter-mcp",
+    "path": null,
+    "stars": 19,
+    "contributors": 1,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "13643a3fb8966a9f3538bb5e20671a73bc1065d0"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.375Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@solana/spl-token",
+      "importance": 9
+    },
+    {
+      "name": "@solana/web3.js",
+      "importance": 9
+    },
+    {
+      "name": "bigint-buffer",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "undici",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"jupiter-mcp\",\n  \"version\": \"1.0.1\",\n  \"main\": \"index.js\",\n  \"homepage\": \"https://github.com/kukapay/jupiter-mcp\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"@solana/spl-token\": \"^0.4.13\",\n    \"@solana/web3.js\": \"^1.98.0\",\n    \"bigint-buffer\": \"^1.1.5\",\n    \"dotenv\": \"^16.4.7\",\n    \"undici\": \"^7.5.0\",\n    \"zod\": \"^3.24.2\"\n  }\n}\n"
+}

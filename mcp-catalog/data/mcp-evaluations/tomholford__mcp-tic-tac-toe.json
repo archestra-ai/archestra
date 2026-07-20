@@ -1,0 +1,97 @@
+{
+  "name": "tomholford__mcp-tic-tac-toe",
+  "display_name": "mcp-tic-tac-toe",
+  "description": "Play tic-tac-toe against an LLM via MCP",
+  "author": {
+    "name": "tomholford"
+  },
+  "server": {
+    "command": "${__dirname}/bin/server",
+    "args": ["-transport=stdio"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Tic-Tac-Toe\n\nA Model Context Protocol (MCP) server that enables AI assistants to play tic-tac-toe through standardized tool interfaces. Perfect for demonstrating AI-human collaboration and MCP integration.\n\n![mcp-tic-tac-toe screenshot](./mcp-tic-tac-toe-screenshot.png)\n\n## Overview\n\nThis project implements a complete tic-tac-toe game as an MCP server, allowing AI assistants like Claude to:\n- Create and manage multiple game sessions\n- Make strategic moves and analyze positions  \n- Provide game commentary and suggestions\n- Play against humans or other AIs\n\n## Quick Start\n\n### Prerequisites\n- Go 1.19+ installed\n- Claude Code or other MCP-compatible client\n\n### Installation\n```bash\ngit clone https://github.com/tomholford/mcp-tic-tac-toe\ncd mcp-tic-tac-toe\ngo mod tidy\ngo build -o bin/server cmd/server.go\n```\n\n### Basic Usage\n```bash\n# Start MCP server (stdio transport)\n./bin/server\n\n# Or specify transport method\n./bin/server -transport=sse -addr=:8080\n```\n\n## MCP Configuration\n\n### Claude Code Setup\n\n1. **Build the server:**\n   ```bash\n   go build -o bin/server cmd/server.go\n   ```\n\n2. **Add to your MCP configuration:**\n   \n   Create or edit your MCP configuration file:\n   ```bash\n   # For macOS/Linux\n   ~/.config/claude-code/mcp_servers.json\n   \n   # For Windows  \n   %APPDATA%\\claude-code\\mcp_servers.json\n   ```\n\n3. **Add the server configuration:**\n   ```json\n   {\n     \"mcpServers\": {\n       \"tic-tac-toe\": {\n         \"command\": \"/full/path/to/mcp-tic-tac-toe/bin/server\",\n         \"args\": [\"-transport=stdio\"],\n         \"env\": {}\n       }\n     }\n   }\n   ```\n\n4. **Restart Claude Code** and the tic-tac-toe tools will be available.\nc\n### Claude Desktop\n\n```json\n\"tic-tac-toe\": {\n  \"command\": \"/full/path/to/mcp-tic-tac-toe/bin/server\",\n  \"args\": [\"\"]\n}\n```\n\n## Available MCP Tools\n\nThe server exposes 8 tools for complete game management:\n\n### Game Management\n- **`new_game`** - Create a new tic-tac-toe game\n  - Optional: `game_id` (string) - Custom game identifier\n  - Returns: Game ID, starting player, initial board\n\n- **`list_games`** - Show all active game sessions  \n  - Returns: List of active game IDs\n\n- **`reset_game`** - Reset a game to initial state\n  - Required: `game_id` (string)\n  - Returns: Confirmation and fresh board\n\n### Gameplay  \n- **`make_move`** - Execute a move on the board\n  - Required: `game_id` (string), `position` (A1-C3), `player` (X/O)\n  - Returns: Updated board, game status, next player\n\n- **`get_board`** - Get current board state\n  - Required: `game_id` (string)  \n  - Returns: Board display, current player, move count\n\n- **`get_available_moves`** - List all valid moves\n  - Required: `game_id` (string)\n  - Returns: Available positions for current player\n\n### Analysis\n- **`get_status`** - Check game status and winner\n  - Required: `game_id` (string)\n  - Returns: Game status (ongoing/won/draw), winner if applicable\n\n- **`analyze_position`** - Get strategic analysis  \n  - Required: `game_id` (string)\n  - Returns: Position analysis and board state\n\n## Usage Examples\n\n### Start a New Game\n```\nAI: Use the new_game tool\n→ New game created with ID: game-a1b2c3d4\n  Starting player: X\n  Initial board:\n    A B C\n  1 · · ·\n  2 · · ·  \n  3 · · ·\n```\n\n### Make Strategic Moves\n```\nHuman: I'll take the center\nAI: Use make_move tool with {\"game_id\": \"game-a1b2c3d4\", \"position\": \"B2\", \"player\": \"X\"}\n\nAI: Let me analyze the position first\nAI: Use analyze_position tool → Shows current state and opportunities\n\nAI: I'll take a corner for strategic advantage  \nAI: Use make_move tool with {\"game_id\": \"game-a1b2c3d4\", \"position\": \"A1\", \"player\": \"O\"}\n```\n\n### Get Game Status\n```\nAI: Use get_status tool → Game Status: Ongoing, Current player: X, Move count: 2\nAI: Use get_available_moves tool → Available moves (7): A2, A3, B1, B3, C1, C2, C3\n```\n\n## Transport Options\n\nThe server supports three transport methods:\n\n### 1. Stdio (Default)\nBest for local MCP clients like Claude Code:\n```bash\n./bin/server -transport=stdio\n```\n\n### 2. Server-Sent Events (SSE)  \nFor web applications and real-time updates:\n```bash\n./bin/server -transport=sse -addr=:8080\n```\n\n### 3. Streamable HTTP\nFor traditional HTTP integrations:\n```bash  \n./bin/server -transport=http -addr=:8080\n```\n\n## Development\n\n### Project Structure\n```\nmcp-tic-tac-toe/\n├── cmd/\n│   ├── server.go          # MCP server main entry point\n│   └── demo.go            # Game logic demonstration  \n├── game/                  # Core tic-tac-toe logic\n│   ├── types.go           # Game data structures\n│   ├── engine.go          # Game rules and validation\n│   └── engine_test.go     # Game logic tests\n├── server/                # MCP server implementation  \n│   ├── server.go          # MCP server setup and tools\n│   ├── handlers.go        # Tool request handlers\n│   └── server_test.go     # MCP integration tests\n└── bin/                   # Built executables\n```\n\n### Running Tests\n```bash\n# Test all packages\ngo test ./game ./server -v\n\n# Test specific functionality\ngo test ./game -run TestWinConditions\ngo test ./server -run TestMakeMoveTool\n```\n\n### Building from Source\n```bash\n# Build server\ngo build -o bin/server cmd/server.go\n\n# Build demo\ngo build -o bin/demo cmd/demo.go\n\n# Run demo (no MCP required)\n./bin/demo\n```\n\n## Resources\n\n- [MCP Specification](https://modelcontextprotocol.io/) - Official MCP documentation\n- [mcp-go Library](https://github.com/mark3labs/mcp-go) - Go MCP implementation used in this project",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tic-tac-toe-stdio": {
+        "command": "/full/path/to/mcp-tic-tac-toe/bin/server",
+        "args": ["-transport=stdio"],
+        "env": {}
+      },
+      "tic-tac-toe-desktop-config": {
+        "command": "/full/path/to/mcp-tic-tac-toe/bin/server",
+        "args": [""],
+        "env": {}
+      },
+      "tic-tac-toe-sse": {
+        "command": "/full/path/to/mcp-tic-tac-toe/bin/server",
+        "args": ["-transport=sse", "-addr=:8080"],
+        "env": {}
+      },
+      "tic-tac-toe-http": {
+        "command": "/full/path/to/mcp-tic-tac-toe/bin/server",
+        "args": ["-transport=http", "-addr=:8080"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tomholford",
+    "repo": "mcp-tic-tac-toe",
+    "url": "https://github.com/tomholford/mcp-tic-tac-toe",
+    "name": "mcp-tic-tac-toe",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4ad4518353bacf8bd261fe77abd5f0796611512a"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.713Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "google/uuid",
+      "importance": 6
+    },
+    {
+      "name": "spf13/cast",
+      "importance": 4
+    },
+    {
+      "name": "yosida95/uritemplate",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule mcp-tic-tac-toe\n\ngo 1.24.5\n\nrequire github.com/mark3labs/mcp-go v0.33.0\n\nrequire (\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n)\n"
+}

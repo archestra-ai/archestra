@@ -1,0 +1,126 @@
+{
+  "name": "genomoncology__biomcp",
+  "display_name": "biomcp",
+  "description": "BioMCP: Biomedical Model Context Protocol",
+  "author": {
+    "name": "genomoncology"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# BioMCP: Biomedical Model Context Protocol\n\nBioMCP is an open source (MIT License) toolkit that empowers AI assistants and\nagents with specialized biomedical knowledge. Built following the Model Context\nProtocol (MCP), it connects AI systems to authoritative biomedical data\nsources, enabling them to answer questions about clinical trials, scientific\nliterature, and genomic variants with precision and depth.\n\n[![▶️ Watch the video](./docs/blog/images/what_is_biomcp_thumbnail.png)](https://www.youtube.com/watch?v=bKxOWrWUUhM)\n\n## MCPHub Certification\n\nBioMCP is certified by [MCPHub](https://mcphub.com/mcp-servers/genomoncology/biomcp). This certification ensures that BioMCP follows best practices for Model Context Protocol implementation and provides reliable biomedical data access.\n\n## Why BioMCP?\n\nWhile Large Language Models have broad general knowledge, they often lack\nspecialized domain-specific information or access to up-to-date resources.\nBioMCP bridges this gap for biomedicine by:\n\n- Providing **structured access** to clinical trials, biomedical literature,\n  and genomic variants\n- Enabling **natural language queries** to specialized databases without\n  requiring knowledge of their specific syntax\n- Supporting **biomedical research** workflows through a consistent interface\n- Functioning as an **MCP server** for AI assistants and agents\n\n## Biomedical Data Sources\n\nBioMCP integrates with multiple biomedical data sources:\n\n### Literature Sources\n\n- **PubTator3/PubMed** - Peer-reviewed biomedical literature with entity annotations\n- **bioRxiv/medRxiv** - Preprint servers for biology and health sciences\n- **Europe PMC** - Open science platform including preprints\n\n### Clinical & Genomic Sources\n\n- **ClinicalTrials.gov** - Clinical trial registry and results database\n- **NCI Clinical Trials Search API** - National Cancer Institute's curated cancer trials database\n  - Advanced search filters (biomarkers, prior therapies, brain metastases)\n  - Organization and intervention databases\n  - Disease vocabulary with synonyms\n- **BioThings Suite** - Comprehensive biomedical data APIs:\n  - **MyVariant.info** - Consolidated genetic variant annotation\n  - **MyGene.info** - Real-time gene annotations and information\n  - **MyDisease.info** - Disease ontology and synonym information\n  - **MyChem.info** - Drug/chemical annotations and properties\n- **TCGA/GDC** - The Cancer Genome Atlas for cancer variant data\n- **1000 Genomes** - Population frequency data via Ensembl\n- **cBioPortal** - Cancer genomics portal with mutation occurrence data\n\n### Regulatory & Safety Sources\n\n- **OpenFDA** - FDA regulatory and safety data:\n  - **Drug Adverse Events (FAERS)** - Post-market drug safety reports\n  - **Drug Labels (SPL)** - Official prescribing information\n  - **Device Events (MAUDE)** - Medical device adverse events, with genomic device filtering\n\n## Available MCP Tools\n\nBioMCP provides 24 specialized tools for biomedical research:\n\n### Core Tools (3)\n\n#### 1. Think Tool (ALWAYS USE FIRST!)\n\n**CRITICAL**: The `think` tool MUST be your first step for ANY biomedical research task.\n\n```python\n# Start analysis with sequential thinking\nthink(\n    thought=\"Breaking down the query about BRAF mutations in melanoma...\",\n    thoughtNumber=1,\n    totalThoughts=3,\n    nextThoughtNeeded=True\n)\n```\n\nThe sequential thinking tool helps:\n\n- Break down complex biomedical problems systematically\n- Plan multi-step research approaches\n- Track reasoning progress\n- Ensure comprehensive analysis\n\n#### 2. Search Tool\n\nThe search tool supports two modes:\n\n##### Unified Query Language (Recommended)\n\nUse the `query` parameter with structured field syntax for powerful cross-domain searches:\n\n```python\n# Simple natural language\nsearch(query=\"BRAF melanoma\")\n\n# Field-specific search\nsearch(query=\"gene:BRAF AND trials.condition:melanoma\")\n\n# Complex queries\nsearch(query=\"gene:BRAF AND variants.significance:pathogenic AND articles.date:>2023\")\n\n# Get searchable fields schema\nsearch(get_schema=True)\n\n# Explain how a query is parsed\nsearch(query=\"gene:BRAF\", explain_query=True)\n```\n\n**Supported Fields:**\n\n- **Cross-domain**: `gene:`, `variant:`, `disease:`\n- **Trials**: `trials.condition:`, `trials.phase:`, `trials.status:`, `trials.intervention:`\n- **Articles**: `articles.author:`, `articles.journal:`, `articles.date:`\n- **Variants**: `variants.significance:`, `variants.rsid:`, `variants.frequency:`\n\n##### Domain-Based Search\n\nUse the `domain` parameter with specific filters:\n\n```python\n# Search articles (includes automatic cBioPortal integration)\nsearch(domain=\"article\", genes=[\"BRAF\"], diseases=[\"melanoma\"])\n\n# Search with mutation-specific cBioPortal data\nsearch(domain=\"article\", genes=[\"BRAF\"], keywords=[\"V600E\"])\nsearch(domain=\"article\", genes=[\"SRSF2\"], keywords=[\"F57*\"])  # Wildcard patterns\n\n# Search trials\nsearch(domain=\"trial\", conditions=[\"lung cancer\"], phase=\"3\")\n\n# Search variants\nsearch(domain=\"variant\", gene=\"TP53\", significance=\"pathogenic\")\n```\n\n**Note**: When searching articles with a gene parameter, cBioPortal data is automatically included:\n\n- Gene-level summaries show mutation frequency across cancer studies\n- Mutation-specific searches (e.g., \"V600E\") show study-level occurrence data\n- Cancer types are dynamically resolved from cBioPortal API\n\n#### 3. Fetch Tool\n\nRetrieve full details for a single article, trial, or variant:\n\n```python\n# Fetch article details (supports both PMID and DOI)\nfetch(domain=\"article\", id=\"34567890\")  # PMID\nfetch(domain=\"article\", id=\"10.1101/2024.01.20.23288905\")  # DOI\n\n# Fetch trial with all sections\nfetch(domain=\"trial\", id=\"NCT04280705\", detail=\"all\")\n\n# Fetch variant details\nfetch(domain=\"variant\", id=\"rs113488022\")\n```\n\n**Domain-specific options:**\n\n- **Articles**: `detail=\"full\"` retrieves full text if available\n- **Trials**: `detail` can be \"protocol\", \"locations\", \"outcomes\", \"references\", or \"all\"\n- **Variants**: Always returns full details\n\n### Individual Tools (21)\n\nFor users who prefer direct access to specific functionality, BioMCP also provides 21 individual tools:\n\n#### Article Tools (2)\n\n- **article_searcher**: Search PubMed/PubTator3 and preprints\n- **article_getter**: Fetch detailed article information (supports PMID and DOI)\n\n#### Trial Tools (5)\n\n- **trial_searcher**: Search ClinicalTrials.gov or NCI CTS API (via source parameter)\n- **trial_getter**: Fetch all trial details from either source\n- **trial_protocol_getter**: Fetch protocol information only (ClinicalTrials.gov)\n- **trial_references_getter**: Fetch trial publications (ClinicalTrials.gov)\n- **trial_outcomes_getter**: Fetch outcome measures and results (ClinicalTrials.gov)\n- **trial_locations_getter**: Fetch site locations and contacts (ClinicalTrials.gov)\n\n#### Variant Tools (2)\n\n- **variant_searcher**: Search MyVariant.info database\n- **variant_getter**: Fetch comprehensive variant details\n\n#### NCI-Specific Tools (6)\n\n- **nci_organization_searcher**: Search NCI's organization database\n- **nci_organization_getter**: Get organization details by ID\n- **nci_intervention_searcher**: Search NCI's intervention database (drugs, devices, procedures)\n- **nci_intervention_getter**: Get intervention details by ID\n- **nci_biomarker_searcher**: Search biomarkers used in trial eligibility criteria\n- **nci_disease_searcher**: Search NCI's controlled vocabulary of cancer conditions\n\n#### Gene, Disease & Drug Tools (3)\n\n- **gene_getter**: Get real-time gene information from MyGene.info\n- **disease_getter**: Get disease definitions and synonyms from MyDisease.info\n- **drug_getter**: Get drug/chemical information from MyChem.info\n\n**Note**: All individual tools that search by gene automatically include cBioPortal summaries when the `include_cbioportal` parameter is True (default). Trial searches can expand disease conditions with synonyms when `expand_synonyms` is True (default).\n\n## Quick Start\n\n### For Claude Desktop Users\n\n1. **Install `uv`** if you don't have it (recommended):\n\n   ```bash\n   # MacOS\n   brew install uv\n\n   # Windows/Linux\n   pip install uv\n   ```\n\n2. **Configure Claude Desktop**:\n   - Open Claude Desktop settings\n   - Navigate to Developer section\n   - Click \"Edit Config\" and add:\n   ```json\n   {\n     \"mcpServers\": {\n       \"biomcp\": {\n         \"command\": \"uv\",\n         \"args\": [\"run\", \"--with\", \"biomcp-python\", \"biomcp\", \"run\"]\n       }\n     }\n   }\n   ```\n   - Restart Claude Desktop and start chatting about biomedical topics!\n\n### Python Package Installation\n\n```bash\n# Using pip\npip install biomcp-python\n\n# Using uv (recommended for faster installation)\nuv pip install biomcp-python\n\n# Run directly without installation\nuv run --with biomcp-python biomcp trial search --condition \"lung cancer\"\n```\n\n## Configuration\n\n### Environment Variables\n\nBioMCP supports optional environment variables for enhanced functionality:\n\n```bash\n# cBioPortal API authentication (optional)\nexport CBIO_TOKEN=\"your-api-token\"  # For authenticated access\nexport CBIO_BASE_URL=\"https://www.cbioportal.org/api\"  # Custom API endpoint\n\n# Performance tuning\nexport BIOMCP_USE_CONNECTION_POOL=\"true\"  # Enable HTTP connection pooling (default: true)\nexport BIOMCP_METRICS_ENABLED=\"false\"     # Enable performance metrics (default: false)\n```\n\n## Running BioMCP Server\n\nBioMCP supports multiple transport protocols to suit different deployment scenarios:\n\n### Local Development (STDIO)\n\nFor direct integration with Claude Desktop or local MCP clients:\n\n```bash\n# Default STDIO mode for local development\nbiomcp run\n\n# Or explicitly specify STDIO\nbiomcp run --mode stdio\n```\n\n### HTTP Server Mode\n\nBioMCP supports multiple HTTP transport protocols:\n\n#### Legacy SSE Transport (Worker Mode)\n\nFor backward compatibility with existing SSE clients:\n\n```bash\nbiomcp run --mode worker\n# Server available at http://localhost:8000/sse\n```\n\n#### Streamable HTTP Transport (Recommended)\n\nThe new MCP-compliant Streamable HTTP transport provides optimal performance and standards compliance:\n\n```bash\nbiomcp run --mode streamable_http\n\n# Custom host and port\nbiomcp run --mode streamable_http --host 127.0.0.1 --port 8080\n```\n\nFeatures of Streamable HTTP transport:\n\n- Single `/mcp` endpoint for all operations\n- Dynamic response mode (JSON for quick operations, SSE for long-running)\n- Session management support (future)\n- Full MCP specification compliance (2025-03-26)\n- Better scalability for cloud deployments\n\n### Deployment Options\n\n#### Docker\n\n```bash\n# Build the Docker image locally\ndocker build -t biomcp:latest .\n\n# Run the container\ndocker run -p 8000:8000 biomcp:latest biomcp run --mode streamable_http\n```\n\n#### Cloudflare Workers\n\nThe worker mode can be deployed to Cloudflare Workers for global edge deployment.\n\nNote: All APIs work without authentication, but tokens may provide higher rate limits.\n\n## Command Line Interface\n\nBioMCP provides a comprehensive CLI for direct database interaction:\n\n```bash\n# Get help\nbiomcp --help\n\n# Run the MCP server\nbiomcp run\n\n# Article search examples\nbiomcp article search --gene BRAF --disease Melanoma  # Includes preprints by default\nbiomcp article search --gene BRAF --no-preprints      # Exclude preprints\nbiomcp article get 21717063 --full\n\n# Clinical trial examples\nbiomcp trial search --condition \"Lung Cancer\" --phase PHASE3\nbiomcp trial search --condition melanoma --source nci --api-key YOUR_KEY  # Use NCI API\nbiomcp trial get NCT04280705 Protocol\nbiomcp trial get NCT04280705 --source nci --api-key YOUR_KEY  # Get from NCI\n\n# Variant examples with external annotations\nbiomcp variant search --gene TP53 --significance pathogenic\nbiomcp variant get rs113488022  # Includes TCGA, 1000 Genomes, and cBioPortal data by default\nbiomcp variant get rs113488022 --no-external  # Core annotations only\n\n# NCI-specific examples (requires NCI API key)\nbiomcp organization search \"MD Anderson\" --api-key YOUR_KEY\nbiomcp organization get ORG123456 --api-key YOUR_KEY\nbiomcp intervention search pembrolizumab --api-key YOUR_KEY\nbiomcp intervention search --type Device --api-key YOUR_KEY\nbiomcp biomarker search \"PD-L1\" --api-key YOUR_KEY\nbiomcp disease search melanoma --source nci --api-key YOUR_KEY\n```\n\n## Testing & Verification\n\nTest your BioMCP setup with the MCP Inspector:\n\n```bash\nnpx @modelcontextprotocol/inspector uv run --with biomcp-python biomcp run\n```\n\nThis opens a web interface where you can explore and test all available tools.\n\n## Enterprise Version: OncoMCP\n\nOncoMCP extends BioMCP with GenomOncology's enterprise-grade precision oncology\nplatform (POP), providing:\n\n- **HIPAA-Compliant Deployment**: Secure on-premise options\n- **Real-Time Trial Matching**: Up-to-date status and arm-level matching\n- **Healthcare Integration**: Seamless EHR and data warehouse connectivity\n- **Curated Knowledge Base**: 15,000+ trials and FDA approvals\n- **Sophisticated Patient Matching**: Using integrated clinical and molecular\n  profiles\n- **Advanced NLP**: Structured extraction from unstructured text\n- **Comprehensive Biomarker Processing**: Mutation and rule processing\n\nLearn more: [GenomOncology](https://genomoncology.com/)\n\n## MCP Registries\n\n[![smithery badge](https://smithery.ai/badge/@genomoncology/biomcp)](https://smithery.ai/server/@genomoncology/biomcp)\n\n<a href=\"https://glama.ai/mcp/servers/@genomoncology/biomcp\">\n<img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@genomoncology/biomcp/badge\" />\n</a>\n\n## Example Use Cases\n\n### Gene Information Retrieval\n\n```python\n# Get comprehensive gene information\ngene_getter(gene_id_or_symbol=\"TP53\")\n# Returns: Official name, summary, aliases, links to databases\n```\n\n### Disease Synonym Expansion\n\n```python\n# Get disease information with synonyms\ndisease_getter(disease_id_or_name=\"GIST\")\n# Returns: \"gastrointestinal stromal tumor\" and other synonyms\n\n# Search trials with automatic synonym expansion\ntrial_searcher(conditions=[\"GIST\"], expand_synonyms=True)\n# Searches for: GIST OR \"gastrointestinal stromal tumor\" OR \"GI stromal tumor\"\n```\n\n### Integrated Biomedical Research\n\n```python\n# 1. Always start with thinking\nthink(thought=\"Analyzing BRAF V600E in melanoma treatment\", thoughtNumber=1)\n\n# 2. Get gene context\ngene_getter(\"BRAF\")\n\n# 3. Search for pathogenic variants\nvariant_searcher(gene=\"BRAF\", hgvsp=\"V600E\", significance=\"pathogenic\")\n\n# 4. Find relevant clinical trials with disease expansion\ntrial_searcher(conditions=[\"melanoma\"], interventions=[\"BRAF inhibitor\"])\n```\n\n## Documentation\n\nFor comprehensive documentation, visit [https://biomcp.org](https://biomcp.org)\n\n### Developer Guides\n\n- [HTTP Client Guide](./docs/http-client-guide.md) - Using the centralized HTTP client\n- [Migration Examples](./docs/migration-examples.md) - Migrating from direct HTTP usage\n- [Error Handling Guide](./docs/error-handling.md) - Comprehensive error handling patterns\n- [Integration Testing Guide](./docs/integration-testing.md) - Best practices for reliable integration tests\n- [Third-Party Endpoints](./THIRD_PARTY_ENDPOINTS.md) - Complete list of external APIs used\n- [Testing Guide](./docs/development/testing.md) - Running tests and understanding test categories\n\n## Development\n\n### Running Tests\n\n```bash\n# Run all tests (including integration tests)\nmake test\n\n# Run only unit tests (excluding integration tests)\nuv run python -m pytest tests -m \"not integration\"\n\n# Run only integration tests\nuv run python -m pytest tests -m \"integration\"\n```\n\n**Note**: Integration tests make real API calls and may fail due to network issues or rate limiting.\nIn CI/CD, integration tests are run separately and allowed to fail without blocking the build.\n\n## BioMCP Examples Repo\n\nLooking to see BioMCP in action?\n\nCheck out the companion repository:\n👉 **[biomcp-examples](https://github.com/genomoncology/biomcp-examples)**\n\nIt contains real prompts, AI-generated research briefs, and evaluation runs across different models.\nUse it to explore capabilities, compare outputs, or benchmark your own setup.\n\nHave a cool example of your own?\n**We’d love for you to contribute!** Just fork the repo and submit a PR with your experiment.\n\n## License\n\nThis project is licensed under the MIT License.\n",
+  "category": "AI Tools",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "biomcp-python": {
+        "command": "uv",
+        "args": ["run", "--with", "biomcp-python", "biomcp", "run"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "genomoncology",
+    "repo": "biomcp",
+    "url": "https://github.com/genomoncology/biomcp",
+    "name": "genomoncology__biomcp",
+    "path": null,
+    "stars": 283,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "dba4671278d90259a31649532b00b8ad143cff7d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:27.968Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "hono",
+      "importance": 10
+    },
+    {
+      "name": "jose",
+      "importance": 6
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "typer",
+      "importance": 8
+    },
+    {
+      "name": "diskcache",
+      "importance": 7
+    },
+    {
+      "name": "alphagenome",
+      "importance": 7
+    },
+    {
+      "name": "rich",
+      "importance": 5
+    },
+    {
+      "name": "certifi",
+      "importance": 4
+    },
+    {
+      "name": "psutil",
+      "importance": 4
+    },
+    {
+      "name": "platformdirs",
+      "importance": 3
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"devDependencies\": {\n    \"wrangler\": \"^4.13.2\"\n  },\n  \"dependencies\": {\n    \"hono\": \"^4.7.8\",\n    \"jose\": \"^6.0.11\"\n  }\n}\n\n\n=== pyproject.toml ===\n[project]\nname = \"biomcp-python\"\nversion = \"0.4.6\"\ndescription = \"Biomedical Model Context Protocol Server\"\nauthors = [{ name = \"Ian Maurer\", email = \"imaurer@gmail.com\" }]\nreadme = \"README.md\"\nkeywords = ['python']\nrequires-python = \">=3.10,<4.0\"\nclassifiers = [\n    \"Intended Audience :: Developers\",\n    \"Programming Language :: Python\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n]\ndependencies = [\n    \"certifi>=2025.1.31\",\n    \"diskcache>=5.6.3\",\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.12.3,<2.0.0\",\n    \"platformdirs>=4.3.6\",\n    \"psutil>=7.0.0\",\n    \"pydantic>=2.10.6\",\n    \"python-dotenv>=1.0.0\",\n    \"rich>=14.0.0\",\n    \"typer>=0.15.2\",\n    \"uvicorn>=0.34.2\",\n    \"alphagenome>=0.1.0\",\n]\n\n[project.urls]\nHomepage = \"https://genomoncology.com/biomcp/\"\nRepository = \"https://github.com/genomoncology/biomcp\"\nDocumentation = \"https://genomoncology.com/biomcp/\"\n\n[dependency-groups]\ndev = [\n    \"pytest>=7.2.0\",\n    \"pytest-xdist>=3.5.0\",\n    \"pre-commit>=2.20.0\",\n    \"tox-uv>=1.11.3\",\n    \"deptry>=0.22.0\",\n    \"mypy>=0.991\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-asyncio>=0.24.0\",\n    \"ruff>=0.9.2\",\n    \"mkdocs>=1.4.2\",\n    \"mkdocs-material>=8.5.10\",\n    \"mkdocstrings[python]>=0.26.1\",\n    \"anyio>=4.8.0\",\n    # \"ipython>=9.0.2\",\n    \"pytest-bdd>=8.1.0\",\n    \"tomlkit>=0.13.2\",\n    \"assertpy>=1.1\",\n    \"twine>=4.0.0\",\n    \"pandas>=2.0.0\",  # Used for mocking AlphaGenome responses in tests\n    \"PyYAML>=6.0.0\",  # Used for mkdocs.yml parsing in scripts\n]\n\n[project.optional-dependencies]\napi = [\n]\n\nworker = [\n    \"fastapi>=0.110.0\",\n    \"uvicorn>=0.28.0\",\n]\n\n[build-system]\nrequires = [\"setuptools >= 61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.setuptools.package-data]\nbiomcp = [\"resources/*.md\"]\n\n[project.scripts]\nbiomcp = \"biomcp.__main__:main\"\n\n[tool.mypy]\nfiles = [\"src\"]\nignore_missing_imports = true\ndisallow_untyped_defs = false\ndisallow_any_unimported = false\nno_implicit_optional = true\ncheck_untyped_defs = false\nwarn_return_any = false\nwarn_unused_ignores = true\nshow_error_codes = true\nplugins = [\n    \"pydantic.mypy\"\n]\ndisable_error_code = [\n    \"union-attr\",\n    \"prop-decorator\",\n]\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\naddopts = \"--import-mode=importlib\"\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\nmarkers = [\n    \"integration: marks tests as integration tests (deselect with '-m \\\"not integration\\\"')\",\n]\nfilterwarnings = [\n    # Ignore protobuf version warnings from AlphaGenome\n    \"ignore:Protobuf gencode version.*is exactly one major version older.*:UserWarning\",\n    # Ignore false positive warning from pytest-xdist about coroutines\n    # This occurs during parallel test execution when mock objects are cleaned up\n    \"ignore:coroutine 'search_trials_unified' was never awaited:RuntimeWarning\",\n]\n\n[tool.ruff]\ntarget-version = \"py310\"\nline-length = 79\nfix = true\nunsafe-fixes = true\n\n[tool.ruff.lint]\nselect = [\n    # flake8-2020\n    \"YTT\",\n    # flake8-bandit\n    \"S\",\n    # flake8-bugbear\n    \"B\",\n    # flake8-builtins\n    \"A\",\n    # flake8-comprehensions\n    \"C4\",\n    # flake8-debugger\n    \"T10\",\n    # flake8-simplify\n    \"SIM\",\n    # isort\n    \"I\",\n    # mccabe\n    \"C90\",\n    # pycodestyle\n    \"E\", \"W\",\n    # pyflakes\n    \"F\",\n    # pygrep-hooks\n    \"PGH\",\n    # pyupgrade\n    \"UP\",\n    # ruff\n    \"RUF\",\n]\nignore = [\n    # LineTooLong\n    \"E501\",\n    # DoNotAssignLambda\n    \"E731\",\n    # Consider unpacking\n    \"RUF005\",\n    # Union for type annotations\n    \"UP007\",\n    # Asserts are ok when I say they are ok.\n    \"S101\",\n]\n\n[tool.ruff.lint.per-file-ignores]\n\"tests/*\" = [\"S101\"]\n\"__init__.py\" = [\"I001\"]\n\"src/biomcp/variants/external.py\" = [\"C901\"]  # Complex API interactions are acceptable\n\n[tool.ruff.format]\npreview = true\n\n[tool.ruff.lint.flake8-bugbear]\nextend-immutable-calls = [\n    \"fastapi.Depends\",\n    \"fastapi.Query\",\n    \"typer.Argument\",\n    \"typer.Option\",\n]\n\n[tool.coverage.report]\nskip_empty = true\n\n[tool.coverage.run]\nbranch = true\nsource = [\"src\"]\nomit = [\n    \"src/*/__main__.py\",\n    \"src/*/server.py\",\n    \"src/*/http_client.py\",\n]\n\n[tool.deptry]\nexclude = [\n  \"example_scripts/python_sdk.py\",\n  \"venv\",\n  \".venv\",\n  \".direnv\",\n  \"tests\",\n  \".git\",\n  \"build\",\n  \"dist\",\n  \"scripts\",\n]\n\n[tool.deptry.per_rule_ignores]\nDEP001 = [\"alphagenome\"]  # Optional dependency, must be installed manually\nDEP002 = [\"uvicorn\"]\nDEP003 = [\"biomcp\", \"alphagenome\"]\n"
+}

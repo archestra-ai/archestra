@@ -1,0 +1,98 @@
+{
+  "name": "coding-solo__godot-mcp",
+  "display_name": "godot-mcp",
+  "description": "MCP server for interfacing with Godot game engine. Provides tools for launching the editor, running projects, and capturing debug output.",
+  "author": {
+    "name": "Coding-Solo"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "DEBUG": "${user_config.debug}",
+      "GODOT_PATH": "${user_config.godot_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "debug": {
+      "type": "boolean",
+      "title": "Enable Debug Logging",
+      "description": "Set to true to enable detailed server-side debug logging.",
+      "default": false,
+      "required": false
+    },
+    "godot_path": {
+      "type": "file",
+      "title": "Godot Executable Path",
+      "description": "Path to the Godot executable (overrides automatic detection).",
+      "required": false,
+      "default": ""
+    }
+  },
+  "readme": "\n# Godot MCP\n\n[![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/Coding-Solo)\n\n[![](https://badge.mcpx.dev?type=server 'MCP Server')](https://modelcontextprotocol.io/introduction)\n[![Made with Godot](https://img.shields.io/badge/Made%20with-Godot-478CBF?style=flat&logo=godot%20engine&logoColor=white)](https://godotengine.org)\n[![](https://img.shields.io/badge/Node.js-339933?style=flat&logo=nodedotjs&logoColor=white 'Node.js')](https://nodejs.org/en/download/)\n[![](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white 'TypeScript')](https://www.typescriptlang.org/)\n\n[![](https://img.shields.io/github/last-commit/Coding-Solo/godot-mcp 'Last Commit')](https://github.com/Coding-Solo/godot-mcp/commits/main)\n[![](https://img.shields.io/github/stars/Coding-Solo/godot-mcp 'Stars')](https://github.com/Coding-Solo/godot-mcp/stargazers)\n[![](https://img.shields.io/github/forks/Coding-Solo/godot-mcp 'Forks')](https://github.com/Coding-Solo/godot-mcp/network/members)\n[![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)\n\n```text\n                           (((((((             (((((((                          \n                        (((((((((((           (((((((((((                      \n                        (((((((((((((       (((((((((((((                       \n                        (((((((((((((((((((((((((((((((((                       \n                        (((((((((((((((((((((((((((((((((                       \n         (((((      (((((((((((((((((((((((((((((((((((((((((      (((((        \n       (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((      \n     ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((    \n    ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((    \n      (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((     \n        (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((       \n         (((((((((((@@@@@@@(((((((((((((((((((((((((((@@@@@@@(((((((((((        \n         (((((((((@@@@,,,,,@@@(((((((((((((((((((((@@@,,,,,@@@@(((((((((        \n         ((((((((@@@,,,,,,,,,@@(((((((@@@@@(((((((@@,,,,,,,,,@@@((((((((        \n         ((((((((@@@,,,,,,,,,@@(((((((@@@@@(((((((@@,,,,,,,,,@@@((((((((        \n         (((((((((@@@,,,,,,,@@((((((((@@@@@((((((((@@,,,,,,,@@@(((((((((        \n         ((((((((((((@@@@@@(((((((((((@@@@@(((((((((((@@@@@@((((((((((((        \n         (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((        \n         (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((        \n         @@@@@@@@@@@@@((((((((((((@@@@@@@@@@@@@((((((((((((@@@@@@@@@@@@@        \n         ((((((((( @@@(((((((((((@@(((((((((((@@(((((((((((@@@ (((((((((        \n         (((((((((( @@((((((((((@@@(((((((((((@@@((((((((((@@ ((((((((((        \n          (((((((((((@@@@@@@@@@@@@@(((((((((((@@@@@@@@@@@@@@(((((((((((         \n           (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((          \n              (((((((((((((((((((((((((((((((((((((((((((((((((((((             \n                 (((((((((((((((((((((((((((((((((((((((((((((((                \n                        (((((((((((((((((((((((((((((((((                       \n                                                                                \n\n                          /$$      /$$  /$$$$$$  /$$$$$$$ \n                         | $$$    /$$$ /$$__  $$| $$__  $$\n                         | $$$$  /$$$$| $$  \\__/| $$  \\ $$\n                         | $$ $$/$$ $$| $$      | $$$$$$$/\n                         | $$  $$$| $$| $$      | $$____/ \n                         | $$\\  $ | $$| $$    $$| $$      \n                         | $$ \\/  | $$|  $$$$$$/| $$      \n                         |__/     |__/ \\______/ |__/       \n```\n\nA Model Context Protocol (MCP) server for interacting with the Godot game engine.\n\n## Introduction\n\nGodot MCP enables AI assistants to launch the Godot editor, run projects, capture debug output, and control project execution - all through a standardized interface.\n\nThis direct feedback loop helps AI assistants like Claude understand what works and what doesn't in real Godot projects, leading to better code generation and debugging assistance.\n\n## Features\n\n- **Launch Godot Editor**: Open the Godot editor for a specific project\n- **Run Godot Projects**: Execute Godot projects in debug mode\n- **Capture Debug Output**: Retrieve console output and error messages\n- **Control Execution**: Start and stop Godot projects programmatically\n- **Get Godot Version**: Retrieve the installed Godot version\n- **List Godot Projects**: Find Godot projects in a specified directory\n- **Project Analysis**: Get detailed information about project structure\n- **Scene Management**:\n  - Create new scenes with specified root node types\n  - Add nodes to existing scenes with customizable properties\n  - Load sprites and textures into Sprite2D nodes\n  - Export 3D scenes as MeshLibrary resources for GridMap\n  - Save scenes with options for creating variants\n- **UID Management** (for Godot 4.4+):\n  - Get UID for specific files\n  - Update UID references by resaving resources\n\n## Requirements\n\n- [Godot Engine](https://godotengine.org/download) installed on your system\n- Node.js and npm\n- An AI assistant that supports MCP (Cline, Cursor, etc.)\n\n## Installation and Configuration\n\n### Step 1: Install and Build\n\nFirst, clone the repository and build the MCP server:\n\n```bash\ngit clone https://github.com/Coding-Solo/godot-mcp.git\ncd godot-mcp\nnpm install\nnpm run build\n```\n\n### Step 2: Configure with Your AI Assistant\n\n#### Option A: Configure with Cline\n\nAdd to your Cline MCP settings file (`~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"godot\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/godot-mcp/build/index.js\"],\n      \"env\": {\n        \"DEBUG\": \"true\"                  // Optional: Enable detailed logging\n      },\n      \"disabled\": false,\n      \"autoApprove\": [\n        \"launch_editor\",\n        \"run_project\",\n        \"get_debug_output\",\n        \"stop_project\",\n        \"get_godot_version\",\n        \"list_projects\",\n        \"get_project_info\",\n        \"create_scene\",\n        \"add_node\",\n        \"load_sprite\",\n        \"export_mesh_library\",\n        \"save_scene\",\n        \"get_uid\",\n        \"update_project_uids\"\n      ]\n    }\n  }\n}\n```\n\n#### Option B: Configure with Cursor\n\n**Using the Cursor UI:**\n\n1. Go to **Cursor Settings** > **Features** > **MCP**\n2. Click on the **+ Add New MCP Server** button\n3. Fill out the form:\n   - Name: `godot` (or any name you prefer)\n   - Type: `command`\n   - Command: `node /absolute/path/to/godot-mcp/build/index.js`\n4. Click \"Add\"\n5. You may need to press the refresh button in the top right corner of the MCP server card to populate the tool list\n\n**Using Project-Specific Configuration:**\n\nCreate a file at `.cursor/mcp.json` in your project directory with the following content:\n\n```json\n{\n  \"mcpServers\": {\n    \"godot\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/godot-mcp/build/index.js\"],\n      \"env\": {\n        \"DEBUG\": \"true\"                  // Enable detailed logging\n      }\n    }\n  }\n}\n```\n\n### Step 3: Optional Environment Variables\n\nYou can customize the server behavior with these environment variables:\n\n- `GODOT_PATH`: Path to the Godot executable (overrides automatic detection)\n- `DEBUG`: Set to \"true\" to enable detailed server-side debug logging\n\n## Example Prompts\n\nOnce configured, your AI assistant will automatically run the MCP server when needed. You can use prompts like:\n\n```text\n\"Launch the Godot editor for my project at /path/to/project\"\n\n\"Run my Godot project and show me any errors\"\n\n\"Get information about my Godot project structure\"\n\n\"Analyze my Godot project structure and suggest improvements\"\n\n\"Help me debug this error in my Godot project: [paste error]\"\n\n\"Write a GDScript for a character controller with double jump and wall sliding\"\n\n\"Create a new scene with a Player node in my Godot project\"\n\n\"Add a Sprite2D node to my player scene and load the character texture\"\n\n\"Export my 3D models as a MeshLibrary for use with GridMap\"\n\n\"Create a UI scene with buttons and labels for my game's main menu\"\n\n\"Get the UID for a specific script file in my Godot 4.4 project\"\n\n\"Update UID references in my Godot project after upgrading to 4.4\"\n```\n\n## Implementation Details\n\n### Architecture\n\nThe Godot MCP server uses a bundled GDScript approach for complex operations:\n\n1. **Direct Commands**: Simple operations like launching the editor or getting project info use Godot's built-in CLI commands directly.\n2. **Bundled Operations Script**: Complex operations like creating scenes or adding nodes use a single, comprehensive GDScript file (`godot_operations.gd`) that handles all operations.\n\nThis architecture provides several benefits:\n\n- **No Temporary Files**: Eliminates the need for temporary script files, keeping your system clean\n- **Simplified Codebase**: Centralizes all Godot operations in one (somewhat) organized file\n- **Better Maintainability**: Makes it easier to add new operations or modify existing ones\n- **Improved Error Handling**: Provides consistent error reporting across all operations\n- **Reduced Overhead**: Minimizes file I/O operations for better performance\n\nThe bundled script accepts operation type and parameters as JSON, allowing for flexible and dynamic operation execution without generating temporary files for each operation.\n\n## Troubleshooting\n\n- **Godot Not Found**: Set the GODOT_PATH environment variable to your Godot executable\n- **Connection Issues**: Ensure the server is running and restart your AI assistant\n- **Invalid Project Path**: Ensure the path points to a directory containing a project.godot file\n- **Build Issues**: Make sure all dependencies are installed by running `npm install`\n- **For Cursor Specifically**:\n-   Ensure the MCP server shows up and is enabled in Cursor settings (Settings > MCP)\n-   MCP tools can only be run using the Agent chat profile (Cursor Pro or Business subscription)\n-   Use \"Yolo Mode\" to automatically run MCP tool requests\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/coding-solo-godot-mcp-badge.png)](https://mseep.ai/app/coding-solo-godot-mcp)\n",
+  "category": "Development",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "godot-mcp": {
+        "command": "node",
+        "args": ["/absolute/path/to/godot-mcp/build/index.js"],
+        "env": {
+          "DEBUG": "true"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Coding-Solo",
+    "repo": "godot-mcp",
+    "url": "https://github.com/Coding-Solo/godot-mcp",
+    "name": "godot-mcp",
+    "path": null,
+    "stars": 690,
+    "contributors": 3,
+    "issues": 18,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ef0052e8502bf1c8a523708cbda72ec0e1dbcd3b"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:17.211Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "fs-extra",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"godot-mcp\",\n  \"version\": \"0.1.0\",\n  \"description\": \"MCP server for interfacing with Godot game engine. Provides tools for launching the editor, running projects, and capturing debug output.\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"godot-mcp\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node scripts/build.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"axios\": \"^1.7.9\",\n    \"fs-extra\": \"^11.2.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/Coding-Solo/godot-mcp.git\"\n  },\n  \"keywords\": [\n    \"godot\",\n    \"mcp\",\n    \"ai\",\n    \"claude\",\n    \"cline\"\n  ]\n}\n"
+}

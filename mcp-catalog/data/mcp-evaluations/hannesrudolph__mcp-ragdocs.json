@@ -1,0 +1,124 @@
+{
+  "name": "hannesrudolph__mcp-ragdocs",
+  "display_name": "mcp-ragdocs",
+  "description": "An MCP server implementation that provides tools for retrieving and processing documentation through vector search, enabling AI assistants to augment their responses with relevant documentation context.",
+  "author": {
+    "name": "hannesrudolph"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@hannesrudolph/mcp-ragdocs"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "QDRANT_URL": "${user_config.qdrant_url}",
+      "QDRANT_API_KEY": "${user_config.qdrant_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key for embeddings generation",
+      "sensitive": true,
+      "required": true
+    },
+    "qdrant_url": {
+      "type": "string",
+      "title": "Qdrant URL",
+      "description": "URL of your Qdrant vector database instance",
+      "sensitive": false,
+      "required": true
+    },
+    "qdrant_api_key": {
+      "type": "string",
+      "title": "Qdrant API Key",
+      "description": "API key for authenticating with Qdrant",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# RAG Documentation MCP Server\n\nAn MCP server implementation that provides tools for retrieving and processing documentation through vector search, enabling AI assistants to augment their responses with relevant documentation context.\n\n<a href=\"https://glama.ai/mcp/servers/54hsrjhmq9\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/54hsrjhmq9/badge\" alt=\"mcp-ragdocs MCP server\" /></a>\n\n## Features\n\n- Vector-based documentation search and retrieval\n- Support for multiple documentation sources\n- Semantic search capabilities\n- Automated documentation processing\n- Real-time context augmentation for LLMs\n\n## Tools\n\n### search_documentation\nSearch through stored documentation using natural language queries. Returns matching excerpts with context, ranked by relevance.\n\n**Inputs:**\n- `query` (string): The text to search for in the documentation. Can be a natural language query, specific terms, or code snippets.\n- `limit` (number, optional): Maximum number of results to return (1-20, default: 5). Higher limits provide more comprehensive results but may take longer to process.\n\n### list_sources\nList all documentation sources currently stored in the system. Returns a comprehensive list of all indexed documentation including source URLs, titles, and last update times. Use this to understand what documentation is available for searching or to verify if specific sources have been indexed.\n\n### extract_urls\nExtract and analyze all URLs from a given web page. This tool crawls the specified webpage, identifies all hyperlinks, and optionally adds them to the processing queue.\n\n**Inputs:**\n- `url` (string): The complete URL of the webpage to analyze (must include protocol, e.g., https://). The page must be publicly accessible.\n- `add_to_queue` (boolean, optional): If true, automatically add extracted URLs to the processing queue for later indexing. Use with caution on large sites to avoid excessive queuing.\n\n### remove_documentation\nRemove specific documentation sources from the system by their URLs. The removal is permanent and will affect future search results.\n\n**Inputs:**\n- `urls` (string[]): Array of URLs to remove from the database. Each URL must exactly match the URL used when the documentation was added.\n\n### list_queue\nList all URLs currently waiting in the documentation processing queue. Shows pending documentation sources that will be processed when run_queue is called. Use this to monitor queue status, verify URLs were added correctly, or check processing backlog.\n\n### run_queue\nProcess and index all URLs currently in the documentation queue. Each URL is processed sequentially, with proper error handling and retry logic. Progress updates are provided as processing occurs. Long-running operations will process until the queue is empty or an unrecoverable error occurs.\n\n### clear_queue\nRemove all pending URLs from the documentation processing queue. Use this to reset the queue when you want to start fresh, remove unwanted URLs, or cancel pending processing. This operation is immediate and permanent - URLs will need to be re-added if you want to process them later.\n\n## Usage\n\nThe RAG Documentation tool is designed for:\n\n- Enhancing AI responses with relevant documentation\n- Building documentation-aware AI assistants\n- Creating context-aware tooling for developers\n- Implementing semantic documentation search\n- Augmenting existing knowledge bases\n\n## Configuration\n\n### Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"rag-docs\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@hannesrudolph/mcp-ragdocs\"\n      ],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"\",\n        \"QDRANT_URL\": \"\",\n        \"QDRANT_API_KEY\": \"\"\n      }\n    }\n  }\n}\n```\n\nYou'll need to provide values for the following environment variables:\n- `OPENAI_API_KEY`: Your OpenAI API key for embeddings generation\n- `QDRANT_URL`: URL of your Qdrant vector database instance\n- `QDRANT_API_KEY`: API key for authenticating with Qdrant\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n\n## Acknowledgments\n\nThis project is a fork of [qpd-v/mcp-ragdocs](https://github.com/qpd-v/mcp-ragdocs), originally developed by qpd-v. The original project provided the foundation for this implementation.\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "hannesrudolph-mcp-ragdocs": {
+        "command": "npx",
+        "args": ["-y", "@hannesrudolph/mcp-ragdocs"],
+        "env": {
+          "OPENAI_API_KEY": "",
+          "QDRANT_URL": "",
+          "QDRANT_API_KEY": ""
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "hannesrudolph",
+    "repo": "mcp-ragdocs",
+    "url": "https://github.com/hannesrudolph/mcp-ragdocs",
+    "name": "mcp-ragdocs",
+    "path": null,
+    "stars": 214,
+    "contributors": 4,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e48c3b23b969438091eeb7a33e806e1c21108396"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:19.902Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@azure/openai",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@qdrant/js-client-rest",
+      "importance": 9
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "cheerio",
+      "importance": 7
+    },
+    {
+      "name": "openai",
+      "importance": 7
+    },
+    {
+      "name": "playwright",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@hannesrudolph/mcp-ragdocs\",\n  \"version\": \"1.1.0\",\n  \"description\": \"An MCP server for semantic documentation search and retrieval using vector databases to augment LLM capabilities.\",\n  \"private\": false,\n  \"type\": \"module\",\n  \"bin\": {\n    \"@hannesrudolph/mcp-ragdocs\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"start\": \"node build/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"rag\",\n    \"documentation\",\n    \"vector-database\",\n    \"qdrant\",\n    \"claude\",\n    \"llm\"\n  ],\n  \"author\": \"hannesrudolph\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/hannesrudolph/mcp-ragdocs.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/hannesrudolph/mcp-ragdocs/issues\"\n  },\n  \"homepage\": \"https://github.com/hannesrudolph/mcp-ragdocs#readme\",\n  \"dependencies\": {\n    \"@azure/openai\": \"2.0.0\",\n    \"@modelcontextprotocol/sdk\": \"1.0.3\",\n    \"@qdrant/js-client-rest\": \"1.12.0\",\n    \"axios\": \"1.7.9\",\n    \"cheerio\": \"1.0.0\",\n    \"openai\": \"4.76.2\",\n    \"playwright\": \"1.49.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.17.10\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.7.2\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  }\n}\n"
+}

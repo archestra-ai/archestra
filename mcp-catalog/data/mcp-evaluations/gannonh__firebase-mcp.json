@@ -1,0 +1,171 @@
+{
+  "name": "gannonh__firebase-mcp",
+  "display_name": "firebase-mcp",
+  "description": "🔥 Model Context Protocol (MCP) server for Firebase.",
+  "author": {
+    "name": "gannonh"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@gannonh/firebase-mcp"],
+    "env": {
+      "SERVICE_ACCOUNT_KEY_PATH": "${user_config.service_account_key_path}",
+      "FIREBASE_STORAGE_BUCKET": "${user_config.firebase_storage_bucket}",
+      "MCP_TRANSPORT": "${user_config.mcp_transport}",
+      "MCP_HTTP_PORT": "${user_config.mcp_http_port}",
+      "MCP_HTTP_HOST": "${user_config.mcp_http_host}",
+      "MCP_HTTP_PATH": "${user_config.mcp_http_path}",
+      "DEBUG_LOG_FILE": "${user_config.debug_log_file}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "service_account_key_path": {
+      "type": "file",
+      "title": "Service Account Key Path",
+      "description": "Absolute path to your Firebase service account key JSON file.",
+      "sensitive": true,
+      "required": true
+    },
+    "firebase_storage_bucket": {
+      "type": "string",
+      "title": "Firebase Storage Bucket",
+      "description": "Bucket name for Firebase Storage (e.g., your-project-id.firebasestorage.app). Defaults to [projectId].appspot.com if not set.",
+      "required": false,
+      "default": ""
+    },
+    "mcp_transport": {
+      "type": "string",
+      "title": "MCP Transport Type",
+      "description": "Transport type to use (stdio or http).",
+      "required": false,
+      "default": "stdio"
+    },
+    "mcp_http_port": {
+      "type": "number",
+      "title": "MCP HTTP Port",
+      "description": "Port for HTTP transport.",
+      "required": false,
+      "default": 3000
+    },
+    "mcp_http_host": {
+      "type": "string",
+      "title": "MCP HTTP Host",
+      "description": "Host for HTTP transport.",
+      "required": false,
+      "default": "localhost"
+    },
+    "mcp_http_path": {
+      "type": "string",
+      "title": "MCP HTTP Path",
+      "description": "Path for HTTP transport.",
+      "required": false,
+      "default": "/mcp"
+    },
+    "debug_log_file": {
+      "type": "string",
+      "title": "Debug Log File",
+      "description": "Enable file logging. Set to 'true' to log to ~/.firebase-mcp/debug.log, or set to a file path for custom logging.",
+      "required": false,
+      "default": ""
+    }
+  },
+  "readme": "# Firebase MCP\n\n\n![Project Logo](./assets/logo.png)\n\n<a href=\"https://glama.ai/mcp/servers/x4i8z2xmrq\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/x4i8z2xmrq/badge\" alt=\"Firebase MCP server\" />\n</a>\n\n[![Firebase Tests CI](https://github.com/gannonh/firebase-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/gannonh/firebase-mcp/actions/workflows/tests.yml)\n\n## Overview\n\n**Firebase MCP** enables AI assistants to work directly with Firebase services, including:\n\n- **Firestore**: Document database operations\n- **Storage**: File management with robust upload capabilities\n- **Authentication**: User management and verification\n\nThe server works with MCP client applicatios such as [Claude Desktop](https://claude.ai/download), [Augment Code](https://docs.augmentcode.com/setup-augment/mcp), [VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers), and [Cursor](https://www.cursor.com/).\n\n> ⚠️ **Known Issue**: The `firestore_list_collections` tool may return a Zod validation error in the client logs. This is an erroneous validation error in the MCP SDK, as our investigation confirmed no boolean values are present in the response. Despite the error message, the query still works correctly and returns the proper collection data. This is a log-level error that doesn't affect functionality.\n\n## ⚡ Quick Start\n\n### Prerequisites\n- Firebase project with service account credentials\n- Node.js environment\n\n### 1. Install MCP Server\n\nAdd the server configuration to your MCP settings file:\n\n- Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Augment: `~/Library/Application Support/Code/User/settings.json`\n- Cursor: `[project root]/.cursor/mcp.json`\n\nMCP Servers can be installed manually or at runtime via npx (recommended). How you install determines your configuration:\n\n#### Configure for npx (recommended)\n\n   ```json\n   {\n     \"firebase-mcp\": {\n       \"command\": \"npx\",\n       \"args\": [\n         \"-y\",\n         \"@gannonh/firebase-mcp\"\n       ],\n       \"env\": {\n         \"SERVICE_ACCOUNT_KEY_PATH\": \"/absolute/path/to/serviceAccountKey.json\",\n         \"FIREBASE_STORAGE_BUCKET\": \"your-project-id.firebasestorage.app\"\n       }\n     }\n   }\n   ```\n\n#### Configure for local installation\n\n   ```json\n   {\n     \"firebase-mcp\": {\n       \"command\": \"node\",\n       \"args\": [\n         \"/absolute/path/to/firebase-mcp/dist/index.js\"\n       ],\n       \"env\": {\n         \"SERVICE_ACCOUNT_KEY_PATH\": \"/absolute/path/to/serviceAccountKey.json\",\n         \"FIREBASE_STORAGE_BUCKET\": \"your-project-id.firebasestorage.app\"\n       }\n     }\n   }\n```\n\n\n### 2. Test the Installation\n\nAsk your AI client: \"Please test all Firebase MCP tools.\"\n\n## 🛠️ Setup & Configuration\n\n### 1. Firebase Configuration\n\n1. Go to [Firebase Console](https://console.firebase.google.com) → Project Settings → Service Accounts\n2. Click \"Generate new private key\"\n3. Save the JSON file securely\n\n### 2. Environment Variables\n\n#### Required\n- `SERVICE_ACCOUNT_KEY_PATH`: Path to your Firebase service account key JSON (required)\n\n#### Optional\n- `FIREBASE_STORAGE_BUCKET`: Bucket name for Firebase Storage (defaults to `[projectId].appspot.com`)\n- `MCP_TRANSPORT`: Transport type to use (`stdio` or `http`) (defaults to `stdio`)\n- `MCP_HTTP_PORT`: Port for HTTP transport (defaults to `3000`)\n- `MCP_HTTP_HOST`: Host for HTTP transport (defaults to `localhost`)\n- `MCP_HTTP_PATH`: Path for HTTP transport (defaults to `/mcp`)\n- `DEBUG_LOG_FILE`: Enable file logging:\n  - Set to `true` to log to `~/.firebase-mcp/debug.log`\n  - Set to a file path to log to a custom location\n\n### 3. Client Integration\n\n#### Claude Desktop\nEdit: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\n#### VS Code / Augment\nEdit: `~/Library/Application Support/Code/User/settings.json`\n\n#### Cursor\nEdit: `[project root]/.cursor/mcp.json`\n\n## 📚 API Reference\n\n### Firestore Tools\n\n| Tool                               | Description                    | Required Parameters        |\n| ---------------------------------- | ------------------------------ | -------------------------- |\n| `firestore_add_document`           | Add a document to a collection | `collection`, `data`       |\n| `firestore_list_documents`         | List documents with filtering  | `collection`               |\n| `firestore_get_document`           | Get a specific document        | `collection`, `id`         |\n| `firestore_update_document`        | Update an existing document    | `collection`, `id`, `data` |\n| `firestore_delete_document`        | Delete a document              | `collection`, `id`         |\n| `firestore_list_collections`       | List root collections          | None                       |\n| `firestore_query_collection_group` | Query across subcollections    | `collectionId`             |\n\n### Storage Tools\n\n| Tool                      | Description               | Required Parameters              |\n| ------------------------- | ------------------------- | -------------------------------- |\n| `storage_list_files`      | List files in a directory | None (optional: `directoryPath`) |\n| `storage_get_file_info`   | Get file metadata and URL | `filePath`                       |\n| `storage_upload`          | Upload file from content  | `filePath`, `content`            |\n| `storage_upload_from_url` | Upload file from URL      | `filePath`, `url`                |\n\n### Authentication Tools\n\n| Tool            | Description             | Required Parameters |\n| --------------- | ----------------------- | ------------------- |\n| `auth_get_user` | Get user by ID or email | `identifier`        |\n\n## 💻 Developer Guide\n\n### Installation & Building\n\n```bash\ngit clone https://github.com/gannonh/firebase-mcp\ncd firebase-mcp\nnpm install\nnpm run build\n```\n\n### Running Tests\n\nFirst, install and start Firebase emulators:\n```bash\nnpm install -g firebase-tools\nfirebase init emulators\nfirebase emulators:start\n```\n\nThen run tests:\n```bash\n# Run tests with emulator\nnpm run test:emulator\n\n# Run tests with coverage\nnpm run test:coverage:emulator\n```\n\n### Project Structure\n\n```bash\nsrc/\n├── index.ts                  # Server entry point\n├── utils/                    # Utility functions\n└── lib/\n    └── firebase/              # Firebase service clients\n        ├── authClient.ts     # Authentication operations\n        ├── firebaseConfig.ts   # Firebase configuration\n        ├── firestoreClient.ts # Firestore operations\n        └── storageClient.ts  # Storage operations\n```\n\n## 🌐 HTTP Transport\n\nFirebase MCP now supports HTTP transport in addition to the default stdio transport. This allows you to run the server as a standalone HTTP service that can be accessed by multiple clients.\n\n### Running with HTTP Transport\n\nTo run the server with HTTP transport:\n\n```bash\n# Using environment variables\nMCP_TRANSPORT=http MCP_HTTP_PORT=3000 node dist/index.js\n\n# Or with npx\nMCP_TRANSPORT=http MCP_HTTP_PORT=3000 npx @gannonh/firebase-mcp\n```\n\n### Client Configuration for HTTP\n\nWhen using HTTP transport, configure your MCP client to connect to the HTTP endpoint:\n\n```json\n{\n  \"firebase-mcp\": {\n    \"url\": \"http://localhost:3000/mcp\"\n  }\n}\n```\n\n### Session Management\n\nThe HTTP transport supports session management, allowing multiple clients to connect to the same server instance. Each client receives a unique session ID that is used to maintain state between requests.\n\n## 🔍 Troubleshooting\n\n### Common Issues\n\n#### Storage Bucket Not Found\nIf you see \"The specified bucket does not exist\" error:\n1. Verify your bucket name in Firebase Console → Storage\n2. Set the correct bucket name in `FIREBASE_STORAGE_BUCKET` environment variable\n\n#### Firebase Initialization Failed\nIf you see \"Firebase is not initialized\" error:\n1. Check that your service account key path is correct and absolute\n2. Ensure the service account has proper permissions for Firebase services\n\n#### Composite Index Required\nIf you receive \"This query requires a composite index\" error:\n1. Look for the provided URL in the error message\n2. Follow the link to create the required index in Firebase Console\n3. Retry your query after the index is created (may take a few minutes)\n\n#### Zod Validation Error with `firestore_list_collections`\nIf you see a Zod validation error with message \"Expected object, received boolean\" when using the `firestore_list_collections` tool:\n\n> ⚠️ **Known Issue**: The `firestore_list_collections` tool may return a Zod validation error in the client logs. This is an erroneous validation error in the MCP SDK, as our investigation confirmed no boolean values are present in the response. Despite the error message, the query still works correctly and returns the proper collection data. This is a log-level error that doesn't affect functionality.\n\n### Debugging\n\n#### Enable File Logging\nTo help diagnose issues, you can enable file logging:\n\n```bash\n# Log to default location (~/.firebase-mcp/debug.log)\nDEBUG_LOG_FILE=true npx @gannonh/firebase-mcp\n\n# Log to a custom location\nDEBUG_LOG_FILE=/path/to/custom/debug.log npx @gannonh/firebase-mcp\n```\n\nYou can also enable logging in your MCP client configuration:\n\n```json\n{\n  \"firebase-mcp\": {\n    \"command\": \"npx\",\n    \"args\": [\"-y\", \"@gannonh/firebase-mcp\"],\n    \"env\": {\n      \"SERVICE_ACCOUNT_KEY_PATH\": \"/path/to/serviceAccountKey.json\",\n      \"FIREBASE_STORAGE_BUCKET\": \"your-project-id.firebasestorage.app\",\n      \"DEBUG_LOG_FILE\": \"true\"\n    }\n  }\n}\n```\n\n#### Real-time Log Viewing\nTo view logs in real-time:\n\n```bash\n# Using tail to follow the log file\ntail -f ~/.firebase-mcp/debug.log\n\n# Using a split terminal to capture stderr\nnpm start 2>&1 | tee logs.txt\n```\n\n#### Using MCP Inspector\nThe MCP Inspector provides interactive debugging:\n\n```bash\n# Install MCP Inspector\nnpm install -g @mcp/inspector\n\n# Connect to your MCP server\nmcp-inspector --connect stdio --command \"node ./dist/index.js\"\n```\n\n## 📋 Response Formatting\n\n### Storage Upload Response Example\n\n```json\n{\n  \"name\": \"reports/quarterly.pdf\",\n  \"size\": \"1024000\",\n  \"contentType\": \"application/pdf\",\n  \"updated\": \"2025-04-11T15:37:10.290Z\",\n  \"downloadUrl\": \"https://storage.googleapis.com/bucket/reports/quarterly.pdf?alt=media\",\n  \"bucket\": \"your-project.appspot.com\"\n}\n```\n\nDisplayed to the user as:\n\n```markdown\n## File Successfully Uploaded! 📁\n\nYour file has been uploaded to Firebase Storage:\n\n**File Details:**\n- **Name:** reports/quarterly.pdf\n- **Size:** 1024000 bytes\n- **Type:** application/pdf\n- **Last Updated:** April 11, 2025 at 15:37:10 UTC\n\n**[Click here to download your file](https://storage.googleapis.com/bucket/reports/quarterly.pdf?alt=media)**\n```\n\n## 🤝 Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Implement changes with tests (80%+ coverage required)\n4. Submit a pull request\n\n## 📄 License\n\nMIT License - see [LICENSE](LICENSE) file for details\n\n## 🔗 Related Resources\n\n- [Model Context Protocol Documentation](https://github.com/modelcontextprotocol)\n- [Firebase Documentation](https://firebase.google.com/docs)\n- [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup)\n",
+  "category": "Development",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "firebase-mcp": {
+        "command": "npx",
+        "args": ["-y", "@gannonh/firebase-mcp"],
+        "env": {
+          "SERVICE_ACCOUNT_KEY_PATH": "/absolute/path/to/serviceAccountKey.json",
+          "FIREBASE_STORAGE_BUCKET": "your-project-id.firebasestorage.app"
+        }
+      },
+      "firebase-mcp-node": {
+        "command": "node",
+        "args": ["/absolute/path/to/firebase-mcp/dist/index.js"],
+        "env": {
+          "SERVICE_ACCOUNT_KEY_PATH": "/absolute/path/to/serviceAccountKey.json",
+          "FIREBASE_STORAGE_BUCKET": "your-project-id.firebasestorage.app"
+        }
+      },
+      "firebase-mcp-http-node": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {
+          "MCP_TRANSPORT": "http",
+          "MCP_HTTP_PORT": "3000"
+        }
+      },
+      "firebase-mcp-http-npx": {
+        "command": "npx",
+        "args": ["@gannonh/firebase-mcp"],
+        "env": {
+          "MCP_TRANSPORT": "http",
+          "MCP_HTTP_PORT": "3000"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gannonh",
+    "repo": "firebase-mcp",
+    "url": "https://github.com/gannonh/firebase-mcp",
+    "name": "gannonh__firebase-mcp",
+    "path": null,
+    "stars": 209,
+    "contributors": 4,
+    "issues": 30,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "43272314daf5a0574e570e84cd523ccc2e8c40ca"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.926Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "firebase-admin",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@gannonh/firebase-mcp\",\n  \"version\": \"1.4.9\",\n  \"description\": \"Firebase MCP server for interacting with Firebase services through the Model Context Protocol\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"firebase-mcp\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest\",\n    \"test:emulator\": \"USE_FIREBASE_EMULATOR=true vitest run\",\n    \"test:coverage\": \"vitest run --coverage\",\n    \"test:coverage:emulator\": \"USE_FIREBASE_EMULATOR=true vitest run --coverage\",\n    \"test:verbose\": \"clear && vitest run --reporter verbose\",\n    \"start\": \"node dist/index.js\",\n    \"start:http\": \"MCP_TRANSPORT=http node dist/index.js\",\n    \"dev\": \"tsc && node dist/index.js\",\n    \"dev:http\": \"tsc && MCP_TRANSPORT=http node dist/index.js\",\n    \"inspect\": \".scripts/inspect-mcp.sh\",\n    \"lint\": \"eslint 'src/**/*.ts'\",\n    \"lint:fix\": \"eslint 'src/**/*.ts' --fix\",\n    \"format\": \"prettier --write \\\"src/**/*.{ts,tsx}\\\"\",\n    \"fix\": \"npm run lint:fix && npm run format\",\n    \"format:check\": \"prettier --check \\\"src/**/*.{ts,tsx}\\\"\",\n    \"preflight\": \"npm run format && npm run lint && npm run build && npm run test:coverage:emulator && npm ls --depth=0\",\n    \"preflight:prod\": \"npm run format && npm run lint && npm run build && npm run test:coverage && npm ls --depth=0\",\n    \"preflight:both\": \"npm run preflight && npm run preflight:prod\",\n    \"publish-preflight\": \"npm run format:check && npm run lint && npm run build\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"directories\": {\n    \"test\": \"test\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.0\",\n    \"axios\": \"^1.9.0\",\n    \"dotenv\": \"^16.5.0\",\n    \"express\": \"^5.1.0\",\n    \"firebase-admin\": \"^13.3.0\"\n  },\n  \"devDependencies\": {\n    \"@eslint/eslintrc\": \"^3.3.1\",\n    \"@eslint/js\": \"^9.26.0\",\n    \"@types/express\": \"^5.0.1\",\n    \"@types/node\": \"^22.15.14\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.32.0\",\n    \"@typescript-eslint/parser\": \"^8.32.0\",\n    \"@vitest/coverage-v8\": \"^3.1.3\",\n    \"eslint\": \"^9.26.0\",\n    \"eslint-config-prettier\": \"^10.1.2\",\n    \"eslint-plugin-prettier\": \"^5.4.0\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"^8.32.0\",\n    \"vitest\": \"^3.1.3\"\n  },\n  \"engines\": {\n    \"node\": \">=16.0.0\"\n  },\n  \"keywords\": [\n    \"firebase\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"ai\",\n    \"claude\",\n    \"anthropic\",\n    \"firestore\",\n    \"storage\",\n    \"authentication\"\n  ],\n  \"author\": \"Gannon Hall (https://github.com/gannonh)\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/gannonh/firebase-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/gannonh/firebase-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/gannonh/firebase-mcp#readme\"\n}"
+}

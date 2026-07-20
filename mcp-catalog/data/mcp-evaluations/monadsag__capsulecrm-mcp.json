@@ -1,0 +1,98 @@
+{
+  "name": "monadsag__capsulecrm-mcp",
+  "display_name": "capsulecrm-mcp",
+  "description": "MCP server from MonadsAG/capsulecrm-mcp",
+  "author": {
+    "name": "MonadsAG"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {
+      "CAPSULECRM_API_KEY": "${user_config.capsulecrm_api_key}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "capsulecrm_api_key": {
+      "type": "string",
+      "title": "CapsuleCRM API Key",
+      "description": "Your API key for connecting to CapsuleCRM. Obtain it from Account Settings → API in your CapsuleCRM dashboard.",
+      "sensitive": true,
+      "required": true
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Set the logging level for detailed output. Use 'DEBUG' for troubleshooting.",
+      "default": "INFO",
+      "required": false
+    }
+  },
+  "readme": "# 🚀 CapsuleCRM MCP Server\n\nTransform your CRM workflow with AI! 🤖✨ Connect Claude directly to your CapsuleCRM account for natural language customer and sales management.\n\n## 🎯 What it does\n\n- 🗣️ **Talk to your CRM in plain English** - \"Show me all VIP customers from last month\"\n- 🔍 **Smart search and filtering** - Find exactly what you need with powerful queries\n- 📊 **Get instant insights** - Query sales pipeline, customer data, and tasks\n- ⚡ **Automate routine tasks** - Create, update, and manage CRM data through conversation\n\n## 🎉 Installation\n\n### 🖥️ Claude Desktop \n1. 📥 Download the `capsulecrm-mcp.dxt` file\n2. 👆 Double-click to install in Claude Desktop\n3. 🔑 Enter your CapsuleCRM API key when prompted\n4. 🎊 Start using natural language CRM commands!\n\n## 🔑 Getting Your API Key\n\n1. 🌐 Log in to your CapsuleCRM dashboard\n2. ⚙️ Go to **Account Settings** → **API**\n3. ✨ Generate a new API token\n4. 💾 Copy and store securely (you won't see it again!)\n\n## 💡 Usage Examples\n\n### 👥 Customer Management\n- 🔍 \"Find all VIP customers in New York\"\n- 📅 \"Show me customers we haven't contacted in 30 days\"\n- ➕ \"Create a new person: John Smith, john@acme.com\"\n\n### 💰 Sales Pipeline\n- 💎 \"What's the total value of our open opportunities?\"\n- 📈 \"Show me deals closing this quarter\"\n- 🎯 \"Create a new opportunity for Acme Corp worth $25,000\"\n\n### ✅ Task Management\n- ⏰ \"What tasks are overdue?\"\n- 👩‍💼 \"Show me all tasks assigned to Sarah\"\n- 📝 \"Create a follow-up task for next Friday\"\n\n### 🔮 Advanced Filtering\nAsk complex questions like:\n- 💵 \"Find opportunities worth more than $50,000 that are in proposal stage\"\n- 🏷️ \"Show me customers added in the last 30 days with hot-lead tags\"\n- 👥 \"List all overdue tasks assigned to my team\"\n\n## 🎪 Capabilities\n\n**👥 Customer Management (Parties)**\n- 👀 View, create, update people and organizations\n- 🔎 Search by name, email, phone, address\n- 🏷️ Filter by tags, location, contact info\n\n**💼 Sales Pipeline (Opportunities)**\n- 📊 Track deals and progress through stages\n- 🎲 Automatic probability-weighted values\n- 🔍 Comprehensive filtering and search\n- 💰 Revenue insights and reporting\n\n**✅ Task Management**\n- 📋 Create, view, and update tasks\n- 🎯 Filter by status, assignee, due dates\n- 🔗 Link tasks to customers and deals\n\n**🎯 Pipeline Configuration**\n- 📈 View all pipeline milestones\n- 🚀 Track opportunity progress through stages\n\n## 🔧 Search Operators\n\n- 🔍 `contains` - Find partial matches\n- 🎯 `starts with` / `ends with` - Prefix/suffix matching\n- 📅 `is after` / `is before` - Date comparisons\n- 📊 `is greater than` / `is less than` - Numerical filtering\n- ⏰ `is within last` - Recent time periods\n\n## 🚨 Troubleshooting\n\n**🚫 Extension won't start:**\n- ✅ Verify your API key is correct\n- 🌐 Check internet connection to CapsuleCRM\n- 🐍 Ensure Python 3.11+ is installed\n\n**📦 \"No module found\" errors:**\n- 🎁 Dependencies are bundled in the extension\n- 🔄 Try reinstalling the extension\n\n**⚠️ API errors:**\n- 🔐 Verify API key permissions in CapsuleCRM\n- 🚦 Check rate limits aren't exceeded\n\n**🐛 Debug Mode:**\nSet environment variable `LOG_LEVEL=DEBUG` for detailed logging.\n\n## 🛡️ Security & Privacy\n\n- 🔐 Uses official CapsuleCRM API with secure token authentication\n- 🚫 No data storage - acts as real-time bridge\n- 🔒 Environment variables for secure token storage\n- ✅ Full read/write permissions as configured in CapsuleCRM\n\n## 📄 License\n\nMIT License - see [LICENSE](LICENSE) file for details.\n\n## 🏢 About\n\nDeveloped by [Monads AG](https://monads.ch) - specialists in AI automation and business process optimization.\n\n---\n\n*Ready to transform your CRM experience? Let's make data management fun! 🎉🚀*",
+  "category": "CRM",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "MonadsAG",
+    "repo": "capsulecrm-mcp",
+    "url": "https://github.com/MonadsAG/capsulecrm-mcp",
+    "name": "capsulecrm-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "702d22780db4575bb1ce364bd9fb755640461236"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.409Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"capsulecrm-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"fastapi>=0.116.0\",\n    \"fastmcp>=2.10.4\",\n    \"httpx>=0.28.1\",\n    \"pydantic>=2.11.7\",\n    \"uvicorn>=0.35.0\",\n]\n\n\n=== requirements.txt ===\nfastapi\nuvicorn\nhttpx\npydantic\nfastmcp\n"
+}

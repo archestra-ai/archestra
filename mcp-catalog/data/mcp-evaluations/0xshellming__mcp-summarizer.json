@@ -1,0 +1,87 @@
+{
+  "name": "0xshellming__mcp-summarizer",
+  "display_name": "mcp-summarizer",
+  "description": "MCP Server for AI Summarization",
+  "author": {
+    "name": "0xshellming"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Content Summarizer Server\n\nA Model Context Protocol (MCP) server that provides intelligent summarization capabilities for various types of content using Google's Gemini 1.5 Pro model. This server can help you generate concise summaries while maintaining key information from different content formats.\n\n<a href=\"https://3min.top\"><img width=\"380\" height=\"200\" src=\"/public/imgs/section1_en.jpg\" alt=\"MCP Content Summarizer Server\" /></a>\n\n## Powered by 3MinTop\n\nThe summarization service is powered by [3MinTop](https://3min.top), an AI-powered reading tool that helps you understand a chapter's content in just three minutes. 3MinTop transforms complex content into clear summaries, making learning efficient and helping build lasting reading habits.\n\n## Features\n\n- Universal content summarization using Google's Gemini 1.5 Pro model\n- Support for multiple content types:\n  - Plain text\n  - Web pages\n  - PDF documents\n  - EPUB books\n  - HTML content\n- Customizable summary length\n- Multi-language support\n- Smart context preservation\n- Dynamic greeting resource for testing\n\n## Getting Started\n\n1. Clone this repository\n2. Install dependencies:\n   ```\n   pnpm install\n   ```\n\n3. Build the project:\n   ```\n   pnpm run build\n   ```\n\n4. Start the server:\n   ```\n   pnpm start\n   ```\n\n## Development\n\n- Use `pnpm run dev` to start the TypeScript compiler in watch mode\n- Modify `src/index.ts` to customize server behavior or add new tools\n\n## Usage with Desktop App\n\nTo integrate this server with a desktop app, add the following to your app's server configuration:\n\n```js\n{\n  \"mcpServers\": {\n    \"content-summarizer\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"{ABSOLUTE PATH TO FILE HERE}/dist/index.js\"\n      ]\n    }\n  }\n}\n```\n\n## Available Tools\n\n### summarize\n\nSummarizes content from various sources using the following parameters:\n- `content` (string | object): The input content to summarize. Can be:\n  - Text string\n  - URL for web pages\n  - Base64 encoded PDF\n  - EPUB file content\n- `type` (string): Content type (\"text\", \"url\", \"pdf\", \"epub\")\n- `maxLength` (number, optional): Maximum length of the summary in characters (default: 200)\n- `language` (string, optional): Target language for the summary (default: \"en\")\n- `focus` (string, optional): Specific aspect to focus on in the summary\n- `style` (string, optional): Summary style (\"concise\", \"detailed\", \"bullet-points\")\n\nExample usage:\n\n```typescript\n// Summarize a webpage\nconst result = await server.invoke(\"summarize\", {\n  content: \"https://example.com/article\",\n  type: \"url\",\n  maxLength: 300,\n  style: \"bullet-points\"\n});\n\n// Summarize a PDF document\nconst result = await server.invoke(\"summarize\", {\n  content: pdfBase64Content,\n  type: \"pdf\",\n  language: \"zh\",\n  style: \"detailed\"\n});\n```\n\n### greeting\n\nA dynamic resource that demonstrates basic MCP resource functionality:\n- URI format: `greeting://{name}`\n- Returns a greeting message with the provided name\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. ",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "content-summarizer": {
+        "command": "pnpm",
+        "args": ["start"],
+        "env": {}
+      },
+      "content-summarizer-configured": {
+        "command": "node",
+        "args": ["{ABSOLUTE PATH TO FILE HERE}/dist/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "0xshellming",
+    "repo": "mcp-summarizer",
+    "url": "https://github.com/0xshellming/mcp-summarizer",
+    "name": "mcp-summarizer",
+    "path": null,
+    "stars": 107,
+    "contributors": 1,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1ce1d5d7003c134e2f075593d39603f72f5cc30a"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.605Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@ai-sdk/google",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "ai",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"mcp-summarizer\",\n\t\"version\": \"1.0.0-alpha.2\",\n\t\"description\": \"A MCP server for summarizing text\",\n\t\"main\": \"dist/index.js\",\n\t\"bin\": {\n\t\t\"mcp-summarizer\": \"./dist/index.js\"\n\t},\n\t\"maintainers\": [\n\t\t{\n\t\t\t\"name\": \"Shellming\",\n\t\t\t\"email\": \"qxm726@gmail.com\"\n\t\t}\n\t],\n\t\"scripts\": {\n\t\t\"dev\": \"tsc --watch\",\n\t\t\"build\": \"tsc\",\n\t\t\"start\": \"node ./dist/index.js\"\n\t},\n\t\"dependencies\": {\n\t\t\"@ai-sdk/google\": \"^1.1.17\",\n\t\t\"@modelcontextprotocol/sdk\": \"^1.6.0\",\n\t\t\"ai\": \"^4.1.46\",\n\t\t\"zod\": \"^3.24.2\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@types/node\": \"^22.9.3\",\n\t\t\"typescript\": \"^5.6.2\"\n\t}\n}"
+}

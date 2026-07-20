@@ -1,0 +1,78 @@
+{
+  "name": "cbcoutinho__nextcloud-mcp-server",
+  "display_name": "nextcloud-mcp-server",
+  "description": "Nextcloud MCP Server",
+  "author": {
+    "name": "cbcoutinho"
+  },
+  "server": {
+    "command": "docker",
+    "args": ["run", "ghcr.io/cbcoutinho/nextcloud--mcp--server-blue"],
+    "env": {},
+    "type": "local",
+    "docker_image": "ghcr.io/cbcoutinho/nextcloud--mcp--server-blue"
+  },
+  "readme": "# Nextcloud MCP Server\n\n[![Docker Image](https://img.shields.io/badge/docker-ghcr.io/cbcoutinho/nextcloud--mcp--server-blue)](https://github.com/cbcoutinho/nextcloud-mcp-server/pkgs/container/nextcloud-mcp-server)\n\nThe Nextcloud MCP (Model Context Protocol) server allows Large Language Models (LLMs) like OpenAI's GPT, Google's Gemini, or Anthropic's Claude to interact with your Nextcloud instance. This enables automation of various Nextcloud actions, starting with the Notes API.\n\n## Features\n\nThe server provides integration with multiple Nextcloud apps, enabling LLMs to interact with your Nextcloud data through a rich set of tools and resources.\n\n## Supported Nextcloud Apps\n\n| App | Support Status | Description |\n|-----|----------------|-------------|\n| **Notes** | ✅ Full Support | Create, read, update, delete, and search notes. Handle attachments via WebDAV. |\n| **Calendar** | ✅ Full Support | Complete calendar integration - create, update, delete events. Support for recurring events, reminders, attendees, and all-day events via CalDAV. |\n| **Tables** | ⚠️ Row Operations | Read table schemas and perform CRUD operations on table rows. Table management not yet supported. |\n| **Files (WebDAV)** | ✅ Full Support | Complete file system access - browse directories, read/write files, create/delete resources. |\n| **Contacts** | ✅ Full Support | Create, read, update, and delete contacts and address books via CardDAV. |\n\n## Available Tools\n\n### Notes Tools\n\n| Tool | Description |\n|------|-------------|\n| `nc_get_note` | Get a specific note by ID |\n| `nc_notes_create_note` | Create a new note with title, content, and category |\n| `nc_notes_update_note` | Update an existing note by ID |\n| `nc_notes_append_content` | Append content to an existing note with a clear separator |\n| `nc_notes_delete_note` | Delete a note by ID |\n| `nc_notes_search_notes` | Search notes by title or content |\n\n### Calendar Tools\n\n| Tool | Description |\n|------|-------------|\n| `nc_calendar_list_calendars` | List all available calendars for the user |\n| `nc_calendar_create_event` | Create a comprehensive calendar event with full feature support (recurring, reminders, attendees, etc.) |\n| `nc_calendar_list_events` | **Enhanced:** List events with advanced filtering (min attendees, duration, categories, status, search across all calendars) |\n| `nc_calendar_get_event` | Get detailed information about a specific event |\n| `nc_calendar_update_event` | Update any aspect of an existing event |\n| `nc_calendar_delete_event` | Delete a calendar event |\n| `nc_calendar_create_meeting` | Quick meeting creation with smart defaults |\n| `nc_calendar_get_upcoming_events` | Get upcoming events in the next N days |\n| `nc_calendar_find_availability` | **New:** Intelligent availability finder - find free time slots for meetings with attendee conflict detection |\n| `nc_calendar_bulk_operations` | **New:** Bulk update, delete, or move events matching filter criteria |\n| `nc_calendar_manage_calendar` | **New:** Create, delete, and manage calendar properties |\n\n### Contacts Tools\n\n| Tool | Description |\n|------|-------------|\n| `nc_contacts_list_addressbooks` | List all available addressbooks for the user |\n| `nc_contacts_list_contacts` | List all contacts in a specific addressbook |\n| `nc_contacts_create_addressbook` | Create a new addressbook |\n| `nc_contacts_delete_addressbook` | Delete an addressbook |\n| `nc_contacts_create_contact` | Create a new contact in an addressbook |\n| `nc_contacts_delete_contact` | Delete a contact from an addressbook |\n\n### Tables Tools\n\n| Tool | Description |\n|------|-------------|\n| `nc_tables_list_tables` | List all tables available to the user |\n| `nc_tables_get_schema` | Get the schema/structure of a specific table including columns and views |\n| `nc_tables_read_table` | Read rows from a table with optional pagination |\n| `nc_tables_insert_row` | Insert a new row into a table |\n| `nc_tables_update_row` | Update an existing row in a table |\n| `nc_tables_delete_row` | Delete a row from a table |\n\n### WebDAV File System Tools\n\n| Tool | Description |\n|------|-------------|\n| `nc_webdav_list_directory` | List files and directories in any NextCloud path |\n| `nc_webdav_read_file` | Read file content (text files decoded, binary as base64) |\n| `nc_webdav_write_file` | Create or update files in NextCloud |\n| `nc_webdav_create_directory` | Create new directories |\n| `nc_webdav_delete_resource` | Delete files or directories |\n\n## Available Resources\n\n| Resource | Description |\n|----------|-------------|\n| `nc://capabilities` | Access Nextcloud server capabilities |\n| `notes://settings` | Access Notes app settings |\n| `nc://Notes/{note_id}/attachments/{attachment_filename}` | Access attachments for notes |\n\n### WebDAV File System Access\n\nThe server provides complete file system access to your NextCloud instance, enabling you to:\n\n- Browse any directory structure\n- Read and write files of any type\n- Create and delete directories\n- Manage your NextCloud files directly through LLM interactions\n\n**Usage Examples:**\n\n```python\n# List files in root directory\nawait nc_webdav_list_directory(\"\")\n\n# Browse a specific folder\nawait nc_webdav_list_directory(\"Documents/Projects\")\n\n# Read a text file\ncontent = await nc_webdav_read_file(\"Documents/readme.txt\")\n\n# Create a new directory\nawait nc_webdav_create_directory(\"NewProject/docs\")\n\n# Write content to a file\nawait nc_webdav_write_file(\"NewProject/docs/notes.md\", \"# My Notes\\n\\nContent here...\")\n\n# Delete a file or directory\nawait nc_webdav_delete_resource(\"old_file.txt\")\n```\n\n### Calendar Integration\n\nThe server provides comprehensive calendar integration through CalDAV, enabling you to:\n\n- List all available calendars\n- Create, read, update, and delete calendar events  \n- Handle recurring events with RRULE support\n- Manage event reminders and notifications\n- Support all-day and timed events\n- Handle attendees and meeting invitations\n- Organize events with categories and priorities\n\n**Usage Examples:**\n\n```python\n# List available calendars\ncalendars = await nc_calendar_list_calendars()\n\n# Create a simple event\nawait nc_calendar_create_event(\n    calendar_name=\"personal\",\n    title=\"Team Meeting\", \n    start_datetime=\"2025-07-28T14:00:00\",\n    end_datetime=\"2025-07-28T15:00:00\",\n    description=\"Weekly team sync\",\n    location=\"Conference Room A\"\n)\n\n# Create a recurring weekly meeting\nawait nc_calendar_create_event(\n    calendar_name=\"work\",\n    title=\"Weekly Standup\",\n    start_datetime=\"2025-07-28T09:00:00\", \n    end_datetime=\"2025-07-28T09:30:00\",\n    recurring=True,\n    recurrence_rule=\"FREQ=WEEKLY;BYDAY=MO\"\n)\n\n# Quick meeting creation\nawait nc_calendar_create_meeting(\n    title=\"Client Call\",\n    date=\"2025-07-28\",\n    time=\"15:00\",\n    duration_minutes=60,\n    attendees=\"client@example.com,colleague@company.com\"\n)\n\n# Get upcoming events  \nevents = await nc_calendar_get_upcoming_events(days_ahead=7)\n\n# Advanced search - find all meetings with 5+ attendees lasting 2+ hours\nlong_meetings = await nc_calendar_list_events(\n    calendar_name=\"\",  # Search all calendars\n    search_all_calendars=True,\n    start_date=\"2025-07-01\",\n    end_date=\"2025-07-31\", \n    min_attendees=5,\n    min_duration_minutes=120,\n    title_contains=\"meeting\"\n)\n\n# Find availability for a 1-hour meeting with specific attendees\navailability = await nc_calendar_find_availability(\n    duration_minutes=60,\n    attendees=\"sarah@company.com,mike@company.com\",\n    date_range_start=\"2025-07-28\",\n    date_range_end=\"2025-08-04\",\n    business_hours_only=True,\n    exclude_weekends=True,\n    preferred_times=\"09:00-12:00,14:00-17:00\"\n)\n\n# Bulk update all team meetings to new location\nbulk_result = await nc_calendar_bulk_operations(\n    operation=\"update\",\n    title_contains=\"team meeting\",\n    start_date=\"2025-08-01\", \n    end_date=\"2025-08-31\",\n    new_location=\"Conference Room B\",\n    new_reminder_minutes=15\n)\n\n# Create a new project calendar\nnew_calendar = await nc_calendar_manage_calendar(\n    action=\"create\",\n    calendar_name=\"project-alpha\",\n    display_name=\"Project Alpha Calendar\",\n    description=\"Calendar for Project Alpha team\",\n    color=\"#FF5722\"\n)\n```\n\n### Note Attachments\n\nThis server supports adding and retrieving note attachments via WebDAV. Please note the following behavior regarding attachments:\n\n* When a note is deleted, its attachments remain in the system. This matches the behavior of the official Nextcloud Notes app.\n* Orphaned attachments (attachments whose parent notes have been deleted) may accumulate over time.\n* WebDAV permissions must be properly configured for attachment operations to work correctly.\n\n## Installation\n\n### Prerequisites\n\n*   Python 3.8+\n*   Access to a Nextcloud instance\n\n### Local Installation\n\n1.  Clone the repository (if running from source):\n    ```bash\n    git clone https://github.com/cbcoutinho/nextcloud-mcp-server.git\n    cd nextcloud-mcp-server\n    ```\n2.  Install the package (if running as a library):\n    ```bash\n    poetry install\n    ```\n\n### Docker\n\nA pre-built Docker image is available: `ghcr.io/cbcoutinho/nextcloud-mcp-server`\n\n## Configuration\n\nThe server requires credentials to connect to your Nextcloud instance. Create a file named `.env` (or any name you prefer) in the directory where you'll run the server, based on the `env.sample` file:\n\n```dotenv\n# .env\nNEXTCLOUD_HOST=https://your.nextcloud.instance.com\nNEXTCLOUD_USERNAME=your_nextcloud_username\nNEXTCLOUD_PASSWORD=your_nextcloud_app_password_or_login_password\n```\n\n*   `NEXTCLOUD_HOST`: The full URL of your Nextcloud instance.\n*   `NEXTCLOUD_USERNAME`: Your Nextcloud username.\n*   `NEXTCLOUD_PASSWORD`: **Important:** It is highly recommended to use a dedicated Nextcloud App Password for security. You can generate one in your Nextcloud Security settings. Alternatively, you can use your regular login password, but this is less secure.\n*   `FASTMCP_HOST`: _Optional:_ By default FastMCP binds to localhost. Use this variable to set a different binding address (e.g. `0.0.0.0`)\n\n## Running the Server\n\n### Locally\n\nEnsure your environment variables are loaded, then run the server using `mcp run`:\n\n```bash\n# Load environment variables from your .env file\nexport $(grep -v '^#' .env | xargs)\n\n# Run the server\nuv run mcp run -t sse nextcloud_mcp_server/app.py:mcp\n```\n\nThe server will start, typically listening on `http://127.0.0.1:8000`.\n\n> NOTE: To make the server bind to a different address, use the FASTMCP_HOST environmental variable\n\n### Using Docker\n\nMount your environment file when running the container:\n\n```bash\ndocker run -p 127.0.0.1:8000:8000 --env-file .env --rm ghcr.io/cbcoutinho/nextcloud-mcp-server:latest\n```\n\nThis will start the server and expose it on port 8000 of your local machine.\n\n## Usage\n\nOnce the server is running, you can connect to it using an MCP client like `MCP Inspector`. Once your MCP server is running, launch MCP Inspector as follows:\n\n```bash\nuv run mcp dev\n```\n\nYou can then connect to and interact with the server's tools and resources through your browser.\n\n## References:\n\n- https://github.com/modelcontextprotocol/python-sdk\n\n## Contributing\n\nContributions are welcome! Please feel free to submit issues or pull requests on the [GitHub repository](https://github.com/cbcoutinho/nextcloud-mcp-server).\n\n## License\n\nThis project is licensed under the AGPL-3.0 License. See the [LICENSE](./LICENSE) file for details.\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/cbcoutinho-nextcloud-mcp-server-badge.png)](https://mseep.ai/app/cbcoutinho-nextcloud-mcp-server)\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "programming_language": "Python",
+  "framework": null,
+  "github_info": {
+    "owner": "cbcoutinho",
+    "repo": "nextcloud-mcp-server",
+    "url": "https://github.com/cbcoutinho/nextcloud-mcp-server",
+    "name": "cbcoutinho__nextcloud-mcp-server",
+    "path": null,
+    "stars": 24,
+    "contributors": 6,
+    "issues": 14,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8f6656c54618a2e11ec3d511c36dfcbd79ac5905"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "pillow",
+      "importance": 7
+    },
+    {
+      "name": "icalendar",
+      "importance": 9
+    },
+    {
+      "name": "pythonvcard4",
+      "importance": 9
+    }
+  ],
+  "user_config": {},
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"nextcloud-mcp-server\"\nversion = \"0.7.1\"\ndescription = \"\"\nauthors = [\n    {name = \"Chris Coutinho\",email = \"chris@coutinho.io\"}\n]\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"mcp[cli] (>=1.10,<1.11)\",\n    \"httpx (>=0.28.1,<0.29.0)\",\n    \"pillow (>=11.2.1,<12.0.0)\",\n    \"icalendar (>=6.0.0,<7.0.0)\",\n    \"pythonvcard4>=0.2.0\",\n]\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nasyncio_default_test_loop_scope = \"session\"\nasyncio_default_fixture_loop_scope = \"session\"\nlog_cli = 1\nlog_cli_level = \"INFO\"\nlog_level = \"INFO\"\nmarkers = [\n    \"integration: marks tests as slow (deselect with '-m \\\"not slow\\\"')\"\n]\n\n[tool.commitizen]\nname = \"cz_conventional_commits\"\ntag_format = \"v$version\"\nversion_scheme = \"pep440\"\nversion_provider = \"uv\"\nupdate_changelog_on_bump = true\nmajor_version_zero = true\n\n[build-system]\nrequires = [\"poetry-core>=2.0.0,<3.0.0\"]\nbuild-backend = \"poetry.core.masonry.api\"\n\n[dependency-groups]\ndev = [\n    \"commitizen>=4.8.2\",\n    \"ipython>=9.2.0\",\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=1.0.0\",\n    \"pytest-cov>=6.1.1\",\n    \"ruff>=0.11.13\",\n]\n",
+  "last_scraped_at": "2025-09-09T13:06:56.137Z"
+}

@@ -1,0 +1,118 @@
+{
+  "name": "ambar__simctl-mcp",
+  "display_name": "iOS Simulator Control",
+  "description": "MCP server from ambar/simctl-mcp",
+  "author": {
+    "name": "ambar"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "simctl-mcp"],
+    "env": {
+      "PORT": "${user_config.port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "port": {
+      "type": "number",
+      "title": "HTTP Server Port",
+      "description": "Port for HTTP server mode. Default is 8081 if --http is used without specifying a port.",
+      "required": false,
+      "default": 8081
+    }
+  },
+  "readme": "# simctl-mcp\n\nA Model Context Protocol server implementation for iOS Simulator control.\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/ambar/simctl-mcp)](https://archestra.ai/mcp-catalog/ambar__simctl-mcp)\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=simctl-mcp&config=eyJjb21tYW5kIjoibnB4IC15IHNpbWN0bC1tY3AifQ%3D%3D)\n\n## Config\n\n`.cursor/mcp.json` or `.vscode/mcp.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"simctl-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"simctl-mcp\"]\n    }\n  }\n}\n```\n\n## Prompts\n\nSome examples of prompts:\n\n- What operations does the simulator support?\n- Open shortcuts://\n- What is the bundle ID of the \"Settings\" app?\n- Set clipboard content to: Hello\n- What is the simulator SDK version?\n- Generate an Appium connection string for the \"Settings\" app\n\n## Usage\n\nThe server can be started in two modes:\n\n1. STDIO Mode (default)\n2. HTTP Server Mode\n\n### STDIO Mode\n\nIn STDIO mode, the server communicates through standard input/output streams.\n\n```bash\nnpx simctl-mcp\n```\n\n### HTTP Server Mode\n\nIn HTTP server mode, the server listens for HTTP connections on a specified port.\n\n```bash\n# Start with default port (8081)\nnpx simctl-mcp --http\n\n# Start with custom port using --port flag\nnpx simctl-mcp --http --port 3000\n\n# Start with custom port using environment variable\nPORT=3000 npx simctl-mcp --http\n```\n\n## Tools\n\n## Device Management:\n- Create new simulator devices\n- Delete existing devices\n- Boot devices\n- Shutdown devices\n- List all available devices\n- List available device types\n- List available runtimes\n\n## App Management:\n- Install apps\n- Uninstall apps\n- Launch apps\n- Terminate running apps\n- Get app container path\n- Get app information\n- List installed apps\n\n## App Permissions:\n- Grant permissions to apps\n- Revoke app permissions\n- Reset all app permissions\n\n## System Features:\n- Open URLs in simulator\n- Add media files\n- Get/Set environment variables\n- Get/Set appearance (light/dark mode)\n- Send simulated push notifications\n\n## Certificate & Security:\n- Add root certificates\n- Add regular certificates\n- Reset keychain\n\n## Media & Content:\n- Take screenshots\n- Get/Set pasteboard content (clipboard)\n",
+  "category": "Development",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "simctl-mcp": {
+        "command": "npx",
+        "args": ["-y", "simctl-mcp"],
+        "env": {}
+      },
+      "simctl-mcp-stdio": {
+        "command": "npx",
+        "args": ["simctl-mcp"],
+        "env": {}
+      },
+      "simctl-mcp-http": {
+        "command": "npx",
+        "args": ["simctl-mcp", "--http"],
+        "env": {}
+      },
+      "simctl-mcp-http-port-3000": {
+        "command": "npx",
+        "args": ["simctl-mcp", "--http", "--port", "3000"],
+        "env": {}
+      },
+      "simctl-mcp-http-env-port": {
+        "command": "npx",
+        "args": ["simctl-mcp", "--http"],
+        "env": {
+          "PORT": "3000"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ambar",
+    "repo": "simctl-mcp",
+    "url": "https://github.com/ambar/simctl-mcp",
+    "name": "ambar__simctl-mcp",
+    "path": null,
+    "stars": 11,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "731b3c0b1ac5b62eb2263193767ad53c084409d5"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:34.684Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "node-simctl",
+      "importance": 9
+    },
+    {
+      "name": "arg",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"simctl-mcp\",\n  \"version\": \"0.0.3\",\n  \"description\": \"simctl mcp server\",\n  \"repository\": \"ambar/simctl-mcp\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"simctl-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"dev\": \"tsx --watch src/index.ts\",\n    \"start\": \"node dist/index.js\",\n    \"build\": \"tsc\",\n    \"prepublishOnly\": \"npm run build\",\n    \"lint\": \"biome check .\",\n    \"lint:fix\": \"biome check --write .\",\n    \"lint:fix-unsafe\": \"biome check --write -unsafe .\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"simctl\"\n  ],\n  \"license\": \"MIT\",\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"^1.9.4\",\n    \"@recommended/biome-config\": \"^1.1.0\",\n    \"@types/express\": \"^5.0.1\",\n    \"@types/node\": \"^22.13.14\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"arg\": \"^5.0.2\",\n    \"express\": \"^4.21.2\",\n    \"node-simctl\": \"^7.7.2\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"packageManager\": \"pnpm@8.15.9+sha512.499434c9d8fdd1a2794ebf4552b3b25c0a633abcee5bb15e7b5de90f32f47b513aca98cd5cfd001c31f0db454bc3804edccd578501e4ca293a6816166bbd9f81\"\n}\n"
+}

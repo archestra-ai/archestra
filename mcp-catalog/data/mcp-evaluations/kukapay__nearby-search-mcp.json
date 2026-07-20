@@ -1,0 +1,100 @@
+{
+  "name": "kukapay__nearby-search-mcp",
+  "display_name": "nearby-search-mcp",
+  "description": "An MCP server for nearby place searches with IP-based location detection.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {
+      "GOOGLE_API_KEY": "${user_config.google_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "google_api_key": {
+      "type": "string",
+      "title": "Google API Key",
+      "description": "Your Google Cloud Platform API Key with Places API enabled.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# NearbySearch MCP Server\n\nAn MCP server for nearby place searches with IP-based location detection.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/nearby-search-mcp) \n![GitHub Last Commit](https://img.shields.io/github/last-commit/kukapay/nearby-search-mcp) \n![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)\n\n## Features\n\n- **IP-based Location Detection**: Uses ipapi.co to determine your current location\n- **Google Places Integration**: Searches for nearby places based on keywords and optional type filters\n- **Simple Interface**: Single tool endpoint with customizable radius\n\n## Requirements\n\n- Python 3.10+\n- Google Cloud Platform API Key with Places API enabled\n- Internet connection\n\n## Installation\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/kukapay/nearby-search-mcp.git\ncd nearby-search-mcp\n```\n\n2. Install dependencies:\n```bash\n# Using uv (recommended)\nuv add \"mcp[cli]\" httpx python-dotenv\n\n# Or using pip\npip install mcp httpx python-dotenv\n```\n\n3. Client Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"nearby-search\": {\n      \"command\": \"uv\",\n      \"args\": [\"--directory\", \"path/to/nearby-search-mcp\", \"run\", \"main.py\"],\n      \"env\": {\n        \"GOOGLE_API_KEY\": \"your google api key\"\n      }\n    }\n  }\n}\n````\n\n## Usage\n\n### Running the Server\n\n- **Development Mode** (with MCP Inspector):\n```bash\nmcp dev main.py\n```\n\n- **Install in Claude Desktop**:\n```bash\nmcp install main.py --name \"NearbySearch\"\n```\n\n- **Direct Execution**:\n```bash\npython main.py\n```\n\n### Available Endpoints\n\n**Tool: `search_nearby`**\n - Searches for places near your current location\n - Parameters:\n   - `keyword` (str): What to search for (e.g., \"coffee shop\")\n   - `radius` (int, optional): Search radius in meters (default: 1500)\n   - `type` (str, optional): Place type (e.g., \"restaurant\", \"cafe\")\n\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Location",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "nearby-search": {
+        "command": "uv",
+        "args": ["--directory", "path/to/nearby-search-mcp", "run", "main.py"],
+        "env": {
+          "GOOGLE_API_KEY": "your google api key"
+        }
+      },
+      "nearby-search-dev": {
+        "command": "mcp",
+        "args": ["dev", "main.py"],
+        "env": {}
+      },
+      "nearby-search-direct": {
+        "command": "python",
+        "args": ["main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "nearby-search-mcp",
+    "url": "https://github.com/kukapay/nearby-search-mcp",
+    "name": "nearby-search-mcp",
+    "path": null,
+    "stars": 12,
+    "contributors": 1,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9509a1348a3ee5153d66e659c0ba56ae5cbf03b8"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.033Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"nearby-search-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server for nearby place searches with IP-based location detection.\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"dotenv>=0.9.9\",\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.4.1\",\n]\n"
+}

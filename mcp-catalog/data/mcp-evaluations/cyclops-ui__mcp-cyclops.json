@@ -1,0 +1,143 @@
+{
+  "name": "cyclops-ui__mcp-cyclops",
+  "display_name": "mcp-cyclops",
+  "description": "Model Context Protocol server for Cyclops",
+  "author": {
+    "name": "cyclops-ui"
+  },
+  "server": {
+    "command": "mcp-cyclops",
+    "args": [],
+    "env": {
+      "KUBECONFIG": "${user_config.kubeconfig}",
+      "CYCLOPS_KUBE_CONTEXT": "${user_config.cyclops_kube_context}",
+      "CYCLOPS_MODULE_NAMESPACE": "${user_config.cyclops_module_namespace}",
+      "CYCLOPS_HELM_RELEASE_NAMESPACE": "${user_config.cyclops_helm_release_namespace}",
+      "CYCLOPS_MODULE_TARGET_NAMESPACE": "${user_config.cyclops_module_target_namespace}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "kubeconfig": {
+      "type": "file",
+      "title": "Kubeconfig File Path",
+      "description": "Path to the Kubernetes kubeconfig file. Defaults to in-cluster config or $HOME/.kube/config if not provided.",
+      "required": false,
+      "default": "${HOME}/.kube/config"
+    },
+    "cyclops_kube_context": {
+      "type": "string",
+      "title": "Kubernetes Context",
+      "description": "The Kubernetes context to use for connecting to the cluster.",
+      "required": false
+    },
+    "cyclops_module_namespace": {
+      "type": "string",
+      "title": "Module Storage Namespace",
+      "description": "The Kubernetes namespace where Cyclops Modules are stored.",
+      "required": false
+    },
+    "cyclops_helm_release_namespace": {
+      "type": "string",
+      "title": "Helm Release Namespace",
+      "description": "The Kubernetes namespace for Helm releases managed by Cyclops.",
+      "required": false
+    },
+    "cyclops_module_target_namespace": {
+      "type": "string",
+      "title": "Module Target Namespace",
+      "description": "The target Kubernetes namespace where modules should be deployed.",
+      "required": false
+    }
+  },
+  "readme": "<p align=\"center\" width=\"100%\">\n    <img width=\"75%\" src=\"https://raw.githubusercontent.com/cyclops-ui/cyclops/main/web/static/img/cyclops-simplistic.png\">\n<p/>\n\n# Cyclops MCP (Model Context Protocol)\n\nCyclops MCP allows your favorite AI agent to manage your Kubernetes applications. Cyclops MCP servers provide tools for agents to create and update existing applications safely.\n\nhttps://github.com/user-attachments/assets/0c675c33-1e36-4fdb-bf8c-2fd7fb491e6b\n\nThis means it can check all of your existing templates and the schema of those templates to create accurate and production-ready applications. Your agent now has much less room to make a misconfiguration since it creates high-level resources (Cyclops Modules) instead of touching every line of your Kubernetes resources (Deployments, Services, and Ingresses).\n\nIt allows you to move fast and ensure no uncaught misconfigurations are hitting your production.\n\n**With Cyclops and our MCP, you can now abstract Kubernetes complexity from your developers AND your AI agents**\n\n## Install via UI\n\nThe easiest way to install the Cyclops MCP server is through the Cyclops UI. Below are instructions on how to install it via binary and kubectl, but the recommended way of installing it is via the UI.\n\n> ⚠️ To install Cyclops MCP through the UI, you should run Cyclops on a version `v0.20.1` or greater\n\n1. Install the Cyclops MCP by going to sidebar `“Addon”` > `\"MCP server\"`. You can now click `\"Install Cyclops MCP server\"` and your Cyclops MCP server will be up and running in a few seconds.\n\n<img width=\"762\" alt=\"addon-install\" src=\"https://github.com/user-attachments/assets/57dfd8f9-9b58-4797-a348-d2788a6fba9b\" />\n\n2. Now that your MCP server is up running, all thats left is exposing it outside of your cluster and connecting your AI agent to it.\n\n   To expose the MCP server on localhost you can simply port-forward it with the following command:\n\n    ```bash\n    kubectl port-forward -n cyclops svc/cyclops-mcp 8000:8000\n    ```\n\n   Your server is now available on `localhost:8000`.\n\n3. To connect it to an AI agent you will just have to provide the Cyclops MCP server in its configuration. For example, to add it to Cursor, you can simply add it with the following JSON:\n\n    ```bash\n    {\n      \"mcpServers\": {\n        \"cyclops-kubernetes\": {\n          \"url\": \"http://localhost:8000/sse\"\n        }\n      }\n    }\n    ```\n\nYou can now start a fresh conversation with your AI companion. Above is an example of how we used it with Cursor.\n\n<details>\n\n<summary>Install stdin binary</summary>\n\n### 1. Make sure Cyclops is installed in your Kubernetes cluster\n\nCheck our docs on how it install it with a single command - https://cyclops-ui.com/docs/installation/install/manifest\n\n### 2. Download MCP server\n\nYou can download the Cyclops MCP server binary with the following command:\n\n```yaml\nGOBIN=\"$HOME/go/bin\" go install github.com/cyclops-ui/mcp-cyclops/cmd/mcp-cyclops@latest\n```\n\n### 3. Add server configuration\n\n> ⚠️ By default, Cyclops MCP will use the `.kube/config` file to connect to your cluster\n\nConfigure your MCP Cyclops server:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-cyclops\": {\n      \"command\": \"mcp-cyclops\"\n    }\n  }\n}\n```\n\n## Configuration\n\nYou can configure Cyclops MCP server via env variables. Below is an example of adding the configuration for specifying the kubeconfig file the Cyclops MCP server should use when managing your Cyclops applications.\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-cyclops\": {\n      \"command\": \"mcp-cyclops\",\n      \"env\": {\n        \"KUBECONFIG\": \"/path/to/your/kubeconfig\"\n      }\n    }\n  }\n}\n\n```\n\n### Environment variables\n\nBelow is the list of environment variables used for configuring your Cyclops MCP server:\n\n| Env var                           | Description                                                                             |\n|-----------------------------------|-----------------------------------------------------------------------------------------|\n| `KUBECONFIG`                      | Path to kubeconfig file (optional, defaults to in-cluster config or $HOME/.kube/config) |\n| `CYCLOPS_KUBE_CONTEXT`            | Kubernetes context to use (optional)                                                    |\n| `CYCLOPS_MODULE_NAMESPACE`        | Namespace where modules are stored                                                      |\n| `CYCLOPS_HELM_RELEASE_NAMESPACE`  | Namespace for Helm releases                                                             |\n| `CYCLOPS_MODULE_TARGET_NAMESPACE` | Target namespace for modules                                                            |\n\n---\n\n</details>\n\n<details>\n\n<summary>\nInstall to a Kubernetes cluster manually\n</summary>\n\n---\n\nInstead of having each developer install `mcp-cyclops` binary, you can install the Cyclops MCP server with SSE as transport type to your Kubernetes cluster and allow all of your developers to connect to the same server.\n\n1. Before installing, make sure Cyclops and all its CRDs are installed in your cluster:\n    1. Check Cyclops pods are running:\n\n        ```shell\n        kubectl get pods -n cyclops\n        ```\n\n       Should write:\n\n        ```\n        NAME                            READY   STATUS    RESTARTS   AGE\n        cyclops-ctrl-676b5d9789-ntcls   1/1     Running   0          94s\n        cyclops-ui-7798655f97-xdg29     1/1     Running   0          94s\n        ```\n\n    2. Check if CRDs are installed\n\n        ```shell\n        kubectl get crds | grep cyclops-ui\n        ```\n\n       Should write:\n\n        ```\n        modules.cyclops-ui.com             2025-04-26T15:28:18Z\n        templateauthrules.cyclops-ui.com   2025-04-26T15:28:18Z\n        templatestores.cyclops-ui.com      2025-04-26T15:28:18Z\n        ```\n\n2. Install Cyclops MCP server with the following command:\n\n    ```shell\n    kubectl apply -f https://raw.githubusercontent.com/cyclops-ui/mcp-cyclops/refs/heads/main/install/mcp-server.yaml\n    ```\n\n3. You can now expose the `cyclops-mcp` service. To test your MCP server, you can port-forward it:\n\n    ```shell\n    kubectl port-forward svc/cyclops-mcp -n cyclops 8000:8000\n    ```\n\n4. Add your Cyclops MCP server host, or in case you are testing it, the [localhost](http://localhost) address where you port-forwarded the MCP service:\n\n    ```json\n    {\n      \"mcpServers\": {\n        \"mcp-cyclops\": {\n          \"url\": \"http://localhost:8000/sse\"\n        }\n      }\n    }\n    ```\n---\n\n</details>\n\n## Tools\n\n| Tool                  | Description                                                                                                                        |\n|-----------------------|------------------------------------------------------------------------------------------------------------------------------------|\n| `create_module`       | Create new Module. Before calling this tool, make sure to call `get_template_schema` to validate values for the given template     |\n| `get_module`          | Fetch Module by name                                                                                                               |\n| `list_modules`        | List all Cyclops Modules                                                                                                           |\n| `update_module`       | Update Module by Name. Before calling this tool, make sure to call `get_template_schema` to validate values for the given template |\n| `get_template_schema` | Returns JSON schema for the given template. Needs to be checked before calling `create_module` tool                                |\n| `get_template_store`  | Fetch Template Store by Name                                                                                                       |\n| `list_template_store` | List Template Stores from cluster                                                                                                  |\n\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-cyclops": {
+        "command": "mcp-cyclops",
+        "args": [],
+        "env": {}
+      },
+      "mcp-cyclops-configured": {
+        "command": "mcp-cyclops",
+        "args": [],
+        "env": {
+          "KUBECONFIG": "/path/to/your/kubeconfig"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cyclops-ui",
+    "repo": "mcp-cyclops",
+    "url": "https://github.com/cyclops-ui/mcp-cyclops",
+    "name": "cyclops-ui__mcp-cyclops",
+    "path": null,
+    "stars": 29,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "db5dc1f20930009437cba2ced9f11689a7399b27"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:15.730Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "sigs.k8s.io/controller-runtime",
+      "importance": 10
+    },
+    {
+      "name": "cyclops-ui/cyclops/cyclops-ctrl",
+      "importance": 9
+    },
+    {
+      "name": "k8s.io/apiextensions-apiserver",
+      "importance": 8
+    },
+    {
+      "name": "k8s.io/apimachinery",
+      "importance": 8
+    },
+    {
+      "name": "xeipuuv/gojsonschema",
+      "importance": 7
+    },
+    {
+      "name": "joho/godotenv",
+      "importance": 4
+    },
+    {
+      "name": "pkg/errors",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/cyclops-ui/mcp-cyclops\n\ngo 1.23.8\n\nrequire (\n\tgithub.com/cyclops-ui/cyclops/cyclops-ctrl v0.0.0-20250504134103-e377a8d4a02b\n\tgithub.com/joho/godotenv v1.5.1\n\tgithub.com/mark3labs/mcp-go v0.22.0\n\tgithub.com/pkg/errors v0.9.1\n\tgithub.com/xeipuuv/gojsonschema v1.2.0\n\tk8s.io/apiextensions-apiserver v0.32.3\n\tk8s.io/apimachinery v0.32.3\n\tsigs.k8s.io/controller-runtime v0.20.4\n)\n\nrequire (\n\tdario.cat/mergo v1.0.0 // indirect\n\tgithub.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24 // indirect\n\tgithub.com/Masterminds/semver/v3 v3.2.1 // indirect\n\tgithub.com/Microsoft/go-winio v0.6.1 // indirect\n\tgithub.com/Microsoft/hcsshim v0.11.4 // indirect\n\tgithub.com/ProtonMail/go-crypto v0.0.0-20230828082145-3c4c8a2d2371 // indirect\n\tgithub.com/beorn7/perks v1.0.1 // indirect\n\tgithub.com/cespare/xxhash/v2 v2.3.0 // indirect\n\tgithub.com/cloudflare/circl v1.3.7 // indirect\n\tgithub.com/containerd/containerd v1.7.12 // indirect\n\tgithub.com/containerd/log v0.1.0 // indirect\n\tgithub.com/cyphar/filepath-securejoin v0.2.4 // indirect\n\tgithub.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect\n\tgithub.com/dgraph-io/ristretto v0.1.1 // indirect\n\tgithub.com/distribution/reference v0.6.0 // indirect\n\tgithub.com/docker/cli v25.0.1+incompatible // indirect\n\tgithub.com/docker/distribution v2.8.3+incompatible // indirect\n\tgithub.com/docker/docker v26.1.5+incompatible // indirect\n\tgithub.com/docker/docker-credential-helpers v0.7.0 // indirect\n\tgithub.com/docker/go-connections v0.5.0 // indirect\n\tgithub.com/docker/go-metrics v0.0.1 // indirect\n\tgithub.com/dustin/go-humanize v1.0.1 // indirect\n\tgithub.com/emicklei/go-restful/v3 v3.11.0 // indirect\n\tgithub.com/emirpasic/gods v1.18.1 // indirect\n\tgithub.com/evanphx/json-patch/v5 v5.9.11 // indirect\n\tgithub.com/felixge/httpsnoop v1.0.4 // indirect\n\tgithub.com/fsnotify/fsnotify v1.7.0 // indirect\n\tgithub.com/fxamacker/cbor/v2 v2.7.0 // indirect\n\tgithub.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect\n\tgithub.com/go-git/go-billy/v5 v5.5.0 // indirect\n\tgithub.com/go-git/go-git/v5 v5.11.0 // indirect\n\tgithub.com/go-logr/logr v1.4.2 // indirect\n\tgithub.com/go-logr/stdr v1.2.2 // indirect\n\tgithub.com/go-logr/zapr v1.3.0 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/jsonreference v0.20.2 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/gogo/protobuf v1.3.2 // indirect\n\tgithub.com/golang/glog v1.2.1 // indirect\n\tgithub.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect\n\tgithub.com/golang/protobuf v1.5.4 // indirect\n\tgithub.com/google/btree v1.1.3 // indirect\n\tgithub.com/google/gnostic-models v0.6.8 // indirect\n\tgithub.com/google/go-cmp v0.6.0 // indirect\n\tgithub.com/google/gofuzz v1.2.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/gorilla/mux v1.8.0 // indirect\n\tgithub.com/gorilla/websocket v1.5.3 // indirect\n\tgithub.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/kevinburke/ssh_config v1.2.0 // indirect\n\tgithub.com/klauspost/compress v1.16.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mitchellh/copystructure v1.2.0 // indirect\n\tgithub.com/mitchellh/reflectwalk v1.0.2 // indirect\n\tgithub.com/moby/locker v1.0.1 // indirect\n\tgithub.com/moby/spdystream v0.5.0 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect\n\tgithub.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect\n\tgithub.com/opencontainers/go-digest v1.0.0 // indirect\n\tgithub.com/opencontainers/image-spec v1.1.0-rc6 // indirect\n\tgithub.com/pjbgf/sha1cd v0.3.0 // indirect\n\tgithub.com/prometheus/client_golang v1.19.1 // indirect\n\tgithub.com/prometheus/client_model v0.6.1 // indirect\n\tgithub.com/prometheus/common v0.55.0 // indirect\n\tgithub.com/prometheus/procfs v0.15.1 // indirect\n\tgithub.com/sergi/go-diff v1.1.0 // indirect\n\tgithub.com/sirupsen/logrus v1.9.3 // indirect\n\tgithub.com/skeema/knownhosts v1.2.1 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/spf13/pflag v1.0.5 // indirect\n\tgithub.com/x448/float16 v0.8.4 // indirect\n\tgithub.com/xanzy/ssh-agent v0.3.3 // indirect\n\tgithub.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect\n\tgithub.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgo.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0 // indirect\n\tgo.opentelemetry.io/otel v1.28.0 // indirect\n\tgo.opentelemetry.io/otel/metric v1.28.0 // indirect\n\tgo.opentelemetry.io/otel/trace v1.28.0 // indirect\n\tgo.uber.org/multierr v1.11.0 // indirect\n\tgo.uber.org/zap v1.27.0 // indirect\n\tgolang.org/x/crypto v0.28.0 // indirect\n\tgolang.org/x/mod v0.21.0 // indirect\n\tgolang.org/x/net v0.30.0 // indirect\n\tgolang.org/x/oauth2 v0.23.0 // indirect\n\tgolang.org/x/sync v0.8.0 // indirect\n\tgolang.org/x/sys v0.26.0 // indirect\n\tgolang.org/x/term v0.25.0 // indirect\n\tgolang.org/x/text v0.19.0 // indirect\n\tgolang.org/x/time v0.7.0 // indirect\n\tgolang.org/x/tools v0.26.0 // indirect\n\tgomodules.xyz/jsonpatch/v2 v2.4.0 // indirect\n\tgoogle.golang.org/genproto/googleapis/rpc v0.0.0-20240826202546-f6391c0de4c7 // indirect\n\tgoogle.golang.org/grpc v1.65.0 // indirect\n\tgoogle.golang.org/protobuf v1.35.1 // indirect\n\tgopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect\n\tgopkg.in/inf.v0 v0.9.1 // indirect\n\tgopkg.in/warnings.v0 v0.1.2 // indirect\n\tgopkg.in/yaml.v2 v2.4.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n\thelm.sh/helm/v3 v3.15.3 // indirect\n\tk8s.io/api v0.32.3 // indirect\n\tk8s.io/client-go v0.32.3 // indirect\n\tk8s.io/klog/v2 v2.130.1 // indirect\n\tk8s.io/kube-openapi v0.0.0-20241105132330-32ad38e42d3f // indirect\n\tk8s.io/utils v0.0.0-20241104100929-3ea5e8cea738 // indirect\n\toras.land/oras-go v1.2.5 // indirect\n\tsigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect\n\tsigs.k8s.io/structured-merge-diff/v4 v4.4.2 // indirect\n\tsigs.k8s.io/yaml v1.4.0 // indirect\n)\n"
+}

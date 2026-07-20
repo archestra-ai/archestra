@@ -1,0 +1,78 @@
+{
+  "name": "kimtaeyoon83__mcp-server-youtube-transcript",
+  "display_name": "mcp-server-youtube-transcript",
+  "description": "This is an MCP server that allows you to directly download transcripts of YouTube videos.",
+  "author": {
+    "name": "kimtaeyoon83"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mcp/youtube-transcriber"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/kimtaeyoon83-mcp-server-youtube-transcript-badge.png)](https://mseep.ai/app/kimtaeyoon83-mcp-server-youtube-transcript)\n\n# YouTube Transcript Server\n\n[![smithery badge](https://smithery.ai/badge/@kimtaeyoon83/mcp-server-youtube-transcript)](https://smithery.ai/server/@kimtaeyoon83/mcp-server-youtube-transcript)\n\nA Model Context Protocol server that enables retrieval of transcripts from YouTube videos. This server provides direct access to video captions and subtitles through a simple interface.\n\n<a href=\"https://glama.ai/mcp/servers/z429kk3te7\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/z429kk3te7/badge\" alt=\"mcp-server-youtube-transcript MCP server\" /></a>\n\n### Installing via Smithery\n\nTo install YouTube Transcript Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kimtaeyoon83/mcp-server-youtube-transcript):\n\n```bash\nnpx -y @smithery/cli install @kimtaeyoon83/mcp-server-youtube-transcript --client claude\n```\n\n## Components\n\n### Tools\n\n- **get_transcript**\n  - Extract transcripts from YouTube videos\n  - Inputs:\n    - `url` (string, required): YouTube video URL or video ID\n    - `lang` (string, optional, default: \"en\"): Language code for transcript (e.g., 'ko', 'en')\n\n## Key Features\n\n- Support for multiple video URL formats\n- Language-specific transcript retrieval\n- Detailed metadata in responses\n\n## Configuration\n\nTo use with Claude Desktop, add this server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"youtube-transcript\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@kimtaeyoon83/mcp-server-youtube-transcript\"]\n    }\n  }\n}\n```\n\n## Install via tool\n\n[mcp-get](https://github.com/michaellatman/mcp-get) A command-line tool for installing and managing Model Context Protocol (MCP) servers.\n\n```shell \nnpx @michaellatman/mcp-get@latest install @kimtaeyoon83/mcp-server-youtube-transcript\n```\n\n## Awesome-mcp-servers \n[awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) A curated list of awesome Model Context Protocol (MCP) servers.\n\n## Development\n\n### Prerequisites\n\n- Node.js 18 or higher\n- npm or yarn\n\n### Setup\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n### Testing\n\n```bash\nnpm test\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the MCP Inspector for development:\n\n```bash\nnpm run inspector\n```\n\n\n\n## Running evals\n\nThe evals package loads an mcp client that then runs the index.ts file, so there is no need to rebuild between tests. You can load environment variables by prefixing the npx command. Full documentation can be found [here](https://www.mcpevals.io/docs).\n\n```bash\nOPENAI_API_KEY=your-key  npx mcp-eval src/evals/evals.ts src/index.ts\n```\n## Error Handling\n\nThe server implements robust error handling for common scenarios:\n- Invalid video URLs or IDs\n- Unavailable transcripts\n- Language availability issues\n- Network errors\n\n## Usage Examples\n\n1. Get transcript by video URL:\n```typescript\nawait server.callTool(\"get_transcript\", {\n  url: \"https://www.youtube.com/watch?v=VIDEO_ID\",\n  lang: \"en\"\n});\n```\n\n2. Get transcript by video ID:\n```typescript\nawait server.callTool(\"get_transcript\", {\n  url: \"VIDEO_ID\",\n  lang: \"ko\"\n});\n```\n\n3. How to Extract YouTube Subtitles in Claude Desktop App\n```\nchat: https://youtu.be/ODaHJzOyVCQ?si=aXkJgso96Deri0aB Extract subtitles\n```\n\n## Security Considerations\n\nThe server:\n- Validates all input parameters\n- Handles YouTube API errors gracefully\n- Implements timeouts for transcript retrieval\n- Provides detailed error messages for troubleshooting\n\n## License\n\nThis MCP server is licensed under the MIT License. See the LICENSE file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kimtaeyoon83-mcp-server-youtube-transcript": {
+        "command": "npx",
+        "args": ["-y", "@kimtaeyoon83/mcp-server-youtube-transcript"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kimtaeyoon83",
+    "repo": "mcp-server-youtube-transcript",
+    "url": "https://github.com/kimtaeyoon83/mcp-server-youtube-transcript",
+    "name": "kimtaeyoon83__mcp-server-youtube-transcript",
+    "path": null,
+    "stars": 308,
+    "contributors": 6,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "61e23191d10ae276159ad056eeb05cbaee07c133"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:14.465Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "youtube-captions-scraper",
+      "importance": 9
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@kimtaeyoon83/mcp-server-youtube-transcript\",\n  \"version\": \"0.1.1\",\n  \"description\": \"This is an MCP server that allows you to directly download transcripts of YouTube videos.\",\n  \"license\": \"MIT\",\n  \"author\": \"Freddie\",\n  \"homepage\": \"https://github.com/kimtaeyoon83/mcp-server-youtube-transcript\",\n  \"bugs\": \"https://github.com/kimtaeyoon83/mcp-server-youtube-transcript/issues\",\n  \"type\": \"module\",\n  \"access\": \"public\",\n  \"main\": \"dist/index.js\",\n  \"module\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-server-youtube-transcript\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"mcp-evals\": \"^1.0.18\",\n    \"youtube-captions-scraper\": \"^2.0.3\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}\n"
+}

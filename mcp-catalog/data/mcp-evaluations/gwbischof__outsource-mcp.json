@@ -1,0 +1,328 @@
+{
+  "name": "gwbischof__outsource-mcp",
+  "display_name": "outsource-mcp",
+  "description": "Give your AI assistant its own AI assistants.",
+  "author": {
+    "name": "gwbischof"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/gwbischof/outsource-mcp.git", "outsource-mcp"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}",
+      "GOOGLE_API_KEY": "${user_config.google_api_key}",
+      "GROQ_API_KEY": "${user_config.groq_api_key}",
+      "DEEPSEEK_API_KEY": "${user_config.deepseek_api_key}",
+      "XAI_API_KEY": "${user_config.xai_api_key}",
+      "PERPLEXITY_API_KEY": "${user_config.perplexity_api_key}",
+      "COHERE_API_KEY": "${user_config.cohere_api_key}",
+      "FIREWORKS_API_KEY": "${user_config.fireworks_api_key}",
+      "HUGGINGFACE_API_KEY": "${user_config.huggingface_api_key}",
+      "MISTRAL_API_KEY": "${user_config.mistral_api_key}",
+      "NVIDIA_API_KEY": "${user_config.nvidia_api_key}",
+      "OLLAMA_HOST": "${user_config.ollama_host}",
+      "OPENROUTER_API_KEY": "${user_config.openrouter_api_key}",
+      "TOGETHER_API_KEY": "${user_config.together_api_key}",
+      "CEREBRAS_API_KEY": "${user_config.cerebras_api_key}",
+      "DEEPINFRA_API_KEY": "${user_config.deepinfra_api_key}",
+      "SAMBANOVA_API_KEY": "${user_config.sambanova_api_key}",
+      "IBM_WATSONX_API_KEY": "${user_config.ibm_watsonx_api_key}",
+      "LLAMA_API_KEY": "${user_config.llama_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your API key for OpenAI",
+      "sensitive": true,
+      "required": false
+    },
+    "anthropic_api_key": {
+      "type": "string",
+      "title": "Anthropic API Key",
+      "description": "Your API key for Anthropic",
+      "sensitive": true,
+      "required": false
+    },
+    "google_api_key": {
+      "type": "string",
+      "title": "Google API Key",
+      "description": "Your API key for Google",
+      "sensitive": true,
+      "required": false
+    },
+    "groq_api_key": {
+      "type": "string",
+      "title": "Groq API Key",
+      "description": "Your API key for Groq",
+      "sensitive": true,
+      "required": false
+    },
+    "deepseek_api_key": {
+      "type": "string",
+      "title": "DeepSeek API Key",
+      "description": "Your API key for DeepSeek",
+      "sensitive": true,
+      "required": false
+    },
+    "xai_api_key": {
+      "type": "string",
+      "title": "xAI API Key",
+      "description": "Your API key for xAI",
+      "sensitive": true,
+      "required": false
+    },
+    "perplexity_api_key": {
+      "type": "string",
+      "title": "Perplexity API Key",
+      "description": "Your API key for Perplexity",
+      "sensitive": true,
+      "required": false
+    },
+    "cohere_api_key": {
+      "type": "string",
+      "title": "Cohere API Key",
+      "description": "Your API key for Cohere",
+      "sensitive": true,
+      "required": false
+    },
+    "fireworks_api_key": {
+      "type": "string",
+      "title": "Fireworks AI API Key",
+      "description": "Your API key for Fireworks AI",
+      "sensitive": true,
+      "required": false
+    },
+    "huggingface_api_key": {
+      "type": "string",
+      "title": "HuggingFace API Key",
+      "description": "Your API key for HuggingFace",
+      "sensitive": true,
+      "required": false
+    },
+    "mistral_api_key": {
+      "type": "string",
+      "title": "Mistral AI API Key",
+      "description": "Your API key for Mistral AI",
+      "sensitive": true,
+      "required": false
+    },
+    "nvidia_api_key": {
+      "type": "string",
+      "title": "NVIDIA API Key",
+      "description": "Your API key for NVIDIA",
+      "sensitive": true,
+      "required": false
+    },
+    "ollama_host": {
+      "type": "string",
+      "title": "Ollama Host",
+      "description": "The host URL for Ollama",
+      "default": "http://localhost:11434",
+      "sensitive": false,
+      "required": false
+    },
+    "openrouter_api_key": {
+      "type": "string",
+      "title": "OpenRouter API Key",
+      "description": "Your API key for OpenRouter",
+      "sensitive": true,
+      "required": false
+    },
+    "together_api_key": {
+      "type": "string",
+      "title": "Together AI API Key",
+      "description": "Your API key for Together AI",
+      "sensitive": true,
+      "required": false
+    },
+    "cerebras_api_key": {
+      "type": "string",
+      "title": "Cerebras API Key",
+      "description": "Your API key for Cerebras",
+      "sensitive": true,
+      "required": false
+    },
+    "deepinfra_api_key": {
+      "type": "string",
+      "title": "DeepInfra API Key",
+      "description": "Your API key for DeepInfra",
+      "sensitive": true,
+      "required": false
+    },
+    "sambanova_api_key": {
+      "type": "string",
+      "title": "SambaNova API Key",
+      "description": "Your API key for SambaNova",
+      "sensitive": true,
+      "required": false
+    },
+    "ibm_watsonx_api_key": {
+      "type": "string",
+      "title": "IBM WatsonX API Key",
+      "description": "Your API key for IBM WatsonX",
+      "sensitive": true,
+      "required": false
+    },
+    "llama_api_key": {
+      "type": "string",
+      "title": "Meta Llama API Key",
+      "description": "Your API key for Meta Llama",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Outsource MCP\n\nAn MCP (Model Context Protocol) server that enables AI applications to outsource tasks to various model providers through a unified interface.\n\n<img width=\"1154\" alt=\"image\" src=\"https://github.com/user-attachments/assets/cd364a7c-eae5-4c58-bc1f-fdeea6cb8434\" />\n\n<img width=\"1103\" alt=\"image\" src=\"https://github.com/user-attachments/assets/55924981-83e9-4811-9f51-b049595b7505\" />\n\n\nCompatible with any AI tool that supports the Model Context Protocol, including Claude Desktop, Cline, and other MCP-enabled applications.\nBuilt with [FastMCP](https://github.com/mcp/fastmcp) for the MCP server implementation and [Agno](https://github.com/agno-agi/agno) for AI agent capabilities.\n\n## Features\n\n- 🤖 **Multi-Provider Support**: Access 20+ AI providers through a single interface\n- 📝 **Text Generation**: Generate text using models from OpenAI, Anthropic, Google, and more\n- 🎨 **Image Generation**: Create images using DALL-E 3 and DALL-E 2\n- 🔧 **Simple API**: Consistent interface with just three parameters: provider, model, and prompt\n- 🔑 **Flexible Authentication**: Only configure API keys for the providers you use\n\n## Configuration\n\nAdd the following configuration to your MCP client. Consult your MCP client's documentation for specific configuration details.\n\n```json\n{\n  \"mcpServers\": {\n    \"outsource-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"git+https://github.com/gwbischof/outsource-mcp.git\", \"outsource-mcp\"],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-openai-key\",\n        \"ANTHROPIC_API_KEY\": \"your-anthropic-key\",\n        \"GOOGLE_API_KEY\": \"your-google-key\",\n        \"GROQ_API_KEY\": \"your-groq-key\",\n        \"DEEPSEEK_API_KEY\": \"your-deepseek-key\",\n        \"XAI_API_KEY\": \"your-xai-key\",\n        \"PERPLEXITY_API_KEY\": \"your-perplexity-key\",\n        \"COHERE_API_KEY\": \"your-cohere-key\",\n        \"FIREWORKS_API_KEY\": \"your-fireworks-key\",\n        \"HUGGINGFACE_API_KEY\": \"your-huggingface-key\",\n        \"MISTRAL_API_KEY\": \"your-mistral-key\",\n        \"NVIDIA_API_KEY\": \"your-nvidia-key\",\n        \"OLLAMA_HOST\": \"http://localhost:11434\",\n        \"OPENROUTER_API_KEY\": \"your-openrouter-key\",\n        \"TOGETHER_API_KEY\": \"your-together-key\",\n        \"CEREBRAS_API_KEY\": \"your-cerebras-key\",\n        \"DEEPINFRA_API_KEY\": \"your-deepinfra-key\",\n        \"SAMBANOVA_API_KEY\": \"your-sambanova-key\"\n      }\n    }\n  }\n}\n```\n\nNote: The environment variables are optional. Only include the API keys for the providers you want to use.\n\n## Quick Start\n\nOnce installed and configured, you can use the tools in your MCP client:\n\n1. **Generate text**: Use the `outsource_text` tool with provider \"openai\", model \"gpt-4o-mini\", and prompt \"Write a haiku about coding\"\n2. **Generate images**: Use the `outsource_image` tool with provider \"openai\", model \"dall-e-3\", and prompt \"A futuristic city skyline at sunset\"\n\n## Tools\n\n### outsource_text\nCreates an Agno agent with a specified provider and model to generate text responses. \n\n**Arguments:**\n- `provider`: The provider name (e.g., \"openai\", \"anthropic\", \"google\", \"groq\", etc.)\n- `model`: The model name (e.g., \"gpt-4o\", \"claude-3-5-sonnet-20241022\", \"gemini-2.0-flash-exp\")\n- `prompt`: The text prompt to send to the model\n\n### outsource_image\nGenerates images using AI models.\n\n**Arguments:**\n- `provider`: The provider name (currently only \"openai\" is supported)\n- `model`: The model name (\"dall-e-3\" or \"dall-e-2\")\n- `prompt`: The image generation prompt\n\nReturns the URL of the generated image.\n\n> **Note**: Image generation is currently only supported by OpenAI models (DALL-E 2 and DALL-E 3). Other providers only support text generation.\n\n## Supported Providers\n\nThe following providers are supported. Use the provider name (in parentheses) as the `provider` argument:\n\n### Core Providers\n- **OpenAI** (`openai`) - GPT-4, GPT-3.5, DALL-E, etc. | [Models](https://platform.openai.com/docs/models)\n- **Anthropic** (`anthropic`) - Claude 3.5, Claude 3, etc. | [Models](https://docs.anthropic.com/en/docs/about-claude/models/overview)\n- **Google** (`google`) - Gemini Pro, Gemini Flash, etc. | [Models](https://ai.google.dev/models)\n- **Groq** (`groq`) - Llama 3, Mixtral, etc. | [Models](https://console.groq.com/docs/models)\n- **DeepSeek** (`deepseek`) - DeepSeek Chat & Coder | [Models](https://api-docs.deepseek.com/api/list-models)\n- **xAI** (`xai`) - Grok models | [Models](https://docs.x.ai/docs/models)\n- **Perplexity** (`perplexity`) - Sonar models | [Models](https://docs.perplexity.ai/guides/model-cards)\n\n### Additional Providers\n- **Cohere** (`cohere`) - Command models | [Models](https://docs.cohere.com/v2/docs/models)\n- **Mistral AI** (`mistral`) - Mistral Large, Medium, Small | [Models](https://docs.mistral.ai/getting-started/models/models_overview/)\n- **NVIDIA** (`nvidia`) - Various models | [Models](https://build.nvidia.com/models)\n- **HuggingFace** (`huggingface`) - Open source models | [Models](https://huggingface.co/models)\n- **Ollama** (`ollama`) - Local models | [Models](https://ollama.com/library)\n- **Fireworks AI** (`fireworks`) - Fast inference | [Models](https://fireworks.ai/models?view=list)\n- **OpenRouter** (`openrouter`) - Multi-provider access | [Models](https://openrouter.ai/docs/overview/models)\n- **Together AI** (`together`) - Open source models | [Models](https://docs.together.ai/docs/serverless-models)\n- **Cerebras** (`cerebras`) - Fast inference | [Models](https://cerebras.ai/models)\n- **DeepInfra** (`deepinfra`) - Optimized models | [Models](https://deepinfra.com/docs/models)\n- **SambaNova** (`sambanova`) - Enterprise models | [Models](https://docs.sambanova.ai/cloud/docs/get-started/supported-models)\n\n### Enterprise Providers\n- **AWS Bedrock** (`aws` or `bedrock`) - AWS-hosted models | [Models](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)\n- **Azure AI** (`azure`) - Azure-hosted models | [Models](https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/foundry-models-overview)\n- **IBM WatsonX** (`ibm` or `watsonx`) - IBM models | [Models](https://www.ibm.com/docs/en/software-hub/5.1.x?topic=install-foundation-models)\n- **LiteLLM** (`litellm`) - Universal interface | [Models](https://docs.litellm.ai/docs/providers)\n- **Vercel v0** (`vercel` or `v0`) - Vercel AI | [Models](https://sdk.vercel.ai/docs/introduction)\n- **Meta Llama** (`meta`) - Direct Meta access | [Models](https://www.llama.com/get-started/)\n\n### Environment Variables\n\nEach provider requires its corresponding API key:\n\n| Provider | Environment Variable | Example |\n|----------|---------------------|---------|\n| OpenAI | `OPENAI_API_KEY` | sk-... |\n| Anthropic | `ANTHROPIC_API_KEY` | sk-ant-... |\n| Google | `GOOGLE_API_KEY` | AIza... |\n| Groq | `GROQ_API_KEY` | gsk_... |\n| DeepSeek | `DEEPSEEK_API_KEY` | sk-... |\n| xAI | `XAI_API_KEY` | xai-... |\n| Perplexity | `PERPLEXITY_API_KEY` | pplx-... |\n| Cohere | `COHERE_API_KEY` | ... |\n| Fireworks | `FIREWORKS_API_KEY` | ... |\n| HuggingFace | `HUGGINGFACE_API_KEY` | hf_... |\n| Mistral | `MISTRAL_API_KEY` | ... |\n| NVIDIA | `NVIDIA_API_KEY` | nvapi-... |\n| Ollama | `OLLAMA_HOST` | http://localhost:11434 |\n| OpenRouter | `OPENROUTER_API_KEY` | ... |\n| Together | `TOGETHER_API_KEY` | ... |\n| Cerebras | `CEREBRAS_API_KEY` | ... |\n| DeepInfra | `DEEPINFRA_API_KEY` | ... |\n| SambaNova | `SAMBANOVA_API_KEY` | ... |\n| AWS Bedrock | AWS credentials | Via AWS CLI/SDK |\n| Azure AI | Azure credentials | Via Azure CLI/SDK |\n| IBM WatsonX | `IBM_WATSONX_API_KEY` | ... |\n| Meta Llama | `LLAMA_API_KEY` | ... |\n\n**Note**: Only configure the API keys for providers you plan to use.\n\n## Examples\n\n### Text Generation\n```\n# Using OpenAI\nprovider: openai\nmodel: gpt-4o-mini\nprompt: Write a haiku about coding\n\n# Using Anthropic\nprovider: anthropic\nmodel: claude-3-5-sonnet-20241022\nprompt: Explain quantum computing in simple terms\n\n# Using Google\nprovider: google\nmodel: gemini-2.0-flash-exp\nprompt: Create a recipe for chocolate chip cookies\n```\n\n### Image Generation\n```\n# Using DALL-E 3\nprovider: openai\nmodel: dall-e-3\nprompt: A serene Japanese garden with cherry blossoms\n\n# Using DALL-E 2\nprovider: openai\nmodel: dall-e-2\nprompt: A futuristic cityscape at sunset\n```\n\n## Development\n\n### Prerequisites\n\n- Python 3.11 or higher\n- [uv](https://github.com/astral-sh/uv) package manager\n\n### Setup\n\n```bash\ngit clone https://github.com/gwbischof/outsource-mcp.git\ncd outsource-mcp\nuv sync\n```\n\n### Testing with MCP Inspector\n\nThe MCP Inspector allows you to test the server interactively:\n\n```bash\nmcp dev server.py\n```\n\n### Running Tests\n\nThe test suite includes integration tests that verify both text and image generation:\n\n```bash\n# Run all tests\nuv run pytest\n```\n\n**Note:** Integration tests require API keys to be set in your environment.\n\n## Troubleshooting\n\n### Common Issues\n\n1. **\"Error: Unknown provider\"**\n   - Check that you're using a supported provider name from the list above\n   - Provider names are case-insensitive\n\n2. **\"Error: OpenAI API error\"** \n   - Verify your API key is correctly set in the environment variables\n   - Check that your API key has access to the requested model\n   - Ensure you have sufficient credits/quota\n\n3. **\"Error: No image was generated\"**\n   - This can happen if the image generation request fails\n   - Try a simpler prompt or different model (dall-e-2 vs dall-e-3)\n\n4. **Environment variables not working**\n   - Make sure to restart your MCP client after updating the configuration\n   - Verify the configuration file location for your specific MCP client\n   - Check that the environment variables are properly formatted in the configuration\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n",
+  "category": "AI Tools",
+  "quality_score": 27,
+  "archestra_config": {
+    "client_config_permutations": {
+      "outsource-mcp": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/gwbischof/outsource-mcp.git", "outsource-mcp"],
+        "env": {
+          "OPENAI_API_KEY": "your-openai-key",
+          "ANTHROPIC_API_KEY": "your-anthropic-key",
+          "GOOGLE_API_KEY": "your-google-key",
+          "GROQ_API_KEY": "your-groq-key",
+          "DEEPSEEK_API_KEY": "your-deepseek-key",
+          "XAI_API_KEY": "your-xai-key",
+          "PERPLEXITY_API_KEY": "your-perplexity-key",
+          "COHERE_API_KEY": "your-cohere-key",
+          "FIREWORKS_API_KEY": "your-fireworks-key",
+          "HUGGINGFACE_API_KEY": "your-huggingface-key",
+          "MISTRAL_API_KEY": "your-mistral-key",
+          "NVIDIA_API_KEY": "your-nvidia-key",
+          "OLLAMA_HOST": "http://localhost:11434",
+          "OPENROUTER_API_KEY": "your-openrouter-key",
+          "TOGETHER_API_KEY": "your-together-key",
+          "CEREBRAS_API_KEY": "your-cerebras-key",
+          "DEEPINFRA_API_KEY": "your-deepinfra-key",
+          "SAMBANOVA_API_KEY": "your-sambanova-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gwbischof",
+    "repo": "outsource-mcp",
+    "url": "https://github.com/gwbischof/outsource-mcp",
+    "name": "gwbischof__outsource-mcp",
+    "path": null,
+    "stars": 22,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "70e7b6b4031d1819fad18ee313fb6ec16e126b92"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:18.335Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "agno",
+      "importance": 10
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "anthropic",
+      "importance": 8
+    },
+    {
+      "name": "azure-ai-inference",
+      "importance": 8
+    },
+    {
+      "name": "azure-ai-ml",
+      "importance": 8
+    },
+    {
+      "name": "boto3",
+      "importance": 8
+    },
+    {
+      "name": "cerebras-cloud-sdk",
+      "importance": 8
+    },
+    {
+      "name": "cohere",
+      "importance": 8
+    },
+    {
+      "name": "deepseek",
+      "importance": 8
+    },
+    {
+      "name": "google-genai",
+      "importance": 8
+    },
+    {
+      "name": "google-generativeai",
+      "importance": 8
+    },
+    {
+      "name": "groq",
+      "importance": 8
+    },
+    {
+      "name": "ibm-watsonx-ai",
+      "importance": 8
+    },
+    {
+      "name": "litellm",
+      "importance": 9
+    },
+    {
+      "name": "llama-api-client",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "mistralai",
+      "importance": 8
+    },
+    {
+      "name": "ollama",
+      "importance": 8
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "together",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"outsource-mcp\"\nversion = \"0.1.0\"\ndescription = \"MCP server for outsourcing tasks to AI agents\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"agno>=1.5.5\",\n    \"aiohttp>=3.12.2\",\n    \"anthropic>=0.52.0\",\n    \"azure-ai-inference>=1.0.0b9\",\n    \"azure-ai-ml>=1.27.1\",\n    \"boto3>=1.38.24\",\n    \"cerebras-cloud-sdk>=1.35.0\",\n    \"cohere>=5.15.0\",\n    \"deepseek>=1.0.0\",\n    \"google-genai>=1.16.1\",\n    \"google-generativeai>=0.8.5\",\n    \"groq>=0.25.0\",\n    \"ibm-watsonx-ai>=1.3.20\",\n    \"litellm>=1.71.1\",\n    \"llama-api-client>=0.1.1\",\n    \"mcp[cli]>=1.9.1\",\n    \"mistralai>=1.8.0\",\n    \"ollama>=0.4.9\",\n    \"openai>=1.82.0\",\n    \"together>=1.5.8\",\n]\n\n[project.scripts]\noutsource-mcp = \"server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\".\"]\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\n\n[dependency-groups]\ndev = [\n    \"black>=25.1.0\",\n    \"mypy>=1.15.0\",\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=1.0.0\",\n    \"ruff>=0.11.11\",\n]\n"
+}

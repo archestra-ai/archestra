@@ -1,0 +1,83 @@
+{
+  "name": "pwh-pwh__cal-mcp",
+  "display_name": "cal-mcp",
+  "description": "用于计算数学表达式的MCP",
+  "author": {
+    "name": "pwh-pwh"
+  },
+  "server": {
+    "command": "bunx",
+    "args": ["cal-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Cal Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/pwh-pwh/cal-mcp)](https://archestra.ai/mcp-catalog/pwh-pwh__cal-mcp)\n[![smithery badge](https://smithery.ai/badge/@pwh-pwh/cal-mcp)](https://smithery.ai/server/@pwh-pwh/cal-mcp)\n\n<a href=\"https://glama.ai/mcp/servers/@pwh-pwh/cal-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@pwh-pwh/cal-mcp/badge\" alt=\"Cal Server MCP server\" />\n</a>\n\n## 项目简介\n\n`Cal Server` 是一个基于 `FastMCP` 框架构建的简单数学表达式计算服务，使用 Bun 运行时环境。它利用 `expr-eval` 库解析和计算用户输入的数学表达式，并通过标准输入输出（stdio）与外界交互。该项目旨在提供一个轻量、高效的计算工具，支持基本数学运算和内置常量。\n\n## 功能\n\n- **表达式计算**：支持用户输入数学表达式并返回计算结果。\n- **内置常量**：\n    - `E`：Bun 环境中的 `Math.E`。\n    - `PI`：Bun 环境中的 `Math.PI`。\n    - `true`：逻辑真值。\n    - `false`：逻辑假值。\n- **工具名称**：`cal`。\n- **参数**：接受一个字符串类型的数学表达式（`exp`）。\n\n## 依赖\n\n- `fastmcp`：用于构建 MCP 服务。\n- `expr-eval`：用于解析和计算数学表达式。\n- `zod`：用于参数验证。\n\n## 前置条件\n\n- 确保已安装 [Bun](https://bun.sh/) 运行时（推荐最新版本）。\n\n## 安装\n### Installing via Smithery\n\nTo install cal-mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@pwh-pwh/cal-mcp):\n\n```bash\nnpx -y @smithery/cli install @pwh-pwh/cal-mcp --client claude\n```\n\n### mcp客户端配置\n```json\n\"cal-mcp\": {\n      \"name\": \"计算\",\n      \"description\": \"\",\n      \"isActive\": true,\n      \"command\": \"bunx\",\n      \"args\": [\n        \"cal-mcp\"\n      ]\n    }\n```\n\n### Manual Installation\n1. 克隆项目仓库：\n   ```bash\n   git clone <仓库地址>\n   ```\n2. 进入项目目录并安装依赖：\n   ```bash\n   bun install\n   ```\n\n## 使用方法\n\n1. 启动服务：\n   ```bash\n   bun run index.ts\n   ```\n   服务将通过标准输入输出（stdio）运行。\n\n2. 输入数学表达式：\n    - 示例输入：`2 + 3 * PI`\n    - 输出：计算结果（字符串形式）。\n\n3. 支持的表达式示例：\n    - 基本运算：`2 + 2` → `4`\n    - 使用常量：`PI * 2` → `6.283185307179586`\n    - 复杂表达式：`E ^ 2 + 1` → `8.38905609893065`\n\n## 注意事项\n\n- 输入的表达式必须是有效的数学表达式，否则可能抛出错误。\n- 服务当前仅支持通过 `stdio` 交互。\n- 项目使用 Bun 运行时，确保命令与 Bun 兼容。",
+  "category": "CLI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cal-mcp": {
+        "command": "bunx",
+        "args": ["cal-mcp"],
+        "env": {}
+      },
+      "cal-mcp-stdio": {
+        "command": "bun",
+        "args": ["run", "index.ts"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pwh-pwh",
+    "repo": "cal-mcp",
+    "url": "https://github.com/pwh-pwh/cal-mcp",
+    "name": "cal-mcp",
+    "path": null,
+    "stars": 11,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e542592a0cec02db3dc3b5bfcbb3cb7e6a50effd"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:50.800Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "expr-eval",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"cal-mcp\",\n  \"module\": \"index.ts\",\n  \"type\": \"module\",\n  \"version\": \"1.0.6\",\n    \"module\": \"dist/index.js\",\n  \"main\": \"dist/index.js\",\n  \"description\": \"A MCP server for evaluating mathematical expressions\",\n  \"bin\": {\n    \"cal-mcp\": \"./dist/index.js\"\n  },\n    \"files\": [\n    \"dist\",\n    \"README.md\"\n  ],\n  \"scripts\": {\n    \"start\": \"bun run index.ts\",\n    \"build\": \"bun build index.ts --outdir ./dist --target node\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"keywords\": [\"ai\", \"math\", \"expression-evaluator\", \"mcp\", \"bun\"],\n  \"author\": \"coderpwh\",\n  \"license\": \"MIT\",\n  \"private\": false,\n  \"devDependencies\": {\n    \"@types/bun\": \"latest\"\n  },\n  \"peerDependencies\": {\n    \"typescript\": \"^5\"\n  },\n  \"dependencies\": {\n    \"expr-eval\": \"^2.0.2\",\n    \"fastmcp\": \"^1.20.5\",\n    \"zod\": \"^3.24.2\"\n  }\n}"
+}

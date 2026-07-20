@@ -1,0 +1,100 @@
+{
+  "name": "shopsavvy__shopsavvy-mcp-server",
+  "display_name": "shopsavvy-mcp-server",
+  "description": "Model Context Protocol (MCP) server for ShopSavvy Data API - provides product lookup, pricing, and historical data tools for AI assistants.",
+  "author": {
+    "name": "shopsavvy"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["@shopsavvy/mcp-server"],
+    "env": {
+      "SHOPSAVVY_API_KEY": "${user_config.shopsavvy_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "shopsavvy_api_key": {
+      "type": "string",
+      "title": "ShopSavvy API Key",
+      "description": "Your ShopSavvy Data API key (starts with ss_live_ or ss_test_)",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# ShopSavvy Data API MCP Server\n\nA [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that provides AI assistants with access to ShopSavvy's comprehensive product data, pricing information, and historical price tracking.\n\n## Overview\n\nThis MCP server enables AI assistants to:\n- **Look up products** by barcode, ASIN, URL, model number, or ShopSavvy ID\n- **Get current pricing** from multiple retailers\n- **Access historical pricing data** with date ranges\n- **Schedule products** for automatic price monitoring\n- **Track API usage** and credit consumption\n\n## Features\n\n### 🔍 Product Lookup Tools\n- `product_lookup` - Find products by various identifiers (barcode, ASIN, URL, etc.)\n- `product_lookup_batch` - Look up multiple products at once\n\n### 💰 Pricing Tools\n- `product_offers` - Get current offers from all retailers\n- `product_offers_retailer` - Get offers from a specific retailer\n- `product_price_history` - Get historical pricing data with date ranges\n\n### 📅 Scheduling Tools\n- `product_schedule` - Schedule products for automatic refresh (hourly/daily/weekly)\n- `product_unschedule` - Remove products from refresh schedule\n- `scheduled_products_list` - View all scheduled products\n\n### 📊 Analytics Tools\n- `api_usage` - View current API usage and credit consumption\n\n## Installation\n\n```bash\nnpm install @shopsavvy/mcp-server\n```\n\n## Configuration\n\n### 1. Get API Key\n\nFirst, get your ShopSavvy Data API key:\n\n1. Visit [https://shopsavvy.com/data](https://shopsavvy.com/data)\n2. Sign up and choose a subscription plan\n3. Create an API key in your dashboard\n4. Copy your API key (starts with `ss_live_` or `ss_test_`)\n\n### 2. Claude Desktop Setup\n\nAdd this to your Claude Desktop configuration file:\n\n**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n**Windows**: `%APPDATA%\\\\Claude\\\\claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"shopsavvy\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@shopsavvy/mcp-server\"\n      ],\n      \"env\": {\n        \"SHOPSAVVY_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n### 3. Environment Variables\n\nSet your API key as an environment variable:\n\n```bash\nexport SHOPSAVVY_API_KEY=\"ss_live_your_key_here\"\n```\n\nOr create a `.env` file:\n```\nSHOPSAVVY_API_KEY=ss_live_your_key_here\n```\n\n## Usage Examples\n\n### Product Lookup\n```\nLook up the product with barcode 012345678901\n```\n\n### Current Pricing\n```\nGet current prices for ASIN B08N5WRWNW from all retailers\n```\n\n### Price History\n```\nGet price history for product 012345678901 from January 1-15, 2024\n```\n\n### Schedule Monitoring\n```\nSchedule daily price monitoring for products: 012345678901, B08N5WRWNW\n```\n\n## API Limits & Pricing\n\n- **Starter Plan**: 1,000 credits/month - $49/month\n- **Professional Plan**: 10,000 credits/month - $199/month\n- **Enterprise Plan**: 100,000 credits/month - $499/month\n\n### Credit Usage:\n- Product lookup: 1 credit per product found\n- Current offers (all retailers): 3 credits per product\n- Current offers (single retailer): 2 credits per product\n- Historical data: 3 credits + 1 credit per day of history\n- Scheduling: 1 credit per product scheduled\n\n## Development\n\n### Running Locally\n\n```bash\n# Clone the repository\ngit clone https://github.com/shopsavvy/shopsavvy-mcp-server\ncd shopsavvy-mcp-server\n\n# Install dependencies\nnpm install\n\n# Set your API key\nexport SHOPSAVVY_API_KEY=\"your_key_here\"\n\n# Test with MCP CLI\nnpm run dev\n\n# Or inspect with MCP Inspector\nnpm run inspect\n```\n\n### Building\n\n```bash\nnpm run build\n```\n\n## Error Handling\n\nThe server provides detailed error messages for:\n- Invalid API keys\n- Insufficient credits\n- Rate limiting\n- Invalid product identifiers\n- API service issues\n\n## Support\n\n- **Documentation**: [https://shopsavvy.com/data/documentation](https://shopsavvy.com/data/documentation)\n- **Dashboard**: [https://shopsavvy.com/data/dashboard](https://shopsavvy.com/data/dashboard)\n- **Issues**: [https://github.com/shopsavvy/shopsavvy-mcp-server/issues](https://github.com/shopsavvy/shopsavvy-mcp-server/issues)\n\n## Changelog\n\n### v1.0.0 (2025-07-28)\n\n🎉 **Initial Release**\n\n- **Features**: Complete ShopSavvy Data API integration with MCP support\n- **Product Tools**: Lookup by barcode, ASIN, URL, model number, or ShopSavvy ID\n- **Pricing Tools**: Current offers from all/specific retailers, historical pricing data\n- **Scheduling Tools**: Automatic product monitoring (hourly/daily/weekly)\n- **Analytics Tools**: API usage tracking and credit consumption monitoring\n- **npm Package**: Published as `@shopsavvy/mcp-server` under ShopSavvy organization\n- **TypeScript**: Full TypeScript support with proper error handling\n- **Documentation**: Comprehensive README with examples and configuration guides\n\n## License\n\nMIT License - see [LICENSE](LICENSE) file for details.\n\n---\n\nMade with ❤️ by [ShopSavvy](https://shopsavvy.com) - Empowering everyone to always get the best deal, every time.",
+  "category": "Aggregators",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "shopsavvy-mcp-server-configured": {
+        "command": "npx",
+        "args": ["@shopsavvy/mcp-server"],
+        "env": {
+          "SHOPSAVVY_API_KEY": "your_api_key_here"
+        }
+      },
+      "shopsavvy-mcp-server-dev": {
+        "command": "npm",
+        "args": ["run", "dev"],
+        "env": {
+          "SHOPSAVVY_API_KEY": "your_key_here"
+        }
+      },
+      "shopsavvy-mcp-server-inspect": {
+        "command": "npm",
+        "args": ["run", "inspect"],
+        "env": {
+          "SHOPSAVVY_API_KEY": "your_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "shopsavvy",
+    "repo": "shopsavvy-mcp-server",
+    "url": "https://github.com/shopsavvy/shopsavvy-mcp-server",
+    "name": "shopsavvy-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "10bf79f7b550bb670ff0603fa07520b151e7f30b"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:30.999Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@shopsavvy/mcp-server\",\n  \"version\": \"1.0.3\",\n  \"description\": \"Model Context Protocol (MCP) server providing AI assistants with access to ShopSavvy's comprehensive product data, pricing information, historical price tracking, and automated monitoring capabilities\",\n  \"main\": \"src/index.ts\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"dev\": \"npx fastmcp dev src/index.ts\",\n    \"inspect\": \"npx fastmcp inspect src/index.ts\",\n    \"start\": \"node dist/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"shopsavvy\",\n    \"product-data\",\n    \"pricing\",\n    \"e-commerce\",\n    \"shopping\",\n    \"ai-tools\"\n  ],\n  \"author\": \"ShopSavvy by Monolith Technologies, Inc.\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"fastmcp\": \"^3.11.0\",\n    \"zod\": \"^4.0.10\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.0.0\",\n    \"typescript\": \"^5.0.0\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/shopsavvy/shopsavvy-mcp-server\"\n  },\n  \"homepage\": \"https://github.com/shopsavvy/shopsavvy-mcp-server\",\n  \"bugs\": {\n    \"url\": \"https://github.com/shopsavvy/shopsavvy-mcp-server/issues\"\n  }\n}"
+}

@@ -1,0 +1,112 @@
+{
+  "name": "zenml-io__mcp-zenml",
+  "display_name": "mcp-zenml",
+  "description": "MCP server to connect an MCP client (Cursor, Claude Desktop etc) with your ZenML MLOps and LLMOps pipelines",
+  "author": {
+    "name": "zenml-io"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "${__dirname}/zenml_server.py"],
+    "env": {
+      "LOGLEVEL": "INFO",
+      "NO_COLOR": "1",
+      "PYTHONUNBUFFERED": "1",
+      "PYTHONIOENCODING": "UTF-8",
+      "ZENML_STORE_URL": "${user_config.zenml_store_url}",
+      "ZENML_STORE_API_KEY": "${user_config.zenml_store_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "zenml_store_url": {
+      "type": "string",
+      "title": "ZenML Server URL",
+      "description": "The URL of your ZenML server. You can find this in the ZenML Cloud UI.",
+      "required": true,
+      "sensitive": false,
+      "default": "https://your-zenml-server-goes-here.com"
+    },
+    "zenml_store_api_key": {
+      "type": "string",
+      "title": "ZenML Server API Key",
+      "description": "The API key for your ZenML server. You can find this in the ZenML Cloud UI or read these docs on how to create one. For the purposes of the ZenML MCP server we recommend using a service account.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "# MCP Server for ZenML\n\nThis project implements a [Model Context Protocol\n(MCP)](https://modelcontextprotocol.io/introduction) server for interacting with\nthe [ZenML](https://zenml.io) API.\n\n![ZenML MCP Server](assets/mcp-zenml.png)\n\n## What is MCP?\n\nThe Model Context Protocol (MCP) is an open protocol that standardizes how\napplications provide context to Large Language Models (LLMs). It acts like a\n\"USB-C port for AI applications\" - providing a standardized way to connect AI\nmodels to different data sources and tools.\n\nMCP follows a client-server architecture where:\n- **MCP Hosts**: Programs like Claude Desktop or IDEs that want to access data through MCP\n- **MCP Clients**: Protocol clients that maintain 1:1 connections with servers\n- **MCP Servers**: Lightweight programs that expose specific capabilities through the standardized protocol\n- **Local Data Sources**: Your computer's files, databases, and services that MCP servers can securely access\n- **Remote Services**: External systems available over the internet that MCP servers can connect to\n\n## What is ZenML?\n\nZenML is an open-source platform for building and managing ML and AI pipelines.\nIt provides a unified interface for managing data, models, and experiments.\n\nFor more information, see the [ZenML website](https://zenml.io) and [our documentation](https://docs.zenml.io).\n\n## Features\n\nThe server provides MCP tools to access core read functionality from the ZenML\nserver, providing a way to get live information about:\n\n- Users\n- Stacks\n- Pipelines\n- Pipeline runs\n- Pipeline steps\n- Services\n- Stack components\n- Flavors\n- Pipeline run templates\n- Schedules\n- Artifacts (metadata about data artifacts, not the data itself)\n- Service Connectors\n- Step code\n- Step logs (if the step was run on a cloud-based stack)\n\nIt also allows you to trigger new pipeline runs (if a run template is present).\n\n*Note: This is a beta/experimental release. We're still exploring how people\nwill use this integration, so we welcome your feedback and suggestions! Please\njoin our [Slack community](https://zenml.io/slack) to share your experience and\nhelp us improve.*\n\n## Testing & Quality Assurance\n\nThis project includes automated testing to ensure the MCP server remains functional:\n\n- **🔄 Automated Smoke Tests**: A comprehensive smoke test runs every 3 days via GitHub Actions\n- **🚨 Issue Creation**: Failed tests automatically create GitHub issues with detailed debugging information\n- **⚡ Fast CI**: Uses UV with caching for quick dependency installation and testing\n- **🧪 Manual Testing**: You can run the smoke test locally using `uv run scripts/test_mcp_server.py server/zenml_server.py`\n\nThe automated tests verify:\n- MCP protocol connection and handshake\n- Server initialization and tool discovery  \n- Basic tool functionality (when ZenML server is accessible)\n- Resource and prompt enumeration\n\n## How to use\n\n### Prerequisites\n\nYou will need to have access to a deployed ZenML server. If you don't have one,\nyou can sign up for a free trial at [ZenML Pro](https://cloud.zenml.io) and we'll manage the deployment for you.\n\nYou will also (probably) need to have `uv` installed locally. For more information, see\nthe [`uv` documentation](https://docs.astral.sh/uv/getting-started/installation/).\nWe recommend installation via their installer script or via `brew` if using a\nMac. (Technically you don't *need* it, but it makes installation and setup easy.)\n\nYou will also need to clone this repository somewhere locally:\n\n```bash\ngit clone https://github.com/zenml-io/mcp-zenml.git\n```\n\n### Your MCP config file\n\nThe MCP config file is a JSON file that tells the MCP client how to connect to\nyour MCP server. Different MCP clients will use or specify this differently. Two\ncommonly-used MCP clients are [Claude Desktop](https://claude.ai/download) and\n[Cursor](https://www.cursor.com/), for which we provide installation instructions\nbelow.\n\nYou will need to specify your ZenML MCP server in the following format:\n\n```json\n{\n    \"mcpServers\": {\n        \"zenml\": {\n            \"command\": \"/usr/local/bin/uv\",\n            \"args\": [\"run\", \"path/to/server/zenml_server.py\"],\n            \"env\": {\n                \"LOGLEVEL\": \"INFO\",\n                \"NO_COLOR\": \"1\",\n                \"PYTHONUNBUFFERED\": \"1\",\n                \"PYTHONIOENCODING\": \"UTF-8\",\n                \"ZENML_STORE_URL\": \"https://your-zenml-server-goes-here.com\",\n                \"ZENML_STORE_API_KEY\": \"your-api-key-here\"\n            }\n        }\n    }\n}\n```\n\nThere are four dummy values that you will need to replace:\n\n- the path to your locally installed `uv` (the path listed above is where it\n  would be on a Mac if you installed it via `brew`)\n- the path to the `zenml_server.py` file (this is the file that will be run when\n  you connect to the MCP server). This file is located inside this repository at\n  the root. You will need to specify the exact full path to this file.\n- the ZenML server URL (this is the URL of your ZenML server. You can find this\n  in the ZenML Cloud UI). It will look something like `https://d534d987a-zenml.cloudinfra.zenml.io`.\n- the ZenML server API key (this is the API key for your ZenML server. You can\n  find this in the ZenML Cloud UI or [read these\n  docs](https://docs.zenml.io/how-to/manage-zenml-server/connecting-to-zenml/connect-with-a-service-account)\n  on how to create one. For the purposes of the ZenML MCP server we recommend\n  using a service account.)\n\nYou are free to change the way you run the MCP server Python file, but using\n`uv` will probably be the easiest option since it handles the environment and\ndependency installation for you.\n\n\n### Installation for use with Claude Desktop\n\nYou will need to have the latest version of [Claude Desktop](https://claude.ai/download) installed.\n\nYou can simply open the Settings menu and drag the `mcp-zenml.dxt` file from the\nroot of this repository on top of the menu and it will guide you through the\ninstallation and setup process. You'll need to add your ZenML server URL and API key.\n\n#### Optional: Improving ZenML Tool Output Display\n\nFor a better experience with ZenML tool results, you can configure Claude to\ndisplay the JSON responses in a more readable format. In Claude Desktop, go to\nSettings → Profile, and in the \"What personal preferences should Claude consider\nin responses?\" section, add something like the following (or use these exact\nwords!):\n\n```markdown\nWhen using zenml tools which return JSON strings and you're asked a question, you might want to consider using markdown tables to summarize the results or make them easier to view!\n```\n\nThis will encourage Claude to format ZenML tool outputs as markdown tables,\nmaking the information much easier to read and understand.\n\n### Installation for use with Cursor\n\nYou will need to have [Cursor](https://www.cursor.com/) installed.\n\nCursor works slightly differently to Claude Desktop in that you specify the\nconfig file on a per-repository basis. This means that if you want to use the\nZenML MCP server in multiple repos, you will need to specify the config file in\neach of them.\n\nTo set it up for a single repository, you will need to:\n\n- create a `.cursor` folder in the root of your repository\n- inside it, create a `mcp.json` file with the content above\n- go into your Cursor settings and click on the ZenML server to 'enable' it.\n\nIn our experience, sometimes it shows a red error indicator even though it is\nworking. You can try it out by chatting in the Cursor chat window. It will let\nyou know if is able to access the ZenML tools or not.\n\n## Desktop Extensions (DXT) Support\n\nThis project supports [Anthropic's Desktop Extensions (DXT) standard](https://www.anthropic.com/engineering/desktop-extensions), which makes installing MCP servers as simple as clicking a button. DXT is a new packaging format that bundles entire MCP servers into a single `.dxt` file, including all dependencies and providing user-friendly configuration.\n\nThe `mcp-zenml.dxt` file in the repository root contains everything needed to run the ZenML MCP server, eliminating the need for complex manual installation steps. This makes powerful ZenML integrations accessible to users without requiring technical setup expertise.\n\nWhen you drag and drop the `.dxt` file into Claude Desktop's settings, it automatically handles:\n- Runtime dependency installation\n- Secure configuration management  \n- Cross-platform compatibility\n- User-friendly setup process\n\nFor more information about Desktop Extensions and the DXT standard, visit the [official documentation](https://www.anthropic.com/engineering/desktop-extensions).\n",
+  "category": "AI Tools",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "zenml": {
+        "command": "/usr/local/bin/uv",
+        "args": ["run", "path/to/server/zenml_server.py"],
+        "env": {
+          "LOGLEVEL": "INFO",
+          "NO_COLOR": "1",
+          "PYTHONUNBUFFERED": "1",
+          "PYTHONIOENCODING": "UTF-8",
+          "ZENML_STORE_URL": "https://your-zenml-server-goes-here.com",
+          "ZENML_STORE_API_KEY": "your-api-key-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zenml-io",
+    "repo": "mcp-zenml",
+    "url": "https://github.com/zenml-io/mcp-zenml",
+    "name": "zenml-io__mcp-zenml",
+    "path": null,
+    "stars": 27,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "6ae10d5e8e3af778fe0c26ad411a655bb95d2dff"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:46.085Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "zenml",
+      "importance": 9
+    },
+    {
+      "name": "setuptools",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nhttpx\nmcp[cli]\nzenml\nsetuptools\n"
+}

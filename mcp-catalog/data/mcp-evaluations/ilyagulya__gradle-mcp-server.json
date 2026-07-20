@@ -1,0 +1,74 @@
+{
+  "name": "ilyagulya__gradle-mcp-server",
+  "display_name": "gradle-mcp-server",
+  "description": "A Model Context Protocol (MCP) server to enable AI tools to interact with Gradle projects programmatically.",
+  "author": {
+    "name": "IlyaGulya"
+  },
+  "server": {
+    "command": "java",
+    "args": ["-jar", "${HOME}/mcp-servers/gradle-mcp-server/gradle-mcp-server-all.jar"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Gradle MCP Server\n\nA Model Context Protocol (MCP) server that enables AI tools to interact with Gradle projects programmatically. It uses the [Gradle Tooling API](https://docs.gradle.org/current/userguide/tooling_api.html) to query project information and execute tasks.\n\n## Features\n\nProvides tools for:\n\n-   **Inspecting Projects**: Retrieve detailed, structured information about a Gradle project, including:\n    -   Build structure (root project, subprojects)\n    -   Available tasks (in the root project)\n    -   Build environment details (Gradle version, Java version, JVM args)\n    -   Root project details (name, path, description, build script path)\n    -   Allows selective querying of information categories.\n-   **Executing Tasks**: Run specific Gradle tasks (e.g., `clean`, `build`, `assemble`) with custom arguments, JVM arguments, and environment variables. Returns formatted text output including stdout/stderr and status.\n-   **Running Tests Hierarchically**: Execute Gradle test tasks (e.g., `test`) and receive detailed, structured results in a hierarchical JSON format (Suite -> Class -> Method). Includes:\n    -   Outcome (passed, failed, skipped) for each node.\n    -   Failure messages and filtered/truncated output lines (stdout/stderr) primarily for failed tests (configurable).\n    -   Support for test filtering via patterns (`--tests`).\n    -   Options to control output inclusion and log line limits.\n\n## Requirements\n\n-   JDK 17 or higher\n-   For command-line installation:\n    -   Linux/macOS: `curl`\n    -   Windows: PowerShell 5+\n\n## Installation\n\n### Recommended Method: Command-Line Download\n\nThis method downloads the server JAR to a standard location in your home directory.\n\n**Linux / macOS (requires `curl`):**\n\n```bash\n# Downloads gradle-mcp-server-all.jar to ~/mcp-servers/gradle-mcp-server/\nTARGET_DIR=\"$HOME/mcp-servers/gradle-mcp-server\" && mkdir -p \"$TARGET_DIR\" && curl -fSL -o \"$TARGET_DIR/gradle-mcp-server-all.jar\" \"https://github.com/IlyaGulya/gradle-mcp-server/releases/latest/download/gradle-mcp-server-all.jar\" && echo \"Downloaded to '$TARGET_DIR'.\" || echo \"Download failed.\"\n```\n\n**Windows (PowerShell 5+):**\n\n```powershell\n# Downloads gradle-mcp-server-all.jar to %USERPROFILE%\\mcp-servers\\gradle-mcp-server\\\n$targetDir = Join-Path $env:USERPROFILE \"mcp-servers\\gradle-mcp-server\"; if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }; $outFile = Join-Path $targetDir \"gradle-mcp-server-all.jar\"; Write-Host \"Downloading...\"; Invoke-WebRequest -Uri \"https://github.com/IlyaGulya/gradle-mcp-server/releases/latest/download/gradle-mcp-server-all.jar\" -OutFile $outFile -ErrorAction Stop; Write-Host \"Downloaded to '$targetDir'.\"\n```\n\n### Alternative Method: Manual Download\n\n1.  Go to the [GitHub Releases page](https://github.com/IlyaGulya/gradle-mcp-server/releases).\n2.  Download the `gradle-mcp-server-all.jar` asset from the latest release.\n3.  Save the downloaded JAR file to a stable location. We recommend:\n    *   macOS / Linux: `~/mcp-servers/gradle-mcp-server/`\n    *   Windows: `%USERPROFILE%\\mcp-servers\\gradle-mcp-server\\`\n    (Create the directory if it doesn't exist).\n\n## MCP Client Configuration\n\nTo use this server with an MCP client (like the VSCode extension or Claude Desktop app), you need to add its configuration to the client's settings file.\n\n1.  **Locate the settings file:**\n    *   VSCode Extension (Example for macOS): `/Users/<YourUsername>/Library/Application Support/VSCodium/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` (Adjust path for standard VSCode or other OS).\n    *   Claude Desktop App (Example for macOS): `~/Library/Application Support/Claude/claude_desktop_config.json` (Adjust path for other OS).\n\n2.  **Add the server configuration:** Edit the JSON file and add the following entry inside the `mcpServers` object. **Replace `<absolute_path_to_home>` with the actual absolute path to your home directory.**\n\n    ```json\n    {\n      \"mcpServers\": {\n        \"gradle-mcp-server\": {\n          \"command\": \"java\",\n          \"args\": [\n            \"-jar\",\n            \"<absolute_path_to_home>/mcp-servers/gradle-mcp-server/gradle-mcp-server-all.jar\"\n          ],\n          \"env\": {},\n          \"disabled\": false,\n          \"autoApprove\": []\n        }\n      }\n    }\n    ```\n\n## Usage\n\n1.  After adding the configuration, **restart your MCP client** (e.g., reload the VSCode window or restart the Claude app).\n2.  The \"Gradle MCP Server\" and its tools (listed below) should now be available for use within the client. The server runs automatically via stdio when needed by the client.\n\n## Available Tools\n\nThe server exposes the following tools via the Model Context Protocol:\n\n1.  **`get_gradle_project_info`**\n    -   **Description**: Retrieves specific details about a Gradle project, returning structured JSON. Allows requesting only necessary information categories (`buildStructure`, `tasks`, `environment`, `projectDetails`). If `requestedInfo` is omitted, all categories are fetched.\n    -   **Key Inputs**:\n        -   `projectPath` (string, required): Absolute path to the Gradle project root.\n        -   `requestedInfo` (array of strings, optional): List of categories to retrieve (e.g., `[\"tasks\", \"environment\"]`).\n    -   **Output**: JSON object (`GradleProjectInfoResponse`) containing the requested data fields and potential errors.\n\n2.  **`execute_gradle_task`**\n    -   **Description**: Executes general Gradle tasks (like `build`, `clean`). **Not recommended for running tests if detailed results are needed** (use the test tool instead). Returns formatted text output summarizing execution and including captured stdout/stderr.\n    -   **Key Inputs**:\n        -   `projectPath` (string, required): Absolute path to the Gradle project root.\n        -   `tasks` (array of strings, required): List of task names to execute (e.g., `[\"clean\", \"assemble\"]`).\n        -   `arguments` (array of strings, optional): Gradle command-line arguments (e.g., `[\"--info\", \"-PmyProp=value\"]`).\n        -   `jvmArguments` (array of strings, optional): JVM arguments for Gradle (e.g., `[\"-Xmx4g\"]`).\n        -   `environmentVariables` (object, optional): Environment variables for the build (e.g., `{\"CI\": \"true\"}`).\n    -   **Output**: Formatted text response with execution summary, final status (`Success`/`Failure`), and combined stdout/stderr.\n\n3.  **`run_gradle_tests`**\n    -   **Description**: Executes Gradle test tasks and returns results as a structured JSON hierarchy (Suite > Class > Test). Filters/truncates output lines by default, focusing on failures. Provides options to include output for passed tests and control log limits.\n    -   **Key Inputs**:\n        -   `projectPath` (string, required): Absolute path to the Gradle project root.\n        -   `gradleTasks` (array of strings, optional): Test tasks to run (defaults to `[\"test\"]`).\n        -   `arguments` (array of strings, optional): Additional Gradle arguments (verbose flags like `--info`/`--debug` are filtered out).\n        -   `environmentVariables` (object, optional): Environment variables for the test execution.\n        -   `testPatterns` (array of strings, optional): Test filter patterns passed via `--tests` (e.g., `[\"*.MyTestClass\"]`).\n        -   `includeOutputForPassed` (boolean, optional): Set to `true` to include output for passed tests (default `false`).\n        -   `maxLogLines` (integer, optional): Override the default limit on output lines per test (0 for unlimited).\n        -   `defaultMaxLogLines` (integer, optional): Set the default output line limit (defaults internally to 100).\n    -   **Output**: JSON object (`GradleHierarchicalTestResponse`) containing execution details, overall build success status, informative notes, and the `test_hierarchy` tree. Each node includes display name, type, outcome, failure message (if any), filtered/truncated output lines, and children.\n\n## Development\n\n### Building from Source\n\nIf you want to build the server yourself:\n\n1.  Clone the repository.\n2.  Ensure you have JDK 17 or higher installed.\n3.  Run the build command:\n    ```bash\n    ./gradlew shadowJar\n    ```\n4.  The self-contained JAR (`gradle-mcp-server-<version>-all.jar`) will be created in the `build/libs/` directory. You can then configure your MCP client to use this JAR (remember to use the correct absolute path and version in the configuration).\n\n### Running Locally (for Testing)\n\nYou can run the built JAR directly from the command line for testing purposes. The server communicates over stdio by default.\n\n```bash\n# Run the packaged JAR in stdio mode\njava -jar build/libs/gradle-mcp-server-<version>-all.jar\n\n# Run with specific arguments (see Configuration section)\njava -jar build/libs/gradle-mcp-server-<version>-all.jar --sse 8080 --debug\n```\n\n## Configuration (Command-Line Arguments)\n\nWhen running the server JAR directly (primarily for testing/development), its behavior can be controlled via command-line arguments:\n\n-   `--stdio`: (Default) Use standard input/output for MCP communication.\n-   `--sse [port]`: Run as an SSE server on the specified `port` (defaults to 3001 if port is omitted). Connect MCP clients (like the Anthropic Console Inspector) to `http://localhost:<port>/sse`.\n-   `--debug`: Enable verbose logging on the server console.\n\n## Dependencies\n\n-   [Gradle Tooling API](https://docs.gradle.org/current/userguide/tooling_api.html) (Version specified in `build.gradle.kts`)\n-   [Anthropic MCP Kotlin SDK](https://github.com/wiremock-inc/anthropic-mcp-kotlin-sdk)\n-   [Ktor](https://ktor.io/) (for SSE server mode)\n-   [Logback](https://logback.qos.ch/) (for logging)\n",
+  "category": "Development",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gradle-mcp-server": {
+        "command": "java",
+        "args": ["-jar", "<absolute_path_to_home>/mcp-servers/gradle-mcp-server/gradle-mcp-server-all.jar"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "IlyaGulya",
+    "repo": "gradle-mcp-server",
+    "url": "https://github.com/IlyaGulya/gradle-mcp-server",
+    "name": "ilyagulya__gradle-mcp-server",
+    "path": null,
+    "stars": 31,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d16e74f231739ff1f774fcc23ae53b8946bb36c3"
+  },
+  "programming_language": "Kotlin",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.860Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "Model Context Protocol (MCP) SDK",
+      "importance": 10
+    },
+    {
+      "name": "Gradle Tooling API",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": null
+}

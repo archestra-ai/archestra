@@ -1,0 +1,96 @@
+{
+  "name": "lightpanda-io__gomcp",
+  "display_name": "gomcp",
+  "description": "Lightpanda MCP server written in Go",
+  "author": {
+    "name": "lightpanda-io"
+  },
+  "server": {
+    "command": "./lightpanda-mcp-server",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Lightpanda Go MCP server\n\n`gomcp` is an [MCP server](https://modelcontextprotocol.io) written in\n[Go](https://go.dev/).\n\nIt exposes tools to interact with [Lightpanda Browser](https://lightpanda.io/)\nvia [CDP protocol](https://chromedevtools.github.io/devtools-protocol/).\n\n```mermaid\nflowchart LR;\n  A[CDP Client]-->|SSE or stdio|gomcp;\n  gomcp-->|CDP|B[Lightpanda browser];\n```\n\n## Installation\n\n### Requirements\n\n`gomcp` requires you to have already installed [Lightpanda\nBrowser](https://lightpanda.io/docs/getting-started/installation).\n\n### Build from source\n\nYou need to install [Go](https://go.dev/doc/install) to build from source.\n\nOnce you have cloned the repository, build the binary with `go build`.\n\n## Usage\n\nBy default, `gocmp` starts a local instance of Lightpanda browser.\n\nOn the first run, you need to download the binary with the command:\n```\n$ gomcp download\n```\nThe browser is stored in the user config directory.\n`$XDG_CONFIG_HOME/lightpanda-gomcp` or `HOME/.config/lightpanda-gomcp` on\nLinux, `$HOME/Library/Application Support/lightpanda-gomcp` on Macosx.\n\nYou can remove the downloaded binary with `gomcp cleanup` command.\n\nYou can connect on a remote browser with the option `--cdp`.\n```\n$ gomcp -cdp ws://127.0.0.1:9222 stdio\n```\n\n###  Configure Claude Desktop\n\nYou can configure `gomcp` as a source for your [Claude\nDesktop](https://claude.ai/download).\n\nClaude Desktop uses the\n[stdio](https://modelcontextprotocol.io/docs/concepts/transports#standard-input%2Foutput-stdio)\ntransport to connect to an MCP server.\n\nEdit the `claude_desktop_config.json` configuration file and add `gomcp` as the mcp\nserver **and restart Claude Desktop**.\n\n```json\n{\n  \"mcpServers\": {\n    \"lightpanda\": {\n      \"command\": \"/path/to/gomcp\",\n      \"args\": [\"stdio\"]\n    }\n  }\n}\n```\n\nThe model context protocol website gives a way to find\n[claude_desktop_config.json](https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server)\nfile.\n\n### Standard input/output (stdio)\n\nYou can start `gomcp` as a\n[stdio](https://modelcontextprotocol.io/docs/concepts/transports#standard-input%2Foutput-stdio).\n\n```\n$ ./gomcp stdio\n```\n\n### Server-Sent Events (SSE)\n\nYou can start `gomcp` as a\n[SSE](https://modelcontextprotocol.io/docs/concepts/transports#server-sent-events-sse).\n\nBy default, the server listens to the HTTP connection at `127.0.0.1:8081`.\n\n```\n$ ./gomcp sse\n2025/05/06 14:37:13 INFO server listening addr=127.0.0.1:8081\n```\n## Thanks\n\n`gomcp` is built thanks of open source projects, in particular:\n* [Go language](https://go.dev)\n* [Chromedp](https://github.com/chromedp/chromedp)\n* [JohannesKaufmann/html-to-markdown](github.com/JohannesKaufmann/html-to-markdown)\n* [Lightpanda Browser](https://github.com/lightpanda-io/browser)\n",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gomcp-stdio": {
+        "command": "/path/to/gomcp",
+        "args": ["stdio"],
+        "env": {}
+      },
+      "gomcp-remote-stdio": {
+        "command": "gomcp",
+        "args": ["-cdp", "ws://127.0.0.1:9222", "stdio"],
+        "env": {}
+      },
+      "gomcp-sse": {
+        "command": "./gomcp",
+        "args": ["sse"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "lightpanda-io",
+    "repo": "gomcp",
+    "url": "https://github.com/lightpanda-io/gomcp",
+    "name": "lightpanda-io__gomcp",
+    "path": null,
+    "stars": 26,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "aaabe5a072edffa130f24022221b79bc24731cf5"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:14.729Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "JohannesKaufmann/html-to-markdown",
+      "importance": 6
+    },
+    {
+      "name": "chromedp/cdproto",
+      "importance": 8
+    },
+    {
+      "name": "chromedp/chromedp",
+      "importance": 10
+    },
+    {
+      "name": "gin-contrib/sse",
+      "importance": 9
+    },
+    {
+      "name": "google/uuid",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/lightpanda-io/gomcp\n\ngo 1.24.2\n\nrequire (\n\tgithub.com/JohannesKaufmann/html-to-markdown v1.6.0\n\tgithub.com/chromedp/cdproto v0.0.0-20250403032234-65de8f5d025b\n\tgithub.com/chromedp/chromedp v0.13.6\n\tgithub.com/gin-contrib/sse v1.1.0\n\tgithub.com/google/uuid v1.6.0\n)\n\nrequire (\n\tgithub.com/PuerkitoBio/goquery v1.9.2 // indirect\n\tgithub.com/andybalholm/cascadia v1.3.2 // indirect\n\tgithub.com/chromedp/sysutil v1.1.0 // indirect\n\tgithub.com/go-json-experiment/json v0.0.0-20250211171154-1ae217ad3535 // indirect\n\tgithub.com/gobwas/httphead v0.1.0 // indirect\n\tgithub.com/gobwas/pool v0.2.1 // indirect\n\tgithub.com/gobwas/ws v1.4.0 // indirect\n\tgolang.org/x/net v0.25.0 // indirect\n\tgolang.org/x/sys v0.29.0 // indirect\n)\n"
+}

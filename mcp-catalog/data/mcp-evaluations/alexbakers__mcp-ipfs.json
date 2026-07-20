@@ -1,0 +1,115 @@
+{
+  "name": "alexbakers__mcp-ipfs",
+  "display_name": "mcp-ipfs",
+  "description": "🪐 MCP IPFS Server ",
+  "author": {
+    "name": "alexbakers"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-ipfs"],
+    "env": {
+      "W3_LOGIN_EMAIL": "${user_config.w3_login_email}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "w3_login_email": {
+      "type": "string",
+      "title": "W3 Login Email",
+      "description": "The email address used for w3 login, required for authentication with storacha.network.",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# 🪐 MCP IPFS Server (storacha.network) 🛰️\n\n![Screenshot](https://raw.githubusercontent.com/alexbakers/mcp-ipfs/refs/heads/main/mcp-ipfs.png?neon-game)\n\n[![Publish Docker](https://github.com/alexbakers/mcp-ipfs/actions/workflows/publish-docker.yml/badge.svg)](https://github.com/alexbakers/mcp-ipfs/actions/workflows/publish-docker.yml) [![Publish NPM](https://github.com/alexbakers/mcp-ipfs/actions/workflows/publish-npm.yml/badge.svg)](https://github.com/alexbakers/mcp-ipfs/actions/workflows/publish-npm.yml) [![npm version](https://badge.fury.io/js/mcp-ipfs.svg)](https://badge.fury.io/js/mcp-ipfs)\n[![smithery badge](https://smithery.ai/badge/@alexbakers/mcp-ipfs)](https://smithery.ai/server/@alexbakers/mcp-ipfs)\n\nA Node.js server implementing the [Model Context Protocol (MCP)](https://github.com/ModelContextProtocol/specification) for interacting with the [storacha.network](https://storacha.network/) platform via the `w3` command-line interface (`@web3-storage/w3cli`).\n\nThis server empowers language models 🤖 and other MCP clients to manage storacha.network spaces, upload/download data, manage delegations, and perform various other tasks by seamlessly wrapping `w3` commands.\n\n## ✨ Features\n\n- Wraps the `w3` CLI for native integration with storacha.network.\n- Provides MCP tools covering a wide range of `w3` functionality:\n  - 🔑 **Authentication & Agent:** `w3_login`, `w3_reset`, `w3_account_ls` (for checking authorization)\n  - 📦 **Space Management:** `w3_space_ls`, `w3_space_use`, `w3_space_info`, `w3_space_add`, `w3_space_provision` (Note: `w3_space_create` must be run manually due to interactive prompts)\n  - 💾 **Data Management:** `w3_up`, `w3_ls`, `w3_rm`\n  - 🔗 **Sharing:** `w3_open` (generates w3s.link URL)\n  - 🤝 **Delegations & Proofs:** `w3_delegation_create`, `w3_delegation_ls`, `w3_delegation_revoke`, `w3_proof_add`, `w3_proof_ls`\n  - 🔐 **Keys & Tokens:** `w3_key_create`, `w3_bridge_generate_tokens`\n  - ⚙️ **Advanced Storage (`w3 can ...`):** Blob, CAR, Upload, Index, Access Claim, Filecoin Info management\n  - 💳 **Account & Billing:** `w3_plan_get`, `w3_coupon_create`, `w3_usage_report`\n\n## 🛠️ Prerequisites\n\n- **Node.js:** Version 22.0.0 or higher (`node -v`).\n- **`w3` CLI:** The server executes `w3` commands directly. Ensure `@web3-storage/w3cli` is installed globally and configured:\n  ```bash\n  npm install -g @web3-storage/w3cli\n  w3 login <your-email@example.com>\n  # Follow email verification steps\n  ```\n- **Environment Variable:** The `w3_login` tool requires the `W3_LOGIN_EMAIL` environment variable to be set to the same email used for `w3 login`.\n\n## 🏗️ Project Structure\n\nThe codebase is organized as follows:\n\n```\nsrc/\n├── index.ts          # Main server entry point, MCP setup, request routing\n├── schemas.ts        # Zod schemas defining input arguments for each tool\n├── tool_handlers.ts  # Implementation logic for each MCP tool\n├── utils.ts          # Helper functions (e.g., running w3 commands, parsing JSON)\n└── utils/\n    └── logger.ts     # Basic logger configuration\n```\n\n## 🚀 Usage with MCP Clients\n\nThis server can be used with any MCP-compatible client. You need to configure your client to connect to this server.\n\n### Example: NPX (Recommended for simple local use)\n\nThis assumes `npm` and the prerequisites are met.\n\n```json\n{\n  \"mcpServers\": {\n    \"ipfs\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-ipfs\"],\n      \"env\": {\n        \"W3_LOGIN_EMAIL\": \"your-email@example.com\"\n      }\n    }\n  }\n}\n```\n\n### Example: Docker\n\nBuild the image first (see Build section) or use the pre-built image `alexbakers/mcp-ipfs`.\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-ipfs\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-v\",\n        \"/path/to/your/project:/path/to/your/project\",\n        \"-e\",\n        \"W3_LOGIN_EMAIL\",\n        \"alexbakers/mcp-ipfs\"\n      ],\n      \"env\": {\n        \"W3_LOGIN_EMAIL\": \"your-email@example.com\"\n      }\n    }\n  }\n}\n```\n\n#### 📝 Note on Paths:\n\nSeveral `w3` commands require **absolute filesystem paths** (e.g., `w3_up`, `w3_delegation_create --output`, `w3_proof_add`, `w3_can_blob_add`, `w3_can_store_add`).\n\n- **NPX:** Provide absolute paths from your host machine.\n- **Docker:** Provide absolute paths _inside the container_. If interacting with files from your host (e.g., uploading), you **must** mount the relevant host directory into the container using the `-v` flag (e.g., `-v /Users/me/project:/Users/me/project`) and then use the _container path_ (e.g., `/Users/me/project/my_file.txt`) in the tool arguments.\n\n## 📦 Build\n\nClone the repository and install dependencies:\n\n```bash\ngit clone https://github.com/alexbakers/mcp-ipfs.git\ncd mcp-ipfs\nnpm install\n```\n\nBuild the TypeScript code:\n\n```bash\nnpm run build\n```\n\nYou can then run the server directly:\n\n```bash\n# Ensure W3_LOGIN_EMAIL is set in your environment\nexport W3_LOGIN_EMAIL=\"your-email@example.com\"\nnode dist/index.js\n```\n\nOr publish it (if you have the rights):\n\n```bash\nnpm publish\n```\n\n### 🐳 Docker Build\n\nBuild the Docker image:\n\n```bash\n# Build locally (replace with your username/repo and desired tag)\ndocker build -t alexbakers/mcp-ipfs .\n```\n\n## 📜 License\n\nThis MCP server is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-ipfs": {
+        "command": "npx",
+        "args": ["-y", "mcp-ipfs"],
+        "env": {
+          "W3_LOGIN_EMAIL": "your-email@example.com"
+        }
+      },
+      "alexbakers-mcp-ipfs-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-v",
+          "/path/to/your/project:/path/to/your/project",
+          "-e",
+          "W3_LOGIN_EMAIL",
+          "alexbakers/mcp-ipfs"
+        ],
+        "env": {
+          "W3_LOGIN_EMAIL": "your-email@example.com"
+        },
+        "docker_image": "alexbakers/mcp-ipfs"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "alexbakers",
+    "repo": "mcp-ipfs",
+    "url": "https://github.com/alexbakers/mcp-ipfs",
+    "name": "alexbakers__mcp-ipfs",
+    "path": null,
+    "stars": 11,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "09bfcc95aa281f11ba411522bae71d3c9ff90dd9"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:15.597Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 8
+    },
+    {
+      "name": "files-from-path",
+      "importance": 7
+    },
+    {
+      "name": "multiformats",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-ipfs\",\n  \"version\": \"0.1.9\",\n  \"type\": \"module\",\n  \"description\": \"MCP Server for interacting with the IPFS Storacha Network\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"mcp-ipfs\": \"dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"files\": [\n    \"dist/\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"files-from-path\": \"^1.1.4\",\n    \"multiformats\": \"^13.3.2\",\n    \"zod\": \"^3.24.2\",\n    \"zod-to-json-schema\": \"^3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"engines\": {\n    \"node\": \">=22.0.0\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"license\": \"MIT\",\n  \"author\": \"Alex Baker <alex.baker.fon@protonmail.com>\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/alexbakers/mcp-ipfs.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"ipfs\",\n    \"storacha\",\n    \"w3up\",\n    \"llm\",\n    \"ai\"\n  ]\n}\n"
+}

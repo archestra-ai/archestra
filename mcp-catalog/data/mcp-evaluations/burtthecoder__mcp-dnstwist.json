@@ -1,0 +1,75 @@
+{
+  "name": "burtthecoder__mcp-dnstwist",
+  "display_name": "mcp-dnstwist",
+  "description": "MCP server for dnstwist, a powerful DNS fuzzing tool that helps detect typosquatting, phishing, and corporate espionage.",
+  "author": {
+    "name": "BurtTheCoder"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# DNStwist MCP Server\n[![smithery badge](https://smithery.ai/badge/@burtthecoder/mcp-dnstwist)](https://smithery.ai/server/@burtthecoder/mcp-dnstwist)\n\nA Model Context Protocol (MCP) server for [dnstwist](https://github.com/elceef/dnstwist), a powerful DNS fuzzing tool that helps detect typosquatting, phishing, and corporate espionage. This server provides tools for analyzing domain permutations and identifying potentially malicious domains. It is designed to integrate seamlessly with MCP-compatible applications like [Claude Desktop](https://claude.ai).\n\n<a href=\"https://glama.ai/mcp/servers/it7izu3ufb\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/it7izu3ufb/badge\" alt=\"mcp-dnstwist MCP server\" /></a>\n\n\n## ⚠️ Warning\n\nThis tool is designed for legitimate security research purposes. Please:\n- Only analyze domains you own or have permission to test\n- Respect rate limits and DNS server policies\n- Use responsibly and ethically\n- Be aware that some DNS servers may rate-limit or block automated queries\n- Consider the impact on DNS infrastructure when running large scans\n\n## Requirements\n\n- Node.js (v18 or later)\n- Docker\n- macOS, Linux, or Windows with Docker Desktop installed\n\n## Quick Start\n\n### Installing via Smithery\n\nTo install DNStwist for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@burtthecoder/mcp-dnstwist):\n\n```bash\nnpx -y @smithery/cli install @burtthecoder/mcp-dnstwist --client claude\n```\n\n### Installing Manually\n1. Install Docker:\n   - macOS: Install [Docker Desktop](https://www.docker.com/products/docker-desktop)\n   - Linux: Follow the [Docker Engine installation guide](https://docs.docker.com/engine/install/)\n\n2. Install the server globally via npm:\n```bash\nnpm install -g mcp-dnstwist\n```\n\n3. Add to your Claude Desktop configuration file:\n```json\n{\n  \"mcpServers\": {\n    \"dnstwist\": {\n      \"command\": \"mcp-dnstwist\"\n    }\n  }\n}\n```\n\nConfiguration file location:\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n4. Restart Claude Desktop\n\n## Alternative Setup (From Source)\n\nIf you prefer to run from source or need to modify the code:\n\n1. Clone and build:\n```bash\ngit clone <repository_url>\ncd mcp-dnstwist\nnpm install\nnpm run build\n```\n\n2. Add to your Claude Desktop configuration:\n```json\n{\n  \"mcpServers\": {\n    \"dnstwist\": {\n      \"command\": \"node\",\n      \"args\": [\"/absolute/path/to/mcp-dnstwist/build/index.js\"]\n    }\n  }\n}\n```\n\n## Features\n\n- **Domain Fuzzing**: Generate domain permutations using various algorithms\n- **Registration Check**: Verify if permutated domains are registered\n- **DNS Analysis**: Check A, AAAA, MX, and NS records\n- **Web Presence**: Capture HTTP banner information\n- **WHOIS Data**: Retrieve registration dates and registrar information\n- **Phishing Detection**: Generate fuzzy hashes of web pages\n- **Configurable**: Custom DNS servers and parallel processing\n- **Multiple Formats**: Support for json, csv, and list output formats\n\n## Tools\n\n### Domain Fuzzing Tool\n- Name: `fuzz_domain`\n- Description: Generate and analyze domain permutations to detect potential typosquatting, phishing, and brand impersonation\n- Parameters:\n  * `domain` (required): Domain name to analyze (e.g., example.com)\n  * `nameservers` (optional, default: \"1.1.1.1\"): Comma-separated list of DNS servers\n  * `threads` (optional, default: 50): Number of threads for parallel processing\n  * `format` (optional, default: \"json\"): Output format (json, csv, list)\n  * `registered_only` (optional, default: true): Show only registered domains\n  * `mxcheck` (optional, default: true): Check for MX records\n  * `ssdeep` (optional, default: false): Generate fuzzy hashes of web pages\n  * `banners` (optional, default: true): Capture HTTP banner information\n\nExample:\n```json\n{\n  \"domain\": \"example.com\",\n  \"nameservers\": \"1.1.1.1,8.8.8.8\",\n  \"threads\": 50,\n  \"format\": \"json\",\n  \"registered_only\": true,\n  \"mxcheck\": true,\n  \"banners\": true\n}\n```\n\n## Troubleshooting\n\n### Docker Issues\n\n1. Verify Docker is installed and running:\n```bash\ndocker --version\ndocker ps\n```\n\n2. Check Docker permissions:\n   - Ensure your user has permissions to run Docker commands\n   - On Linux, add your user to the docker group: `sudo usermod -aG docker $USER`\n\n### Common Issues\n\n1. DNS resolution problems:\n   - Verify DNS servers are accessible\n   - Try alternative DNS servers (e.g., 8.8.8.8)\n   - Check for rate limiting or blocking\n\n2. Performance issues:\n   - Adjust thread count based on system capabilities\n   - Consider network bandwidth and latency\n   - Monitor DNS server response times\n\n3. After fixing any issues:\n   - Save the configuration file\n   - Restart Claude Desktop\n\n## Error Messages\n\n- \"Docker is not installed or not running\": Install Docker and start the Docker daemon\n- \"Failed to parse dnstwist output\": Check if the domain is valid and the format is correct\n- \"Error executing dnstwist\": Check Docker logs and ensure proper permissions\n- \"DNS server not responding\": Verify DNS server accessibility and try alternative servers\n\n## Contributing\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Security",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-dnstwist": {
+        "command": "mcp-dnstwist",
+        "args": [],
+        "env": {}
+      },
+      "mcp-dnstwist-from-source": {
+        "command": "node",
+        "args": ["/absolute/path/to/mcp-dnstwist/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "BurtTheCoder",
+    "repo": "mcp-dnstwist",
+    "url": "https://github.com/BurtTheCoder/mcp-dnstwist",
+    "name": "mcp-dnstwist",
+    "path": null,
+    "stars": 31,
+    "contributors": 4,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "af62d09328f762a3581cd354997299ed0a758c11"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.978Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@burtthecoder/mcp-dnstwist\",\n  \"version\": \"1.0.4\",\n  \"description\": \"MCP server for dnstwist - DNS fuzzing to detect typosquatting, phishing and corporate espionage\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-dnstwist\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"README.md\",\n    \"LICENSE\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && chmod +x build/index.js\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^0.4.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.0.0\",\n    \"typescript\": \"^5.0.0\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/burtthecoder/mcp-dnstwist.git\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"dnstwist\",\n    \"dns\",\n    \"security\",\n    \"phishing\",\n    \"typosquatting\",\n    \"domain-security\",\n    \"claude\",\n    \"claude-desktop\"\n  ],\n  \"author\": \"burtmacklin\",\n  \"license\": \"MIT\",\n  \"engines\": {\n    \"node\": \">=18\"\n  }\n}\n"
+}

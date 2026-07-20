@@ -1,0 +1,182 @@
+{
+  "name": "co-browser__browser-use-mcp-server",
+  "display_name": "browser-use-mcp-server",
+  "description": "Browse the web, directly from Cursor etc.",
+  "author": {
+    "name": "co-browser"
+  },
+  "server": {
+    "command": "browser-use-mcp-server",
+    "args": ["run", "server", "--port", "8000", "--stdio", "--proxy-port", "9000"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}",
+      "CHROME_PATH": "${user_config.chrome_path}",
+      "PATIENT": "${user_config.patient}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key, required for AI agent functionality.",
+      "sensitive": true,
+      "required": true
+    },
+    "chrome_path": {
+      "type": "file",
+      "title": "Chrome Executable Path",
+      "description": "Optional path to a custom Chrome or Chromium executable.",
+      "required": false
+    },
+    "patient": {
+      "type": "boolean",
+      "title": "Patient Mode",
+      "description": "If enabled, API calls will wait for long-running browser tasks to complete before responding.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# browser-use-mcp-server\n\n<div align=\"center\">\n\n[![Twitter URL](https://img.shields.io/twitter/url/https/twitter.com/cobrowser.svg?style=social&label=Follow%20%40cobrowser)](https://x.com/cobrowser)\n[![Discord](https://img.shields.io/discord/1351569878116470928?logo=discord&logoColor=white&label=discord&color=white)](https://discord.gg/gw9UpFUhyY)\n[![PyPI version](https://badge.fury.io/py/browser-use-mcp-server.svg)](https://badge.fury.io/py/browser-use-mcp-server)\n\n**An MCP server that enables AI agents to control web browsers using\n[browser-use](https://github.com/browser-use/browser-use).**\n\n> **🌐 Want to Vibe Browse the Web?** Open-source AI-powered web browser - [**Vibe Browser**](https://github.com/co-browser/vibe).\n>\n> **🔗 Managing multiple MCP servers?** Simplify your development workflow with [agent-browser](https://github.com/co-browser/agent-browser)\n\n</div>\n\n## Prerequisites\n\n- [uv](https://github.com/astral-sh/uv) - Fast Python package manager\n- [Playwright](https://playwright.dev/) - Browser automation\n- [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) - Required for stdio mode\n\n```bash\n# Install prerequisites\ncurl -LsSf https://astral.sh/uv/install.sh | sh\nuv tool install mcp-proxy\nuv tool update-shell\n```\n\n## Environment\n\nCreate a `.env` file:\n\n```bash\nOPENAI_API_KEY=your-api-key\nCHROME_PATH=optional/path/to/chrome\nPATIENT=false  # Set to true if API calls should wait for task completion\n```\n\n## Installation\n\n```bash\n# Install dependencies\nuv sync\nuv pip install playwright\nuv run playwright install --with-deps --no-shell chromium\n```\n\n## Usage\n\n### SSE Mode\n\n```bash\n# Run directly from source\nuv run server --port 8000\n```\n\n### stdio Mode\n\n```bash\n# 1. Build and install globally\nuv build\nuv tool uninstall browser-use-mcp-server 2>/dev/null || true\nuv tool install dist/browser_use_mcp_server-*.whl\n\n# 2. Run with stdio transport\nbrowser-use-mcp-server run server --port 8000 --stdio --proxy-port 9000\n```\n\n## Client Configuration\n\n### SSE Mode Client Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"browser-use-mcp-server\": {\n      \"url\": \"http://localhost:8000/sse\"\n    }\n  }\n}\n```\n\n### stdio Mode Client Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"browser-server\": {\n      \"command\": \"browser-use-mcp-server\",\n      \"args\": [\n        \"run\",\n        \"server\",\n        \"--port\",\n        \"8000\",\n        \"--stdio\",\n        \"--proxy-port\",\n        \"9000\"\n      ],\n      \"env\": {\n        \"OPENAI_API_KEY\": \"your-api-key\"\n      }\n    }\n  }\n}\n```\n\n### Config Locations\n\n| Client           | Configuration Path                                                |\n| ---------------- | ----------------------------------------------------------------- |\n| Cursor           | `./.cursor/mcp.json`                                              |\n| Windsurf         | `~/.codeium/windsurf/mcp_config.json`                             |\n| Claude (Mac)     | `~/Library/Application Support/Claude/claude_desktop_config.json` |\n| Claude (Windows) | `%APPDATA%\\Claude\\claude_desktop_config.json`                     |\n\n## Features\n\n- [x] **Browser Automation**: Control browsers through AI agents\n- [x] **Dual Transport**: Support for both SSE and stdio protocols\n- [x] **VNC Streaming**: Watch browser automation in real-time\n- [x] **Async Tasks**: Execute browser operations asynchronously\n\n## Local Development\n\nTo develop and test the package locally:\n\n1. Build a distributable wheel:\n\n   ```bash\n   # From the project root directory\n   uv build\n   ```\n\n2. Install it as a global tool:\n\n   ```bash\n   uv tool uninstall browser-use-mcp-server 2>/dev/null || true\n   uv tool install dist/browser_use_mcp_server-*.whl\n   ```\n\n3. Run from any directory:\n\n   ```bash\n   # Set your OpenAI API key for the current session\n   export OPENAI_API_KEY=your-api-key-here\n\n   # Or provide it inline for a one-time run\n   OPENAI_API_KEY=your-api-key-here browser-use-mcp-server run server --port 8000 --stdio --proxy-port 9000\n   ```\n\n4. After making changes, rebuild and reinstall:\n   ```bash\n   uv build\n   uv tool uninstall browser-use-mcp-server\n   uv tool install dist/browser_use_mcp_server-*.whl\n   ```\n\n## Docker\n\nUsing Docker provides a consistent and isolated environment for running the server.\n\n```bash\n# Build the Docker image\ndocker build -t browser-use-mcp-server .\n\n# Run the container with the default VNC password (\"browser-use\")\n# --rm ensures the container is automatically removed when it stops\n# -p 8000:8000 maps the server port\n# -p 5900:5900 maps the VNC port\ndocker run --rm -p8000:8000 -p5900:5900 browser-use-mcp-server\n\n# Run with a custom VNC password read from a file\n# Create a file (e.g., vnc_password.txt) containing only your desired password\necho \"your-secure-password\" > vnc_password.txt\n# Mount the password file as a secret inside the container\ndocker run --rm -p8000:8000 -p5900:5900 \\\n  -v $(pwd)/vnc_password.txt:/run/secrets/vnc_password:ro \\\n  browser-use-mcp-server\n```\n\n*Note: The `:ro` flag in the volume mount (`-v`) makes the password file read-only inside the container for added security.*\n\n### VNC Viewer\n\n```bash\n# Browser-based viewer\ngit clone https://github.com/novnc/noVNC\ncd noVNC\n./utils/novnc_proxy --vnc localhost:5900\n```\n\nDefault password: `browser-use` (unless overridden using the custom password method)\n\n<div align=\"center\">\n  <img width=\"428\" alt=\"VNC Screenshot\" src=\"https://github.com/user-attachments/assets/45bc5bee-418d-4182-94f5-db84b4fc0b3a\" />\n  <br><br>\n  <img width=\"428\" alt=\"VNC Screenshot\" src=\"https://github.com/user-attachments/assets/7db53f41-fc00-4e48-8892-f7108096f9c4\" />\n</div>\n\n## Example\n\nTry asking your AI:\n\n```text\nopen https://news.ycombinator.com and return the top ranked article\n```\n\n## Support\n\nFor issues or inquiries: [cobrowser.xyz](https://cobrowser.xyz)\n\n## Star History\n\n<div align=\"center\">\n  <picture>\n    <source media=\"(prefers-color-scheme: dark)\" srcset=\"https://api.star-history.com/svg?repos=co-browser/browser-use-mcp-server&type=Date&theme=dark\" />\n    <source media=\"(prefers-color-scheme: light)\" srcset=\"https://api.star-history.com/svg?repos=co-browser/browser-use-mcp-server&type=Date\" />\n    <img alt=\"Star History Chart\" src=\"https://api.star-history.com/svg?repos=co-browser/browser-use-mcp-server&type=Date\" />\n  </picture>\n</div>\n",
+  "category": "AI Tools",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "browser-use-mcp-server": {
+        "command": "uv",
+        "args": ["run", "server", "--port", "8000"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key",
+          "CHROME_PATH": "optional/path/to/chrome",
+          "PATIENT": "false"
+        }
+      },
+      "browser-use-mcp-server-stdio-configured": {
+        "command": "browser-use-mcp-server",
+        "args": ["run", "server", "--port", "8000", "--stdio", "--proxy-port", "9000"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key"
+        }
+      },
+      "browser-use-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-p8000:8000", "-p5900:5900", "browser-use-mcp-server"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key",
+          "CHROME_PATH": "optional/path/to/chrome",
+          "PATIENT": "false"
+        },
+        "docker_image": "browser-use-mcp-server"
+      },
+      "browser-use-mcp-server-docker-custom-vnc": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-p8000:8000",
+          "-p5900:5900",
+          "-v",
+          "$(pwd)/vnc_password.txt:/run/secrets/vnc_password:ro",
+          "browser-use-mcp-server"
+        ],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key",
+          "CHROME_PATH": "optional/path/to/chrome",
+          "PATIENT": "false"
+        },
+        "docker_image": "browser-use-mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "co-browser",
+    "repo": "browser-use-mcp-server",
+    "url": "https://github.com/co-browser/browser-use-mcp-server",
+    "name": "co-browser__browser-use-mcp-server",
+    "path": null,
+    "stars": 728,
+    "contributors": 7,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a9864a400979e6e80fac9bff3e38adf3fa4e64cb"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.903Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "browser-use",
+      "importance": 10
+    },
+    {
+      "name": "starlette",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "playwright",
+      "importance": 9
+    },
+    {
+      "name": "langchain-openai",
+      "importance": 8
+    },
+    {
+      "name": "asyncio",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "click",
+      "importance": 6
+    },
+    {
+      "name": "anyio",
+      "importance": 5
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "python-json-logger",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"browser-use-mcp-server\"\ndynamic = [\"version\"]\ndescription = \"MCP browser-use server library\"\nreadme = \"README.md\"\nrequires-python = \">=3.11,<4.0\"\nlicense = {text = \"MIT\"}\nauthors = [\n    {name = \"Cobrowser Team\"}\n]\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"asyncio>=3.4.3\",\n    \"browser-use>=0.1.40\",\n    \"click>=8.1.8\",\n    \"httpx>=0.28.1\",\n    \"langchain-openai>=0.3.1\",\n    \"mcp>=1.3.0\",\n    \"pydantic>=2.10.6\",\n    \"anyio\",\n    \"python-dotenv\",\n    \"python-json-logger>=2.0.7\",\n    \"starlette\",\n    \"uvicorn\",\n    \"playwright>=1.50.0\",\n]\n\n[project.optional-dependencies]\n# Dependencies for running tests\ntest = [\n    \"pytest>=7.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-cov>=4.1.0\",\n]\n# Dependencies for development (includes test dependencies)\ndev = [\n    \"browser-use-mcp-server[test]\",\n    \"black>=23.0.0\",\n    \"isort>=5.12.0\",\n    \"mypy>=1.0.0\",\n    \"ruff>=0.5.5\",\n]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/cobrowser/browser-use-mcp-server\"\n\"Bug Tracker\" = \"https://github.com/cobrowser/browser-use-mcp-server/issues\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\n\n[tool.black]\nline-length = 88\ntarget-version = [\"py311\"]\n\n[tool.isort]\nprofile = \"black\"\nline_length = 88\n\n[tool.mypy]\npython_version = \"3.11\"\nwarn_return_any = true\nwarn_unused_configs = true\ndisallow_untyped_defs = true\ndisallow_incomplete_defs = true\n\n[project.scripts]\nbrowser-use-mcp-server = \"browser_use_mcp_server.cli:cli\"\n\n[build-system]\nrequires = [\"hatchling\", \"uv-dynamic-versioning\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build]\ninclude = [\"src/browser_use_mcp_server\", \"server\"]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/browser_use_mcp_server\", \"server\"]\n\n[tool.hatch.version]\nsource = \"uv-dynamic-versioning\"\n\n[tool.uv-dynamic-versioning]\nvcs = \"git\"\nstyle = \"pep440\"\nbump = true\n\n[tool.ruff]\nline-length = 88\ntarget-version = \"py311\"\n\n[tool.ruff.lint]\n# Enable common Pyflakes, pycodestyle, and isort rules\nselect = [\"E\", \"F\", \"W\", \"I\"]\n# Ignore line length violations in comments, docstrings, and string literals\nextend-ignore = [\"E501\"]\n\n# Exclude string literals and comments from line length checks\n[tool.ruff.lint.per-file-ignores]\n\"server/server.py\" = [\"E501\"]\n\"src/browser_use_mcp_server/cli.py\" = [\"E501\"]\n\n[tool.ruff.format]\n# Use black-compatible formatting\nquote-style = \"double\"\n"
+}

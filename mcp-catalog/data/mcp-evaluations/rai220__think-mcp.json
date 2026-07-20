@@ -1,0 +1,103 @@
+{
+  "name": "rai220__think-mcp",
+  "display_name": "think-mcp",
+  "description": "MCP Server for reasoning",
+  "author": {
+    "name": "Rai220"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["think-mcp"],
+    "env": {
+      "ADVANCED_MODE": "${user_config.advanced_mode}",
+      "TAVILY_API_KEY": "${user_config.tavily_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "advanced_mode": {
+      "type": "boolean",
+      "title": "Enable Advanced Mode",
+      "description": "Adds additional tools like criticize, plan, and search.",
+      "default": false,
+      "required": false
+    },
+    "tavily_api_key": {
+      "type": "string",
+      "title": "Tavily API Key",
+      "description": "Your Tavily API key for search functionality in advanced mode.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Think MCP Tool\n\nThink MCP is an implementation of an MCP (Model Context Protocol) server that provides a \"think\" tool for structured reasoning in agentic AI workflows. This project is inspired by the Anthropic engineering article: [The \"think\" tool: Enabling Claude to stop and think in complex tool use situations](https://www.anthropic.com/engineering/claude-think-tool).\n\nAccording to the referenced article, adding the think tool can lead to improved evaluation metrics by enabling reasoning capabilities even in models that do not natively possess advanced reasoning skills.\n\n![alt text](tau_bench.png)\n\n## What is the \"think\" tool?\nThe \"think\" tool allows an AI agent to pause and record an explicit thought during complex reasoning or multi-step tool use. It does not change the environment or database, but appends the thought to the log, helping the agent process information, backtrack, or comply with detailed policies.\n\nThis approach is especially useful for:\n- Tool output analysis (processing results of previous tool calls)\n- Policy-heavy environments (verifying compliance with guidelines)\n- Sequential decision making (where each step builds on previous ones)\n\n## Features\n- Implements the \"think\" tool as described in Anthropic's research\n- Minimal, standards-based MCP server using [mcp[cli]](https://pypi.org/project/mcp/)\n- Ready for integration with Claude or other agentic LLMs\n\n## Usage\n\n### MCP server configuration\nAdd this MCP server to your facorite agent.\n```\n\"mcpServers\": {\n    \"think-mcp\": {\n        \"command\": \"uvx\",\n        \"args\": [\"think-mcp\"],\n        \"enabled\": true\n    }\n}\n```\n\n## Tool definition\nThe \"think\" tool is defined as:\n- **Input:** `thought` (string) — A thought to think about.\n- **Behavior:** Appends the thought to the log for structured reasoning.\n\n## Advanced mode\nAdds aditional tools for your agent:\n- criticize\n- plan\n- search\n\n```\n\"mcpServers\": {\n    \"think-mcp\": {\n        \"command\": \"uvx\",\n        \"args\": [\"think-mcp\", \"--advanced\"],\n        \"enabled\": true,\n        \"env\": {\n            \"TAVILY_API_KEY\": ... YOUR TAVILY API KEY HERE ...\n        }\n    }\n}\n```\n\n## Reference\n- Based on: [Anthropic Engineering Blog — The \"think\" tool](https://www.anthropic.com/engineering/claude-think-tool)\n\n## License\nMIT License — see [LICENSE](LICENSE)",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "think-mcp": {
+        "command": "uvx",
+        "args": ["think-mcp"],
+        "env": {}
+      },
+      "think-mcp-configured": {
+        "command": "uvx",
+        "args": ["think-mcp", "--advanced"],
+        "env": {
+          "TAVILY_API_KEY": "... YOUR TAVILY API KEY HERE ..."
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Rai220",
+    "repo": "think-mcp",
+    "url": "https://github.com/Rai220/think-mcp",
+    "name": "think-mcp",
+    "path": null,
+    "stars": 53,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b8cc127b1f4298d861745c3b99755b8f5ff05004"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.822Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "tavily-python",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"think_mcp\"\nversion = \"0.1.16\"\ndescription = \"MCP server providing a 'think' tool for structured reasoning, inspired by Anthropic's Claude 'think' tool. Enables agentic LLMs to pause, log thoughts, and improve multi-step tool use.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n    \"python-dotenv>=1.1.0\",\n    \"tavily-python>=0.5.4\",\n]\nauthors = [\n    { name = \"Konstantin Krestnikov\", email = \"k.krestnikov@gmail.com\" }\n]\nlicense = { text = \"MIT\" }\nkeywords = [\n    \"mcp\",\n    \"think\",\n    \"agentic\",\n    \"llm\",\n    \"structured reasoning\",\n    \"anthropic\",\n    \"claude\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/Rai220/think-mcp\"\n\n[tool.setuptools.packages.find]\nwhere = [\".\"]\n\n[project.scripts]\nthink_mcp = \"think_mcp.__main__:main\"\nthink-mcp = \"think_mcp.__main__:main\"\n"
+}

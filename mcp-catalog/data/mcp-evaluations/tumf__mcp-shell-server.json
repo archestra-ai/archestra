@@ -1,0 +1,96 @@
+{
+  "name": "tumf__mcp-shell-server",
+  "display_name": "mcp-shell-server",
+  "description": "MCP server from tumf/mcp-shell-server",
+  "author": {
+    "name": "tumf"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-shell-server"],
+    "env": {
+      "ALLOW_COMMANDS": "${user_config.allow_commands}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "allow_commands": {
+      "type": "string",
+      "title": "Allowed Commands",
+      "description": "Comma-separated list of shell commands that are allowed to be executed.",
+      "required": false,
+      "default": "ls,cat,pwd,grep,wc,touch,find"
+    }
+  },
+  "readme": "# MCP Shell Server\n\n[![codecov](https://codecov.io/gh/tumf/mcp-shell-server/branch/main/graph/badge.svg)](https://codecov.io/gh/tumf/mcp-shell-server)\n[![smithery badge](https://smithery.ai/badge/mcp-shell-server)](https://smithery.ai/server/mcp-shell-server)\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/tumf-mcp-shell-server-badge.png)](https://mseep.ai/app/tumf-mcp-shell-server)\n\nA secure shell command execution server implementing the Model Context Protocol (MCP). This server allows remote execution of whitelisted shell commands with support for stdin input.\n\n<a href=\"https://glama.ai/mcp/servers/rt2d4pbn22\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/rt2d4pbn22/badge\" alt=\"mcp-shell-server MCP server\" /></a>\n\n<a href=\"https://glama.ai/mcp/servers/rt2d4pbn22\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/rt2d4pbn22/badge\" alt=\"mcp-shell-server MCP server\" /></a>\n\n## Features\n\n* **Secure Command Execution**: Only whitelisted commands can be executed\n* **Standard Input Support**: Pass input to commands via stdin\n* **Comprehensive Output**: Returns stdout, stderr, exit status, and execution time\n* **Shell Operator Safety**: Validates commands after shell operators (; , &&, ||, |)\n* **Timeout Control**: Set maximum execution time for commands\n\n## MCP client setting in your Claude.app\n\n### Published version\n\n```shell\ncode ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n```json\n{\n  \"mcpServers\": {\n    \"shell\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-shell-server\"\n      ],\n      \"env\": {\n        \"ALLOW_COMMANDS\": \"ls,cat,pwd,grep,wc,touch,find\"\n      }\n    },\n  }\n}\n```\n\n### Local version\n\n#### Configuration\n\n```shell\ncode ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n```json\n{\n  \"mcpServers\": {\n    \"shell\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \".\",\n        \"run\",\n        \"mcp-shell-server\"\n      ],\n      \"env\": {\n        \"ALLOW_COMMANDS\": \"ls,cat,pwd,grep,wc,touch,find\"\n      }\n    },\n  }\n}\n```\n\n#### Installation\n\n### Installing via Smithery\n\nTo install Shell Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-shell-server):\n\n```bash\nnpx -y @smithery/cli install mcp-shell-server --client claude\n```\n\n### Manual Installation\n\n### Installing via Smithery\n\nTo install Shell Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-shell-server):\n\n```bash\nnpx -y @smithery/cli install mcp-shell-server --client claude\n```\n\n### Manual Installation\n\n```bash\npip install mcp-shell-server\n```\n\n### Installing via Smithery\n\nTo install Shell Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-shell-server):\n\n```bash\nnpx -y @smithery/cli install mcp-shell-server --client claude\n```\n\n## Usage\n\n### Starting the Server\n\n```bash\nALLOW_COMMANDS=\"ls,cat,echo\" uvx mcp-shell-server\n# Or using the alias\nALLOWED_COMMANDS=\"ls,cat,echo\" uvx mcp-shell-server\n```\n\nThe `ALLOW_COMMANDS` (or its alias `ALLOWED_COMMANDS` ) environment variable specifies which commands are allowed to be executed. Commands can be separated by commas with optional spaces around them.\n\nValid formats for ALLOW_COMMANDS or ALLOWED_COMMANDS:\n\n```bash\nALLOW_COMMANDS=\"ls,cat,echo\"          # Basic format\nALLOWED_COMMANDS=\"ls ,echo, cat\"      # With spaces (using alias)\nALLOW_COMMANDS=\"ls,  cat  , echo\"     # Multiple spaces\n```\n\n### Request Format\n\n```python\n# Basic command execution\n{\n    \"command\": [\"ls\", \"-l\", \"/tmp\"]\n}\n\n# Command with stdin input\n{\n    \"command\": [\"cat\"],\n    \"stdin\": \"Hello, World!\"\n}\n\n# Command with timeout\n{\n    \"command\": [\"long-running-process\"],\n    \"timeout\": 30  # Maximum execution time in seconds\n}\n\n# Command with working directory and timeout\n{\n    \"command\": [\"grep\", \"-r\", \"pattern\"],\n    \"directory\": \"/path/to/search\",\n    \"timeout\": 60\n}\n```\n\n### Response Format\n\nSuccessful response:\n\n```json\n{\n    \"stdout\": \"command output\",\n    \"stderr\": \"\",\n    \"status\": 0,\n    \"execution_time\": 0.123\n}\n```\n\nError response:\n\n```json\n{\n    \"error\": \"Command not allowed: rm\",\n    \"status\": 1,\n    \"stdout\": \"\",\n    \"stderr\": \"Command not allowed: rm\",\n    \"execution_time\": 0\n}\n```\n\n## Security\n\nThe server implements several security measures:\n\n1. **Command Whitelisting**: Only explicitly allowed commands can be executed\n2. **Shell Operator Validation**: Commands after shell operators (;, &&, ||, |) are also validated against the whitelist\n3. **No Shell Injection**: Commands are executed directly without shell interpretation\n\n## Development\n\n### Setting up Development Environment\n\n1. Clone the repository\n\n```bash\ngit clone https://github.com/yourusername/mcp-shell-server.git\ncd mcp-shell-server\n```\n\n2. Install dependencies including test requirements\n\n```bash\npip install -e \".[test]\"\n```\n\n### Running Tests\n\n```bash\npytest\n```\n\n## API Reference\n\n### Request Arguments\n\n| Field     | Type       | Required | Description                                   |\n|-----------|------------|----------|-----------------------------------------------|\n| command   | string[]   | Yes      | Command and its arguments as array elements   |\n| stdin     | string     | No       | Input to be passed to the command            |\n| directory | string     | No       | Working directory for command execution       |\n| timeout   | integer    | No       | Maximum execution time in seconds             |\n\n### Response Fields\n\n| Field           | Type    | Description                                |\n|----------------|---------|---------------------------------------------|\n| stdout         | string  | Standard output from the command           |\n| stderr         | string  | Standard error output from the command     |\n| status         | integer | Exit status code                           |\n| execution_time | float   | Time taken to execute (in seconds)         |\n| error          | string  | Error message (only present if failed)     |\n\n## Requirements\n\n* Python 3.11 or higher\n* mcp>=1.1.0\n\n## License\n\nMIT License - See LICENSE file for details\n",
+  "category": "Development",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-shell-server-configured-published": {
+        "command": "uvx",
+        "args": ["mcp-shell-server"],
+        "env": {
+          "ALLOW_COMMANDS": "ls,cat,pwd,grep,wc,touch,find"
+        }
+      },
+      "mcp-shell-server-configured-local": {
+        "command": "uv",
+        "args": ["--directory", ".", "run", "mcp-shell-server"],
+        "env": {
+          "ALLOW_COMMANDS": "ls,cat,pwd,grep,wc,touch,find"
+        }
+      },
+      "mcp-shell-server-direct": {
+        "command": "uvx",
+        "args": ["mcp-shell-server"],
+        "env": {
+          "ALLOW_COMMANDS": "ls,cat,echo"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tumf",
+    "repo": "mcp-shell-server",
+    "url": "https://github.com/tumf/mcp-shell-server",
+    "name": "tumf__mcp-shell-server",
+    "path": null,
+    "stars": 130,
+    "contributors": 11,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4da78d583149b461ef5d3ba19e3a7eb8a7ff3af3"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.913Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-shell-server\"\ndescription = \"MCP Shell Server - Execute shell commands via MCP protocol\"\nauthors = [\n    { name = \"tumf\" }\n]\ndependencies = [\n    \"asyncio>=3.4.3\",\n    \"mcp>=1.1.2\",\n]\nrequires-python = \">=3.11\"\nreadme = \"README.md\"\nlicense = { text = \"MIT\" }\ndynamic = [\"version\"]\n\n[project.scripts]\nmcp-shell-server = \"mcp_shell_server:main\"\n\n[project.optional-dependencies]\ntest = [\n    \"pytest>=7.4.0\",\n    \"pytest-asyncio>=0.23.0\", \n    \"pytest-env>=1.1.0\",\n    \"pytest-cov>=6.0.0\",\n    \"pytest-mock>=3.12.0\",\n]\ndev = [\n    \"ruff>=0.0.262\",\n    \"black>=23.3.0\",\n    \"isort>=5.12.0\",\n    \"mypy>=1.2.0\",\n    \"pre-commit>=3.2.2\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.pytest.ini_options]\nasyncio_mode = \"strict\"\ntestpaths = \"tests\"\n# Set default event loop scope for async tests \nasyncio_default_fixture_loop_scope = \"function\"\nmarkers = [\n    \"macos: marks tests that should only run on macOS\",\n    \"slow: marks tests as slow running\",\n]\nfilterwarnings = [\n    \"ignore::RuntimeWarning:selectors:\",\n    \"ignore::DeprecationWarning:pytest_asyncio.plugin:\",\n]\n\n[tool.ruff]\nlint.select = [\n    \"E\",  # pycodestyle errors\n    \"F\",  # pyflakes\n    \"W\",  # pycodestyle warnings\n    \"I\",  # isort\n    \"C\",  # flake8-comprehensions\n    \"B\",  # flake8-bugbear\n]\nlint.ignore = [\n    \"E501\",  # line too long, handled by black\n    \"B008\",  # do not perform function calls in argument defaults\n    \"C901\",  # too complex\n]\n\n[tool.black]\nline-length = 88\ntarget-version = ['py311']\n\n[tool.isort]\nprofile = \"black\" \nline_length = 88\n\n[tool.mypy]\nerror_summary = false\nhide_error_codes = true\ndisallow_untyped_defs = false\ncheck_untyped_defs = false\n\n[tool.hatch.version]\npath = \"src/mcp_shell_server/version.py\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mcp_shell_server\"]\n\n[tool.hatch.metadata]\nallow-direct-references = true\n\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"raise NotImplementedError\",\n    \"if __name__ == .__main__.:\",\n    \"pass\",\n    \"raise ImportError\",\n    \"__version__\",\n    \"except IOError:\",\n    \"except IOError as e:\",\n    \"def _cleanup_handles\",\n    \"def __aexit__\",\n    \"if path in [\\\">\\\", \\\">>\\\", \\\"<\\\"]:\",\n    \"def _close_handles\",\n]\n\nomit = [\n    \"src/mcp_shell_server/__init__.py\",\n    \"src/mcp_shell_server/version.py\",\n]\n\n[dependency-groups]\ndev = [\n    \"black>=23.3.0\",\n    \"isort>=5.12.0\",\n    \"mypy>=1.2.0\",\n    \"ruff>=0.0.262\",\n]\n"
+}

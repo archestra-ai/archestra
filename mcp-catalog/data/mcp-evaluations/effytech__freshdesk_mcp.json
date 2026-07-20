@@ -1,0 +1,117 @@
+{
+  "name": "effytech__freshdesk_mcp",
+  "display_name": "freshdesk_mcp",
+  "description": "MCP server created for Freshdesk, allowing AI models to interact with Freshdesk modules",
+  "author": {
+    "name": "effytech"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["freshdesk-mcp"],
+    "env": {
+      "FRESHDESK_API_KEY": "${user_config.freshdesk_api_key}",
+      "FRESHDESK_DOMAIN": "${user_config.freshdesk_domain}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "freshdesk_api_key": {
+      "type": "string",
+      "title": "Freshdesk API Key",
+      "description": "Your actual Freshdesk API key from the Freshdesk admin panel.",
+      "sensitive": true,
+      "required": true
+    },
+    "freshdesk_domain": {
+      "type": "string",
+      "title": "Freshdesk Domain",
+      "description": "Your Freshdesk domain (e.g., yourcompany.freshdesk.com).",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# Freshdesk MCP Server\n[![smithery badge](https://smithery.ai/badge/@effytech/freshdesk_mcp)](https://smithery.ai/server/@effytech/freshdesk_mcp)\n\nAn MCP server implementation that integrates with Freshdesk, enabling AI models to interact with Freshdesk modules and perform various support operations.\n\n## Features\n\n- **Freshdesk Integration**: Seamless interaction with Freshdesk API endpoints\n- **AI Model Support**: Enables AI models to perform support operations through Freshdesk\n- **Automated Ticket Management**: Handle ticket creation, updates, and responses\n\n## Components\n\n### Tools\n\nThe server offers several tools for Freshdesk operations:\n\n- `create_ticket`: Create new support tickets\n  - **Inputs**:\n    - `subject` (string, required): Ticket subject\n    - `description` (string, required): Ticket description\n    - `source` (number, required): Ticket source code\n    - `priority` (number, required): Ticket priority level\n    - `status` (number, required): Ticket status code\n    - `email` (string, optional): Email of the requester\n    - `requester_id` (number, optional): ID of the requester\n    - `custom_fields` (object, optional): Custom fields to set on the ticket\n    - `additional_fields` (object, optional): Additional top-level fields\n\n- `update_ticket`: Update existing tickets\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket to update\n    - `ticket_fields` (object, required): Fields to update\n\n- `delete_ticket`: Delete a ticket\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket to delete\n\n- `search_tickets`: Search for tickets based on criteria\n  - **Inputs**:\n    - `query` (string, required): Search query string\n\n- `get_ticket_fields`: Get all ticket fields\n  - **Inputs**:\n    - None\n\n- `get_tickets`: Get all tickets\n  - **Inputs**:\n    - `page` (number, optional): Page number to fetch\n    - `per_page` (number, optional): Number of tickets per page\n\n- `get_ticket`: Get a single ticket\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket to get\n\n- `get_ticket_conversation`: Get conversation for a ticket\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket\n\n- `create_ticket_reply`: Reply to a ticket\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket\n    - `body` (string, required): Content of the reply\n\n- `create_ticket_note`: Add a note to a ticket\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket\n    - `body` (string, required): Content of the note\n\n- `update_ticket_conversation`: Update a conversation\n  - **Inputs**:\n    - `conversation_id` (number, required): ID of the conversation\n    - `body` (string, required): Updated content\n\n- `view_ticket_summary`: Get the summary of a ticket\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket\n\n- `update_ticket_summary`: Update the summary of a ticket\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket\n    - `body` (string, required): New summary content\n\n- `delete_ticket_summary`: Delete the summary of a ticket\n  - **Inputs**:\n    - `ticket_id` (number, required): ID of the ticket\n\n- `get_agents`: Get all agents\n  - **Inputs**:\n    - `page` (number, optional): Page number\n    - `per_page` (number, optional): Number of agents per page\n\n- `view_agent`: Get a single agent\n  - **Inputs**:\n    - `agent_id` (number, required): ID of the agent\n\n- `create_agent`: Create a new agent\n  - **Inputs**:\n    - `agent_fields` (object, required): Agent details\n\n- `update_agent`: Update an agent\n  - **Inputs**:\n    - `agent_id` (number, required): ID of the agent\n    - `agent_fields` (object, required): Fields to update\n\n- `search_agents`: Search for agents\n  - **Inputs**:\n    - `query` (string, required): Search query\n\n- `list_contacts`: Get all contacts\n  - **Inputs**:\n    - `page` (number, optional): Page number\n    - `per_page` (number, optional): Contacts per page\n\n- `get_contact`: Get a single contact\n  - **Inputs**:\n    - `contact_id` (number, required): ID of the contact\n\n- `search_contacts`: Search for contacts\n  - **Inputs**:\n    - `query` (string, required): Search query\n\n- `update_contact`: Update a contact\n  - **Inputs**:\n    - `contact_id` (number, required): ID of the contact\n    - `contact_fields` (object, required): Fields to update\n\n- `list_companies`: Get all companies\n  - **Inputs**:\n    - `page` (number, optional): Page number\n    - `per_page` (number, optional): Companies per page\n\n- `view_company`: Get a single company\n  - **Inputs**:\n    - `company_id` (number, required): ID of the company\n\n- `search_companies`: Search for companies\n  - **Inputs**:\n    - `query` (string, required): Search query\n\n- `find_company_by_name`: Find a company by name\n  - **Inputs**:\n    - `name` (string, required): Company name\n\n- `list_company_fields`: Get all company fields\n  - **Inputs**:\n    - None\n\n## Getting Started\n\n### Installing via Smithery\n\nTo install freshdesk_mcp for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@effytech/freshdesk_mcp):\n\n```bash\nnpx -y @smithery/cli install @effytech/freshdesk_mcp --client claude\n```\n\n### Prerequisites\n\n- A Freshdesk account (sign up at [freshdesk.com](https://freshdesk.com))\n- Freshdesk API key\n- `uvx` installed (`pip install uv` or `brew install uv`)\n\n### Configuration\n\n1. Generate your Freshdesk API key from the Freshdesk admin panel\n2. Set up your domain and authentication details\n\n### Usage with Claude Desktop\n\n1. Install Claude Desktop if you haven't already\n2. Add the following configuration to your `claude_desktop_config.json`:\n\n```json\n\"mcpServers\": {\n  \"freshdesk-mcp\": {\n    \"command\": \"uvx\",\n    \"args\": [\n        \"freshdesk-mcp\"\n    ],\n    \"env\": {\n      \"FRESHDESK_API_KEY\": \"<YOUR_FRESHDESK_API_KEY>\",\n      \"FRESHDESK_DOMAIN\": \"<YOUR_FRESHDESK_DOMAIN>\"\n    }\n  }\n}\n```\n\n**Important Notes**:\n- Replace `YOUR_FRESHDESK_API_KEY` with your actual Freshdesk API key\n- Replace `YOUR_FRESHDESK_DOMAIN` with your Freshdesk domain (e.g., `yourcompany.freshdesk.com`)\n\n## Example Operations\n\nOnce configured, you can ask Claude to perform operations like:\n\n- \"Create a new ticket with subject 'Payment Issue for customer A101' and description as 'Reaching out for a payment issue in the last month for customer A101', where customer email is a101@acme.com and set priority to high\"\n- \"Update the status of ticket #12345 to 'Resolved'\"\n- \"List all high-priority tickets assigned to the agent John Doe\"\n- \"List previous tickets of customer A101 in last 30 days\"\n\n\n## Testing\n\nFor testing purposes, you can start the server manually:\n\n```bash\nuvx freshdesk-mcp --env FRESHDESK_API_KEY=<your_api_key> --env FRESHDESK_DOMAIN=<your_domain>\n```\n\n## Troubleshooting\n\n- Verify your Freshdesk API key and domain are correct\n- Ensure proper network connectivity to Freshdesk servers\n- Check API rate limits and quotas\n- Verify the `uvx` command is available in your PATH\n\n## License\n\nThis MCP server is licensed under the MIT License. See the LICENSE file in the project repository for full details.\n",
+  "category": "Support",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "freshdesk-mcp": {
+        "command": "uvx",
+        "args": ["freshdesk-mcp"],
+        "env": {
+          "FRESHDESK_API_KEY": "<YOUR_FRESHDESK_API_KEY>",
+          "FRESHDESK_DOMAIN": "<YOUR_FRESHDESK_DOMAIN>"
+        }
+      },
+      "freshdesk-mcp-manual": {
+        "command": "uvx",
+        "args": [
+          "freshdesk-mcp",
+          "--env",
+          "FRESHDESK_API_KEY=<your_api_key>",
+          "--env",
+          "FRESHDESK_DOMAIN=<your_domain>"
+        ],
+        "env": {
+          "FRESHDESK_API_KEY": "<your_api_key>",
+          "FRESHDESK_DOMAIN": "<your_domain>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "effytech",
+    "repo": "freshdesk_mcp",
+    "url": "https://github.com/effytech/freshdesk_mcp",
+    "name": "freshdesk_mcp",
+    "path": null,
+    "stars": 19,
+    "contributors": 5,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3266713c70c901aad5a19378c0d9046f34c0c4f8"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:36.679Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "build",
+      "importance": 3
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"freshdesk-mcp\"\nversion = \"1.2.0\"\ndescription = \"An MCP server for Freshdesk\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"build>=1.2.2.post1\",\n    \"httpx==0.28.1\",\n    \"mcp[cli]>=1.3.0\",\n    \"pydantic>=2.10.6\",\n]\n\n[[project.authors]]\nname = \"Gopi Krishnan\"\nemail = \"gopi@effy.co.in\"\n\n[[project.authors]]\nname = \"Maanaesh Swamy\"\nemail = \"maanaesh.s@effy.co.in\"\n\n[build-system]\nrequires = [ \"hatchling\", \"setuptools\", \"wheel\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nfreshdesk-mcp = \"freshdesk_mcp.server:main\"\n"
+}

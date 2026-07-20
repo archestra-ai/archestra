@@ -1,0 +1,83 @@
+{
+  "name": "zcaceres__gtasks-mcp",
+  "display_name": "gtasks-mcp",
+  "description": "A Google Tasks Model Context Protocol Server for Claude",
+  "author": {
+    "name": "zcaceres"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Google Tasks MCP Server\n\n![gtasks mcp logo](./logo.jpg)\n[![smithery badge](https://smithery.ai/badge/@zcaceres/gtasks)](https://smithery.ai/server/@zcaceres/gtasks)\n\nThis MCP server integrates with Google Tasks to allow listing, reading, searching, creating, updating, and deleting tasks.\n\n## Components\n\n### Tools\n\n- **search**\n  - Search for tasks in Google Tasks\n  - Input: `query` (string): Search query\n  - Returns matching tasks with details\n\n- **list**\n  - List all tasks in Google Tasks\n  - Optional input: `cursor` (string): Cursor for pagination\n  - Returns a list of all tasks\n\n- **create**\n  - Create a new task in Google Tasks\n  - Input:\n    - `taskListId` (string, optional): Task list ID\n    - `title` (string, required): Task title\n    - `notes` (string, optional): Task notes\n    - `due` (string, optional): Due date\n  - Returns confirmation of task creation\n\n- **update**\n  - Update an existing task in Google Tasks\n  - Input:\n    - `taskListId` (string, optional): Task list ID\n    - `id` (string, required): Task ID\n    - `uri` (string, required): Task URI\n    - `title` (string, optional): New task title\n    - `notes` (string, optional): New task notes\n    - `status` (string, optional): New task status (\"needsAction\" or \"completed\")\n    - `due` (string, optional): New due date\n  - Returns confirmation of task update\n\n- **delete**\n  - Delete a task in Google Tasks\n  - Input:\n    - `taskListId` (string, required): Task list ID\n    - `id` (string, required): Task ID\n  - Returns confirmation of task deletion\n\n- **clear**\n  - Clear completed tasks from a Google Tasks task list\n  - Input: `taskListId` (string, required): Task list ID\n  - Returns confirmation of cleared tasks\n\n### Resources\n\nThe server provides access to Google Tasks resources:\n\n- **Tasks** (`gtasks:///<task_id>`)\n  - Represents individual tasks in Google Tasks\n  - Supports reading task details including title, status, due date, notes, and other metadata\n  - Can be listed, read, created, updated, and deleted using the provided tools\n\n## Getting started\n\n1. [Create a new Google Cloud project](https://console.cloud.google.com/projectcreate)\n2. [Enable the Google Tasks API](https://console.cloud.google.com/workspace-api/products)\n3. [Configure an OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) (\"internal\" is fine for testing)\n4. Add scopes `https://www.googleapis.com/auth/tasks`\n5. [Create an OAuth Client ID](https://console.cloud.google.com/apis/credentials/oauthclient) for application type \"Desktop App\"\n6. Download the JSON file of your client's OAuth keys\n7. Rename the key file to `gcp-oauth.keys.json` and place into the root of this repo (i.e. `gcp-oauth.keys.json`)\n\nMake sure to build the server with either `npm run build` or `npm run watch`.\n\n### Installing via Smithery\n\nTo install Google Tasks Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@zcaceres/gtasks):\n\n```bash\nnpx -y @smithery/cli install @zcaceres/gtasks --client claude\n```\n\n### Authentication\n\nTo authenticate and save credentials:\n\n1. Run the server with the `auth` argument: `npm run start auth`\n2. This will open an authentication flow in your system browser\n3. Complete the authentication process\n4. Credentials will be saved in the root of this repo (i.e. `.gdrive-server-credentials.json`)\n\n### Usage with Desktop App\n\nTo integrate this server with the desktop app, add the following to your app's server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"gtasks\": {\n      \"command\": \"/opt/homebrew/bin/node\",\n      \"args\": [\n        \"{ABSOLUTE PATH TO FILE HERE}/dist/index.js\"\n      ]\n    }\n  }\n}\n```\n",
+  "category": "Data",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gtasks": {
+        "command": "/opt/homebrew/bin/node",
+        "args": ["{ABSOLUTE PATH TO FILE HERE}/dist/index.js"],
+        "env": {}
+      },
+      "gtasks-auth": {
+        "command": "npm",
+        "args": ["run", "start", "auth"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zcaceres",
+    "repo": "gtasks-mcp",
+    "url": "https://github.com/zcaceres/gtasks-mcp",
+    "name": "zcaceres__gtasks-mcp",
+    "path": null,
+    "stars": 84,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c4c903f3de42aecbbb0df61f4cb39a93229d957f"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:24.988Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@google-cloud/local-auth",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "googleapis",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@modelcontextprotocol/server-gtasks\",\n  \"version\": \"0.0.1\",\n  \"description\": \"MCP server for interacting with Google Tasks\",\n  \"license\": \"MIT\",\n  \"author\": \"zcaceres (@zachcaceres zach.dev)\",\n  \"homepage\": \"https://modelcontextprotocol.io\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-gtasks\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"dev\": \"tsc --watch\",\n    \"start\": \"node dist/index.js\"\n  },\n  \"dependencies\": {\n    \"@google-cloud/local-auth\": \"^3.0.1\",\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"googleapis\": \"^144.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.9.3\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}\n"
+}

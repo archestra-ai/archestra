@@ -1,0 +1,133 @@
+{
+  "name": "pydantic__logfire-mcp",
+  "display_name": "logfire-mcp",
+  "description": "The Logfire MCP Server is here! :tada:",
+  "author": {
+    "name": "pydantic"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["logfire-mcp@latest"],
+    "env": {
+      "LOGFIRE_READ_TOKEN": "${user_config.logfire_read_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "logfire_read_token": {
+      "type": "string",
+      "title": "Pydantic Logfire Read Token",
+      "description": "Your Pydantic Logfire read token, obtainable from your project settings in Pydantic Logfire (https://logfire.pydantic.dev/-/redirect/latest-project/settings/read-tokens). This token is project-specific.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Pydantic Logfire MCP Server\n\nThis repository contains a Model Context Protocol (MCP) server with tools that can access the OpenTelemetry traces and\nmetrics you've sent to Pydantic Logfire.\n\n<a href=\"https://glama.ai/mcp/servers/@pydantic/logfire-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@pydantic/logfire-mcp/badge\" alt=\"Pydantic Logfire Server MCP server\" />\n</a>\n\nThis MCP server enables LLMs to retrieve your application's telemetry data, analyze distributed\ntraces, and make use of the results of arbitrary SQL queries executed using the Pydantic Logfire APIs.\n\n## Available Tools\n\n* `find_exceptions_in_file` - Get detailed trace information about exceptions in a specific file\n  * Required arguments:\n    * `filepath` (string): Path to the file to analyze\n    * `age` (int): Number of minutes to look back (max 7 days)\n\n* `arbitrary_query` - Run custom SQL queries on your OpenTelemetry traces and metrics\n  * Required arguments:\n    * `query` (string): SQL query to execute\n    * `age` (int): Number of minutes to look back (max 7 days)\n\n* `get_logfire_records_schema` - Get the OpenTelemetry schema to help with custom queries\n  * No required arguments\n\n* `logfire_link` - Get a link to the trace in Pydantic Logfire\n  * Required arguments:\n    * `trace_id` (string): The trace ID to link to\n\n## Setup\n\n### Install `uv`\n\nThe first thing to do is make sure `uv` is installed, as `uv` is used to run the MCP server.\n\nFor installation instructions, see the [`uv` installation docs](https://docs.astral.sh/uv/getting-started/installation/).\n\nIf you already have an older version of `uv` installed, you might need to update it with `uv self update`.\n\n### Obtain a Pydantic Logfire read token\nIn order to make requests to the Pydantic Logfire APIs, the Pydantic Logfire MCP server requires a \"read token\".\n\nYou can create one under the \"Read Tokens\" section of your project settings in Pydantic Logfire:\nhttps://logfire.pydantic.dev/-/redirect/latest-project/settings/read-tokens\n\n> [!IMPORTANT]\n> Pydantic Logfire read tokens are project-specific, so you need to create one for the specific project you want to expose to the Pydantic Logfire MCP server.\n\n### Manually run the server\n\nOnce you have `uv` installed and have a Pydantic Logfire read token, you can manually run the MCP server using `uvx` (which is provided by `uv`).\n\nYou can specify your read token using the `LOGFIRE_READ_TOKEN` environment variable:\n\n```bash\nLOGFIRE_READ_TOKEN=YOUR_READ_TOKEN uvx logfire-mcp@latest\n```\n\nYou can also set `LOGFIRE_READ_TOKEN` in a `.env` file:\n\n```bash\nLOGFIRE_READ_TOKEN=pylf_v1_us_...\n```\n\n**NOTE:** for this to work, the MCP server needs to run with the directory containing the `.env` file in its working directory.\n\nor using the `--read-token` flag:\n\n```bash\nuvx logfire-mcp@latest --read-token=YOUR_READ_TOKEN\n```\n> [!NOTE]\n> If you are using Cursor, Claude Desktop, Cline, or other MCP clients that manage your MCP servers for you, you **_do\n    NOT_** need to manually run the server yourself. The next section will show you how to configure these clients to make\n    use of the Pydantic Logfire MCP server.\n\n### Base URL\n\nIf you are running Logfire in a self hosted environment, you need to specify the base URL.\nThis can be done using the `LOGFIRE_BASE_URL` environment variable:\n\n```bash\nLOGFIRE_BASE_URL=https://logfire.my-company.com uvx logfire-mcp@latest --read-token=YOUR_READ_TOKEN\n```\n\nYou can also use the `--base-url` argument:\n\n```bash\nuvx logfire-mcp@latest --base-url=https://logfire.my-company.com --read-token=YOUR_READ_TOKEN\n```\n\n## Configuration with well-known MCP clients\n\n### Configure for Cursor\n\nCreate a `.cursor/mcp.json` file in your project root:\n\n```json\n{\n  \"mcpServers\": {\n    \"logfire\": {\n      \"command\": \"uvx\",\n      \"args\": [\"logfire-mcp@latest\", \"--read-token=YOUR-TOKEN\"]\n    }\n  }\n}\n```\n\nThe Cursor doesn't accept the `env` field, so you need to use the `--read-token` flag instead.\n\n### Configure for Claude code\n\nRun the following command:\n\n```bash\nclaude mcp add logfire -e LOGFIRE_READ_TOKEN=YOUR_TOKEN -- uvx logfire-mcp@latest\n```\n\n### Configure for Claude Desktop\n\nAdd to your Claude settings:\n\n```json\n{\n  \"command\": [\"uvx\"],\n  \"args\": [\"logfire-mcp@latest\"],\n  \"type\": \"stdio\",\n  \"env\": {\n    \"LOGFIRE_READ_TOKEN\": \"YOUR_TOKEN\"\n  }\n}\n```\n\n### Configure for Cline\n\nAdd to your Cline settings in `cline_mcp_settings.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"logfire\": {\n      \"command\": \"uvx\",\n      \"args\": [\"logfire-mcp@latest\"],\n      \"env\": {\n        \"LOGFIRE_READ_TOKEN\": \"YOUR_TOKEN\"\n      },\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n### Configure for VS Code\n\nMake sure you [enabled MCP support in VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_enable-mcp-support-in-vs-code).\n\nCreate a `.vscode/mcp.json` file in your project's root directory:\n\n```json\n{\n  \"servers\": {\n    \"logfire\": {\n      \"type\": \"stdio\",\n      \"command\": \"uvx\", // or the absolute /path/to/uvx\n      \"args\": [\"logfire-mcp@latest\"],\n      \"env\": {\n        \"LOGFIRE_READ_TOKEN\": \"YOUR_TOKEN\"\n      }\n    }\n  }\n}\n```\n\n### Configure for Zed\n\nCreate a `.zed/settings.json` file in your project's root directory:\n\n```json\n{\n  \"context_servers\": {\n    \"logfire\": {\n      \"source\": \"custom\",\n      \"command\": \"uvx\",\n      \"args\": [\"logfire-mcp@latest\"],\n      \"env\": {\n        \"LOGFIRE_READ_TOKEN\": \"YOUR_TOKEN\"\n      },\n      \"enabled\": true\n    }\n  }\n}\n```\n\n## Example Interactions\n\n1. Get details about exceptions from traces in a specific file:\n```json\n{\n  \"name\": \"find_exceptions_in_file\",\n  \"arguments\": {\n    \"filepath\": \"app/api.py\",\n    \"age\": 1440\n  }\n}\n```\n\nResponse:\n```json\n[\n  {\n    \"created_at\": \"2024-03-20T10:30:00Z\",\n    \"message\": \"Failed to process request\",\n    \"exception_type\": \"ValueError\",\n    \"exception_message\": \"Invalid input format\",\n    \"function_name\": \"process_request\",\n    \"line_number\": \"42\",\n    \"attributes\": {\n      \"service.name\": \"api-service\",\n      \"code.filepath\": \"app/api.py\"\n    },\n    \"trace_id\": \"1234567890abcdef\"\n  }\n]\n```\n\n2. Run a custom query on traces:\n```json\n{\n  \"name\": \"arbitrary_query\",\n  \"arguments\": {\n    \"query\": \"SELECT trace_id, message, created_at, attributes->>'service.name' as service FROM records WHERE severity_text = 'ERROR' ORDER BY created_at DESC LIMIT 10\",\n    \"age\": 1440\n  }\n}\n```\n\n## Examples of Questions for Claude\n\n1. \"What exceptions occurred in traces from the last hour across all services?\"\n2. \"Show me the recent errors in the file 'app/api.py' with their trace context\"\n3. \"How many errors were there in the last 24 hours per service?\"\n4. \"What are the most common exception types in my traces, grouped by service name?\"\n5. \"Get me the OpenTelemetry schema for traces and metrics\"\n6. \"Find all errors from yesterday and show their trace contexts\"\n\n## Getting Started\n\n1. First, obtain a Pydantic Logfire read token from:\n   https://logfire.pydantic.dev/-/redirect/latest-project/settings/read-tokens\n\n2. Run the MCP server:\n   ```bash\n   uvx logfire-mcp@latest --read-token=YOUR_TOKEN\n   ```\n\n3. Configure your preferred client (Cursor, Claude Desktop, or Cline) using the configuration examples above\n\n4. Start using the MCP server to analyze your OpenTelemetry traces and metrics!\n\n## Contributing\n\nWe welcome contributions to help improve the Pydantic Logfire MCP server. Whether you want to add new trace analysis tools, enhance metrics querying functionality, or improve documentation, your input is valuable.\n\nFor examples of other MCP servers and implementation patterns, see the [Model Context Protocol servers repository](https://github.com/modelcontextprotocol/servers).\n\n## License\n\nPydantic Logfire MCP is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License.\n",
+  "category": "Monitoring",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "logfire-mcp-env": {
+        "command": "uvx",
+        "args": ["logfire-mcp@latest"],
+        "env": {
+          "LOGFIRE_READ_TOKEN": "YOUR_READ_TOKEN"
+        }
+      },
+      "logfire-mcp-flag": {
+        "command": "uvx",
+        "args": ["logfire-mcp@latest", "--read-token=YOUR_READ_TOKEN"],
+        "env": {}
+      },
+      "logfire-mcp-cursor": {
+        "command": "uvx",
+        "args": ["logfire-mcp@latest", "--read-token=YOUR-TOKEN"],
+        "env": {}
+      },
+      "logfire-mcp-claude-desktop": {
+        "command": "uvx",
+        "args": ["logfire-mcp@latest"],
+        "env": {
+          "LOGFIRE_READ_TOKEN": "YOUR_TOKEN"
+        }
+      },
+      "logfire-mcp-cline": {
+        "command": "uvx",
+        "args": ["logfire-mcp@latest"],
+        "env": {
+          "LOGFIRE_READ_TOKEN": "YOUR_TOKEN"
+        }
+      },
+      "logfire-mcp-vscode": {
+        "command": "uvx",
+        "args": ["logfire-mcp@latest"],
+        "env": {
+          "LOGFIRE_READ_TOKEN": "YOUR_TOKEN"
+        }
+      },
+      "logfire-mcp-zed": {
+        "command": "uvx",
+        "args": ["logfire-mcp@latest"],
+        "env": {
+          "LOGFIRE_READ_TOKEN": "YOUR_TOKEN"
+        }
+      },
+      "logfire-mcp-claude-code": {
+        "command": "uvx",
+        "args": ["logfire-mcp@latest", "--read-token=YOUR_TOKEN"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pydantic",
+    "repo": "logfire-mcp",
+    "url": "https://github.com/pydantic/logfire-mcp",
+    "name": "logfire-mcp",
+    "path": null,
+    "stars": 96,
+    "contributors": 8,
+    "issues": 8,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "06b79fd66a02fa46500ad0b0ddaa1bbf811bb4c1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:24.581Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "logfire",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\", \"uv-dynamic-versioning\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.version]\nsource = \"uv-dynamic-versioning\"\n\n[tool.uv-dynamic-versioning]\nvcs = \"git\"\nstyle = \"pep440\"\nbump = true\n\n[project]\nname = \"logfire-mcp\"\ndynamic = [\"version\"]\ndescription = \"The Pydantic Logfire MCP server! 🔍\"\nauthors = [\n    { name = \"Marcelo Trylesinski\", email = \"marcelotryle@gmail.com\" },\n    { name = \"Samuel Colvin\", email = \"samuel@pydantic.dev\" },\n]\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\nlicense = \"MIT\"\nlicense-files = [\"LICENSE\"]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n]\ndependencies = [\"logfire>=3.7.1\", \"mcp[cli]>=1.10.0\", \"python-dotenv>=1.1.1\"]\n\n[project.scripts]\nlogfire-mcp = \"logfire_mcp.__main__:main\"\n\n[project.urls]\nHomepage = \"https://github.com/pydantic/logfire-mcp\"\nRepository = \"https://github.com/pydantic/logfire-mcp\"\nIssues = \"https://github.com/pydantic/logfire-mcp/issues\"\n\n[dependency-groups]\ndev = [\n    \"inline-snapshot[black]>=0.24.0\",\n    \"pyright>=1.1.403\",\n    \"pytest-recording>=0.13.4\",\n    \"ruff\",\n]\n\n[tool.ruff]\nline-length = 120\n\n[tool.ruff.lint]\nextend-select = [\n    \"Q\",\n    \"RUF100\",\n    \"RUF018\", # https://docs.astral.sh/ruff/rules/assignment-in-assert/\n    \"C90\",\n    \"UP\",\n    \"I\",\n    \"TID251\",\n]\nignore = [\"UP031\"] # https://docs.astral.sh/ruff/rules/printf-string-formatting/\nflake8-quotes = { inline-quotes = \"single\", multiline-quotes = \"double\" }\nisort = { combine-as-imports = true }\n\n[tool.ruff.format]\n# don't format python in docstrings, pytest-examples takes care of it\ndocstring-code-format = false\nquote-style = \"single\"\n\n[tool.inline-snapshot]\nformat-command = \"ruff format --stdin-filename {filename}\"\n\n[tool.inline-snapshot.shortcuts]\nsnap-fix = [\"create\", \"fix\"]\nsnap = [\"create\"]\n"
+}

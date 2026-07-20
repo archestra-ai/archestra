@@ -1,0 +1,114 @@
+{
+  "name": "ks-gen-ai__confluence-mcp-server",
+  "display_name": "confluence-mcp-server",
+  "description": "A test of confluence mcp server",
+  "author": {
+    "name": "KS-GEN-AI"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "CONFLUENCE_URL": "${user_config.confluence_url}",
+      "CONFLUENCE_API_MAIL": "${user_config.confluence_api_mail}",
+      "CONFLUENCE_API_KEY": "${user_config.confluence_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "confluence_url": {
+      "type": "string",
+      "title": "Confluence URL",
+      "description": "The base URL for your Confluence instance (e.g., https://yourcompany.atlassian.net/wiki)",
+      "required": true,
+      "default": "https://XXXXXXXX.atlassian.net/wiki"
+    },
+    "confluence_api_mail": {
+      "type": "string",
+      "title": "Confluence API Email",
+      "description": "The email address associated with your Confluence API key",
+      "required": true,
+      "sensitive": false,
+      "default": "Your email"
+    },
+    "confluence_api_key": {
+      "type": "string",
+      "title": "Confluence API Key",
+      "description": "An API token generated from https://id.atlassian.com/manage-profile/security/api-tokens",
+      "sensitive": true,
+      "required": true,
+      "default": "KEY_FROM: https://id.atlassian.com/manage-profile/security/api-tokens"
+    }
+  },
+  "readme": "# Confluence Communication Server MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@KS-GEN-AI/confluence-mcp-server)](https://smithery.ai/server/@KS-GEN-AI/confluence-mcp-server)\n\nInteract with Confluence\n\nThis is a TypeScript-based MCP server that provides tools to interact with Confluence. It demonstrates core MCP concepts by providing:\n\n- Tools for executing CQL queries to search pages\n- Tools for retrieving the content of Confluence pages\n- Tools for updating content on Confluence pages\n\n<a href=\"https://glama.ai/mcp/servers/850t5hxya0\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/850t5hxya0/badge\" alt=\"Confluence Communication Server MCP server\" />\n</a>\n\n## Features\n\n## Confluence Tools\n\n### `execute_cql_search`\n\n- **Purpose**: Run a CQL query to search for Confluence pages.\n- **Parameters**: `cql`, `limit` (default: 10).\n\n### `get_page_content`\n\n- **Purpose**: Fetch the content of a Confluence page.\n- **Parameters**: `pageId`.\n\n### `update_page_content`\n\n- **Purpose**: Update the content of a Confluence page.\n- **Parameters**: `pageId`, `content`, `title` (optional, if you want to change it).\n\n## Development\n\nInstall dependencies:\n\n```bash\nnpm install\n```\n\nBuild the server:\n\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n\n```bash\nnpm run watch\n```\n\n## Installation\n\n### Installing via Smithery\n\nTo install Confluence Communication Server MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@KS-GEN-AI/confluence-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @KS-GEN-AI/confluence-mcp-server --client claude\n```\n\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`  \nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"Confluence communication server\": {\n      \"command\": \"node\",\n      \"args\": [\"/PATH_TO_THE_PROJECT/build/index.js\"],\n      \"env\": {\n        \"CONFLUENCE_URL\": \"https://XXXXXXXX.atlassian.net/wiki\",\n        \"CONFLUENCE_API_MAIL\": \"Your email\",\n        \"CONFLUENCE_API_KEY\": \"KEY_FROM: https://id.atlassian.com/manage-profile/security/api-tokens\"\n      }\n    }\n  }\n}\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.",
+  "category": "Communication",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "KS-GEN-AI-confluence-mcp-server-configured": {
+        "command": "node",
+        "args": ["/PATH_TO_THE_PROJECT/build/index.js"],
+        "env": {
+          "CONFLUENCE_URL": "https://XXXXXXXX.atlassian.net/wiki",
+          "CONFLUENCE_API_MAIL": "Your email",
+          "CONFLUENCE_API_KEY": "KEY_FROM: https://id.atlassian.com/manage-profile/security/api-tokens"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "KS-GEN-AI",
+    "repo": "confluence-mcp-server",
+    "url": "https://github.com/KS-GEN-AI/confluence-mcp-server",
+    "name": "confluence-mcp-server",
+    "path": null,
+    "stars": 12,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "7950608a1c36a87dab5e994b0705d47994a6da9d"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.042Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "mcp-framework",
+      "importance": 10
+    },
+    {
+      "name": "okhttp",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"jira_communication_server\",\n  \"version\": \"0.2.0\",\n  \"description\": \"Talk to jira\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"Jira communication server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"axios\": \"^1.7.9\",\n    \"mcp-framework\": \"^0.1.12\",\n    \"okhttp\": \"^1.1.0\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.7.2\"\n  }\n}\n"
+}

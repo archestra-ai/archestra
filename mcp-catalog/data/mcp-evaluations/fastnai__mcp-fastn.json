@@ -1,0 +1,182 @@
+{
+  "name": "fastnai__mcp-fastn",
+  "display_name": "mcp-fastn",
+  "description": "MCP server from fastnai/mcp-fastn",
+  "author": {
+    "name": "fastnai"
+  },
+  "server": {
+    "command": "fastn-mcp-server",
+    "args": [],
+    "env": {
+      "API_KEY": "${user_config.api_key}",
+      "SPACE_ID": "${user_config.space_id}",
+      "TENANT_ID": "${user_config.tenant_id}",
+      "AUTH_TOKEN": "${user_config.auth_token}",
+      "CONFIG_MODE": "${user_config.config_mode}"
+    },
+    "type": "local"
+  },
+  "readme": "# Unified Context Layer (UCL) MCP Server\n\nUnified Context Layer (UCL) is a multi-tenant Model Context Protocol (MCP) server that enables AI agents, automation platforms, and applications to connect to over 1,000 SaaS tools—such as Slack, Jira, Gmail, Shopify, Notion, and more—via a single standardized /command endpoint. UCL abstracts away SDK sprawl, glue code, and complex authentication flows, allowing developers to orchestrate context-rich, cross-platform integrations without building and maintaining separate connectors for each service.\n\n## Features\n\n- **Integrated platform support** - Use services like Slack, Notion, HubSpot, and more through the Fastn server\n- **Flexible authentication** - Use either API key or tenant-based authentication\n- **Comprehensive logging** - Detailed logs for troubleshooting\n- **Error handling** - Robust error management for various scenarios\n\n## Prerequisites\n\n- Python 3.10 or higher\n\n## Installation Options\n\n### Option 1: Package Installation (Recommended)\n\nThe easiest way to install the UCL server is using pip:\n\n```bash\npip install fastn-mcp-server\n```\n\nTo find the exact path of the installed command:\n- On macOS/Linux: `which fastn-mcp-server`\n- On Windows: `where fastn-mcp-server`\n\n## After Package Installation\n\n```bash\n{\n  \"mcpServers\": {\n      \"fastn\": {\n          \"command\": \"fastn-mcp-server\",\n          \"args\": [\n              \"--api_key\",\n              \"YOUR_API_KEY\",\n              \"--space_id\",\n              \"YOUR_WORKSPACE_ID\"\n          ]\n      }\n  }\n}\n```\n\n### Option 2: Manual Setup\n\n```bash\n# Clone repository and navigate to directory\ngit clone <your-repo-url> && cd fastn-server\n\n# macOS/Linux: Install UV, create virtual environment, and install dependencies\ncurl -LsSf https://astral.sh/uv/install.sh | sh && uv venv && source .venv/bin/activate && uv pip install -e .\n\n# Windows (PowerShell): Install UV, create a virtual environment, and install dependencies\npowershell -c \"irm https://astral.sh/uv/install.ps1 | iex\" && uv venv && .venv\\Scripts\\activate && uv pip install -e .\n\n# Install dependencies directly\nuv pip install \"httpx>=0.28.1\" \"mcp[cli]>=1.2.0\"\n```\n\n## UCL Account Setup\n\n1. Log in to your UCL account or sign up for a new UCL account\n3. Activate the service(s)/connector(s) you want to use\n4. Go to the \"Integrate\" section on the left-hand side and follow the provided instructions to connect UCL to your agents.\n5. Alternatively, you can also select and different method to use UCL as mentioned within the integrate section.\n\n## Running the Server\n\nThe server supports two authentication methods:\n\n### Authentication Method 1: API Key\n\n```bash\n# Package installation\nfastn-mcp-server --api_key YOUR_API_KEY --space_id YOUR_WORKSPACE_ID\n\n# Manual installation\nuv run fastn-server.py --api_key YOUR_API_KEY --space_id YOUR_WORKSPACE_ID\n```\n\n### Authentication Method 2: Tenant-based\n\n```bash\n# Package installation\nfastn-mcp-server --space_id YOUR_WORKSPACE_ID --tenant_id YOUR_TENANT_ID --auth_token YOUR_AUTH_TOKEN\n\n# Manual installation\nuv run fastn-server.py --space_id YOUR_WORKSPACE_ID --tenant_id YOUR_TENANT_ID --auth_token YOUR_AUTH_TOKEN\n```\n\n## Integration with AI Assistants\n\n### Claude Integration\n\n1. Open the Claude configuration file:\n   - Windows: `notepad \"%APPDATA%\\Claude\\claude_desktop_config.json\"` or `code \"%APPDATA%\\Claude\\claude_desktop_config.json\"`\n   - Mac: `code ~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\n2. Add the appropriate configuration:\n\n#### Using Package Installation\n\n```json\n{\n    \"mcpServers\": {\n        \"fastn\": {\n            \"command\": \"/path/to/fastn-mcp-server\",\n            \"args\": [\n                \"--api_key\",\n                \"YOUR_API_KEY\",\n                \"--space_id\",\n                \"YOUR_WORKSPACE_ID\"\n            ]\n        }\n    }\n}\n```\n\nOr with tenant authentication:\n\n```json\n{\n    \"mcpServers\": {\n        \"fastn\": {\n            \"command\": \"/path/to/fastn-mcp-server\",\n            \"args\": [\n                \"--space_id\",\n                \"YOUR_WORKSPACE_ID\",\n                \"--tenant_id\",\n                \"YOUR_TENANT_ID\",\n                \"--auth_token\",\n                \"YOUR_AUTH_TOKEN\"\n            ]\n        }\n    }\n}\n```\n\n#### Using Manual Installation\n\nAPI Key authentication:\n\n```json\n{\n    \"mcpServers\": {\n        \"fastn\": {\n            \"command\": \"/path/to/your/uv\",\n            \"args\": [\n                \"--directory\",\n                \"/path/to/your/fastn-server\",\n                \"run\",\n                \"fastn-server.py\",\n                \"--api_key\",\n                \"YOUR_API_KEY\",\n                \"--space_id\",\n                \"YOUR_WORKSPACE_ID\"\n            ]\n        }\n    }\n}\n```\n\nTenant authentication:\n\n```json\n{\n    \"mcpServers\": {\n        \"fastn\": {\n            \"command\": \"/path/to/your/uv\",\n            \"args\": [\n                \"--directory\",\n                \"/path/to/your/fastn-server\",\n                \"run\",\n                \"fastn-server.py\",\n                \"--space_id\",\n                \"YOUR_WORKSPACE_ID\",\n                \"--tenant_id\",\n                \"YOUR_TENANT_ID\",\n                \"--auth_token\",\n                \"YOUR_AUTH_TOKEN\"\n            ]\n        }\n    }\n}\n```\n\n### Cursor Integration\n\n1. Open Cursor settings\n2. Navigate to the \"Tools & Integrations\" tab and click \"Add Custom MCP\"\n3. Click on \"Add new MCP server\"\n4. Add a name for your server (e.g., \"fastn\")\n5. Head back to UCL and within the Integrate section, head over to \"Real Time Event Streaming\" mentioned at the bottom of the Integrate section\n6. Copy the JSON command and head back to Cursor to paste the file in mcp.json and save.\n\n## Docker Integration\n\n### Step 1: Setup Environment Configuration\n\nCreate a `.env` file in your project directory with your UCL credentials:\n\n```bash\n# Configuration Format 1: Basic API Key and Space ID\nAPI_KEY=your_actual_api_key\nSPACE_ID=your_actual_space_id\n\n# Configuration Format 2: Extended with Tenant ID and Auth Token\nTENANT_ID=your_tenant_id\nAUTH_TOKEN=your_actual_auth_token\n\n# Set configuration mode: \"basic\" or \"extended\"\nCONFIG_MODE=extended\n```\n\n### Step 2: Build and Run with Docker Compose\n\nFirst, build and start the container:\n\n```bash\ndocker-compose up --build\n```\n\nThis will create the UCL server image and verify it starts correctly.\n\n### Step 3: Configure AI Assistants for Docker Integration\n\n#### Claude Desktop Integration\n\n1. Open the Claude configuration file:\n   - Windows: `notepad \"%APPDATA%\\Claude\\claude_desktop_config.json\"`\n   - Mac: `code ~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\n2. Add the Docker configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"ucl\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"--env-file\", \"/path/to/your/fastn-stdio-server/.env\",\n        \"ucl-stdio-server\"\n      ]\n    }\n  }\n}\n```\n\n**Note:** Replace `/path/to/your/fastn-stdio-server/.env` with the actual path to your `.env` file.\n\n#### Alternative: Using Environment Variables\n\nIf you prefer to pass environment variables directly:\n\n```json\n{\n  \"mcpServers\": {\n    \"ucl\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \"-i\", \"--rm\",\n        \"-e\", \"API_KEY=your_actual_api_key\",\n        \"-e\", \"SPACE_ID=your_actual_space_id\", \n        \"-e\", \"TENANT_ID=your_tenant_id\",\n        \"-e\", \"AUTH_TOKEN=your_actual_auth_token\",\n        \"-e\", \"CONFIG_MODE=extended\",\n        \"ucl-stdio-server\"\n      ]\n    }\n  }\n}\n```\n\n### Benefits of Docker Integration\n\n- **Isolation**: UCL server runs in a secure container environment\n- **Consistency**: Same runtime across different machines and platforms\n- **Easy Setup**: No need to install Python dependencies locally\n- **Scalability**: Can be deployed in cloud environments or orchestrated with Kubernetes\n\n## Troubleshooting\n\n### Package Structure Error\n\nIf you encounter an error like this during installation:\n```\nValueError: Unable to determine which files to ship inside the wheel using the following heuristics:\nThe most likely cause of this is that there is no directory that matches the name of your project (fastn).\n```\n\n**Quick Fix:**\n1. Make sure `pyproject.toml` has the wheel configuration:\n```toml\n[tool.hatch.build.targets.wheel]\npackages = [\".\"]\n```\n\n2. Then install dependencies:\n```bash\nuv pip install \"httpx>=0.28.1\" \"mcp[cli]>=1.2.0\"\n```\n\n## Support\n\n- Documentation: https://docs.fastn.ai/ucl-unified-context-layer/about-ucl\n- Community: [https://discord.gg/Nvd5p8axU3](https://discord.gg/Nvd5p8axU3)\n\n## License\n\nThis project is licensed under the terms included in the [LICENSE](LICENSE) file.\n",
+  "category": "AI Tools",
+  "quality_score": 32,
+  "programming_language": "Python",
+  "framework": null,
+  "github_info": {
+    "owner": "fastnai",
+    "repo": "mcp-fastn",
+    "url": "https://github.com/fastnai/mcp-fastn",
+    "name": "fastnai__mcp-fastn",
+    "path": null,
+    "stars": 11,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "bf80d081a8e6ef36cfc8412a1593d7f3090cd39f"
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your API key for authentication",
+      "sensitive": true,
+      "required": false
+    },
+    "space_id": {
+      "type": "string",
+      "title": "Workspace ID",
+      "description": "Your UCL workspace ID",
+      "required": true
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID",
+      "description": "Your UCL tenant ID for tenant-based authentication",
+      "sensitive": true,
+      "required": false
+    },
+    "auth_token": {
+      "type": "string",
+      "title": "Authentication Token",
+      "description": "Your authentication token for tenant-based authentication",
+      "sensitive": true,
+      "required": false
+    },
+    "config_mode": {
+      "type": "string",
+      "title": "Configuration Mode",
+      "description": "Set configuration mode: 'basic' (API Key) or 'extended' (Tenant-based)",
+      "default": "extended",
+      "required": false
+    }
+  },
+  "archestra_config": {
+    "client_config_permutations": {
+      "fastn-mcp-server-api-key": {
+        "command": "fastn-mcp-server",
+        "args": ["--api_key", "YOUR_API_KEY", "--space_id", "YOUR_WORKSPACE_ID"]
+      },
+      "fastn-mcp-server-tenant-auth": {
+        "command": "fastn-mcp-server",
+        "args": ["--space_id", "YOUR_WORKSPACE_ID", "--tenant_id", "YOUR_TENANT_ID", "--auth_token", "YOUR_AUTH_TOKEN"]
+      },
+      "fastn-server-manual-api-key": {
+        "command": "/path/to/your/uv",
+        "args": [
+          "--directory",
+          "/path/to/your/fastn-server",
+          "run",
+          "fastn-server.py",
+          "--api_key",
+          "YOUR_API_KEY",
+          "--space_id",
+          "YOUR_WORKSPACE_ID"
+        ]
+      },
+      "fastn-server-manual-tenant-auth": {
+        "command": "/path/to/your/uv",
+        "args": [
+          "--directory",
+          "/path/to/your/fastn-server",
+          "run",
+          "fastn-server.py",
+          "--space_id",
+          "YOUR_WORKSPACE_ID",
+          "--tenant_id",
+          "YOUR_TENANT_ID",
+          "--auth_token",
+          "YOUR_AUTH_TOKEN"
+        ]
+      },
+      "ucl-stdio-server-docker-env-file": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "--env-file", "/path/to/your/fastn-stdio-server/.env", "ucl-stdio-server"],
+        "env": {
+          "API_KEY": "YOUR_API_KEY",
+          "SPACE_ID": "YOUR_WORKSPACE_ID",
+          "TENANT_ID": "YOUR_TENANT_ID",
+          "AUTH_TOKEN": "YOUR_AUTH_TOKEN",
+          "CONFIG_MODE": "extended"
+        },
+        "docker_image": "/path/to/your/fastn-stdio-server/.env"
+      },
+      "ucl-stdio-server-docker-env-vars": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "API_KEY=YOUR_API_KEY",
+          "-e",
+          "SPACE_ID=YOUR_WORKSPACE_ID",
+          "-e",
+          "TENANT_ID=YOUR_TENANT_ID",
+          "-e",
+          "AUTH_TOKEN=YOUR_AUTH_TOKEN",
+          "-e",
+          "CONFIG_MODE=extended",
+          "ucl-stdio-server"
+        ],
+        "env": {
+          "API_KEY": "YOUR_API_KEY",
+          "SPACE_ID": "YOUR_WORKSPACE_ID",
+          "TENANT_ID": "YOUR_TENANT_ID",
+          "AUTH_TOKEN": "YOUR_AUTH_TOKEN",
+          "CONFIG_MODE": "extended"
+        },
+        "docker_image": "ucl-stdio-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"fastn\"\nversion = \"0.1.0\"\ndescription = \"A simple MCP fastn server\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.2.0\",\n]\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\".\"]\n\n[project.scripts]\nfastn = \"fastn:main\"\n\n",
+  "last_scraped_at": "2025-09-09T13:06:33.746Z"
+}

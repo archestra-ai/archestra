@@ -1,0 +1,98 @@
+{
+  "name": "kehvinbehvin__json-mcp-filter",
+  "display_name": "json-mcp-filter",
+  "description": "JSON MCP server to filter only relevant data for your LLM",
+  "author": {
+    "name": "kehvinbehvin"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "json-mcp-filter@latest"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# JSON MCP Filter\n\nA powerful Model Context Protocol (MCP) server that provides JSON schema generation and filtering tools for local files and remote HTTP/HTTPS endpoints. Built with [quicktype](https://github.com/quicktype/quicktype) for robust TypeScript type generation.\n\n<a href=\"https://glama.ai/mcp/servers/@kehvinbehvin/json-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kehvinbehvin/json-mcp/badge\" alt=\"JSON Server MCP server\" />\n\n**Perfect for**: Filtering large JSON files and API responses to extract only relevant data for LLM context, while maintaining type safety.\n\n\n## ✨ Key Features\n\n- 🔄 **Schema Generation** - Convert JSON to TypeScript interfaces using quicktype\n- 🎯 **Smart Filtering** - Extract specific fields with shape-based filtering  \n- 🌐 **Remote Support** - Works with HTTP/HTTPS URLs and API endpoints\n- 📦 **Auto Chunking** - Handles large datasets with automatic 400KB chunking\n- 🛡️ **Size Protection** - Built-in 50MB limit with memory safety\n- ⚡ **MCP Ready** - Seamless integration with Claude Desktop and Claude Code\n- 🚨 **Smart Errors** - Clear, actionable error messages with debugging info\n\n## 🛠️ Available Tools\n\n### `json_schema`\n\nGenerates TypeScript interfaces from JSON data.\n\n**Parameters:**\n- `filePath`: Local file path or HTTP/HTTPS URL\n\n**Example:**\n```javascript\n// Input JSON\n{\"name\": \"John\", \"age\": 30, \"city\": \"New York\"}\n\n// Generated TypeScript\nexport interface GeneratedType {\n    name: string;\n    age:  number;\n    city: string;\n}\n```\n\n### `json_filter`\n\nExtracts specific fields using shape-based filtering with automatic chunking for large datasets.\n\n**Parameters:**\n- `filePath`: Local file path or HTTP/HTTPS URL\n- `shape`: Object defining which fields to extract\n- `chunkIndex` (optional): Chunk index for large datasets (0-based)\n\n**Auto-Chunking:**\n- ≤400KB: Returns all data\n- >400KB: Auto-chunks with metadata\n\n### `json_dry_run`\n\nAnalyzes data size and provides chunking recommendations before filtering.\n\n**Parameters:**\n- `filePath`: Local file path or HTTP/HTTPS URL  \n- `shape`: Object defining what to analyze\n\n**Returns:** Size breakdown and chunk recommendations\n\n## 📋 Usage Examples\n\n### Basic Filtering\n```javascript\n// Simple field extraction\njson_filter({\n  filePath: \"https://api.example.com/users\",\n  shape: {\"name\": true, \"email\": true}\n})\n```\n\n### Shape Patterns\n```javascript\n// Single field\n{\"name\": true}\n\n// Nested objects\n{\"user\": {\"name\": true, \"email\": true}}\n\n// Arrays (applies to each item)\n{\"users\": {\"name\": true, \"age\": true}}\n\n// Complex nested\n{\n  \"results\": {\n    \"profile\": {\"name\": true, \"location\": {\"city\": true}}\n  }\n}\n```\n\n### Large Dataset Workflow\n```javascript\n// 1. Check size first\njson_dry_run({filePath: \"./large.json\", shape: {\"users\": {\"id\": true}}})\n// → \"Recommended chunks: 6\"\n\n// 2. Get chunks\njson_filter({filePath: \"./large.json\", shape: {\"users\": {\"id\": true}}})\n// → Chunk 0 + metadata\n\njson_filter({filePath: \"./large.json\", shape: {\"users\": {\"id\": true}}, chunkIndex: 1})\n// → Chunk 1 + metadata\n```\n\n## 🔒 Security Notice\n\n**Remote Data Fetching**: This tool fetches data from HTTP/HTTPS URLs. Users are responsible for:\n\n✅ **Safe Practices:**\n- Verify URLs point to legitimate endpoints\n- Use trusted, public APIs only\n- Respect API rate limits and terms of service\n- Review data sources before processing\n\n❌ **Maintainers Not Responsible For:**\n- External URL content\n- Privacy implications of remote requests\n- Third-party API abuse or violations\n\n💡 **Recommendation**: Only use trusted, public data sources.\n\n## 🚀 Quick Start\n\n### Option 1: NPX (Recommended)\n```bash\n# No installation required\nnpx json-mcp-filter@latest\n```\n\n### Option 2: Global Install\n```bash\nnpm install -g json-mcp-filter@latest\njson-mcp-server\n```\n\n### Option 3: From Source\n```bash\ngit clone <repository-url>\ncd json-mcp-filter\nnpm install\nnpm run build\n```\n\n## ⚙️ MCP Integration\n\n### Claude Desktop\n\nAdd to your configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"json-mcp-filter\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"json-mcp-filter@latest\"]\n    }\n  }\n}\n```\n\n### Claude Code\n\n```bash\n# Add via CLI\nclaude mcp add json-mcp-filter npx -y json-mcp-filter@latest\n```\n\nOr add manually:\n- **Name**: `json-mcp-filter`\n- **Command**: `npx`\n- **Args**: `[\"-y\", \"json-mcp-filter@latest\"]`\n\n## 🔧 Development\n\n### Commands\n```bash\nnpm run build      # Compile TypeScript\nnpm run start      # Run compiled server  \nnpm run inspect    # Debug with MCP inspector\nnpx tsc --noEmit   # Type check only\n```\n\n### Testing\n```bash\nnpm run inspect    # Interactive testing interface\n```\n\n## 📁 Project Structure\n\n```\nsrc/\n├── index.ts                    # Main server + tools\n├── strategies/                 # Data ingestion strategies\n│   ├── JsonIngestionStrategy.ts  # Abstract interface\n│   ├── LocalFileStrategy.ts      # Local file access\n│   └── HttpJsonStrategy.ts       # HTTP/HTTPS fetching\n├── context/\n│   └── JsonIngestionContext.ts   # Strategy management\n└── types/\n    └── JsonIngestion.ts          # Type definitions\n```\n\n## 🚨 Error Handling\n\n### Comprehensive Coverage\n- **Local Files**: Not found, permissions, invalid JSON\n- **Remote URLs**: Network failures, auth errors (401/403), server errors (500+)\n- **Content Size**: Auto-reject >50MB with clear messages\n- **Format Detection**: Smart detection of HTML/XML with guidance\n- **Rate Limiting**: 429 responses with retry instructions\n- **Processing**: Quicktype errors, shape filtering issues\n\n**All errors include actionable debugging information.**\n\n## ⚡ Performance\n\n### Processing Times\n| File Size | Processing Time |\n|-----------|-----------------|\n| < 100 KB  | < 10ms         |\n| 1-10 MB   | 100ms - 1s     |\n| 10-50 MB  | 1s - 5s        |\n| > 50 MB   | **Blocked**    |\n\n### Size Protection\n- **50MB maximum** for all sources\n- **Pre-download checking** via Content-Length\n- **Memory safety** prevents OOM errors\n- **Clear error messages** with actual vs. limit sizes\n\n### Best Practices\n- Use `json_dry_run` first for large files\n- Filter with `json_filter` before schema generation\n- Focus shapes on essential fields only\n\n## 🌐 Supported Sources\n\n- **Public APIs** - REST endpoints with JSON responses\n- **Static Files** - JSON files on web servers\n- **Local Dev** - `http://localhost` during development\n- **Local Files** - File system access\n\n## 💡 Common Workflows\n\n**LLM Integration:**\n1. API returns large response\n2. `json_filter` extracts relevant fields\n3. Process clean data without noise\n4. `json_schema` generates types for safety",
+  "category": "AI Tools",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "json-mcp-filter-npx": {
+        "command": "npx",
+        "args": ["-y", "json-mcp-filter@latest"],
+        "env": {}
+      },
+      "json-mcp-filter-global": {
+        "command": "json-mcp-server",
+        "args": [],
+        "env": {}
+      },
+      "json-mcp-filter-source-start": {
+        "command": "npm",
+        "args": ["run", "start"],
+        "env": {}
+      },
+      "json-mcp-filter-node-path": {
+        "command": "node",
+        "args": ["/path/to/json-mcp-filter/build/index.js"],
+        "env": {}
+      },
+      "json-mcp-filter-inspect": {
+        "command": "npm",
+        "args": ["run", "inspect"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kehvinbehvin",
+    "repo": "json-mcp-filter",
+    "url": "https://github.com/kehvinbehvin/json-mcp-filter",
+    "name": "json-mcp-filter",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "fe3d1bfd4171b6fe2820f3d52d89159e04ffc16a"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.922Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "quicktype-core",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@kehvinbehvin/json-mcp-filter\",\n  \"version\": \"1.0.2\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/kehvinbehvin/json-mcp-filter.git\"\n  },\n  \"publishConfig\": {\n    \"registry\": \"https://npm.pkg.github.com\"\n  },\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"json-mcp-server\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"inspect\": \"npx @modelcontextprotocol/inspector node build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"src\",\n    \"README.md\"\n  ],\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"json\",\n    \"schema\",\n    \"typescript\",\n    \"quicktype\",\n    \"json-filter\",\n    \"claude\"\n  ],\n  \"author\": \"Kevin\",\n  \"license\": \"MIT\",\n  \"description\": \"MCP server providing JSON schema generation and filtering tools using quicktype\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.1\",\n    \"quicktype-core\": \"^23.2.6\",\n    \"zod\": \"^3.25.76\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.1.0\",\n    \"typescript\": \"^5.9.2\"\n  }\n}\n"
+}

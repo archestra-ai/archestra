@@ -1,0 +1,154 @@
+{
+  "name": "ndthanhdev__mcp-browser-kit",
+  "display_name": "mcp-browser-kit",
+  "description": "An MCP Server that enables AI assistants to interact with your local browsers.",
+  "author": {
+    "name": "ndthanhdev"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Browser Kit\n\n[![Build and Test](https://github.com/ndthanhdev/mcp-browser-kit/actions/workflows/build-test.yml/badge.svg)](https://github.com/ndthanhdev/mcp-browser-kit/actions/workflows/build-test.yml)\n[![Checked with Biome](https://img.shields.io/badge/Checked_with-Biome-60a5fa?style=flat&logo=biome)](https://biomejs.dev)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/ndthanhdev/mcp-browser-kit)](https://archestra.ai/mcp-catalog/ndthanhdev__mcp-browser-kit)\n\nAn MCP Server that enables AI assistants to interact with your local browsers.\n\n> **Note**: Consider using a separate browser profile or dedicated browser instance with this MCP to prevent sensitive data from being unintentionally exposed to AI model providers.\n\nhttps://github.com/user-attachments/assets/1fbf87fd-06d1-42bf-a06f-cc2bbdf375a8\n\n## Usage\n\n1. Add MCP Browser Kit to your MCP Client:\n\n   ```json\n   {\n   \t\"mcpServers\": {\n   \t\t\"browser-kit\": {\n   \t\t\t\"command\": \"npx\",\n   \t\t\t\"args\": [\"@mcp-browser-kit/server\"]\n   \t\t}\n   \t}\n   }\n   ```\n\n2. Choose the right extension build for your browser:\n\n   - Check the [Compatibility table](#compatibility-table) below to see which build (M2 or M3) is compatible with your browser\n   - Note that M2 builds offer more functionality than M3 builds, so prefer M2 if your browser supports both\n\n3. Download and unzip the latest compatible build from [The Latest Release](https://github.com/ndthanhdev/mcp-browser-kit/releases/latest).\n\n4. [Load the extension](#load-extension) into a compatible browser and enable it.\n\n5. Refresh open tabs to ensure extension scripts are loaded.\n\n6. Start messaging on your MCP Client:\n\n   ```\n   Use browser-kit, star the last open GitHub repo on my browser\n   ```\n\n## Compatibility table\n\n> The M2 build supports more functionalities than the M3 build.\n\n> Extension file name patterns:\n>\n> - M2 build: `mcp_browser_kit_m2-[version].zip` (e.g., `mcp_browser_kit_m2-5.0.0.zip`)\n> - M3 build: `mcp_browser_kit_m3-[version].zip` (e.g., `mcp_browser_kit_m3-5.0.0.zip`)\n\n| Browser | M2 build | M3 build |\n| ------- | -------- | -------- |\n| Chrome  | ❌       | ✅       |\n| Brave   | ✅       | ✅       |\n| Edge    | ✅       | ✅       |\n| Firefox | ✅       | ❌       |\n| Safari  | ✅       | ❌       |\n\n## Load Extension\n\n- Chromium-based browsers (Chrome, Brave, Edge)\n  1.  Open [chrome://extensions/](chrome://extensions/)\n  2.  Enable `Developer mode`\n  3.  Click `Load unpacked`\n  4.  Select the unpacked extension folder\n- Firefox\n  1.  Open [about:debugging#/runtime/this-firefox](about:debugging#/runtime/this-firefox)\n  2.  Click `Load Temporary Add-on`\n  3.  Select the `manifest.json` file in the unpacked extension folder\n- Safari\n  1.  Open `Develop > Show Extension Builder`\n  2.  Click `+` and select `Add Extension`\n  3.  Select the unpacked extension folder\n  4.  Click `Install` to install the extension\n",
+  "category": "Browser Automation",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-browser-kit-server": {
+        "command": "npx",
+        "args": ["@mcp-browser-kit/server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ndthanhdev",
+    "repo": "mcp-browser-kit",
+    "url": "https://github.com/ndthanhdev/mcp-browser-kit",
+    "name": "ndthanhdev__mcp-browser-kit",
+    "path": null,
+    "stars": 31,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a31e44c7ac98f0bf23c4e5b01bd3d1b78b74b208"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:14.498Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@trpc/client",
+      "importance": 8
+    },
+    {
+      "name": "@trpc/server",
+      "importance": 10
+    },
+    {
+      "name": "change-case",
+      "importance": 4
+    },
+    {
+      "name": "consola",
+      "importance": 6
+    },
+    {
+      "name": "core-js",
+      "importance": 5
+    },
+    {
+      "name": "data-urls",
+      "importance": 5
+    },
+    {
+      "name": "dompurify",
+      "importance": 7
+    },
+    {
+      "name": "emittery",
+      "importance": 4
+    },
+    {
+      "name": "image-dimensions",
+      "importance": 5
+    },
+    {
+      "name": "inversify",
+      "importance": 8
+    },
+    {
+      "name": "js-base64",
+      "importance": 4
+    },
+    {
+      "name": "ok-value-error-reason",
+      "importance": 4
+    },
+    {
+      "name": "p-timeout",
+      "importance": 4
+    },
+    {
+      "name": "pino",
+      "importance": 7
+    },
+    {
+      "name": "ramda",
+      "importance": 6
+    },
+    {
+      "name": "reflect-metadata",
+      "importance": 8
+    },
+    {
+      "name": "sanitize-html",
+      "importance": 7
+    },
+    {
+      "name": "superjson",
+      "importance": 8
+    },
+    {
+      "name": "webextension-polyfill",
+      "importance": 9
+    },
+    {
+      "name": "winston",
+      "importance": 7
+    },
+    {
+      "name": "winston-transport-browserconsole",
+      "importance": 3
+    },
+    {
+      "name": "zod",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"devDependencies\": {\n\t\t\"@biomejs/biome\": \"2.0.6\",\n\t\t\"@trpc/client\": \"^11.1.2\",\n\t\t\"@trpc/server\": \"^11.1.2\",\n\t\t\"@types/data-urls\": \"^3.0.4\",\n\t\t\"@types/firefox-webext-browser\": \"^120.0.4\",\n\t\t\"@types/node\": \"^22.15.17\",\n\t\t\"@types/ramda\": \"^0.30.2\",\n\t\t\"@types/sanitize-html\": \"^2.16.0\",\n\t\t\"@types/webextension-polyfill\": \"^0.12.3\",\n\t\t\"change-case\": \"^5.4.4\",\n\t\t\"consola\": \"^3.4.2\",\n\t\t\"core-js\": \"^3.42.0\",\n\t\t\"data-urls\": \"^5.0.0\",\n\t\t\"dompurify\": \"^3.2.5\",\n\t\t\"emittery\": \"^1.1.0\",\n\t\t\"image-dimensions\": \"^2.3.0\",\n\t\t\"inversify\": \"^7.5.1\",\n\t\t\"js-base64\": \"^3.7.7\",\n\t\t\"ok-value-error-reason\": \"^1.1.0\",\n\t\t\"p-timeout\": \"^6.1.4\",\n\t\t\"pino\": \"^9.6.0\",\n\t\t\"pino-pretty\": \"^13.0.0\",\n\t\t\"ramda\": \"^0.30.1\",\n\t\t\"reflect-metadata\": \"^0.2.2\",\n\t\t\"sanitize-html\": \"^2.16.0\",\n\t\t\"superjson\": \"^2.2.2\",\n\t\t\"tsconfig-moon\": \"^1.4.0\",\n\t\t\"tsup\": \"^8.4.0\",\n\t\t\"type-fest\": \"^4.41.0\",\n\t\t\"typescript\": \"^5.8.3\",\n\t\t\"web-ext\": \"^8.6.0\",\n\t\t\"webextension-polyfill\": \"^0.12.0\",\n\t\t\"winston\": \"^3.17.0\",\n\t\t\"winston-transport-browserconsole\": \"^1.0.5\",\n\t\t\"zod\": \"^3.24.4\"\n\t},\n\t\"name\": \"root\",\n\t\"private\": true,\n\t\"workspaces\": [\n\t\t\"etc/scripts\",\n\t\t\"apps/*\",\n\t\t\"packages/*\"\n\t],\n\t\"engines\": {\n\t\t\"node\": \"^22.14.0\"\n\t},\n\t\"packageManager\": \"yarn@4.9.2\"\n}\n"
+}

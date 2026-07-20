@@ -1,0 +1,94 @@
+{
+  "name": "kyrietangsheng__mcp-server-nationalparks",
+  "display_name": "mcp-server-nationalparks",
+  "description": "MCP server from KyrieTangSheng/mcp-server-nationalparks",
+  "author": {
+    "name": "KyrieTangSheng"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-server-nationalparks"],
+    "env": {
+      "NPS_API_KEY": "${user_config.nps_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "nps_api_key": {
+      "type": "string",
+      "title": "NPS API Key",
+      "description": "Your API key from the National Park Service Developer Portal.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# National Parks MCP Server\n[![smithery badge](https://smithery.ai/badge/@KyrieTangSheng/mcp-server-nationalparks)](https://smithery.ai/server/@KyrieTangSheng/mcp-server-nationalparks)\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/8c07fa61-fd4b-4662-8356-908408e45e44)\n\nMCP Server for the National Park Service (NPS) API, providing real-time information about U.S. National Parks, including park details, alerts, and activities.\n\n## Tools\n\n1. `findParks`\n   - Search for national parks based on various criteria\n   - Inputs:\n     - `stateCode` (optional string): Filter parks by state code (e.g., \"CA\" for California). Multiple states can be comma-separated (e.g., \"CA,OR,WA\")\n     - `q` (optional string): Search term to filter parks by name or description\n     - `limit` (optional number): Maximum number of parks to return (default: 10, max: 50)\n     - `start` (optional number): Start position for results (useful for pagination)\n     - `activities` (optional string): Filter by available activities (e.g., \"hiking,camping\")\n   - Returns: Matching parks with detailed information\n\n2. `getParkDetails`\n   - Get comprehensive information about a specific national park\n   - Inputs:\n     - `parkCode` (string): The park code of the national park (e.g., \"yose\" for Yosemite, \"grca\" for Grand Canyon)\n   - Returns: Detailed park information including descriptions, hours, fees, contacts, and activities\n\n3. `getAlerts`\n   - Get current alerts for national parks including closures, hazards, and important information\n   - Inputs:\n     - `parkCode` (optional string): Filter alerts by park code (e.g., \"yose\" for Yosemite). Multiple parks can be comma-separated (e.g., \"yose,grca\")\n     - `limit` (optional number): Maximum number of alerts to return (default: 10, max: 50)\n     - `start` (optional number): Start position for results (useful for pagination)\n     - `q` (optional string): Search term to filter alerts by title or description\n   - Returns: Current alerts organized by park\n\n4. `getVisitorCenters`\n   - Get information about visitor centers and their operating hours\n   - Inputs:\n     - `parkCode` (optional string): Filter visitor centers by park code (e.g., \"yose\" for Yosemite). Multiple parks can be comma-separated (e.g., \"yose,grca\")\n     - `limit` (optional number): Maximum number of visitor centers to return (default: 10, max: 50)\n     - `start` (optional number): Start position for results (useful for pagination)\n     - `q` (optional string): Search term to filter visitor centers by name or description\n   - Returns: Visitor center information including location, hours, and contact details\n\n5. `getCampgrounds`\n   - Get information about available campgrounds and their amenities\n   - Inputs:\n     - `parkCode` (optional string): Filter campgrounds by park code (e.g., \"yose\" for Yosemite). Multiple parks can be comma-separated (e.g., \"yose,grca\")\n     - `limit` (optional number): Maximum number of campgrounds to return (default: 10, max: 50)\n     - `start` (optional number): Start position for results (useful for pagination)\n     - `q` (optional string): Search term to filter campgrounds by name or description\n   - Returns: Campground information including amenities, fees, and reservation details\n\n6. `getEvents`\n   - Find upcoming events at parks\n   - Inputs:\n     - `parkCode` (optional string): Filter events by park code (e.g., \"yose\" for Yosemite). Multiple parks can be comma-separated (e.g., \"yose,grca\")\n     - `limit` (optional number): Maximum number of events to return (default: 10, max: 50)\n     - `start` (optional number): Start position for results (useful for pagination)\n     - `dateStart` (optional string): Start date for filtering events (format: YYYY-MM-DD)\n     - `dateEnd` (optional string): End date for filtering events (format: YYYY-MM-DD)\n     - `q` (optional string): Search term to filter events by title or description\n   - Returns: Event information including dates, times, and descriptions\n\n## Setup\n\n### Installing via Smithery\n\nTo install mcp-server-nationalparks for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@KyrieTangSheng/mcp-server-nationalparks):\n\n```bash\nnpx -y @smithery/cli install @KyrieTangSheng/mcp-server-nationalparks --client claude\n```\n\n### NPS API Key\n1. Get a free API key from the [National Park Service Developer Portal](https://www.nps.gov/subjects/developer/get-started.htm)\n2. Store this key securely as it will be used to authenticate requests\n\n### Usage with Claude Desktop\n\nTo use this server with Claude Desktop, add the following to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"nationalparks\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-server-nationalparks\"],\n      \"env\": {\n        \"NPS_API_KEY\": \"YOUR_NPS_API_KEY\"\n      }\n    }\n  }\n}\n```\n## Example Usage\n\n### Finding Parks in a State\n```\nTell me about national parks in Colorado.\n```\n\n### Getting Details About a Specific Park\n```\nWhat's the entrance fee for Yellowstone National Park?\n```\n\n### Checking for Alerts or Closures\n```\nAre there any closures or alerts at Yosemite right now?\n```\n\n### Finding Visitor Centers\n```\nWhat visitor centers are available at Grand Canyon National Park?\n```\n\n### Looking for Campgrounds\n```\nAre there any campgrounds with electrical hookups in Zion National Park?\n```\n\n### Finding Upcoming Events\n```\nWhat events are happening at Acadia National Park next weekend?\n```\n\n### Planning a Trip Based on Activities\n```\nWhich national parks in Utah have good hiking trails?\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. See the LICENSE file for details.\n\n\n## Appendix: Popular National Parks and their codes\n\n| Park Name | Park Code |\n|-----------|-----------|\n| Yosemite | yose |\n| Grand Canyon | grca |\n| Yellowstone | yell |\n| Zion | zion |\n| Great Smoky Mountains | grsm |\n| Acadia | acad |\n| Olympic | olym |\n| Rocky Mountain | romo |\n| Joshua Tree | jotr |\n| Sequoia & Kings Canyon | seki |\n\nFor a complete list, visit the [NPS website](https://www.nps.gov/findapark/index.htm).\n",
+  "category": "Travel",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-nationalparks": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-nationalparks"],
+        "env": {
+          "NPS_API_KEY": "YOUR_NPS_API_KEY"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "KyrieTangSheng",
+    "repo": "mcp-server-nationalparks",
+    "url": "https://github.com/KyrieTangSheng/mcp-server-nationalparks",
+    "name": "mcp-server-nationalparks",
+    "path": null,
+    "stars": 22,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "59d06755bb566f3f62eac39b3ad8bc51d25470bf"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.676Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-nationalparks\",\n  \"version\": \"1.0.0\",\n  \"description\": \"\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-nationalparks\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/KyrieTangSheng/mcp-server-nationalparks.git\"\n  },\n  \"keywords\": [\"mcp\", \"claude\", \"national-parks\", \"api\", \"anthropic\"],\n  \"author\": \"Tang Sheng\",\n  \"license\": \"MIT\",\n  \"bugs\": {\n    \"url\": \"https://github.com/KyrieTangSheng/mcp-server-nationalparks/issues\"\n  },\n  \"homepage\": \"https://github.com/KyrieTangSheng/mcp-server-nationalparks#readme\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"axios\": \"^1.8.4\",\n    \"dotenv\": \"^16.4.7\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.10\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

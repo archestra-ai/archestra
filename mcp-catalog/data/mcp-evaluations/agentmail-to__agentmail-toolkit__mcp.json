@@ -1,0 +1,59 @@
+{
+  "name": "agentmail-to__agentmail-toolkit__mcp",
+  "display_name": "mcp",
+  "description": "MCP server from agentmail-to/agentmail-toolkit",
+  "author": {
+    "name": "agentmail-to"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# AgentMail Toolkit\n\nThe AgentMail Toolkit integrates popular agent frameworks and protocols including OpenAI Agents SDK, Vercel AI SDK, and Model Context Protocol (MCP) with the AgentMail API.\n\n## Setup & Usage\n\nSee the [Python](/python) and [Node](/node) packages for language specific setup and usage.\n",
+  "category": null,
+  "quality_score": 77,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "agentmail-to",
+    "repo": "agentmail-toolkit",
+    "url": "https://github.com/agentmail-to/agentmail-toolkit/tree/main/mcp",
+    "name": "agentmail-toolkit",
+    "path": "mcp",
+    "stars": 17,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "fb25e85d8d3ac3d234251b8882db6519a87fe0b0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-07-30T22:28:00.576Z",
+  "evaluation_model": null,
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [],
+  "raw_dependencies": null
+}

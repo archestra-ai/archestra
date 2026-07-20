@@ -1,0 +1,86 @@
+{
+  "name": "pragmar__mcp-server-webcrawl",
+  "display_name": "mcp-server-webcrawl",
+  "description": "MCP server tailored to connecting web crawler data and archives",
+  "author": {
+    "name": "pragmar"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/lib/mcp_server_webcrawl/cli.py"],
+    "env": {
+      "PYTHONPATH": "${__dirname}/server/lib"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<p align=\"center\">\r\n  <img src=\"sphinx/_static/images/mcpswc.svg\" alt=\"MCP Server Webcrawl\" width=\"60%\">\r\n</p>\r\n\r\n<p align=\"center\">\r\n  <a href=\"https://pragmar.com/mcp-server-webcrawl/\" style=\"margin: 0 10px;\">Website</a> |\r\n  <a href=\"https://github.com/pragmar/mcp-server-webcrawl\" style=\"margin: 0 10px;\">GitHub</a> |\r\n  <a href=\"https://pragmar.github.io/mcp-server-webcrawl/\" style=\"margin: 0 10px;\">Docs</a> |\r\n  <a href=\"https://pypi.org/project/mcp-server-webcrawl/\" style=\"margin: 0 10px;\">PyPi</a>\r\n</p>\r\n\r\n# mcp-server-webcrawl\r\n\r\nAdvanced search and retrieval for web crawler data. With **mcp-server-webcrawl**, your AI client filters and analyzes web content under your direction or autonomously. The server includes a fulltext search interface with boolean support, and resource filtering by type, HTTP status, and more.\r\n\r\n**mcp-server-webcrawl** provides the LLM a complete menu with which to search your web content, and works with a variety of web crawlers:\r\n\r\n| Crawler/Format | Description | Platforms | Setup Guide |\r\n|---|---|---|---|\r\n| [**ArchiveBox**][1] | Web archiving tool | macOS/Linux | [Setup Guide][8] |\r\n| [**HTTrack**][2] | GUI mirroring tool | macOS/Windows/Linux | [Setup Guide][9] |\r\n| [**InterroBot**][3] | GUI crawler and analyzer | macOS/Windows/Linux | [Setup Guide][10] |\r\n| [**Katana**][4] | CLI security-focused crawler | macOS/Windows/Linux | [Setup Guide][11] |\r\n| [**SiteOne**][5] | GUI crawler and analyzer | macOS/Windows/Linux | [Setup Guide][12] |\r\n| [**WARC**][6] | Standard web archive format | varies by client | [Setup Guide][13] |\r\n| [**wget**][7] | CLI website mirroring tool | macOS/Linux | [Setup Guide][14] |\r\n\r\n[1]: https://archivebox.io\r\n[2]: https://github.com/xroche/httrack\r\n[3]: https://interro.bot\r\n[4]: https://github.com/projectdiscovery/katana\r\n[5]: https://crawler.siteone.io\r\n[6]: https://en.wikipedia.org/wiki/WARC_(file_format)\r\n[7]: https://en.wikipedia.org/wiki/Wget\r\n[8]: https://pragmar.github.io/mcp-server-webcrawl/guides/archivebox.html\r\n[9]: https://pragmar.github.io/mcp-server-webcrawl/guides/httrack.html\r\n[10]: https://pragmar.github.io/mcp-server-webcrawl/guides/interrobot.html\r\n[11]: https://pragmar.github.io/mcp-server-webcrawl/guides/katana.html\r\n[12]: https://pragmar.github.io/mcp-server-webcrawl/guides/siteone.html\r\n[13]: https://pragmar.github.io/mcp-server-webcrawl/guides/warc.html\r\n[14]: https://pragmar.github.io/mcp-server-webcrawl/guides/wget.html\r\n\r\n**mcp-server-webcrawl** is free and open source, and requires Claude Desktop and Python (>=3.10). It is installed on the command line, via pip install:\r\n\r\n```bash\r\npip install mcp-server-webcrawl\r\n```\r\n\r\nFor step-by-step MCP server setup, refer to the [Setup Guides](https://pragmar.github.io/mcp-server-webcrawl/guides.html).\r\n\r\n## Features\r\n\r\n* Claude Desktop ready\r\n* Multi-crawler compatible\r\n* Filter by type, status, and more\r\n* Boolean search support\r\n* Support for Markdown and snippets\r\n* Roll your own website knowledgebase\r\n\r\n## Prompt Routines\r\n\r\n**mcp-server-webcrawl** provides the toolkit necessary to search web crawl data freestyle, figuring it out as you go, reacting to each query. This is what it was designed for.\r\n\r\nIt is also capable of running routines (as prompts). You can write these yourself, or use the ones provided. These prompts are **copy and paste**, and used as raw Markdown. They are enabled by the advanced search provided to the LLM; queries and logic can be embedded in a procedural set of instructions, or even an input loop as is the case with Gopher Service.\r\n\r\n| Prompt | Download | Category | Description |\r\n|--------|----------|----------|-------------|\r\n|🔍 **SEO Audit** | [`auditseo.md`](https://raw.githubusercontent.com/pragmar/mcp-server-webcrawl/master/prompts/auditseo.md) | audit | Technical SEO (search engine optimization) analysis. Covers the basics, with options to dive deeper. |\r\n|🔗 **404 Audit** | [`audit404.md`](https://raw.githubusercontent.com/pragmar/mcp-server-webcrawl/master/prompts/audit404.md) | audit | Broken link detection and pattern analysis. Not only finds issues, but suggests fixes. |\r\n|⚡&nbsp;**Performance&nbsp;Audit** | [`auditperf.md`](https://raw.githubusercontent.com/pragmar/mcp-server-webcrawl/master/prompts/auditperf.md) | audit | Website speed and optimization analysis. Real talk. |\r\n|📁 **File Audit** | [`auditfiles.md`](https://raw.githubusercontent.com/pragmar/mcp-server-webcrawl/master/prompts/auditfiles.md) | audit | File organization and asset analysis. Discover the composition of your website. |\r\n|🌐 **Gopher Interface** | [`gopher.md`](https://raw.githubusercontent.com/pragmar/mcp-server-webcrawl/master/prompts/gopher.md) | interface | An old-fashioned search interface inspired by the Gopher clients of yesteryear. |\r\n|⚙️ **Search Test** | [`testsearch.md`](https://raw.githubusercontent.com/pragmar/mcp-server-webcrawl/master/prompts/testsearch.md) | self-test | A battery of tests to check for Boolean logical inconsistencies in the search query parser and subsequent FTS5 conversion. |\r\n\r\nIf you want to shortcut the site selection (one less query), paste the markdown and in the same request, type \"run pasted for [site name or URL].\" It will figure it out. When pasted without additional context, you should be prompted to select from a list of crawled sites.\r\n\r\n## Boolean Search Syntax\r\n\r\nThe query engine supports field-specific (`field: value`) searches and complex boolean expressions. Fulltext is supported as a combination of the url, content, and headers fields.\r\n\r\nWhile the API interface is designed to be consumed by the LLM directly, it can be helpful to familiarize yourself with the search syntax. Searches generated by the LLM are inspectable, but generally collapsed in the UI. If you need to see the query, expand the MCP collapsible.\r\n\r\n**Example Queries**\r\n\r\n| Query Example | Description |\r\n|--------------|-------------|\r\n| privacy | fulltext single keyword match |\r\n| \"privacy policy\" | fulltext match exact phrase |\r\n| boundar* | fulltext wildcard matches results starting with *boundar* (boundary, boundaries) |\r\n| id: 12345 | id field matches a specific resource by ID |\r\n| url: example.com/somedir | url field matches results with URL containing example.com/somedir |\r\n| type: html | type field matches for HTML pages only |\r\n| status: 200 | status field matches specific HTTP status codes (equal to 200) |\r\n| status: >=400 | status field matches specific HTTP status code (greater than or equal to 400) |\r\n| content: h1 | content field matches content (HTTP response body, often, but not always HTML) |\r\n| headers: text/xml | headers field matches HTTP response headers |\r\n| privacy AND policy | fulltext matches both |\r\n| privacy OR policy | fulltext matches either |\r\n| policy NOT privacy | fulltext matches policies not containing privacy |\r\n| (login OR signin) AND form | fulltext matches fulltext login or signin with form |\r\n| type: html AND status: 200 | fulltext matches only HTML pages with HTTP success |\r\n\r\n## Field Search Definitions\r\n\r\nField search provides search precision, allowing you to specify which columns of the search index to filter. Rather than searching the entire content, you can restrict your query to specific attributes like URLs, headers, or content body. This approach improves efficiency when looking for specific attributes or patterns within crawl data.\r\n\r\n| Field | Description |\r\n|-------|-------------|\r\n| id | database ID |\r\n| url | resource URL |\r\n| type | enumerated list of types (see types table) |\r\n| size | file size in bytes |\r\n| status | HTTP response codes |\r\n| headers | HTTP response headers |\r\n| content | HTTP body—HTML, CSS, JS, and more |\r\n\r\n## Field Content\r\n\r\nA subset of fields can be independently requested with results, while core fields are always on. Use of headers and content can consume tokens quickly. Use judiciously, or use extras to crunch more results into the context window. Fields are a top level argument, independent of any field searching taking place in the query.\r\n\r\n| Field | Description |\r\n|-------|-------------|\r\n| id | always available |\r\n| url | always available |\r\n| type | always available |\r\n| status | always available |\r\n| created | on request |\r\n| modified | on request |\r\n| size | on request |\r\n| headers | on request |\r\n| content | on request |\r\n\r\n## Content Types\r\n\r\nCrawls contain resource types beyond HTML pages. The `type:` field search allows filtering by broad content type groups, particularly useful when filtering images without complex extension queries. For example, you might search for `type: html NOT content: login` to find pages without \"login,\" or `type: img` to analyze image resources. The table below lists all supported content types in the search system.\r\n\r\n| Type | Description |\r\n|------|-------------|\r\n| html | webpages |\r\n| iframe | iframes |\r\n| img | web images |\r\n| audio | web audio files |\r\n| video | web video files |\r\n| font | web font files |\r\n| style | CSS stylesheets |\r\n| script | JavaScript files |\r\n| rss | RSS syndication feeds |\r\n| text | plain text content |\r\n| pdf | PDF files |\r\n| doc | MS Word documents |\r\n| other | uncategorized |\r\n\r\n## Extras\r\n\r\nThe `extras` parameter provides additional processing options, transforming HTTP data (markdown, snippets, regex, xpath), or connecting the LLM to external data (thumbnails). These options can be combined as needed to achieve the desired result format.\r\n\r\n| Extra | Description |\r\n|-------|-------------|\r\n| thumbnails | Generates base64 encoded images to be viewed and analyzed by AI models. Enables image description, content analysis, and visual understanding while keeping token output minimal. Works with images, which can be filtered using `type: img` in queries. SVG is not supported. |\r\n| markdown | Provides the HTML content field as concise Markdown, reducing token usage and improving readability for LLMs. Works with HTML, which can be filtered using `type: html` in queries. |\r\n| regex | Extracts regular expression matches from crawled files such as HTML, CSS, JavaScript, etc. Not as precise a tool as XPath for HTML, but supports any text file as a data source. One or more regex patterns can be requested, using the `extrasRegex` argument. |\r\n| snippets | Matches fulltext queries to contextual keyword usage within the content. When used without requesting the content field (or markdown extra), it can provide an efficient means of refining a search without pulling down the complete page contents. Also great for rendering old school hit-highlighted results as a list, like Google search in 1999. Works with HTML, CSS, JS, or any text-based, crawled file. |\r\n| xpath | Extracts XPath selector data, used in scraping HTML content. Use XPath's text() selector for text-only, element selectors return outerHTML. Only supported with `type: html`, other types will be ignored. One or more XPath selectors (//h1, count(//h1), etc.) can be requested, using the `extrasXpath` argument. |\r\n\r\nExtras provide a means of producing token-efficient HTTP content responses. Markdown produces roughly 1/3 the bytes of the source HTML, snippets are generally 500 or so bytes per result, and XPath can be as specific or broad as you choose. The more focused your requests, the more results you can fit into your LLM session.\r\n\r\nThe idea, of course, is that the LLM takes care of this for you. If you notice your LLM developing an affinity to the \"content\" field (full HTML), a nudge in chat to budget tokens using the extras feature should be all that is needed.\r\n\r\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pragmar",
+    "repo": "mcp-server-webcrawl",
+    "url": "https://github.com/pragmar/mcp-server-webcrawl",
+    "name": "mcp-server-webcrawl",
+    "path": null,
+    "stars": 18,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "61fe761316509445a4d85c57a5750014b81ba1ce"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.765Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "lxml",
+      "importance": 8
+    },
+    {
+      "name": "Pillow",
+      "importance": 7
+    },
+    {
+      "name": "aiohttp",
+      "importance": 9
+    },
+    {
+      "name": "warcio",
+      "importance": 9
+    },
+    {
+      "name": "ply",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\r\nrequires = [\"setuptools>=61.0\", \"wheel\"]\r\nbuild-backend = \"setuptools.build_meta\"\r\n\r\n[project]\r\nname = \"mcp-server-webcrawl\"\r\ndescription = \"MCP server for search and retrieval of web crawler content\"\r\nreadme = \"README_pypi.md\"\r\nrequires-python = \">=3.10\"\r\nauthors = [\r\n    {name = \"Ben Caulfield\"}\r\n]\r\nclassifiers = [\r\n    \"Programming Language :: Python :: 3\",\r\n    \"Operating System :: OS Independent\",\r\n    \"License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)\",\r\n]\r\ndependencies = [\r\n    \"mcp>=1.3.0\",\r\n    \"lxml>=4.6.0\",\r\n    \"Pillow>=9.0.0\",\r\n    \"aiohttp>=3.8.0\",\r\n    \"warcio>=1.7.0\",\r\n    \"ply==3.11\"\r\n]\r\ndynamic = [\"version\"]\r\n\r\n[project.scripts]\r\nmcp-server-webcrawl = \"mcp_server_webcrawl:main\"\r\n\r\n[project.urls]\r\nHomepage = \"https://pragmar.com/mcp-server-webcrawl/\"\r\n\r\n[tool.setuptools]\r\npackage-dir = {\"\" = \"src\"}\r\n\r\n[tool.setuptools.packages.find]\r\nwhere = [\"src\"]\r\ninclude = [\"mcp_server_webcrawl*\"]\r\nexclude = [\"*settings_local*\"]\r\n\r\n[tool.setuptools.dynamic]\r\nversion = {attr = \"mcp_server_webcrawl.__version__\"}\n\n=== setup.py ===\nimport re\r\nfrom setuptools import setup\r\n\r\n# remove centered image that doesn't render for pypi\r\nwith open(\"README.md\", \"r\") as src:\r\n    content = src.read()\r\nmodified_content = re.sub(r'<p align=\"center\">.*?</p>', '', content, flags=re.DOTALL)\r\nwith open(\"README_pypi.md\", \"w\") as dest:\r\n    dest.write(modified_content.strip())\r\n\r\n# set up configuration in pyproject.toml\r\nsetup()"
+}

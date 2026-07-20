@@ -1,0 +1,93 @@
+{
+  "name": "dumpling-ai__mcp-server-dumplingai",
+  "display_name": "Dumpling AI",
+  "description": "MCP (Model Context Protocol) server for Dumpling AI",
+  "author": {
+    "name": "Dumpling-AI"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-server-dumplingai"],
+    "env": {
+      "DUMPLING_API_KEY": "${user_config.dumpling_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "dumpling_api_key": {
+      "type": "string",
+      "title": "Dumpling AI API Key",
+      "description": "Your Dumpling AI API key",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Dumpling AI MCP Server\n\nA Model Context Protocol (MCP) server implementation that integrates with Dumpling AI for data scraping, content processing, knowledge management, AI agents, and code execution capabilities.\n\n[![smithery badge](https://smithery.ai/badge/@Dumpling-AI/mcp-server-dumplingai)](https://smithery.ai/server/@Dumpling-AI/mcp-server-dumplingai)\n\n## Features\n\n- Complete integration with all Dumpling AI API endpoints\n- Data APIs for YouTube transcripts, search, autocomplete, maps, places, news, and reviews\n- Web scraping with support for scraping, crawling, screenshots, and structured data extraction\n- Document conversion tools for text extraction, PDF operations, video processing\n- Extract data from documents, images, audio, and video\n- AI capabilities including agent completions, knowledge base management, and image generation\n- Developer tools for running JavaScript and Python code in a secure environment\n- Automatic error handling and detailed response formatting\n\n## Installation\n\n### Installing via Smithery\n\nTo install mcp-server-dumplingai for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@Dumpling-AI/mcp-server-dumplingai):\n\n```bash\nnpx -y @smithery/cli install @Dumpling-AI/mcp-server-dumplingai --client claude\n```\n\n### Running with npx\n\n```bash\nenv DUMPLING_API_KEY=your_api_key npx -y mcp-server-dumplingai\n```\n\n### Manual Installation\n\n```bash\nnpm install -g mcp-server-dumplingai\n```\n\n### Running on Cursor\n\nConfiguring Cursor 🖥️ Note: Requires Cursor version 0.45.6+\n\nTo configure Dumpling AI MCP in Cursor:\n\n1. Open Cursor Settings\n2. Go to Features > MCP Servers\n3. Click \"+ Add New MCP Server\"\n4. Enter the following:\n\n```\n{\n  \"mcpServers\": {\n    \"dumplingai\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-server-dumplingai\"],\n      \"env\": {\n        \"DUMPLING_API_KEY\": \"<your-api-key>\"\n      }\n    }\n  }\n}\n```\n\n> If you are using Windows and are running into issues, try `cmd /c \"set DUMPLING_API_KEY=your-api-key && npx -y mcp-server-dumplingai\"`\n\nReplace `your-api-key` with your Dumpling AI API key.\n\n## Configuration\n\n### Environment Variables\n\n- `DUMPLING_API_KEY`: Your Dumpling AI API key (required)\n\n## Available Tools\n\n### Data APIs\n\n#### 1. Get YouTube Transcript (`get-youtube-transcript`)\n\nExtract transcripts from YouTube videos with optional timestamps.\n\n```json\n{\n  \"name\": \"get-youtube-transcript\",\n  \"arguments\": {\n    \"videoUrl\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\",\n    \"includeTimestamps\": true,\n    \"timestampsToCombine\": 3,\n    \"preferredLanguage\": \"en\"\n  }\n}\n```\n\n#### 2. Search (`search`)\n\nPerform Google web searches and optionally scrape content from results.\n\n```json\n{\n  \"name\": \"search\",\n  \"arguments\": {\n    \"query\": \"machine learning basics\",\n    \"country\": \"us\",\n    \"language\": \"en\",\n    \"dateRange\": \"pastMonth\",\n    \"scrapeResults\": true,\n    \"numResultsToScrape\": 3,\n    \"scrapeOptions\": {\n      \"format\": \"markdown\",\n      \"cleaned\": true\n    }\n  }\n}\n```\n\n#### 3. Get Autocomplete (`get-autocomplete`)\n\nGet Google search autocomplete suggestions for a query.\n\n```json\n{\n  \"name\": \"get-autocomplete\",\n  \"arguments\": {\n    \"query\": \"how to learn\",\n    \"country\": \"us\",\n    \"language\": \"en\",\n    \"location\": \"New York\"\n  }\n}\n```\n\n#### 4. Search Maps (`search-maps`)\n\nSearch Google Maps for locations and businesses.\n\n```json\n{\n  \"name\": \"search-maps\",\n  \"arguments\": {\n    \"query\": \"coffee shops\",\n    \"gpsPositionZoom\": \"37.7749,-122.4194,14z\",\n    \"language\": \"en\",\n    \"page\": 1\n  }\n}\n```\n\n#### 5. Search Places (`search-places`)\n\nSearch for places with more detailed information.\n\n```json\n{\n  \"name\": \"search-places\",\n  \"arguments\": {\n    \"query\": \"hotels in paris\",\n    \"country\": \"fr\",\n    \"language\": \"en\",\n    \"page\": 1\n  }\n}\n```\n\n#### 6. Search News (`search-news`)\n\nSearch for news articles with customizable parameters.\n\n```json\n{\n  \"name\": \"search-news\",\n  \"arguments\": {\n    \"query\": \"climate change\",\n    \"country\": \"us\",\n    \"language\": \"en\",\n    \"dateRange\": \"pastWeek\"\n  }\n}\n```\n\n#### 7. Get Google Reviews (`get-google-reviews`)\n\nRetrieve Google reviews for businesses or places.\n\n```json\n{\n  \"name\": \"get-google-reviews\",\n  \"arguments\": {\n    \"businessName\": \"Eiffel Tower\",\n    \"location\": \"Paris, France\",\n    \"limit\": 10,\n    \"sortBy\": \"relevance\"\n  }\n}\n```\n\n### Web Scraping\n\n#### 8. Scrape (`scrape`)\n\nExtract content from a web page with formatting options.\n\n```json\n{\n  \"name\": \"scrape\",\n  \"arguments\": {\n    \"url\": \"https://example.com\",\n    \"format\": \"markdown\",\n    \"cleaned\": true,\n    \"renderJs\": true\n  }\n}\n```\n\n#### 9. Crawl (`crawl`)\n\nRecursively crawl websites and extract content with customizable parameters.\n\n```json\n{\n  \"name\": \"crawl\",\n  \"arguments\": {\n    \"baseUrl\": \"https://example.com\",\n    \"maxPages\": 10,\n    \"crawlBeyondBaseUrl\": false,\n    \"depth\": 2,\n    \"scrapeOptions\": {\n      \"format\": \"markdown\",\n      \"cleaned\": true,\n      \"renderJs\": true\n    }\n  }\n}\n```\n\n#### 10. Screenshot (`screenshot`)\n\nCapture screenshots of web pages with customizable viewport and format options.\n\n```json\n{\n  \"name\": \"screenshot\",\n  \"arguments\": {\n    \"url\": \"https://example.com\",\n    \"width\": 1280,\n    \"height\": 800,\n    \"fullPage\": true,\n    \"format\": \"png\",\n    \"waitFor\": 1000\n  }\n}\n```\n\n#### 11. Extract (`extract`)\n\nExtract structured data from web pages using AI-powered instructions.\n\n```json\n{\n  \"name\": \"extract\",\n  \"arguments\": {\n    \"url\": \"https://example.com/products\",\n    \"instructions\": \"Extract all product names, prices, and descriptions from this page\",\n    \"schema\": {\n      \"products\": [\n        {\n          \"name\": \"string\",\n          \"price\": \"number\",\n          \"description\": \"string\"\n        }\n      ]\n    },\n    \"renderJs\": true\n  }\n}\n```\n\n### Document Conversion\n\n#### 12. Doc to Text (`doc-to-text`)\n\nConvert documents to plaintext with optional OCR.\n\n```json\n{\n  \"name\": \"doc-to-text\",\n  \"arguments\": {\n    \"url\": \"https://example.com/document.pdf\",\n    \"options\": {\n      \"ocr\": true,\n      \"language\": \"en\"\n    }\n  }\n}\n```\n\n#### 13. Convert to PDF (`convert-to-pdf`)\n\nConvert various file formats to PDF.\n\n```json\n{\n  \"name\": \"convert-to-pdf\",\n  \"arguments\": {\n    \"url\": \"https://example.com/document.docx\",\n    \"format\": \"docx\",\n    \"options\": {\n      \"quality\": 90,\n      \"pageSize\": \"A4\",\n      \"margin\": 10\n    }\n  }\n}\n```\n\n#### 14. Merge PDFs (`merge-pdfs`)\n\nCombine multiple PDFs into a single document.\n\n```json\n{\n  \"name\": \"merge-pdfs\",\n  \"arguments\": {\n    \"urls\": [\"https://example.com/doc1.pdf\", \"https://example.com/doc2.pdf\"],\n    \"options\": {\n      \"addPageNumbers\": true,\n      \"addTableOfContents\": true\n    }\n  }\n}\n```\n\n#### 15. Trim Video (`trim-video`)\n\nExtract a specific clip from a video.\n\n```json\n{\n  \"name\": \"trim-video\",\n  \"arguments\": {\n    \"url\": \"https://example.com/video.mp4\",\n    \"startTime\": 30,\n    \"endTime\": 60,\n    \"output\": \"mp4\",\n    \"options\": {\n      \"quality\": 720,\n      \"fps\": 30\n    }\n  }\n}\n```\n\n#### 16. Extract Document (`extract-document`)\n\nExtract specific content from documents in various formats.\n\n```json\n{\n  \"name\": \"extract-document\",\n  \"arguments\": {\n    \"url\": \"https://example.com/document.pdf\",\n    \"format\": \"structured\",\n    \"options\": {\n      \"ocr\": true,\n      \"language\": \"en\",\n      \"includeMetadata\": true\n    }\n  }\n}\n```\n\n#### 17. Extract Image (`extract-image`)\n\nExtract text and information from images.\n\n```json\n{\n  \"name\": \"extract-image\",\n  \"arguments\": {\n    \"url\": \"https://example.com/image.jpg\",\n    \"extractionType\": \"text\",\n    \"options\": {\n      \"language\": \"en\",\n      \"detectOrientation\": true\n    }\n  }\n}\n```\n\n#### 18. Extract Audio (`extract-audio`)\n\nTranscribe and extract information from audio files.\n\n```json\n{\n  \"name\": \"extract-audio\",\n  \"arguments\": {\n    \"url\": \"https://example.com/audio.mp3\",\n    \"language\": \"en\",\n    \"options\": {\n      \"model\": \"enhanced\",\n      \"speakerDiarization\": true,\n      \"wordTimestamps\": true\n    }\n  }\n}\n```\n\n#### 19. Extract Video (`extract-video`)\n\nExtract content from videos including transcripts, scenes, and objects.\n\n```json\n{\n  \"name\": \"extract-video\",\n  \"arguments\": {\n    \"url\": \"https://example.com/video.mp4\",\n    \"extractionType\": \"transcript\",\n    \"options\": {\n      \"language\": \"en\",\n      \"speakerDiarization\": true\n    }\n  }\n}\n```\n\n#### 20. Read PDF Metadata (`read-pdf-metadata`)\n\nExtract metadata from PDF files.\n\n```json\n{\n  \"name\": \"read-pdf-metadata\",\n  \"arguments\": {\n    \"url\": \"https://example.com/document.pdf\",\n    \"includeExtended\": true\n  }\n}\n```\n\n#### 21. Write PDF Metadata (`write-pdf-metadata`)\n\nUpdate metadata in PDF files.\n\n```json\n{\n  \"name\": \"write-pdf-metadata\",\n  \"arguments\": {\n    \"url\": \"https://example.com/document.pdf\",\n    \"metadata\": {\n      \"title\": \"New Title\",\n      \"author\": \"John Doe\",\n      \"keywords\": [\"keyword1\", \"keyword2\"]\n    }\n  }\n}\n```\n\n### AI\n\n#### 22. Generate Agent Completion (`generate-agent-completion`)\n\nGet AI agent completions with optional tool definitions.\n\n```json\n{\n  \"name\": \"generate-agent-completion\",\n  \"arguments\": {\n    \"prompt\": \"How can I improve my website's SEO?\",\n    \"model\": \"gpt-4\",\n    \"temperature\": 0.7,\n    \"maxTokens\": 500,\n    \"context\": [\"The website is an e-commerce store selling handmade crafts.\"]\n  }\n}\n```\n\n#### 23. Search Knowledge Base (`search-knowledge-base`)\n\nSearch a knowledge base for relevant information.\n\n```json\n{\n  \"name\": \"search-knowledge-base\",\n  \"arguments\": {\n    \"kbId\": \"kb_12345\",\n    \"query\": \"How to optimize database performance\",\n    \"limit\": 5,\n    \"similarityThreshold\": 0.7\n  }\n}\n```\n\n#### 24. Add to Knowledge Base (`add-to-knowledge-base`)\n\nAdd entries to a knowledge base.\n\n```json\n{\n  \"name\": \"add-to-knowledge-base\",\n  \"arguments\": {\n    \"kbId\": \"kb_12345\",\n    \"entries\": [\n      {\n        \"text\": \"MongoDB is a document-based NoSQL database.\",\n        \"metadata\": {\n          \"source\": \"MongoDB documentation\",\n          \"category\": \"databases\"\n        }\n      }\n    ],\n    \"upsert\": true\n  }\n}\n```\n\n#### 25. Generate AI Image (`generate-ai-image`)\n\nGenerate images using AI models.\n\n```json\n{\n  \"name\": \"generate-ai-image\",\n  \"arguments\": {\n    \"prompt\": \"A futuristic city with flying cars and neon lights\",\n    \"width\": 1024,\n    \"height\": 1024,\n    \"numImages\": 1,\n    \"quality\": \"hd\",\n    \"style\": \"photorealistic\"\n  }\n}\n```\n\n#### 26. Generate Image (`generate-image`)\n\nGenerate images using various AI providers.\n\n```json\n{\n  \"name\": \"generate-image\",\n  \"arguments\": {\n    \"prompt\": \"A golden retriever in a meadow of wildflowers\",\n    \"provider\": \"dalle\",\n    \"width\": 1024,\n    \"height\": 1024,\n    \"numImages\": 1\n  }\n}\n```\n\n### Developer Tools\n\n#### 27. Run JavaScript Code (`run-js-code`)\n\nExecute JavaScript code with optional dependencies.\n\n```json\n{\n  \"name\": \"run-js-code\",\n  \"arguments\": {\n    \"code\": \"const result = [1, 2, 3, 4].reduce((sum, num) => sum + num, 0); console.log(`Sum: ${result}`); return result;\",\n    \"dependencies\": {\n      \"lodash\": \"^4.17.21\"\n    },\n    \"timeout\": 5000\n  }\n}\n```\n\n#### 28. Run Python Code (`run-python-code`)\n\nExecute Python code with optional dependencies.\n\n```json\n{\n  \"name\": \"run-python-code\",\n  \"arguments\": {\n    \"code\": \"import numpy as np\\narr = np.array([1, 2, 3, 4, 5])\\nmean = np.mean(arr)\\nprint(f'Mean: {mean}')\\nreturn mean\",\n    \"dependencies\": [\"numpy\", \"pandas\"],\n    \"timeout\": 10000,\n    \"saveOutputFiles\": true\n  }\n}\n```\n\n## Error Handling\n\nThe server provides robust error handling:\n\n- Detailed error messages with HTTP status codes\n- API key validation\n- Input validation using Zod schemas\n- Network error handling with descriptive messages\n\nExample error response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"Error: Failed to fetch YouTube transcript: 404 Not Found\"\n    }\n  ],\n  \"isError\": true\n}\n```\n\n## Development\n\n```bash\n# Install dependencies\nnpm install\n\n# Build\nnpm run build\n\n```\n\n## License\n\nMIT License - see LICENSE file for details\n",
+  "category": "AI Tools",
+  "quality_score": 61,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-dumplingai": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-dumplingai"],
+        "env": {
+          "DUMPLING_API_KEY": "your_api_key"
+        }
+      },
+      "mcp-server-dumplingai-cursor": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-dumplingai"],
+        "env": {
+          "DUMPLING_API_KEY": "<your-api-key>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Dumpling-AI",
+    "repo": "mcp-server-dumplingai",
+    "url": "https://github.com/Dumpling-AI/mcp-server-dumplingai",
+    "name": "mcp-server-dumplingai",
+    "path": null,
+    "stars": 22,
+    "contributors": 4,
+    "issues": 6,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1650f0fbceda9aafdc65dd792a66d1956a7168ae"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.244Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-dumplingai\",\n  \"version\": \"1.1.3\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-dumplingai\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"rm -rf build && tsc && chmod +x build/index.js\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"dumpling\",\n    \"dumplingai\",\n    \"ai\",\n    \"cli\",\n    \"websearch\",\n    \"serp\",\n    \"scrape\",\n    \"search\",\n    \"youtube\",\n    \"document\",\n    \"document-conversion\",\n    \"markdown\",\n    \"claude\",\n    \"research\",\n    \"papers\",\n    \"twitter\",\n    \"x.com\",\n    \"social-media\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"description\": \"MCP Server for Dumpling AI providing various Data scraping, conversion, and extraction tools\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.12\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/dumpling-ai/mcp-server-dumplingai.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/dumpling-ai/mcp-server-dumplingai/issues\"\n  },\n  \"homepage\": \"https://github.com/dumplingai/mcp-server-dumplingai#readme\"\n}\n"
+}

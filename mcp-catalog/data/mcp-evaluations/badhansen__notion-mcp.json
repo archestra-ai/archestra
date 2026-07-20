@@ -1,0 +1,112 @@
+{
+  "name": "badhansen__notion-mcp",
+  "display_name": "notion-mcp",
+  "description": "A simple Model Context Protocol (MCP) server that integrates with Notion's API to manage my personal todo list.",
+  "author": {
+    "name": "Badhansen"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}/src", "run", "server.py"],
+    "env": {
+      "NOTION_TOKEN": "${user_config.notion_token}",
+      "PAGE_ID": "${user_config.page_id}",
+      "NOTION_VERSION": "${user_config.notion_version}",
+      "NOTION_BASE_URL": "${user_config.notion_base_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "notion_token": {
+      "type": "string",
+      "title": "Notion API Token",
+      "description": "Your Notion API integration token.",
+      "sensitive": true,
+      "required": true
+    },
+    "page_id": {
+      "type": "string",
+      "title": "Notion Page ID",
+      "description": "The ID of the Notion page where you want to manage your todo list.",
+      "sensitive": false,
+      "required": true
+    },
+    "notion_version": {
+      "type": "string",
+      "title": "Notion API Version",
+      "description": "The Notion API version to use.",
+      "default": "2022-06-28",
+      "required": false
+    },
+    "notion_base_url": {
+      "type": "string",
+      "title": "Notion API Base URL",
+      "description": "The base URL for Notion API requests.",
+      "default": "https://api.notion.com/v1",
+      "required": false
+    }
+  },
+  "readme": "# notion-mcp\n\n[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Badhansen/notion-mcp)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Badhansen/notion-mcp)](https://archestra.ai/mcp-catalog/badhansen__notion-mcp)\n[![smithery badge](https://smithery.ai/badge/@Badhansen/notion-mcp)](https://smithery.ai/server/@Badhansen/notion-mcp)\n\nA simple Model Context Protocol (MCP) server that integrates with Notion's API to manage my personal todo list.\n\n## Demo\n\n![Demo](docs/assets/videos/notion-mcp.gif)\n\n## Visual Guide\n\n#### Notion MCP Query 1\n\n![Notion MCP Query 1](docs/assets/images/query1.jpg)\n\n#### Notion MCP Query 2\n\n![Notion MCP Query 1](docs/assets/images/query2.jpg)\n\n#### Notion MCP Query 3\n\n![Notion MCP Query 1](docs/assets/images/query3.jpg)\n\n## Prerequisites\n\n-   Python 3.11 or higher\n-   A Notion account with API access\n-   A Notion integration token\n-   A Notion page where you want to manage your todo list\n-   Claude Desktop clint\n\n## Setup\n\n### Installing via Smithery\n\nTo install Notion MCP for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@Badhansen/notion-mcp):\n\n```bash\nnpx -y @smithery/cli install @Badhansen/notion-mcp --client claude\n```\n\n1. Clone the repository:\n\n```sh\ngit clone https://github.com/Badhansen/notion-mcp.git\ncd notion-mcp\n```\n\n2. Set up Python environment:\n\n```sh\nuv venv\nsource .venv/bin/activate\nuv pip install -e .\n```\n\n3. Create a Notion integration:\n    - Go to https://www.notion.so/my-integrations\n    - Create new integration\n    - Copy the API key\n4. Share your database/page with the integration:\n    - Open your notion workspace with a database/table present or a page.\n    - Click \"...\" menu → \"Add connections\"\n    - Select your integration (Search by name)\n\n## Configuration\n\n1. Create `.env` file:\n\n```sh\ncp .env.example .env\n```\n\n2. Configure Notion credentials in `.env`:\n\n```markdown\nNOTION_TOKEN=<your-notion-api-token>\nPAGE_ID=<your-notion-page-id>\nNOTION_VERSION=\"2022-06-28\"\nNOTION_BASE_URL=\"https://api.notion.com/v1\"\n```\n\n3. To use it with Claude Desktop as intended you need to adjust your `claude_desktop_config.json` file.\n   Go to `Claude Desktop -> Settings -> Developer -> Edit Config`. Now add the `Notion` server configuration.\n\n```json\n{\n    \"mcpServers\": {\n        \"notion-mcp\": {\n            \"command\": \"uv\",\n            \"args\": [\n                \"--directory\",\n                \"/Users/username/Projects/Python/notion-mcp/src\" /* Path to your project */,\n                \"run\",\n                \"server.py\"\n            ]\n        }\n    }\n}\n```\n\n## Development\n\nProject structure:\n\n```markdown\nnotion-mcp/\n├── docs/\n├── src/\n│ └── server.py\n├── .env\n├── .python-version\n├── README.md\n├── pyproject.toml\n└── uv.lock\n```\n\n## Support Functions\n\n#### Show Tasks\n\nTo show all tasks from your Notion workspace, use the `show_all_todos` function:\n\n```json\n{\n    \"name\": \"show_all_todos\",\n    \"arguments\": {}\n}\n```\n\n#### Add Task\n\nTo add a new task to your Notion workspace, use the `add_todo` function:\n\n```json\n{\n    \"name\": \"add_todo\",\n    \"arguments\": {\n        \"task\": \"Your task description\"\n    }\n}\n```\n\n#### Update Task\n\nTo update an existing task in your Notion workspace, use the `complete_todo` function:\n\n```json\n{\n    \"name\": \"complete_todo\",\n    \"arguments\": {\n        \"task_id\": \"your-task-id\"\n    }\n}\n```\n\n## Contributing\n\n1. Fork the repository\n2. Create feature branch\n3. Submit pull request\n\n## License\n\nMIT License. See LICENSE file for details.\n",
+  "category": "Knowledge",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "notion-mcp": {
+        "command": "uv",
+        "args": ["--directory", "/Users/username/Projects/Python/notion-mcp/src", "run", "server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Badhansen",
+    "repo": "notion-mcp",
+    "url": "https://github.com/Badhansen/notion-mcp",
+    "name": "notion-mcp",
+    "path": null,
+    "stars": 21,
+    "contributors": 2,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ada33ae10718759826b2db7c3d5328889886c9ac"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:45.178Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"notion-mcp\"\nversion = \"1.0.0\"\ndescription = \"A simple Model Context Protocol (MCP) server that integrates with Notion's API to manage my personal todo list.\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.2.1\",\n    \"python-dotenv>=1.0.1\",\n]\n"
+}

@@ -1,0 +1,124 @@
+{
+  "name": "marcelmarais__spotify-mcp-server",
+  "display_name": "spotify-mcp-server",
+  "description": "MCP server from marcelmarais/spotify-mcp-server",
+  "author": {
+    "name": "marcelmarais"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "SPOTIPY_CLIENT_ID": "${user_config.spotipy_client_id}",
+      "SPOTIPY_CLIENT_SECRET": "${user_config.spotipy_client_secret}",
+      "SPOTIPY_REDIRECT_URI": "${user_config.spotipy_redirect_uri}",
+      "SPOTIPY_SCOPE": "${user_config.spotipy_scope}",
+      "SPOTIPY_CACHE_PATH": "${user_config.spotipy_cache_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "spotipy_client_id": {
+      "type": "string",
+      "title": "Spotify Client ID",
+      "description": "Your Spotify application's Client ID.",
+      "sensitive": true,
+      "required": true
+    },
+    "spotipy_client_secret": {
+      "type": "string",
+      "title": "Spotify Client Secret",
+      "description": "Your Spotify application's Client Secret.",
+      "sensitive": true,
+      "required": true
+    },
+    "spotipy_redirect_uri": {
+      "type": "string",
+      "title": "Spotify Redirect URI",
+      "description": "The redirect URI you configured in your Spotify application settings.",
+      "default": "http://localhost:8888/callback",
+      "required": true
+    },
+    "spotipy_scope": {
+      "type": "string",
+      "title": "Spotify API Scopes",
+      "description": "A space-separated string of Spotify API scopes required by the server.",
+      "default": "user-read-playback-state user-modify-playback-state user-read-currently-playing app-remote-control streaming playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-library-read user-library-modify user-top-read user-read-recently-played",
+      "required": true
+    },
+    "spotipy_cache_path": {
+      "type": "string",
+      "title": "Spotify Token Cache Path",
+      "description": "Path to store the Spotify token cache.",
+      "default": ".cache",
+      "required": false
+    }
+  },
+  "readme": "<div align=\"center\" style=\"display: flex; align-items: center; justify-content: center; gap: 10px;\">\n<img src=\"https://upload.wikimedia.org/wikipedia/commons/8/84/Spotify_icon.svg\" width=\"30\" height=\"30\">\n<h1>Spotify MCP Server</h1>\n</div>\n\nA lightweight [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that enables AI assistants like Cursor & Claude to control Spotify playback and manage playlists.\n\n<details>\n<summary>Contents</summary>\n  \n- [Example Interactions](#example-interactions)\n- [Tools](#tools)\n  - [Read Operations](#read-operations)\n  - [Album Operations](#album-operations)\n  - [Play / Create Operations](#play--create-operations)\n- [Setup](#setup)\n  - [Prerequisites](#prerequisites)\n  - [Installation](#installation)\n  - [Creating a Spotify Developer Application](#creating-a-spotify-developer-application)\n  - [Spotify API Configuration](#spotify-api-configuration)\n  - [Authentication Process](#authentication-process)\n- [Integrating with Claude Desktop, Cursor, and VsCode (Cline)](#integrating-with-claude-desktop-and-cursor)\n</details>\n\n## Example Interactions\n\n- _\"Play Elvis's first song\"_\n- _\"Create a Taylor Swift / Slipknot fusion playlist\"_\n- _\"Copy all the techno tracks from my workout playlist to my work playlist\"_\n\n## Tools\n\n### Read Operations\n\n1. **searchSpotify**\n\n   - **Description**: Search for tracks, albums, artists, or playlists on Spotify\n   - **Parameters**:\n     - `query` (string): The search term\n     - `type` (string): Type of item to search for (track, album, artist, playlist)\n     - `limit` (number, optional): Maximum number of results to return (10-50)\n   - **Returns**: List of matching items with their IDs, names, and additional details\n   - **Example**: `searchSpotify(\"bohemian rhapsody\", \"track\", 20)`\n\n2. **getNowPlaying**\n\n   - **Description**: Get information about the currently playing track on Spotify\n   - **Parameters**: None\n   - **Returns**: Object containing track name, artist, album, playback progress, duration, and playback state\n   - **Example**: `getNowPlaying()`\n\n3. **getMyPlaylists**\n\n   - **Description**: Get a list of the current user's playlists on Spotify\n   - **Parameters**:\n     - `limit` (number, optional): Maximum number of playlists to return (default: 20)\n     - `offset` (number, optional): Index of the first playlist to return (default: 0)\n   - **Returns**: Array of playlists with their IDs, names, track counts, and public status\n   - **Example**: `getMyPlaylists(10, 0)`\n\n4. **getPlaylistTracks**\n\n   - **Description**: Get a list of tracks in a specific Spotify playlist\n   - **Parameters**:\n     - `playlistId` (string): The Spotify ID of the playlist\n     - `limit` (number, optional): Maximum number of tracks to return (default: 100)\n     - `offset` (number, optional): Index of the first track to return (default: 0)\n   - **Returns**: Array of tracks with their IDs, names, artists, album, duration, and added date\n   - **Example**: `getPlaylistTracks(\"37i9dQZEVXcJZyENOWUFo7\")`\n\n5. **getRecentlyPlayed**\n\n   - **Description**: Retrieves a list of recently played tracks from Spotify.\n   - **Parameters**:\n     - `limit` (number, optional): A number specifying the maximum number of tracks to return.\n   - **Returns**: If tracks are found it returns a formatted list of recently played tracks else a message stating: \"You don't have any recently played tracks on Spotify\".\n   - **Example**: `getRecentlyPlayed({ limit: 10 })`\n\n6. **getUsersSavedTracks**\n\n   - **Description**: Get a list of tracks saved in the user's \"Liked Songs\" library\n   - **Parameters**:\n     - `limit` (number, optional): Maximum number of tracks to return (1-50, default: 50)\n     - `offset` (number, optional): Offset for pagination (0-based index, default: 0)\n   - **Returns**: Formatted list of saved tracks with track names, artists, duration, track IDs, and when they were added to Liked Songs. Shows pagination info (e.g., \"1-20 of 150\").\n   - **Example**: `getUsersSavedTracks({ limit: 20, offset: 0 })`\n\n\n### Play / Create Operations\n\n1. **playMusic**\n\n   - **Description**: Start playing a track, album, artist, or playlist on Spotify\n   - **Parameters**:\n     - `uri` (string, optional): Spotify URI of the item to play (overrides type and id)\n     - `type` (string, optional): Type of item to play (track, album, artist, playlist)\n     - `id` (string, optional): Spotify ID of the item to play\n     - `deviceId` (string, optional): ID of the device to play on\n   - **Returns**: Success status\n   - **Example**: `playMusic({ uri: \"spotify:track:6rqhFgbbKwnb9MLmUQDhG6\" })`\n   - **Alternative**: `playMusic({ type: \"track\", id: \"6rqhFgbbKwnb9MLmUQDhG6\" })`\n\n2. **pausePlayback**\n\n   - **Description**: Pause the currently playing track on Spotify\n   - **Parameters**:\n     - `deviceId` (string, optional): ID of the device to pause\n   - **Returns**: Success status\n   - **Example**: `pausePlayback()`\n\n3. **skipToNext**\n\n   - **Description**: Skip to the next track in the current playback queue\n   - **Parameters**:\n     - `deviceId` (string, optional): ID of the device\n   - **Returns**: Success status\n   - **Example**: `skipToNext()`\n\n4. **skipToPrevious**\n\n   - **Description**: Skip to the previous track in the current playback queue\n   - **Parameters**:\n     - `deviceId` (string, optional): ID of the device\n   - **Returns**: Success status\n   - **Example**: `skipToPrevious()`\n\n5. **createPlaylist**\n\n   - **Description**: Create a new playlist on Spotify\n   - **Parameters**:\n     - `name` (string): Name for the new playlist\n     - `description` (string, optional): Description for the playlist\n     - `public` (boolean, optional): Whether the playlist should be public (default: false)\n   - **Returns**: Object with the new playlist's ID and URL\n   - **Example**: `createPlaylist({ name: \"Workout Mix\", description: \"Songs to get pumped up\", public: false })`\n\n6. **addTracksToPlaylist**\n\n   - **Description**: Add tracks to an existing Spotify playlist\n   - **Parameters**:\n     - `playlistId` (string): ID of the playlist\n     - `trackUris` (array): Array of track URIs or IDs to add\n     - `position` (number, optional): Position to insert tracks\n   - **Returns**: Success status and snapshot ID\n   - **Example**: `addTracksToPlaylist({ playlistId: \"3cEYpjA9oz9GiPac4AsH4n\", trackUris: [\"spotify:track:4iV5W9uYEdYUVa79Axb7Rh\"] })`\n\n7. **addToQueue**\n\n   - **Description**: Adds a track, album, artist or playlist to the current playback queue\n   - - **Parameters**:\n     - `uri` (string, optional): Spotify URI of the item to add to queue (overrides type and id)\n     - `type` (string, optional): Type of item to queue (track, album, artist, playlist)\n     - `id` (string, optional): Spotify ID of the item to queue\n     - `deviceId` (string, optional): ID of the device to queue on\n   - **Returns**: Success status\n   - **Example**: `addToQueue({ uri: \"spotify:track:6rqhFgbbKwnb9MLmUQDhG6\" })`\n   - **Alternative**: `addToQueue({ type: \"track\", id: \"6rqhFgbbKwnb9MLmUQDhG6\" })`\n   \n\n### Album Operations\n\n1. **getAlbums**\n\n   - **Description**: Get detailed information about one or more albums by their Spotify IDs\n   - **Parameters**:\n     - `albumIds` (string|array): A single album ID or array of album IDs (max 20)\n   - **Returns**: Album details including name, artists, release date, type, total tracks, and ID. For single album returns detailed view, for multiple albums returns summary list.\n   - **Example**: `getAlbums(\"4aawyAB9vmqN3uQ7FjRGTy\")` or `getAlbums([\"4aawyAB9vmqN3uQ7FjRGTy\", \"1DFixLWuPkv3KT3TnV35m3\"])`\n\n2. **getAlbumTracks**\n\n   - **Description**: Get tracks from a specific album with pagination support\n   - **Parameters**:\n     - `albumId` (string): The Spotify ID of the album\n     - `limit` (number, optional): Maximum number of tracks to return (1-50)\n     - `offset` (number, optional): Offset for pagination (0-based index)\n   - **Returns**: List of tracks from the album with track names, artists, duration, and IDs. Shows pagination info.\n   - **Example**: `getAlbumTracks(\"4aawyAB9vmqN3uQ7FjRGTy\", 10, 0)`\n\n3. **saveOrRemoveAlbumForUser**\n\n   - **Description**: Save or remove albums from the user's \"Your Music\" library\n   - **Parameters**:\n     - `albumIds` (array): Array of Spotify album IDs (max 20)\n     - `action` (string): Action to perform: \"save\" or \"remove\"\n   - **Returns**: Success status with confirmation message\n   - **Example**: `saveOrRemoveAlbumForUser([\"4aawyAB9vmqN3uQ7FjRGTy\"], \"save\")`\n\n4. **checkUsersSavedAlbums**\n\n   - **Description**: Check if albums are saved in the user's \"Your Music\" library\n   - **Parameters**:\n     - `albumIds` (array): Array of Spotify album IDs to check (max 20)\n   - **Returns**: Status of each album (saved or not saved)\n   - **Example**: `checkUsersSavedAlbums([\"4aawyAB9vmqN3uQ7FjRGTy\", \"1DFixLWuPkv3KT3TnV35m3\"])`\n\n## Setup\n\n### Prerequisites\n\n- Node.js v16+\n- A Spotify Premium account\n- A registered Spotify Developer application\n\n### Installation\n\n```bash\ngit clone https://github.com/marcelmarais/spotify-mcp-server.git\ncd spotify-mcp-server\nnpm install\nnpm run build\n```\n\n### Creating a Spotify Developer Application\n\n1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)\n2. Log in with your Spotify account\n3. Click the \"Create an App\" button\n4. Fill in the app name and description\n5. Accept the Terms of Service and click \"Create\"\n6. In your new app's dashboard, you'll see your **Client ID**\n7. Click \"Show Client Secret\" to reveal your **Client Secret**\n8. Click \"Edit Settings\" and add a Redirect URI (e.g., `http://127.0.0.1:8888/callback`)\n9. Save your changes\n\n### Spotify API Configuration\n\nCreate a `spotify-config.json` file in the project root (you can copy and modify the provided example):\n\n```bash\n# Copy the example config file\ncp spotify-config.example.json spotify-config.json\n```\n\nThen edit the file with your credentials:\n\n```json\n{\n  \"clientId\": \"your-client-id\",\n  \"clientSecret\": \"your-client-secret\",\n  \"redirectUri\": \"http://127.0.0.1:8888/callback\"\n}\n```\n\n### Authentication Process\n\nThe Spotify API uses OAuth 2.0 for authentication. Follow these steps to authenticate your application:\n\n1. Run the authentication script:\n\n```bash\nnpm run auth\n```\n\n2. The script will generate an authorization URL. Open this URL in your web browser.\n\n3. You'll be prompted to log in to Spotify and authorize your application.\n\n4. After authorization, Spotify will redirect you to your specified redirect URI with a code parameter in the URL.\n\n5. The authentication script will automatically exchange this code for access and refresh tokens.\n\n6. These tokens will be saved to your `spotify-config.json` file, which will now look something like:\n\n```json\n{\n  \"clientId\": \"your-client-id\",\n  \"clientSecret\": \"your-client-secret\",\n  \"redirectUri\": \"http://localhost:8888/callback\",\n  \"accessToken\": \"BQAi9Pn...kKQ\",\n  \"refreshToken\": \"AQDQcj...7w\",\n  \"expiresAt\": 1677889354671\n}\n```\n\n7. The server will automatically refresh the access token when needed, using the refresh token.\n\n## Integrating with Claude Desktop, Cursor, and VsCode [Via Cline model extension](https://marketplace.visualstudio.com/items/?itemName=saoudrizwan.claude-dev)\n\nTo use your MCP server with Claude Desktop, add it to your Claude configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"spotify\": {\n      \"command\": \"node\",\n      \"args\": [\"spotify-mcp-server/build/index.js\"]\n    }\n  }\n}\n```\n\nFor Cursor, go to the MCP tab in `Cursor Settings` (command + shift + J). Add a server with this command:\n\n```bash\nnode path/to/spotify-mcp-server/build/index.js\n```\n\nTo set up your MCP correctly with Cline ensure you have the following file configuration set `cline_mcp_settings.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"spotify\": {\n      \"command\": \"node\",\n      \"args\": [\"~/../spotify-mcp-server/build/index.js\"],\n      \"autoApprove\": [\"getListeningHistory\", \"getNowPlaying\"]\n    }\n  }\n}\n```\n\nYou can add additional tools to the auto approval array to run the tools without intervention.\n",
+  "category": "Audio",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "spotify-mcp-server": {
+        "command": "uvx",
+        "args": ["spotify-mcp-server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "marcelmarais",
+    "repo": "spotify-mcp-server",
+    "url": "https://github.com/marcelmarais/spotify-mcp-server",
+    "name": "spotify-mcp-server",
+    "path": null,
+    "stars": 102,
+    "contributors": 6,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "630503c3696493807111ef660dcfe462bb7f2beb"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.851Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@spotify/web-api-ts-sdk",
+      "importance": 9
+    },
+    {
+      "name": "open",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"type\": \"module\",\n  \"name\": \"spotify-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"bin\": {\n    \"spotify-mcp\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"auth\": \"tsc && node build/auth.js\",\n    \"lint\": \"biome check --diagnostic-level=warn --error-on-warnings\",\n    \"lint:fix\": \"biome check --write --unsafe --organize-imports-enabled=true\",\n    \"typecheck\": \"tsc --noEmit\"\n  },\n  \"files\": [\"build\"],\n  \"keywords\": [],\n  \"author\": \"Marcel Marais\",\n  \"description\": \"A Model Context Protocol server for Spotify integration\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.1\",\n    \"@spotify/web-api-ts-sdk\": \"^1.2.0\",\n    \"open\": \"^10.1.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"^1.9.4\",\n    \"@types/node\": \"^22.13.8\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

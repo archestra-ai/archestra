@@ -1,0 +1,259 @@
+{
+  "name": "idosal__git-mcp",
+  "display_name": "git-mcp",
+  "description": "Put an end to code hallucinations! GitMCP is a free, open-source, remote MCP server for any GitHub project",
+  "author": {
+    "name": "idosal"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-remote", "https://gitmcp.io/${user_config.github_owner}/${user_config.github_repo}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "github_owner": {
+      "type": "string",
+      "title": "GitHub Owner/Organization",
+      "description": "The GitHub username or organization name for the target repository.",
+      "required": true
+    },
+    "github_repo": {
+      "type": "string",
+      "title": "GitHub Repository Name",
+      "description": "The name of the GitHub repository.",
+      "required": true
+    }
+  },
+  "readme": "# GitMCP\n\n<p align=\"center\">\n  <img width=\"884\" alt=\"image\" src=\"https://github.com/user-attachments/assets/2bf3e3df-556c-49c6-ab7b-36c279d53bba\" />\n</p>\n\n<p align=\"center\">\n  <a href=\"#-what-is-gitmcp\">What is GitMCP</a> •\n  <a href=\"#-features\">Features</a> •\n  <a href=\"#-getting-started\">Getting Started</a> •\n  <a href=\"#-how-it-works\">How It Works</a> •\n  <a href=\"#-badge\">Badge</a> •\n  <a href=\"#-examples\">Examples</a> •\n  <a href=\"#-faq\">FAQ</a> •\n  <a href=\"#-privacy\">Privacy</a> •\n  <a href=\"#-contributing\">Contributing</a> •\n  <a href=\"#-license\">License</a>\n</p>\n<div align=\"center\">\n\n[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/idosal/git-mcp)](https://gitmcp.io/idosal/git-mcp)\n[![Twitter Follow](https://img.shields.io/twitter/follow/idosal1?style=social)](https://twitter.com/idosal1)\n[![Twitter Follow](https://img.shields.io/twitter/follow/liadyosef?style=social)](https://twitter.com/liadyosef)\n</div>\n\n<div align=\"center\">\n  <a href=\"https://www.pulsemcp.com/servers/idosal-git-mcp\"><img src=\"https://www.pulsemcp.com/badge/top-pick/idosal-git-mcp\" width=\"400\" alt=\"Pulse MCP Badge\"></a>\n</div>\n\n## 🤔 What is GitMCP?\n**Stop vibe-hallucinating and start vibe-coding!**\n\n[GitMCP](https://gitmcp.io) is a free, open-source, remote [Model Context Protocol (MCP)](https://docs.anthropic.com/en/docs/agents-and-tools/mcp) server that transforms **any** GitHub project (repositories or GitHub pages) into a documentation hub. It enables AI tools like Cursor to access up-to-date documentation and code, even if the LLM has never encountered them, thereby eliminating code hallucinations seamlessly.\n\nGitMCP supports **two flavors** -\n\n*   **Specific Repository (`gitmcp.io/{owner}/{repo}` or `{owner}.gitmcp.io/{repo}`):** Use these when you primarily work with a select number of libraries. This ensures your AI assistant always targets the correct project, enhancing security and relevance by preventing access to unintended repositories.\n*   **Generic Server (`gitmcp.io/docs`):** Use this for maximum flexibility when you need to switch between different repositories frequently. The AI assistant will prompt you (or decide based on context) which repository to access for each request. Be mindful that this relies on correctly identifying the target repository each time.\n\n**With GitMCP:**\n\n*   AI assistants access the *latest* documentation and code directly from the source.\n*   Get accurate API usage and reliable code examples.\n*   Work effectively even with niche, new, or rapidly changing libraries.\n*   Significantly reduced hallucinations and improved code correctness.\n\nFor example, this side-by-side comparison shows the result for the same one-shot prompt in Cursor when creating a [three.js](https://github.com/mrdoob/three.js) scene -\n\nhttps://github.com/user-attachments/assets/fbf1b4a7-f9f0-4c0e-831c-4d64faae2c45\n\n## ✨ Features\n\n- 😎 **Latest Documentation on ANY GitHub Project**: Grant your AI assistant seamless access to the GitHub project's documentation and code. The built-in smart search capabilities help find exactly what the AI needs without using too many tokens!\n- 🧠 **No More Hallucinations**: With GitMCP, your AI assistant can provide accurate and relevant answers to your questions.\n- ☁️ **Zero Setup**: GitMCP runs in the cloud. Simply add the chosen GitMCP URL as an MCP server in your IDE — no downloads, installations, signups, or changes are required.\n- 💬 **Embedded Chat**: Start quickly by chatting directly with the repository's documentation through our in-browser chat!\n- ✅ **Open, Free, and Private**: GitMCP is open-source and completely free to use. It doesn't collect personal information or store queries. You can even self-host it!\n\n<video src=\"https://github.com/user-attachments/assets/2c3afaf9-6c08-436e-9efd-db8710554430\"></video>\n\n## 🚀 Getting Started\n\nUsing GitMCP is easy! Simply follow these steps:\n\n### Step 1: Choose the type of server you want\n\nChoose one of these URL formats depending on what you want to connect to:\n\n- For GitHub repositories: `gitmcp.io/{owner}/{repo}`\n- For GitHub Pages sites: `{owner}.gitmcp.io/{repo}`\n- For a generic tool that supports any repository (dynamic): `gitmcp.io/docs`\n\nReplace `{owner}` with the GitHub username or organization name, and `{repo}` with the repository name.\n\nFor your convenience, you can also use the conversion tool on the landing page to format the GitHub URL into an MCP URL!\n\n### Step 2: Connect your AI assistant\n\nSelect your AI assistant from the options below and follow the configuration instructions:\n\n#### Connecting Cursor\n\nUpdate your Cursor configuration file at `~/.cursor/mcp.json`:\n   ```json\n   {\n     \"mcpServers\": {\n       \"gitmcp\": {\n         \"url\": \"https://gitmcp.io/{owner}/{repo}\"\n       }\n     }\n   }\n   ```\n\n#### Connecting Claude Desktop\n\n1. In Claude Desktop, go to Settings > Developer > Edit Config\n2. Replace the configuration with:\n   ```json\n   {\n     \"mcpServers\": {\n       \"gitmcp\": {\n         \"command\": \"npx\",\n         \"args\": [\n           \"mcp-remote\",\n           \"https://gitmcp.io/{owner}/{repo}\"\n         ]\n       }\n     }\n   }\n   ```\n\n#### Connecting Windsurf\n\nUpdate your Windsurf configuration file at `~/.codeium/windsurf/mcp_config.json`:\n   ```json\n   {\n     \"mcpServers\": {\n       \"gitmcp\": {\n         \"serverUrl\": \"https://gitmcp.io/{owner}/{repo}\"\n       }\n     }\n   }\n   ```\n\n#### Connecting VSCode\n\nUpdate your VSCode configuration file at `.vscode/mcp.json`:\n   ```json\n   {\n     \"servers\": {\n       \"gitmcp\": {\n         \"type\": \"sse\",\n         \"url\": \"https://gitmcp.io/{owner}/{repo}\"\n       }\n     }\n   }\n   ```\n\n#### Connecting Cline\n\nUpdate your Cline configuration file at `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`:\n   ```json\n   {\n     \"mcpServers\": {\n       \"gitmcp\": {\n         \"url\": \"https://gitmcp.io/{owner}/{repo}\",\n         \"disabled\": false,\n         \"autoApprove\": []\n       }\n     }\n   }\n   ```\n\n#### Connecting Highlight AI\n\n1. Open Highlight AI and click the plugins icon (@ symbol) in the sidebar\n2. Click **Installed Plugins** at the top of the sidebar\n3. Select **Custom Plugin**\n4. Click **Add a plugin using a custom SSE URL**\n\nPlugin name: `gitmcp`\nSSE URL: `https://gitmcp.io/{owner}/{repo}`\n\nFor more details on adding custom MCP servers to HighlightAI, refer to [the documentation](https://docs.highlightai.com/learn/developers/plugins/custom-plugins-setup).\n\n#### Connecting Augment Code\n\n1. Open Augment Code settings\n2. Navigate to the MCP section\n3. Add a new MCP server with the following details:\n\nName the MCP server: `git-mcp Docs`\n\nUse this command:\n```bash\nnpx mcp-remote https://gitmcp.io/{owner}/{repo}\n```\n\nOr use the following configuration:\n```json\n{\n  \"mcpServers\": {\n    \"git-mcp Docs\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"mcp-remote\",\n        \"https://gitmcp.io/{owner}/{repo}\"\n      ]\n    }\n  }\n}\n```\n\n#### Connecting Msty AI\n1. Open Msty Studio\n2. Go to Tools > Import Tools from JSON Clipboard\n3. Paste the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"git-mcp Docs\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"mcp-remote\",\n        \"https://gitmcp.io/{owner}/{repo}\"\n      ]\n    }\n  }\n}\n```\n\nFor more details on configuring MCP servers in Augment Code, visit [the Augment Code documentation](https://docs.augmentcode.com/setup-augment/mcp).\n\n> **Note:** Remember to replace `{owner}` and `{repo}` with the actual GitHub username/organization and repository name. You can also use the dynamic endpoint `https://gitmcp.io/docs` to allow your AI to access any repository on demand.\n\n## ⚙ How It Works\n\nGitMCP connects your AI assistant to GitHub repositories using the Model Context Protocol (MCP), a standard that lets AI tools request additional information from external sources.\n\nWhat happens when you use GitMCP:\n\n1. **You provide the GitMCP URL** to your AI assistant (e.g., `gitmcp.io/microsoft/typescript`). GitMCP exposes tools like documentation fetching, smart search, code search, etc.\n2. **Prompt the AI assistant** on documentation/code-related questions.\n3. **Your AI sends requests** to GitMCP to use its tools (with your approval).\n4. **GitMCP executes the AI's request** and returns the requested data.\n5. **Your AI receives the information** and generates a more accurate, grounded response without hallucinations.\n\n### Supported Documentation\n\nGitMCP currently supports the following documents (in order of priority):\n1. [llms.txt](https://llmstxt.org)\n2. AI-optimized version of the project's documentation\n3. `README.md`/root\n\n## 💡 Examples\n\nHere are some examples of how to use GitMCP with different AI assistants and repositories:\n\n### Example 1: Using Windsurf with a specific repository\n\nFor the GitHub repository `https://github.com/microsoft/playwright-mcp`, add `https://gitmcp.io/microsoft/playwright-mcp` as an MCP server to Windsurf.\n\n**Prompt to Claude:**\n> \"How do I use the Playwright MCP\"\n\nWindsurf will pull the relevant documentation from GitMCP to implement the memory feature correctly.\n\n### Example 2: Using Cursor with a GitHub Pages site\n\nFor the GitHub Pages site `langchain-ai.github.io/langgraph`, add `https://langchain-ai.gitmcp.io/langgraph` as an MCP server to Cursor.\n\n**Prompt to Cursor:**\n> \"Add memory to my LangGraph agent\"\n\nCursor will pull the relevant documentation and code from GitMCP to correctly implement the memory feature.\n\n### Example 3: Using Claude Desktop with the dynamic endpoint\n\nYou don't have to pick specific repositories. The generic `gitmcp.io/docs` endpoint allows AI to pick the GitHub project on the fly!\n\n**Prompt to any AI assistant:**\n> \"I want to learn about the OpenAI Whisper speech recognition model. Explain how it works.\n\nClaude will pull the data from GitMCP and answer the question.\n\n## 🛠️ Tools\n\nGitMCP provides AI assistants with several valuable tools to help them access, understand, and query GitHub repositories.\n\n### `fetch_<repo-name>_documentation`\n\nThis tool gets the primary documentation from a GitHub repository. It works by retrieving relevant documentation (e.g., `llms.txt`). This gives the AI a good overview of what the project is about\n\n**When it's useful:** For general questions about a project's purpose, features, or how to get started\n\n### `search_<repo-name>_documentation`\n\nThis tool lets the AI search through a repository's documentation by providing a specific search query. Instead of loading all the documentation (which could be very large), it uses intelligent search to find just the relevant parts.\n\n**When it's useful:** For specific questions about particular features, functions, or concepts within a project\n\n### `fetch_url_content`\n\nThis tool helps the AI get information from links mentioned in the documentation. It retrieves the content from those links and converts it to a format the AI can easily read.\n\n**When it's useful:** When documentation references external information that would help answer your question\n\n### `search_<repo-name>_code`\n\nThis tool searches through the actual code in the repository using GitHub's code search. It helps AI find specific code examples or implementation details.\n\n**When it's useful:** When you want examples of how something is implemented or need technical details not covered in documentation\n\n> **Note:** When using the dynamic endpoint (`gitmcp.io/docs`), these tools are named slightly differently (`fetch_generic_documentation`, `search_generic_code`, and `search_generic_documentation`) and need additional information about which repository to access.\n\n## 📊 Badge\n\nGitMCP has a badge to your repository's README. It allows users to quickly access your documentation through their IDE or browser (using the embedded chat). It also showcases how many times your documentation has been accessed through GitMCP.\n\nExample (`idosal/git-mcp`): [![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/idosal/git-mcp)](https://gitmcp.io/idosal/git-mcp)\n\n### Adding the Badge to Your Repository\n\nAdd the following to your `README.md`:\n\n```markdown\n[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/OWNER/REPO)](https://gitmcp.io/OWNER/REPO)\n```\n\nReplace `OWNER` with your GitHub username or organization, and `REPO` with your repository name.\n\n### How We Count Views\n\nIncrement for each tool call on the specific repository.\n\n### Customizing the Badge\n\nYou can customize the badge's appearance with parameters:\n\n| Parameter | Description | Default | Example |\n|-----------|-------------|---------|---------|\n| `color` | Color for the badge value | `aquamarine` | `?color=green` |\n| `label` | Badge label | `GitMCP` | `Documentation`\n\nPlease reach out!\n\n## ❓ FAQ\n\n### What is the Model Context Protocol?\n\nThe [Model Context Protocol](https://modelcontextprotocol.io/introduction) is a standard that allows AI assistants to request and receive additional context from external sources in a structured manner, enhancing their understanding and performance.\n\n### Does GitMCP work with any AI assistant?\n\nYes, GitMCP is compatible with any AI assistant supporting the Model Context Protocol, including tools like Cursor, VSCode, Claude, etc.\n\n### Is GitMCP compatible with all GitHub projects?\n\nAbsolutely! GitMCP works with any public GitHub repository without requiring any modifications. It prioritizes the `llms.txt` file and falls back to `README.md` or other pages if the former is unavailable. Future updates aim to support additional documentation methods and even generate content dynamically.\n\n### Does GitMCP cost money?\n\nNo, GitMCP is a free service to the community with no associated costs.\n\n## 🔒 Privacy\n\nGitMCP is deeply committed to its users' privacy. The service doesn't have access to or store any personally identifiable information as it doesn't require authentication. In addition, it doesn't store any queries sent by the agents. Moreover, as GitMCP is an open-source project, it can be deployed independently in your environment.\n\nGitMCP only accesses content that is already publicly available and only when queried by a user. GitMCP does not automatically scrape repositories. Before accessing any GitHub Pages site, the code checks for `robots.txt` rules and follows the directives set by site owners, allowing them to opt out. Please note that GitMCP doesn't permanently store data regarding the GitHub projects or their content.\n\n## 👥 Contributing\n\nWe welcome contributions, feedback, and ideas! Please review our [contribution](https://github.com/idosal/git-mcp/blob/main/.github/CONTRIBUTING.md) guidelines.\n\n### Local Development Setup\n\n1. **Clone the repository**\n   ```bash\n   git clone https://github.com/idosal/git-mcp.git\n   cd git-mcp\n   ```\n\n2. **Install dependencies**\n   ```bash\n   pnpm install\n   ```\n\n3. **Run locally for development**\n   ```bash\n   npm run dev\n   # or\n   pnpm dev\n   ```\n\n#### Using MCP Inspector for Testing\n\n1. Install the MCP Inspector tool:\n   ```bash\n   npx @modelcontextprotocol/inspector\n   ```\n\n2. In the inspector interface:\n   - Set Transport Type to `SSE`\n   - Enter your GitMCP URL (e.g., `http://localhost:5173/docs`)\n   - Click \"Connect\"\n\n## 📄 License\n\nThis project is licensed under the [Apache License 2.0](LICENSE).\n\n## Disclaimer\n\nGitMCP is provided \"as is\" without warranty of any kind. While we strive to ensure the reliability and security of our service, we are not responsible for any damages or issues that may arise from its use. GitHub projects accessed through GitMCP are subject to their respective owners' terms and conditions. GitMCP is not affiliated with GitHub or any of the mentioned AI tools.\n\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=idosal/git-mcp&type=Timeline)](https://www.star-history.com/#idosal/git-mcp&Timeline)\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-remote": {
+        "command": "npx",
+        "args": ["mcp-remote", "https://gitmcp.io/{owner}/{repo}"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "idosal",
+    "repo": "git-mcp",
+    "url": "https://github.com/idosal/git-mcp",
+    "name": "idosal__git-mcp",
+    "path": null,
+    "stars": 6049,
+    "contributors": 13,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d1808ca6a66a3c9b7c3f9cd554ee61e7ae3984ef"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:37.814Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@ai-sdk/anthropic",
+      "importance": 7
+    },
+    {
+      "name": "@ai-sdk/cohere",
+      "importance": 7
+    },
+    {
+      "name": "@ai-sdk/google",
+      "importance": 7
+    },
+    {
+      "name": "@ai-sdk/groq",
+      "importance": 7
+    },
+    {
+      "name": "@ai-sdk/openai",
+      "importance": 7
+    },
+    {
+      "name": "@ai-sdk/react",
+      "importance": 7
+    },
+    {
+      "name": "@ai-sdk/xai",
+      "importance": 7
+    },
+    {
+      "name": "@cloudflare/workers-oauth-provider",
+      "importance": 6
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@radix-ui/react-accordion",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-avatar",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-dialog",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-dropdown-menu",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-label",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-popover",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-scroll-area",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-select",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-separator",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-slot",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-tooltip",
+      "importance": 5
+    },
+    {
+      "name": "@react-router/fs-routes",
+      "importance": 7
+    },
+    {
+      "name": "@remix-run/cloudflare",
+      "importance": 10
+    },
+    {
+      "name": "agents",
+      "importance": 8
+    },
+    {
+      "name": "ai",
+      "importance": 9
+    },
+    {
+      "name": "class-variance-authority",
+      "importance": 4
+    },
+    {
+      "name": "clsx",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "fast-deep-equal",
+      "importance": 3
+    },
+    {
+      "name": "hono",
+      "importance": 9
+    },
+    {
+      "name": "html-to-md",
+      "importance": 5
+    },
+    {
+      "name": "isbot",
+      "importance": 3
+    },
+    {
+      "name": "lucide-react",
+      "importance": 5
+    },
+    {
+      "name": "motion",
+      "importance": 6
+    },
+    {
+      "name": "next-themes",
+      "importance": 5
+    },
+    {
+      "name": "react",
+      "importance": 9
+    },
+    {
+      "name": "react-dom",
+      "importance": 9
+    },
+    {
+      "name": "react-markdown",
+      "importance": 6
+    },
+    {
+      "name": "react-router",
+      "importance": 7
+    },
+    {
+      "name": "react-router-dom",
+      "importance": 7
+    },
+    {
+      "name": "remark-gfm",
+      "importance": 5
+    },
+    {
+      "name": "sonner",
+      "importance": 5
+    },
+    {
+      "name": "tailwind-merge",
+      "importance": 4
+    },
+    {
+      "name": "tailwindcss-animate",
+      "importance": 4
+    },
+    {
+      "name": "typewriter-effect",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"git-mcp\",\n  \"version\": \"1.0.0\",\n  \"description\": \"GitMCP is a tool that allows you to get the documentation for a given repository.\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"react-router build\",\n    \"deploy\": \"npm run build && wrangler deploy\",\n    \"dev\": \"react-router dev\",\n    \"preview\": \"vite preview\",\n    \"start\": \"wrangler dev\",\n    \"format\": \"biome format --write\",\n    \"lint:fix\": \"biome lint --fix\",\n    \"cf-typegen\": \"wrangler types\",\n    \"test\": \"vitest run\",\n    \"test:e2e\": \"playwright test\",\n    \"prepare\": \"husky\"\n  },\n  \"lint-staged\": {\n    \"src/**/*.ts\": [\n      \"prettier --write\"\n    ],\n    \"src/**/*.tsx\": [\n      \"prettier --write\"\n    ],\n    \"app/**/*.ts\": [\n      \"prettier --write\"\n    ],\n    \"app/**/*.tsx\": [\n      \"prettier --write\"\n    ]\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"packageManager\": \"pnpm@10.7.1+sha512.2d92c86b7928dc8284f53494fb4201f983da65f0fb4f0d40baafa5cf628fa31dae3e5968f12466f17df7e97310e30f343a648baea1b9b350685dafafffdf5808\",\n  \"dependencies\": {\n    \"@ai-sdk/anthropic\": \"^1.2.10\",\n    \"@ai-sdk/cohere\": \"^1.2.9\",\n    \"@ai-sdk/google\": \"^1.2.13\",\n    \"@ai-sdk/groq\": \"^1.2.8\",\n    \"@ai-sdk/openai\": \"^1.3.20\",\n    \"@ai-sdk/react\": \"^1.2.9\",\n    \"@ai-sdk/xai\": \"^1.2.15\",\n    \"@cloudflare/workers-oauth-provider\": \"^0.0.2\",\n    \"@modelcontextprotocol/sdk\": \"^1.11.2\",\n    \"@radix-ui/react-accordion\": \"^1.2.8\",\n    \"@radix-ui/react-avatar\": \"^1.1.7\",\n    \"@radix-ui/react-dialog\": \"^1.1.11\",\n    \"@radix-ui/react-dropdown-menu\": \"^2.1.12\",\n    \"@radix-ui/react-label\": \"^2.1.4\",\n    \"@radix-ui/react-popover\": \"^1.1.11\",\n    \"@radix-ui/react-scroll-area\": \"^1.2.6\",\n    \"@radix-ui/react-select\": \"^2.2.2\",\n    \"@radix-ui/react-separator\": \"^1.1.4\",\n    \"@radix-ui/react-slot\": \"^1.2.0\",\n    \"@radix-ui/react-tooltip\": \"^1.2.4\",\n    \"@react-router/fs-routes\": \"^7.5.2\",\n    \"@remix-run/cloudflare\": \"^2.16.5\",\n    \"@types/react\": \"^19.1.2\",\n    \"@types/react-dom\": \"^19.1.2\",\n    \"agents\": \"^0.0.84\",\n    \"ai\": \"^4.3.10\",\n    \"class-variance-authority\": \"^0.7.1\",\n    \"clsx\": \"^2.1.1\",\n    \"dotenv\": \"^16.5.0\",\n    \"fast-deep-equal\": \"^3.1.3\",\n    \"hono\": \"^4.7.7\",\n    \"html-to-md\": \"^0.8.7\",\n    \"isbot\": \"^5.1.27\",\n    \"lucide-react\": \"^0.487.0\",\n    \"motion\": \"^12.9.2\",\n    \"next-themes\": \"^0.4.6\",\n    \"react\": \"^19.1.0\",\n    \"react-dom\": \"^19.1.0\",\n    \"react-markdown\": \"^10.1.0\",\n    \"react-router\": \"^7.5.2\",\n    \"react-router-dom\": \"^7.5.2\",\n    \"remark-gfm\": \"^4.0.1\",\n    \"sonner\": \"^2.0.3\",\n    \"tailwind-merge\": \"^3.2.0\",\n    \"tailwindcss-animate\": \"^1.0.7\",\n    \"typewriter-effect\": \"^2.21.0\",\n    \"zod\": \"^3.24.3\"\n  },\n  \"devDependencies\": {\n    \"@cloudflare/vite-plugin\": \"^0.1.21\",\n    \"@cloudflare/workers-types\": \"^4.20250505.0\",\n    \"@playwright/test\": \"^1.52.0\",\n    \"@react-router/dev\": \"^7.5.2\",\n    \"@tailwindcss/postcss\": \"^4.1.4\",\n    \"@tailwindcss/vite\": \"^4.1.4\",\n    \"@types/node\": \"^20.17.31\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"@types/react\": \"^19.0.1\",\n    \"@types/react-dom\": \"^19.0.1\",\n    \"husky\": \"^9.1.7\",\n    \"lint-staged\": \"^15.5.1\",\n    \"marked\": \"^15.0.11\",\n    \"node-fetch\": \"^3.3.2\",\n    \"prettier\": \"^3.5.3\",\n    \"tailwindcss\": \"^4.1.4\",\n    \"typescript\": \"^5.8.3\",\n    \"vite\": \"^6.3.3\",\n    \"vite-tsconfig-paths\": \"^5.1.4\",\n    \"vitest\": \"^1.6.1\",\n    \"workers-mcp\": \"0.1.0-3\",\n    \"wrangler\": \"^4.14.1\"\n  }\n}\n"
+}

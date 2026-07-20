@@ -1,0 +1,74 @@
+{
+  "name": "artmann__package-registry-mcp",
+  "display_name": "Package Registry",
+  "description": "MCP server for searching and getting up-to-date information about NPM, Cargo, PyPi, and NuGet packages.",
+  "author": {
+    "name": "artmann"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "package-registry-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Package Registry MCP Server\n\nA Model Context Protocol (MCP) server that enables AI assistants and agents\n(Claude, Cursor, Copilot, etc.) to search package registries and retrieve\nup-to-date package information.\n\n## Getting Started\n\n### Cursor\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=package-registry&config=eyJjb21tYW5kIjoibnB4IC15IHBhY2thZ2UtcmVnaXN0cnktbWNwIn0%3D)\n\nAlternatively, in Cursor, you can configure MCP servers in your settings:\n\n1. Open Cursor Settings (`Cmd/Ctrl + ,`)\n2. Search for \"MCP\" or go to Extensions > MCP\n3. Add a new server with:\n   - **Name**: `package-registry`\n   - **Command**: `npx`\n   - **Args**: `[\"-y\", \"package-registry-mcp\"]`\n\n### Claude Code\n\nFor Claude Code, run the following command in your terminal:\n\n```shell\nclaude mcp add -s user package-registry 'npx -y package-registry-mcp'\n\n```\n\nAfter configuration, you'll have access to package search and information tools.\n\n### Claude Desktop\n\nAdd this server to your Claude Desktop by adding the following to your\n`claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"package-registry\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"package-registry-mcp\"]\n    }\n  }\n}\n```\n\nThe config file is typically located at:\n\n- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- **Windows**: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\nAfter adding the configuration, restart Claude Desktop.\n\n## Features\n\n- Search NPM packages\n- Get detailed NPM package information\n- Search crates.io (Rust package registry)\n- Get detailed crate information\n- Search NuGet packages (.NET package registry)\n- Get detailed NuGet package information\n- Get detailed PyPI package information (Python package registry)\n- Get detailed Go module information (Go package registry)\n- Real-time data directly from package registries\n\n## Available Tools\n\n### NPM Tools\n\n#### `search-npm-packages`\n\nSearch the NPM registry for packages matching a query.\n\n**Parameters:**\n\n- `query` (string): Search term for packages\n- `limit` (number, optional): Maximum number of results (1-100, default: 10)\n\n**Example:**\n\n```bash\nbun tool search-npm-packages '{\"query\": \"react\", \"limit\": 5}'\n```\n\n#### `get-npm-package-details`\n\nGet detailed information about a specific NPM package.\n\n**Parameters:**\n\n- `name` (string): Exact crate name\n\n**Example:**\n\n```bash\nbun tool get-npm-package-details '{\"name\": \"react\"}'\n```\n\n**Returns detailed information including:**\n\n- Package metadata (name, description, version, license)\n- Dependencies (runtime, dev, peer)\n- Maintainer information\n- Repository and homepage links\n- Last 50 versions (newest first)\n\n#### `list-npm-package-versions`\n\nList all versions of a specific NPM package.\n\n**Parameters:**\n\n- `name` (string): Exact crate name\n- `limit` (number, optional): Maximum number of versions to return (1-1000,\n  default: 100)\n\n**Example:**\n\n```bash\nbun tool list-npm-package-versions '{\"name\": \"react\", \"limit\": 50}'\n```\n\n**Returns:**\n\n- Package name and total version count\n- All versions sorted by release date (newest first)\n- Latest version information\n\n### crates.io Tools\n\n#### `search-cargo-packages`\n\nSearch crates.io for Rust crates matching a query.\n\n**Parameters:**\n\n- `query` (string): Search term for crates\n- `limit` (number, optional): Maximum number of results (1-100, default: 10)\n\n**Example:**\n\n```bash\nbun tool search-cargo-packages '{\"query\": \"serde\", \"limit\": 5}'\n```\n\n#### `get-cargo-package-details`\n\nGet detailed information about a specific crate from crates.io.\n\n**Parameters:**\n\n- `name` (string): Exact crate name\n\n**Example:**\n\n```bash\nbun tool get-cargo-package-details '{\"name\": \"serde\"}'\n```\n\n**Returns detailed information including:**\n\n- Crate metadata (name, description, version, license)\n- Keywords and categories\n- Download statistics (total and recent)\n- Features and crate size\n- Repository, homepage, and documentation links\n- Last 50 versions (newest first)\n\n#### `list-cargo-package-versions`\n\nList all versions of a specific crate from crates.io.\n\n**Parameters:**\n\n- `name` (string): Exact crate name\n- `limit` (number, optional): Maximum number of versions to return (1-1000,\n  default: 100)\n\n**Example:**\n\n```bash\nbun tool list-cargo-package-versions '{\"name\": \"serde\", \"limit\": 50}'\n```\n\n**Returns:**\n\n- Crate name and total version count\n- All versions sorted by release date (newest first)\n- Latest and max stable version information\n\n### NuGet Tools\n\n#### `search-nuget-packages`\n\nSearch the NuGet registry for .NET packages matching a query.\n\n**Parameters:**\n\n- `query` (string): Search term for packages\n- `limit` (number, optional): Maximum number of results (1-100, default: 10)\n\n**Example:**\n\n```bash\nbun tool search-nuget-packages '{\"query\": \"newtonsoft\", \"limit\": 5}'\n```\n\n#### `get-nuget-package-details`\n\nGet detailed information about a specific NuGet package.\n\n**Parameters:**\n\n- `name` (string): Exact package name\n\n**Example:**\n\n```bash\nbun tool get-nuget-package-details '{\"name\": \"Newtonsoft.Json\"}'\n```\n\n**Returns detailed information including:**\n\n- Package metadata (name, description, version, license)\n- Authors and project information\n- Target frameworks and dependencies\n- Download statistics and verification status\n- Project, license, and icon URLs\n- Last 50 versions (newest first)\n\n#### `list-nuget-package-versions`\n\nList all versions of a specific NuGet package.\n\n**Parameters:**\n\n- `name` (string): Exact package name\n- `limit` (number, optional): Maximum number of versions to return (1-1000,\n  default: 100)\n\n**Example:**\n\n```bash\nbun tool list-nuget-package-versions '{\"name\": \"Newtonsoft.Json\", \"limit\": 50}'\n```\n\n**Returns:**\n\n- Package name and total version count\n- All versions sorted by release date (newest first)\n- Latest version information\n\n### PyPI Tools\n\nNote: PyPI does not provide a JSON search API, so only package details and\nversion listing are supported. For searching, please use the PyPI website\ndirectly at https://pypi.org/search/.\n\n#### `get-pypi-package-details`\n\nGet detailed information about a specific PyPI package.\n\n**Parameters:**\n\n- `name` (string): Exact package name\n\n**Example:**\n\n```bash\nbun tool get-pypi-package-details '{\"name\": \"requests\"}'\n```\n\n**Returns detailed information including:**\n\n- Package metadata (name, description, version, license)\n- Author and maintainer information\n- Dependencies and Python version requirements\n- Classifiers and keywords\n- Project URLs and documentation links\n- Download statistics\n- Vulnerability information\n- Last 50 versions (newest first)\n\n#### `list-pypi-package-versions`\n\nList all versions of a specific PyPI package.\n\n**Parameters:**\n\n- `name` (string): Exact package name\n- `limit` (number, optional): Maximum number of versions to return (1-1000,\n  default: 100)\n\n**Example:**\n\n```bash\nbun tool list-pypi-package-versions '{\"name\": \"django\", \"limit\": 50}'\n```\n\n**Returns:**\n\n- Package name and total version count\n- All versions sorted by release date (newest first)\n- Latest version information\n\n### Go Tools\n\nNote: pkg.go.dev does not provide a JSON search API, so only package details and\nversion listing are supported. For searching, please use the pkg.go.dev website\ndirectly at https://pkg.go.dev/search/.\n\n#### `get-golang-package-details`\n\nGet detailed information about a specific Go module/package.\n\n**Parameters:**\n\n- `module` (string): Exact module path (e.g., \"github.com/gin-gonic/gin\")\n\n**Example:**\n\n```bash\nbun tool get-golang-package-details '{\"module\": \"github.com/gin-gonic/gin\"}'\n```\n\n**Returns detailed information including:**\n\n- Module path and latest version\n- Publication date and repository information\n- VCS (version control system) details\n- pkg.go.dev and go get command links\n- Last 50 versions (newest first)\n\n#### `list-golang-package-versions`\n\nList all versions of a specific Go module/package.\n\n**Parameters:**\n\n- `module` (string): Exact module path\n- `limit` (number, optional): Maximum number of versions to return (1-1000,\n  default: 100)\n\n**Example:**\n\n```bash\nbun tool list-golang-package-versions '{\"module\": \"github.com/gorilla/mux\", \"limit\": 50}'\n```\n\n**Returns:**\n\n- Module path and total version count\n- All versions sorted by release date (newest first)\n- Latest version information\n\n## Installation\n\nInstall the package globally:\n\n```bash\nnpm install -g package-registry-mcp\n```\n\nOr use directly with npx (no installation required):\n\n```bash\nnpx package-registry-mcp\n```\n\n## Development\n\n```bash\nnpm install\n# or\nbun install\n# or\nyarn install\n```\n\n## Development\n\n```bash\n# Install dependencies\nbun install\n\n# Build the server\nbun run build\n\n# Format code\nbun run format\n\n# Test individual MCP tools\nbun tool <tool-name> <json-arguments>\n# NPM Examples:\n# bun tool search-npm-packages '{\"query\": \"react\"}'\n# bun tool get-npm-package-details '{\"name\": \"react\"}'\n# bun tool list-npm-package-versions '{\"name\": \"react\", \"limit\": 50}'\n# crates.io Examples:\n# bun tool search-cargo-packages '{\"query\": \"serde\"}'\n# bun tool get-cargo-package-details '{\"name\": \"serde\"}'\n# bun tool list-cargo-package-versions '{\"name\": \"serde\", \"limit\": 50}'\n# NuGet Examples:\n# bun tool search-nuget-packages '{\"query\": \"newtonsoft\"}'\n# bun tool get-nuget-package-details '{\"name\": \"Newtonsoft.Json\"}'\n# bun tool list-nuget-package-versions '{\"name\": \"Newtonsoft.Json\", \"limit\": 50}'\n# PyPI Examples:\n# bun tool get-pypi-package-details '{\"name\": \"requests\"}'\n# bun tool list-pypi-package-versions '{\"name\": \"django\", \"limit\": 50}'\n# Go Examples:\n# bun tool get-golang-package-details '{\"module\": \"github.com/gin-gonic/gin\"}'\n# bun tool list-golang-package-versions '{\"module\": \"github.com/gorilla/mux\", \"limit\": 50}'\n```\n\n## Requirements\n\n- Node.js 18+ or Bun runtime\n- Internet connection for package registry access\n\n## License\n\nSee LICENSE file for details.\n",
+  "category": "Development",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "package-registry": {
+        "command": "npx",
+        "args": ["-y", "package-registry-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "artmann",
+    "repo": "package-registry-mcp",
+    "url": "https://github.com/artmann/package-registry-mcp",
+    "name": "artmann__package-registry-mcp",
+    "path": null,
+    "stars": 21,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "7c26db47ded2672fe29b5e9bb6dce5c0a9ad19b2"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:35.504Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"package-registry-mcp\",\n  \"version\": \"1.1.0\",\n  \"description\": \"MCP server for searching and getting up-to-date information about NPM, Cargo and NuGet packages.\",\n  \"author\": \"Christoffer Artmann <artgaard@gmail.com>\",\n  \"license\": \"MIT\",\n  \"keywords\": [\n    \"mcp\",\n    \"mcp-server\",\n    \"modelcontextprotocol\",\n    \"npm\",\n    \"cargo\",\n    \"nuget\",\n    \"package-registry\",\n    \"claude\",\n    \"ai\"\n  ],\n  \"homepage\": \"https://github.com/artmann/package-registry-mcp\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/artmann/package-registry-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/artmann/package-registry-mcp/issues\"\n  },\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"package-registry-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"bun build src/index.ts --outdir dist --target node --format esm\",\n    \"format\": \"bun prettier --write .\",\n    \"prepublishOnly\": \"npm run build\",\n    \"test\": \"vitest\",\n    \"tool\": \"bun run src/test-tool.ts\",\n    \"typecheck\": \"bun tsc --noEmit --skipLibCheck\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.13.0\",\n    \"zod\": \"^3.25.67\"\n  },\n  \"peerDependencies\": {},\n  \"devDependencies\": {\n    \"@types/bun\": \"latest\",\n    \"msw\": \"^2.10.2\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5\",\n    \"vitest\": \"^3.2.4\"\n  },\n  \"packageManager\": \"yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610\"\n}\n"
+}

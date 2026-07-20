@@ -1,0 +1,70 @@
+{
+  "name": "endorhq__cli",
+  "display_name": "cli",
+  "description": "Endor provides instant, private, sandboxed environments for your favorite services anywhere Node is available. Run MariaDB, PostgreSQL and many more servers securely and in just a few seconds. Perfect for AI agents and humans in a hurry.",
+  "author": {
+    "name": "endorhq"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@endorhq/cli", "mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Endor\n\nEndor provides instant, private, sandboxed environments for your favorite services anywhere Node is available. Run MariaDB, PostgreSQL and many more servers securely and in just a few seconds. Nothing extra to install, everything runs locally. Perfect for AI agents and humans in a hurry.\n\nEach service will run in an ephemeral, isolated VM that only exposes the application ports. When you are done, you can exit Endor with CTRL+C and everything is gone without leaving a trace in your system.\n\nMCP mode allows the services to be launched and used from AI tools like agents and IDEs. Your agents can now securely and safely launch database servers or KV stores as part of their capabilities!\n\nAn experimental full-networking mode can be optionally enabled, allowing you to run a fully-featured Alpine Linux machine.\n\nNeed a MariaDB database? Just type `endor run mariadb`. Claude Code wants to run a Valkey instance? Just run `endor mcp`.\n\n**Learn more in the [official documentation](https://docs.endor.dev/cli/overview/)**.\n\n## Get started\n\nInstall Endor:\n\n```sh\nnpm install -g @endorhq/cli\n```\n\nRun your first service:\n\n```sh\nendor run mariadb\n```\n\nYou can also run the service without installing the CLI with `npx`:\n\n```sh\nnpx -y @endorhq/cli run mariadb\n```\n\n## Supported applications\n\n- Alpine\n- MariaDB\n- Memcached\n- Redis\n- Postgres\n- RabbitMQ\n- Valkey\n\n## Connect to your AI agents\n\nEndor connects to your AI agents using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction). You can run it directly using `npx`:\n\n```sh\nnpx -y @endorhq/cli mcp\n```\n\nFollow these guides to configure your favorite agent tools:\n\n- [Claude Code](https://docs.endor.dev/mcp/claude-code/)\n- [Goose CLI](https://docs.endor.dev/mcp/goose/)\n- [Cursor](https://docs.endor.dev/mcp/cursor/)\n- [VSCode](https://docs.endor.dev/mcp/vscode/)\n- [Windsurf](https://docs.endor.dev/mcp/windsurf/)\n\n## License\n\nBy using Endor, you accept our [End-User License Agreement (EULA)](https://endor.dev/eula).\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "endorhq-cli-mcp": {
+        "command": "npx",
+        "args": ["-y", "@endorhq/cli", "mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "endorhq",
+    "repo": "cli",
+    "url": "https://github.com/endorhq/cli",
+    "name": "endorhq__cli",
+    "path": null,
+    "stars": 22,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "81510485e196dcf78a16f2c96444b709c87da359"
+  },
+  "programming_language": "Unknown",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.380Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

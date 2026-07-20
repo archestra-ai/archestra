@@ -1,0 +1,132 @@
+{
+  "name": "thomasmarches__substrate-mcp-rs",
+  "display_name": "substrate-mcp-rs",
+  "description": "A Model Context Protocol (MCP) server for Substrate blockchains, written in Rust and interfacing the subxt crate.",
+  "author": {
+    "name": "ThomasMarches"
+  },
+  "server": {
+    "command": "${__dirname}/target/release/substrate-mcp-rs",
+    "args": [],
+    "env": {
+      "RPC_URL": "${user_config.rpc_url}",
+      "SIGNING_KEYPAIR_HEX": "${user_config.signing_keypair_hex}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rpc_url": {
+      "type": "string",
+      "title": "RPC URL",
+      "description": "WebSocket endpoint for the Substrate node",
+      "required": true
+    },
+    "signing_keypair_hex": {
+      "type": "string",
+      "title": "Signing Keypair (Hex)",
+      "description": "Signing keypair as hex (32 bytes, e.g. output of subkey inspect-key --scheme Sr25519)",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Substrate MCP Server\n\n[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)\n[![Rust](https://img.shields.io/badge/Rust-2025-brightgreen)](https://www.rust-lang.org/)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/ThomasMarches/substrate-mcp-rs)](https://archestra.ai/mcp-catalog/thomasmarches__substrate-mcp-rs)\n\nA Model Context Protocol [(MCP)](https://modelcontextprotocol.io/introduction) server for Substrate blockchains, written in Rust. This project exposes dynamic Substrate blockchain operations (querying balances, blocks, pallets, storage, events, and more) via the MCP protocol, and is fully configurable via environment variables.\n\nDesigned to interface with the [subxt](https://github.com/paritytech/subxt) crate.\n\n## ✨ Features\n\n- Query account balances and storage dynamically\n- List pallets and their entries\n- Fetch and filter events and extrinsics\n- Submit and watch dynamic signed transactions\n- Access system and block information\n- Custom RPC calls to Substrate nodes\n\n## 🚀 Potential Use Cases\n\n1. AI-Driven Blockchain Operations\n\n    - Integrate with LLMs (like Cursor or Claude) to allow users to ask questions in natural language (e.g., \"What was the last transfer from Alice?\"), which are translated into MCP tool calls.\n    - Build a chatbot that can answer questions, fetch balances, or explain on-chain activity using your MCP server as the backend.\n    - Use the MCP server to provide live updates on-chain activity, such as balance changes or transaction statuses, to development tools like VSCode, Cursor, Claude Code, etc.\n\n2. Custom Dashboards and Monitoring\n\n    - Create custom dashboards and monitoring systems for your Substrate blockchain\n    - Display real-time data and analytics on your blockchain operations\n    - Set up alerts and notifications for critical events\n    - Use AI agents to detect suspicious activity by analyzing events and extrinsics in real time.\n\n## 🛠️ Requirements\n\n- Rust\n- Access to a Substrate node endpoint (WebSocket)\n- A valid signing keypair (as hex)\n- Runtime metadata file for your target chain (see below for naming and placement)\n\n## 📦 Installation\n\nClone the repository and build:\n\n```sh\ngit clone https://github.com/ThomasMarches/substrate-mcp-rs.git\ncd substrate-mcp-rs\ncargo build --release\n```\n\n## ⚙️ Configuration\n\nCreate a `.env` file in the project root with the following variables:\n\n```env\n# WebSocket endpoint for the Substrate node\nRPC_URL=wss://your-node-url.example.com\n\n# Signing keypair as hex (32 bytes, e.g. output of subkey inspect-key --scheme Sr25519)\nSIGNING_KEYPAIR_HEX=your_signing_keypair_hex_here\n```\n\n### Generating a Signing Keypair\n\nYou can generate a keypair and get the secret seed in hex using [subkey](https://paritytech.github.io/polkadot-sdk/master/subkey/index.html):\n\n```sh\nsubkey generate --scheme Sr25519 --output-type Json\n```\n\nUse the `secretSeed` field (strip the 0x prefix if present) for `SIGNING_KEYPAIR_HEX`.\n\n### Obtaining and Placing Runtime Metadata\n\nExport the runtime metadata from your node and place it at `artifacts/metadata.scale`:\n\n```sh\nsubxt metadata -f bytes > artifacts/metadata.scale\n```\n\n**Important:** The file must be named `metadata.scale` and located in the `artifacts/` directory before building. The build will fail if this file is missing or misnamed.\n\n## ▶️ Usage\n\nTo start the MCP server:\n\n```sh\ncargo run --release\n```\n\nThe server will start and listen for MCP requests via stdio.\n\n## 🖇️ Integrating with Cursor\n\nTo use this MCP server with [Cursor](https://www.cursor.so/), you need to add it to your Cursor MCP configuration. This allows Cursor to discover and interact with your Substrate MCP server.\n\n1. Build your server in release mode:\n\n   ```sh\n   cargo build --release\n   ```\n\n2. Locate the path to the built binary (typically `target/release/substrate-mcp-rs`).\n\n3. In your project (or global) `.cursor/mcp.json` file, add an entry for your server. For example:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"substrate-mcp-rs\": {\n         \"command\": \"$PROJECT_ROOT_ABSOLUTE_PATH/target/release/substrate-mcp-rs\",\n         \"args\": []\n       }\n     }\n   }\n   ```\n\n   - Replace the `command` path with the absolute path to your built binary if it differs.\n\n4. Restart Cursor. It should now detect and connect to your Substrate MCP server, making its tools available for use.\n\nFor more details, see the [Cursor documentation](https://docs.cursor.com/context/model-context-protocol) or the [Model Context Protocol introduction](https://modelcontextprotocol.io/introduction).\n\n## 🧰 Available Tools\n\nThe server exposes a set of tools for interacting with a Substrate blockchain, including:\n\n- `query_balance`: Fetch the balance of an account\n- `list_pallets`: List all pallets in the runtime\n- `list_pallet_entries`: List all storage entries for a pallet\n- `dynamic_runtime_call`: Execute a runtime API call\n- `send_dynamic_signed_transaction`: Construct, sign, and send a transaction\n- `query_storage`: Query storage by pallet and entry\n- `get_latest_events`: Get all events from the latest block\n- `find_events`: Find specific events by pallet and variant\n- `get_latest_block`: Get details about the latest block\n- `get_block_by_hash`: Get block details by hash\n- `find_extrinsics`: Find extrinsics in the latest block\n- `get_system_info`: Get system info via RPC\n- `custom_rpc`: Make a custom RPC call\n\nSee [`src/tooling/substrate.rs`](src/tooling/substrate.rs) for full details and parameters.\n\n## 🗂️ Project Structure\n\n- `src/main.rs`: Entry point, sets up logging and starts the MCP server\n- `src/tooling/`: Contains the Substrate tool implementation\n- `artifacts/`: Place your runtime metadata file here as `metadata.scale` (required before building)\n\n## 📈 Next Steps and Goals\n\n- [ ] Add E2E tests\n- [ ] Add Unit tests\n- [ ] Add more tools\n\n## 🤝 Contributing\n\nContributions are welcome! Please open issues or pull requests. For larger changes, open an issue first to discuss your proposal.\n\n- Follow Rust best practices and ensure code is documented\n- Run `cargo fmt` and `cargo clippy` before submitting\n- Add tests where possible\n\n## 📄 License\n\nMIT\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "substrate-mcp-rs-cargo": {
+        "command": "cargo",
+        "args": ["run", "--release"],
+        "env": {}
+      },
+      "substrate-mcp-rs-binary": {
+        "command": "$PROJECT_ROOT_ABSOLUTE_PATH/target/release/substrate-mcp-rs",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ThomasMarches",
+    "repo": "substrate-mcp-rs",
+    "url": "https://github.com/ThomasMarches/substrate-mcp-rs",
+    "name": "substrate-mcp-rs",
+    "path": null,
+    "stars": 9,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9ae1254584b2ba6a1b16376a42cf6dc3a3d7c733"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:16.566Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "anyhow",
+      "importance": 4
+    },
+    {
+      "name": "tracing",
+      "importance": 6
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "serde_json",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "subxt",
+      "importance": 9
+    },
+    {
+      "name": "subxt-signer",
+      "importance": 8
+    },
+    {
+      "name": "hex",
+      "importance": 3
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"substrate-mcp-rs\"\nversion = \"0.1.0\"\nedition = \"2024\"\nauthors = [\"Thomas Marches <thomas.marches@epitech.eu>\"]\ndescription = \"A Model Context Protocol (MCP) server for interacting with Substrate blockchains, written in Rust.\"\nlicense = \"MIT\"\nrepository = \"https://github.com/ThomasMarches/substrate-mcp-rs\"\n\n[dependencies]\nrmcp = { git = \"https://github.com/modelcontextprotocol/rust-sdk\", branch = \"main\", features = [\n    \"server\",\n    \"transport-io\",\n] }\nanyhow = \"1.0\"\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\"] }\ntokio = { version = \"1.45\", features = [\"full\"] }\nserde_json = \"1.0\"\nserde = { version = \"1.0\", features = [\"derive\"] }\nsubxt = { version = \"0.42\", features = [\"native\"] }\nsubxt-signer = \"0.42\"\nhex = \"0.4\"\ndotenv = \"0.15\"\n"
+}

@@ -1,0 +1,166 @@
+{
+  "name": "webscraping-ai__webscraping-ai-mcp-server",
+  "display_name": "webscraping-ai-mcp-server",
+  "description": " A Model Context Protocol (MCP) server implementation that integrates with WebScraping.AI for web data extraction capabilities.",
+  "author": {
+    "name": "webscraping-ai"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "webscraping-ai-mcp"],
+    "env": {
+      "WEBSCRAPING_AI_API_KEY": "${user_config.webscraping_ai_api_key}",
+      "WEBSCRAPING_AI_CONCURRENCY_LIMIT": "${user_config.webscraping_ai_concurrency_limit}",
+      "WEBSCRAPING_AI_DEFAULT_PROXY_TYPE": "${user_config.webscraping_ai_default_proxy_type}",
+      "WEBSCRAPING_AI_DEFAULT_JS_RENDERING": "${user_config.webscraping_ai_default_js_rendering}",
+      "WEBSCRAPING_AI_DEFAULT_TIMEOUT": "${user_config.webscraping_ai_default_timeout}",
+      "WEBSCRAPING_AI_DEFAULT_JS_TIMEOUT": "${user_config.webscraping_ai_default_js_timeout}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "webscraping_ai_api_key": {
+      "type": "string",
+      "title": "WebScraping.AI API Key",
+      "description": "Your WebScraping.AI API key",
+      "sensitive": true,
+      "required": true
+    },
+    "webscraping_ai_concurrency_limit": {
+      "type": "number",
+      "title": "Concurrency Limit",
+      "description": "Maximum number of concurrent requests",
+      "default": 5,
+      "min": 1,
+      "required": false
+    },
+    "webscraping_ai_default_proxy_type": {
+      "type": "string",
+      "title": "Default Proxy Type",
+      "description": "Type of proxy to use (datacenter or residential)",
+      "default": "residential",
+      "required": false
+    },
+    "webscraping_ai_default_js_rendering": {
+      "type": "boolean",
+      "title": "Default JavaScript Rendering",
+      "description": "Enable/disable JavaScript rendering",
+      "default": true,
+      "required": false
+    },
+    "webscraping_ai_default_timeout": {
+      "type": "number",
+      "title": "Default Timeout (ms)",
+      "description": "Maximum web page retrieval time in milliseconds",
+      "default": 15000,
+      "min": 1,
+      "max": 30000,
+      "required": false
+    },
+    "webscraping_ai_default_js_timeout": {
+      "type": "number",
+      "title": "Default JavaScript Timeout (ms)",
+      "description": "Maximum JavaScript rendering time in milliseconds",
+      "default": 2000,
+      "min": 1,
+      "required": false
+    }
+  },
+  "readme": "# WebScraping.AI MCP Server\n\nA Model Context Protocol (MCP) server implementation that integrates with [WebScraping.AI](https://webscraping.ai) for web data extraction capabilities.\n\n## Features\n\n- Question answering about web page content\n- Structured data extraction from web pages\n- HTML content retrieval with JavaScript rendering\n- Plain text extraction from web pages\n- CSS selector-based content extraction\n- Multiple proxy types (datacenter, residential) with country selection\n- JavaScript rendering using headless Chrome/Chromium\n- Concurrent request management with rate limiting\n- Custom JavaScript execution on target pages\n- Device emulation (desktop, mobile, tablet)\n- Account usage monitoring\n\n## Installation\n\n### Running with npx\n\n```bash\nenv WEBSCRAPING_AI_API_KEY=your_api_key npx -y webscraping-ai-mcp\n```\n\n### Manual Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/webscraping-ai/webscraping-ai-mcp-server.git\ncd webscraping-ai-mcp-server\n\n# Install dependencies\nnpm install\n\n# Run\nnpm start\n```\n\n### Configuring in Cursor\nNote: Requires Cursor version 0.45.6+\n\nThe WebScraping.AI MCP server can be configured in two ways in Cursor:\n\n1. **Project-specific Configuration** (recommended for team projects):\n   Create a `.cursor/mcp.json` file in your project directory:\n   ```json\n   {\n     \"servers\": {\n       \"webscraping-ai\": {\n         \"type\": \"command\",\n         \"command\": \"npx -y webscraping-ai-mcp\",\n         \"env\": {\n           \"WEBSCRAPING_AI_API_KEY\": \"your-api-key\",\n           \"WEBSCRAPING_AI_CONCURRENCY_LIMIT\": \"5\"\n         }\n       }\n     }\n   }\n   ```\n\n2. **Global Configuration** (for personal use across all projects):\n   Create a `~/.cursor/mcp.json` file in your home directory with the same configuration format as above.\n\n> If you are using Windows and are running into issues, try using `cmd /c \"set WEBSCRAPING_AI_API_KEY=your-api-key && npx -y webscraping-ai-mcp\"` as the command.\n\nThis configuration will make the WebScraping.AI tools available to Cursor's AI agent automatically when relevant for web scraping tasks.\n\n### Running on Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server-webscraping-ai\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"webscraping-ai-mcp\"],\n      \"env\": {\n        \"WEBSCRAPING_AI_API_KEY\": \"YOUR_API_KEY_HERE\",\n        \"WEBSCRAPING_AI_CONCURRENCY_LIMIT\": \"5\"\n      }\n    }\n  }\n}\n```\n\n## Configuration\n\n### Environment Variables\n\n#### Required\n\n- `WEBSCRAPING_AI_API_KEY`: Your WebScraping.AI API key\n  - Required for all operations\n  - Get your API key from [WebScraping.AI](https://webscraping.ai)\n\n#### Optional Configuration\n- `WEBSCRAPING_AI_CONCURRENCY_LIMIT`: Maximum number of concurrent requests (default: `5`)\n- `WEBSCRAPING_AI_DEFAULT_PROXY_TYPE`: Type of proxy to use (default: `residential`)\n- `WEBSCRAPING_AI_DEFAULT_JS_RENDERING`: Enable/disable JavaScript rendering (default: `true`)\n- `WEBSCRAPING_AI_DEFAULT_TIMEOUT`: Maximum web page retrieval time in ms (default: `15000`, max: `30000`)\n- `WEBSCRAPING_AI_DEFAULT_JS_TIMEOUT`: Maximum JavaScript rendering time in ms (default: `2000`)\n\n### Configuration Examples\n\nFor standard usage:\n```bash\n# Required\nexport WEBSCRAPING_AI_API_KEY=your-api-key\n\n# Optional - customize behavior (default values)\nexport WEBSCRAPING_AI_CONCURRENCY_LIMIT=5\nexport WEBSCRAPING_AI_DEFAULT_PROXY_TYPE=residential # datacenter or residential\nexport WEBSCRAPING_AI_DEFAULT_JS_RENDERING=true\nexport WEBSCRAPING_AI_DEFAULT_TIMEOUT=15000\nexport WEBSCRAPING_AI_DEFAULT_JS_TIMEOUT=2000\n```\n\n## Available Tools\n\n### 1. Question Tool (`webscraping_ai_question`)\n\nAsk questions about web page content.\n\n```json\n{\n  \"name\": \"webscraping_ai_question\",\n  \"arguments\": {\n    \"url\": \"https://example.com\",\n    \"question\": \"What is the main topic of this page?\",\n    \"timeout\": 30000,\n    \"js\": true,\n    \"js_timeout\": 2000,\n    \"wait_for\": \".content-loaded\",\n    \"proxy\": \"datacenter\",\n    \"country\": \"us\"\n  }\n}\n```\n\nExample response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"The main topic of this page is examples and documentation for HTML and web standards.\"\n    }\n  ],\n  \"isError\": false\n}\n```\n\n### 2. Fields Tool (`webscraping_ai_fields`)\n\nExtract structured data from web pages based on instructions.\n\n```json\n{\n  \"name\": \"webscraping_ai_fields\",\n  \"arguments\": {\n    \"url\": \"https://example.com/product\",\n    \"fields\": {\n      \"title\": \"Extract the product title\",\n      \"price\": \"Extract the product price\",\n      \"description\": \"Extract the product description\"\n    },\n    \"js\": true,\n    \"timeout\": 30000\n  }\n}\n```\n\nExample response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": {\n        \"title\": \"Example Product\",\n        \"price\": \"$99.99\",\n        \"description\": \"This is an example product description.\"\n      }\n    }\n  ],\n  \"isError\": false\n}\n```\n\n### 3. HTML Tool (`webscraping_ai_html`)\n\nGet the full HTML of a web page with JavaScript rendering.\n\n```json\n{\n  \"name\": \"webscraping_ai_html\",\n  \"arguments\": {\n    \"url\": \"https://example.com\",\n    \"js\": true,\n    \"timeout\": 30000,\n    \"wait_for\": \"#content-loaded\"\n  }\n}\n```\n\nExample response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"<html>...[full HTML content]...</html>\"\n    }\n  ],\n  \"isError\": false\n}\n```\n\n### 4. Text Tool (`webscraping_ai_text`)\n\nExtract the visible text content from a web page.\n\n```json\n{\n  \"name\": \"webscraping_ai_text\",\n  \"arguments\": {\n    \"url\": \"https://example.com\",\n    \"js\": true,\n    \"timeout\": 30000\n  }\n}\n```\n\nExample response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"Example Domain\\nThis domain is for use in illustrative examples in documents...\"\n    }\n  ],\n  \"isError\": false\n}\n```\n\n### 5. Selected Tool (`webscraping_ai_selected`)\n\nExtract content from a specific element using a CSS selector.\n\n```json\n{\n  \"name\": \"webscraping_ai_selected\",\n  \"arguments\": {\n    \"url\": \"https://example.com\",\n    \"selector\": \"div.main-content\",\n    \"js\": true,\n    \"timeout\": 30000\n  }\n}\n```\n\nExample response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"<div class=\\\"main-content\\\">This is the main content of the page.</div>\"\n    }\n  ],\n  \"isError\": false\n}\n```\n\n### 6. Selected Multiple Tool (`webscraping_ai_selected_multiple`)\n\nExtract content from multiple elements using CSS selectors.\n\n```json\n{\n  \"name\": \"webscraping_ai_selected_multiple\",\n  \"arguments\": {\n    \"url\": \"https://example.com\",\n    \"selectors\": [\"div.header\", \"div.product-list\", \"div.footer\"],\n    \"js\": true,\n    \"timeout\": 30000\n  }\n}\n```\n\nExample response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": [\n        \"<div class=\\\"header\\\">Header content</div>\",\n        \"<div class=\\\"product-list\\\">Product list content</div>\",\n        \"<div class=\\\"footer\\\">Footer content</div>\"\n      ]\n    }\n  ],\n  \"isError\": false\n}\n```\n\n### 7. Account Tool (`webscraping_ai_account`)\n\nGet information about your WebScraping.AI account.\n\n```json\n{\n  \"name\": \"webscraping_ai_account\",\n  \"arguments\": {}\n}\n```\n\nExample response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": {\n        \"requests\": 5000,\n        \"remaining\": 4500,\n        \"limit\": 10000,\n        \"resets_at\": \"2023-12-31T23:59:59Z\"\n      }\n    }\n  ],\n  \"isError\": false\n}\n```\n\n## Common Options for All Tools\n\nThe following options can be used with all scraping tools:\n\n- `timeout`: Maximum web page retrieval time in ms (15000 by default, maximum is 30000)\n- `js`: Execute on-page JavaScript using a headless browser (true by default)\n- `js_timeout`: Maximum JavaScript rendering time in ms (2000 by default)\n- `wait_for`: CSS selector to wait for before returning the page content\n- `proxy`: Type of proxy, datacenter or residential (residential by default)\n- `country`: Country of the proxy to use (US by default). Supported countries: us, gb, de, it, fr, ca, es, ru, jp, kr, in\n- `custom_proxy`: Your own proxy URL in \"http://user:password@host:port\" format\n- `device`: Type of device emulation. Supported values: desktop, mobile, tablet\n- `error_on_404`: Return error on 404 HTTP status on the target page (false by default)\n- `error_on_redirect`: Return error on redirect on the target page (false by default)\n- `js_script`: Custom JavaScript code to execute on the target page\n\n## Error Handling\n\nThe server provides robust error handling:\n\n- Automatic retries for transient errors\n- Rate limit handling with backoff\n- Detailed error messages\n- Network resilience\n\nExample error response:\n\n```json\n{\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"API Error: 429 Too Many Requests\"\n    }\n  ],\n  \"isError\": true\n}\n```\n\n## Integration with LLMs\n\nThis server implements the [Model Context Protocol](https://github.com/facebookresearch/modelcontextprotocol), making it compatible with any MCP-enabled LLM platforms. You can configure your LLM to use these tools for web scraping tasks.\n\n### Example: Configuring Claude with MCP\n\n```javascript\nconst { Claude } = require('@anthropic-ai/sdk');\nconst { Client } = require('@modelcontextprotocol/sdk/client/index.js');\nconst { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');\n\nconst claude = new Claude({\n  apiKey: process.env.ANTHROPIC_API_KEY\n});\n\nconst transport = new StdioClientTransport({\n  command: 'npx',\n  args: ['-y', 'webscraping-ai-mcp'],\n  env: {\n    WEBSCRAPING_AI_API_KEY: 'your-api-key'\n  }\n});\n\nconst client = new Client({\n  name: 'claude-client',\n  version: '1.0.0'\n});\n\nawait client.connect(transport);\n\n// Now you can use Claude with WebScraping.AI tools\nconst tools = await client.listTools();\nconst response = await claude.complete({\n  prompt: 'What is the main topic of example.com?',\n  tools: tools\n});\n```\n\n## Development\n\n```bash\n# Clone the repository\ngit clone https://github.com/webscraping-ai/webscraping-ai-mcp-server.git\ncd webscraping-ai-mcp-server\n\n# Install dependencies\nnpm install\n\n# Run tests\nnpm test\n\n# Add your .env file\ncp .env.example .env\n\n# Start the inspector\nnpx @modelcontextprotocol/inspector node src/index.js\n```\n\n### Contributing\n\n1. Fork the repository\n2. Create your feature branch\n3. Run tests: `npm test`\n4. Submit a pull request\n\n## License\n\nMIT License - see LICENSE file for details \n",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "webscraping-ai-mcp": {
+        "command": "npx",
+        "args": ["-y", "webscraping-ai-mcp"],
+        "env": {
+          "WEBSCRAPING_AI_API_KEY": "your_api_key"
+        }
+      },
+      "webscraping-ai-mcp-npm-start": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "webscraping-ai-mcp-cursor-config": {
+        "command": "npx",
+        "args": ["-y", "webscraping-ai-mcp"],
+        "env": {
+          "WEBSCRAPING_AI_API_KEY": "your-api-key",
+          "WEBSCRAPING_AI_CONCURRENCY_LIMIT": "5"
+        }
+      },
+      "webscraping-ai-mcp-cursor-windows": {
+        "command": "cmd",
+        "args": ["/c", "set WEBSCRAPING_AI_API_KEY=your-api-key && npx -y webscraping-ai-mcp"],
+        "env": {
+          "WEBSCRAPING_AI_API_KEY": "your-api-key"
+        }
+      },
+      "webscraping-ai-mcp-claude-desktop": {
+        "command": "npx",
+        "args": ["-y", "webscraping-ai-mcp"],
+        "env": {
+          "WEBSCRAPING_AI_API_KEY": "YOUR_API_KEY_HERE",
+          "WEBSCRAPING_AI_CONCURRENCY_LIMIT": "5"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "webscraping-ai",
+    "repo": "webscraping-ai-mcp-server",
+    "url": "https://github.com/webscraping-ai/webscraping-ai-mcp-server",
+    "name": "webscraping-ai-mcp-server",
+    "path": null,
+    "stars": 21,
+    "contributors": 1,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f7ff8446e3d05a87c0a6f34ff5a2d312061b3829"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.033Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "p-queue",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"webscraping-ai-mcp\",\n  \"version\": \"1.0.2\",\n  \"description\": \"Model Context Protocol server for WebScraping.AI API. Provides LLM-powered web scraping tools with Chromium JavaScript rendering, rotating proxies, and HTML parsing.\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"webscraping-ai-mcp\": \"src/index.js\"\n  },\n  \"files\": [\n    \"src\"\n  ],\n  \"scripts\": {\n    \"test\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js\",\n    \"start\": \"node src/index.js\",\n    \"lint\": \"eslint src/**/*.js\",\n    \"lint:fix\": \"eslint src/**/*.js --fix\",\n    \"format\": \"prettier --write .\"\n  },\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.4.1\",\n    \"axios\": \"^1.6.7\",\n    \"dotenv\": \"^16.4.7\",\n    \"p-queue\": \"^8.0.1\"\n  },\n  \"devDependencies\": {\n    \"@jest/globals\": \"^29.7.0\",\n    \"eslint\": \"^8.56.0\",\n    \"eslint-config-prettier\": \"^9.1.0\",\n    \"jest\": \"^29.7.0\",\n    \"jest-mock-extended\": \"^4.0.0-beta1\",\n    \"prettier\": \"^3.1.1\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"webscraping\",\n    \"web-scraping\",\n    \"crawler\",\n    \"content-extraction\",\n    \"llm\"\n  ],\n  \"main\": \"src/index.js\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/webscraping-ai/webscraping-ai-mcp-server.git\"\n  },\n  \"author\": \"WebScraping.AI\",\n  \"bugs\": {\n    \"url\": \"https://github.com/webscraping-ai/webscraping-ai-mcp-server/issues\"\n  },\n  \"homepage\": \"https://github.com/webscraping-ai/webscraping-ai-mcp-server#readme\"\n}\n"
+}

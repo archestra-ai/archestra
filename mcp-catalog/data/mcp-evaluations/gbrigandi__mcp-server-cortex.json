@@ -1,0 +1,137 @@
+{
+  "name": "gbrigandi__mcp-server-cortex",
+  "display_name": "mcp-server-cortex",
+  "description": "MCP Server for Cortex",
+  "author": {
+    "name": "gbrigandi"
+  },
+  "server": {
+    "command": "mcp-server-cortex",
+    "args": [],
+    "env": {
+      "CORTEX_ENDPOINT": "${user_config.cortex_endpoint}",
+      "CORTEX_API_KEY": "${user_config.cortex_api_key}",
+      "RUST_LOG": "${user_config.rust_log}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "cortex_endpoint": {
+      "type": "string",
+      "title": "Cortex Endpoint URL",
+      "description": "The full URL to your Cortex API. Example: http://localhost:9000/api",
+      "sensitive": false,
+      "required": true,
+      "default": "http://localhost:9000/api"
+    },
+    "cortex_api_key": {
+      "type": "string",
+      "title": "Cortex API Key",
+      "description": "Your API key for authenticating with the Cortex instance.",
+      "sensitive": true,
+      "required": true
+    },
+    "rust_log": {
+      "type": "string",
+      "title": "Rust Log Level",
+      "description": "Controls the logging level for the server. Examples: info, mcp_server_cortex=debug,cortex_client=info",
+      "sensitive": false,
+      "required": false,
+      "default": "info"
+    }
+  },
+  "readme": "# MCP Server for Cortex\n\n![Claude Cortex Session](media/claude-cortex-session.png)\n\nThis server acts as a bridge, exposing the powerful analysis capabilities of a [Cortex](https://thehive-project.org/cortex/) instance as tools consumable by Model Context Protocol (MCP) clients, such as large language models like Claude. It allows these clients to leverage Cortex analyzers for threat intelligence tasks.\n\n## What is Cortex?\n\nCortex is a powerful, free, and open-source observable analysis and active response engine. It allows you to analyze observables (like IPs, URLs, domains, files, etc.) using a variety of \"analyzers\" – modular pieces of code that connect to external services or perform local analysis.\n\n**Benefits of using Cortex (and this MCP server):**\n\n*   **Centralized Analysis**: Run various analyses from a single point.\n*   **Extensibility**: Easily add new analyzers for different threat intelligence feeds and tools.\n*   **Automation**: Automate the process of enriching observables.\n*   **Integration**: Designed to work closely with TheHive, a Security Incident Response Platform (SIRP), but can also be used standalone.\n*   **Security**: API-key based access to protect your Cortex instance.\n\nThis MCP server makes these benefits accessible to MCP-compatible clients, enabling them to request analyses and receive structured results.\n\n## Prerequisites\n\n1.  **Rust Toolchain**: Ensure you have Rust installed (visit [rustup.rs](https://rustup.rs/)).\n2.  **Cortex Instance**: A running Cortex instance is required.\n    *   The server needs network access to this Cortex instance.\n    *   An API key for Cortex with permissions to list analyzers and run jobs.\n3.  **Configured Analyzers**: The specific analyzers you intend to use (e.g., `AbuseIPDB_1_0`, `Abuse_Finder_3_0`, `VirusTotal_Scan_3_1`, `Urlscan_io_Scan_0_1_0`) must be enabled and correctly configured within your Cortex instance.\n\n## Installation\n\nThe recommended way to install the MCP Server for Cortex is to download a pre-compiled binary for your operating system.\n\n1.  **Go to the Releases Page**:\n    Navigate to the [GitHub Releases page](https://github.com/gbrigandi/mcp-server-cortex/releases).\n\n2.  **Download the Binary**:\n    Find the latest release and download the appropriate binary for your operating system (e.g., `mcp-server-cortex-linux-amd64`, `mcp-server-cortex-macos-amd64`, `mcp-server-cortex-windows-amd64.exe`).\n\n3.  **Place and Prepare the Binary**:\n    *   Move the downloaded binary to a suitable location on your system (e.g., `/usr/local/bin` on Linux/macOS, or a dedicated folder like `C:\\Program Files\\MCP Servers\\` on Windows).\n    *   **For Linux/macOS**: Make the binary executable:\n        ```bash\n        chmod +x /path/to/your/mcp-server-cortex\n        ```\n    *   Ensure the directory containing the binary is in your system's `PATH` if you want to run it without specifying the full path.\n\nAlternatively, you can build the server from source (see the [Building](#building) section below).\n\n\n## Configuration\n\nThe server is configured using the following environment variables:\n\n*   `CORTEX_ENDPOINT`: The full URL to your Cortex API.\n    *   Example: `http://localhost:9000/api`\n*   `CORTEX_API_KEY`: Your API key for authenticating with the Cortex instance.\n*   `RUST_LOG` (Optional): Controls the logging level for the server.\n    *   Example: `info` (for general information)\n    *   Example: `mcp_server_cortex=debug,cortex_client=info` (for detailed server logs and info from the cortex client library)\n\n### Cortex Analyzer Configuration\n\nFor the tools provided by this MCP server to function correctly, the corresponding analyzers must be **enabled and properly configured** within your Cortex instance. The server relies on these Cortex analyzers to perform the actual analysis tasks.\n\nThe tools currently use the following analyzers by default (though these can often be overridden via tool parameters):\n\n*   **`analyze_ip_with_abuseipdb`**: Uses an analyzer like `AbuseIPDB_1_0`.\n    *   This analyzer typically requires an API key from AbuseIPDB. Ensure this is configured in Cortex.\n*   **`analyze_with_abusefinder`**: Uses an analyzer like `Abuse_Finder_3_0`.\n    *   AbuseFinder might have its own configuration requirements or dependencies within Cortex.\n*   **`scan_url_with_virustotal`**: Uses an analyzer like `VirusTotal_Scan_3_1`.\n    *   This analyzer requires a VirusTotal API key. Ensure this is configured in Cortex.\n*   **`analyze_url_with_urlscan_io`**: Uses an analyzer like `Urlscan_io_Scan_0_1_0`.\n    *   This analyzer requires an API key for urlscan.io. Ensure this is configured in Cortex.\n\n\n**Key Points:**\n\n*   **Enable Analyzers**: Make sure the analyzers you intend to use are enabled in your Cortex instance's \"Organization\" -> \"Analyzers\" section.\n*   **Configure Analyzers**: Each analyzer will have its own configuration page within Cortex where you'll need to input API keys, set thresholds, or define other operational parameters. Refer to the documentation for each specific Cortex analyzer.\n*   **Test in Cortex**: It's a good practice to test the analyzers directly within the Cortex UI first to ensure they are working as expected before trying to use them via this MCP server.\n\nIf an analyzer is not configured, not enabled, or misconfigured (e.g., invalid API key), the corresponding tool call from the MCP client will likely fail or return an error from Cortex.\n\n### Example: Claude Desktop Configuration\n\nFor MCP clients like Claude Desktop, you typically configure them by specifying the command to launch the MCP server and any necessary environment variables for that server.\n\n1.  **Build or Download the Server Binary:**\n    Ensure you have the `mcp-server-cortex` executable. If you've built it from source, it will be in `target/debug/mcp_server_cortex` or `target/release/mcp_server_cortex`.\n\n2.  **Configure Your LLM Client (e.g., Claude Desktop):**\n    *   The method for configuring your LLM client will vary depending on the client itself.\n    *   For clients that support MCP, you will typically need to point the client to the path of the `mcp-server-cortex` executable.\n    *   **Example for Claude Desktop `claude_desktop_config.json`:**\n        You would modify your Claude Desktop configuration file (usually `claude_desktop_config.json`) to include an entry for this server.\n\n        For instance, if your `mcp-server-cortex` binary is located at `/opt/mcp-servers/mcp-server-cortex`, your configuration might look like this:\n\n        ```json\n        {\n          \"mcpServers\": {\n            // ... other server configurations ...\n            \"cortex\": {\n              \"command\": \"/opt/mcp-servers/mcp-server-cortex\",\n              \"args\": [],\n              \"env\": {\n                \"CORTEX_ENDPOINT\": \"http://your-cortex-instance:9000/api\",\n                \"CORTEX_API_KEY\": \"your_cortex_api_key_here\",\n              }\n            }\n            // ... other server configurations ...\n          }\n        }\n\n\n## Available Tools\n\nThe server provides the following tools, which can be called by an MCP client:\n\n1.  **`analyze_ip_with_abuseipdb`**\n    *   **Description**: Analyzes an IP address using an AbuseIPDB analyzer (or a similarly configured IP reputation analyzer) via Cortex. Returns the job report if successful.\n    *   **Parameters**:\n        *   `ip` (string, required): The IP address to analyze.\n        *   `analyzer_name` (string, optional): The specific name of the AbuseIPDB analyzer instance in Cortex. Defaults to `AbuseIPDB_1_0`.\n        *   `max_retries` (integer, optional): Maximum number of times to poll for the analyzer job to complete. Defaults to 5.\n\n2.  **`analyze_with_abusefinder`**\n    *   **Description**: Analyzes various types of data (IP, domain, FQDN, URL, or email) using an AbuseFinder analyzer via Cortex. Returns the job report if successful.\n    *   **Parameters**:\n        *   `data` (string, required): The data to analyze (e.g., \"1.1.1.1\", \"example.com\", \"http://evil.com/malware\", \"test@example.com\").\n        *   `data_type` (string, required): The type of the data. Must be one of: `ip`, `domain`, `fqdn`, `url`, `mail`.\n        *   `analyzer_name` (string, optional): The specific name of the AbuseFinder analyzer instance in Cortex. Defaults to `Abuse_Finder_3_0`.\n        *   `max_retries` (integer, optional): Maximum number of times to poll for the analyzer job to complete. Defaults to 5.\n\n3.  **`scan_url_with_virustotal`**\n    *   **Description**: Scans a URL using a VirusTotal_Scan analyzer (e.g., `VirusTotal_Scan_3_1`) via Cortex. Returns the job report if successful.\n    *   **Parameters**:\n        *   `url` (string, required): The URL to scan.\n        *   `analyzer_name` (string, optional): The specific name of the VirusTotal_Scan analyzer instance in Cortex. Defaults to `VirusTotal_Scan_3_1`.\n        *   `max_retries` (integer, optional): Maximum number of times to poll for the analyzer job to complete. Defaults to 5.\n\n4.  **`analyze_url_with_urlscan_io`**\n    *   **Description**: Analyzes a URL using a Urlscan.io analyzer (e.g., `Urlscan_io_Scan_0_1_0`) via Cortex. Returns the job report if successful.\n    *   **Parameters**:\n        *   `url` (string, required): The URL to analyze.\n        *   `analyzer_name` (string, optional): The specific name of the Urlscan.io analyzer instance in Cortex. Defaults to `Urlscan_io_Scan_0_1_0`.\n        *   `max_retries` (integer, optional): Maximum number of times to poll for the analyzer job to complete. Defaults to 5.\n\n\n\n## Building\n\nTo build the server from source, ensure you have the Rust toolchain installed (as mentioned in the \"Prerequisites\" section).\n\n1.  **Clone the repository (if you haven't already):**\n    ```bash\n    git clone https://github.com/gbrigandi/mcp-server-cortex.git\n    cd mcp-server-cortex\n    ```\n    If you are already working within a cloned repository and are in its root directory, you can skip this step.\n\n2.  **Build the project using Cargo:**\n    *   For a **debug build**:\n        ```bash\n        cargo build\n        ```\n        The executable will be located at `target/debug/mcp-server-cortex`.\n    *   For a **release build** (recommended for performance and actual use):\n        ```bash\n        cargo build --release\n        ```\n        The executable will be located at `target/release/mcp-server-cortex`.\n\nAfter building, you can run the server executable. Refer to the \"Configuration\" section for required environment variables and the \"Example: Claude Desktop Configuration\" for how an MCP client might launch the server.\n\n\n",
+  "category": "Security",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-cortex-configured": {
+        "command": "/opt/mcp-servers/mcp-server-cortex",
+        "args": [],
+        "env": {
+          "CORTEX_ENDPOINT": "http://your-cortex-instance:9000/api",
+          "CORTEX_API_KEY": "your_cortex_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gbrigandi",
+    "repo": "mcp-server-cortex",
+    "url": "https://github.com/gbrigandi/mcp-server-cortex",
+    "name": "mcp-server-cortex",
+    "path": null,
+    "stars": 7,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "808bd44fef067d6c372bf20bb5a78a23f80ab8b7"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:33.650Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "rmcp-macros",
+      "importance": 9
+    },
+    {
+      "name": "cortex-client",
+      "importance": 9
+    },
+    {
+      "name": "tokio",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 7
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "anyhow",
+      "importance": 6
+    },
+    {
+      "name": "tracing",
+      "importance": 5
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 5
+    },
+    {
+      "name": "async-trait",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"mcp-server-cortex\"\nversion = \"0.1.0\"\nedition = \"2024\"\nauthors = [\"Gianluca Brigandi\"]\nlicense = \"MIT\"\ndescription = \"An MCP server that acts as a bridge to a Cortex instance, exposing Cortex analyzer functionalities as tools.\"\nrepository = \"https://github.com/gbrigandi/mcp-server-cortex\" # Please verify this URL\nreadme = \"README.md\"\n\n[lib]\nname = \"mcp_server_cortex\"\npath = \"src/lib.rs\"\n\n[[bin]]\nname = \"mcp-server-cortex\"\npath = \"src/main.rs\"\n\n[dependencies]\nrmcp = { version = \"0.3.0\", features = [\"server\", \"transport-io\"] }\nrmcp-macros = \"0.3.0\"\ncortex-client = \"0.1.1\"\ntokio = { version = \"1\", features = [\"full\"] }\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\nanyhow = \"1.0\"\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\", \"fmt\"] }\n \nasync-trait = \"0.1.88\"\n\n[dev-dependencies]\ntokio-test = \"0.4\"\ntokio-util = \"0.7\"\nserde_json = \"1.0\"\nhyper = { version = \"1.0\", features = [\"full\"] }\nhyper-util = { version = \"0.1\", features = [\"full\"] }\ntower = { version = \"0.5\", features = [\"full\"] }\nhttp-body-util = \"0.1\"\n"
+}

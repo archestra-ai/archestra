@@ -1,0 +1,100 @@
+{
+  "name": "overquotaai__chatterboxio-mcp-server",
+  "display_name": "chatterboxio-mcp-server",
+  "description": "A Model Context Protocol server implementation for ChatterBox, enabling AI agents to interact with online meetings and generate meeting summaries",
+  "author": {
+    "name": "OverQuotaAI"
+  },
+  "server": {
+    "command": "pnpm",
+    "args": ["start"],
+    "env": {
+      "CHATTERBOX_API_ENDPOINT": "${user_config.chatterbox_api_endpoint}",
+      "CHATTERBOX_API_KEY": "${user_config.chatterbox_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "chatterbox_api_endpoint": {
+      "type": "string",
+      "title": "ChatterBox API Endpoint",
+      "description": "The API endpoint for ChatterBox services.",
+      "default": "https://api.chatter-box.io",
+      "required": false,
+      "sensitive": false
+    },
+    "chatterbox_api_key": {
+      "type": "string",
+      "title": "ChatterBox API Key",
+      "description": "Your API key for authenticating with ChatterBox services.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/chatterboxio-chatterboxio-mcp-server-badge.png)](https://mseep.ai/app/chatterboxio-chatterboxio-mcp-server)\n\n# ChatterBox MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@OverQuotaAI/chatterboxio-mcp-server)](https://smithery.ai/server/@OverQuotaAI/chatterboxio-mcp-server)\n\nA Model Context Protocol server implementation for ChatterBox, enabling AI agents to interact with online meetings and generate meeting summaries.\n\n<a href=\"https://glama.ai/mcp/servers/@ChatterBoxIO/chatterboxio-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@ChatterBoxIO/chatterboxio-mcp-server/badge\" alt=\"ChatterBox MCP Server\" />\n</a>\n\n## Overview\n\nThe ChatterBox MCP Server provides tools for AI agents to:\n\n- Join online meetings (Zoom, Google Meet, or Microsoft Teams)\n- Capture transcripts and recordings\n- Generate meeting summaries\n\n## Installation\n\n### Installing via Smithery\n\nTo install chatterboxio-mcp-server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@OverQuotaAI/chatterboxio-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @OverQuotaAI/chatterboxio-mcp-server --client claude\n```\n\n### Manual Installation\n\nYou can install the dependencies using either npm or pnpm:\n\n```bash\n# Using npm\nnpm install\n\n# Using pnpm\npnpm install\n```\n\n## Configuration\n\n### Getting API Keys\n\nYou can get your API keys for free by registering on our website at [ChatterBox](https://chatter-box.io). After registration, you'll receive your API endpoint and key.\n\n### Environment Setup\n\nCreate a `.env` file in the root directory with the following variables:\n\n```env\nCHATTERBOX_API_ENDPOINT=https://api.chatter-box.io\nCHATTERBOX_API_KEY=your_api_key_here\n```\n\n## Usage\n\n### Starting the Server\n\n```bash\npnpm start\n```\n\n### Available Tools\n\n#### joinMeeting\n\nJoin a Zoom or Google Meet meeting and capture transcript and audio recording.\n\n**Parameters:**\n\n- `platform` (string): The online conference platform (\"zoom\", \"googlemeet\", or \"teams\")\n- `meetingId` (string): The ID of the meeting\n- `meetingPassword` (string, optional): The password or the passcode for the meeting\n- `botName` (string): The name of the bot\n- `webhookUrl` (string, optional): URL to receive webhook events for meeting status\n\n#### getMeetingInfo\n\nGet information about a meeting, including transcript and recording.\n\n**Parameters:**\n\n- `sessionId` (string): The session ID to get information for\n\n#### summarizeMeeting\n\nGenerate a concise summary of a meeting's contents from its transcript.\n\n**Parameters:**\n\n- `transcript` (string): The meeting transcript to summarize\n\n## Development\n\n### Prerequisites\n\n- Node.js 16+\n- npm or yarn\n\n### Building\n\n```bash\npnpm run build\n```\n\n### Debugging\n\nTo debug the MCP server using the MCP Inspector:\n\n```bash\nnpx @modelcontextprotocol/inspector\n```\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Support\n\nFor support, please visit [ChatterBox Documentation](https://chatter-box.io/documentation) or contact support@chatter-box.io.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "OverQuotaAI-chatterboxio-mcp-server": {
+        "command": "pnpm",
+        "args": ["start"],
+        "env": {
+          "CHATTERBOX_API_ENDPOINT": "https://api.chatter-box.io",
+          "CHATTERBOX_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OverQuotaAI",
+    "repo": "chatterboxio-mcp-server",
+    "url": "https://github.com/OverQuotaAI/chatterboxio-mcp-server",
+    "name": "overquotaai__chatterboxio-mcp-server",
+    "path": null,
+    "stars": 7,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "008d87b3e35283236566b46cdd5b7982d52feb4b"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:24.402Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"chatterboxio-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"chatterboxio-mcp-server\": \"./build/index.js\"\n  },\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [],\n  \"author\": \"Alex Tsimbalistov\",\n  \"license\": \"MIT\",\n  \"packageManager\": \"pnpm@10.5.2\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.13.0\",\n    \"dotenv\": \"^16.5.0\",\n    \"zod\": \"^3.25.67\"\n  },\n  \"devDependencies\": {\n    \"@types/dotenv\": \"^8.2.3\",\n    \"@types/node\": \"^22.15.32\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

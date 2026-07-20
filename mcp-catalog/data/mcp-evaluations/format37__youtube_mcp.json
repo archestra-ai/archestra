@@ -1,0 +1,144 @@
+{
+  "name": "format37__youtube_mcp",
+  "display_name": "youtube_mcp",
+  "description": "youtube transcriber mcp server",
+  "author": {
+    "name": "format37"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/mcp/main.py"],
+    "env": {
+      "PORT": "${user_config.port}",
+      "MCP_KEY": "${user_config.mcp_key}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key for accessing the OpenAI API.",
+      "sensitive": true,
+      "required": true
+    },
+    "mcp_key": {
+      "type": "string",
+      "title": "MCP Key",
+      "description": "The authentication key for the MCP server. Generate using python token_generator.py.",
+      "sensitive": true,
+      "required": true
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port on which the MCP server will listen for incoming connections.",
+      "default": 7001,
+      "required": false
+    },
+    "cookies_file": {
+      "type": "file",
+      "title": "Cookies File",
+      "description": "Path to your cookies.txt file, required for YouTube transcription. This file will be placed in the ./mcp/ folder.",
+      "required": true
+    },
+    "container_name": {
+      "type": "string",
+      "title": "Docker Container Name",
+      "description": "The name for the Docker container if deploying with Docker Compose.",
+      "default": "youtube_mcp_main",
+      "required": false
+    }
+  },
+  "readme": "# youtube_mcp\nYoutube transcribation MCP server\n\n## Demo Video\n\n[![YouTube MCP Demo](https://img.youtube.com/vi/bS5vKuehzEE/maxresdefault.jpg)](https://youtu.be/bS5vKuehzEE)\n\n*Click the image above to watch the demo video*\n\n## Requirements:\n* OpenAI API key\n* Cookies\n\n## Server installation\n* Clone the repo:\n```\ngit clone https://github.com/format37/youtube_mcp.git\ncd youtube_mcp\nnano .env\n```\n* Extract your cookies. See [cookies.md](./cookies.md)  \nPlace cookies.txt in the ./mcp/ folder.\n* Generate MCP_KEY:\n```\npython token_generator.py\n```\n* Define .env:\n```\nCONTAINER_NAME=youtube_mcp_main\nPORT=7001\nMCP_KEY=YOUR-MCP-KEY\nOPENAI_API_KEY=YOUR-OPENAI-KRY\n```\n* Provide run access\n```\nsudo chmod +x compose.sh\nsudo chmod +x logs.sh\nsudo chmod +x update.sh\n```\n* Run\n```\n./compose.sh\n```\n* Check that port is opened for incoming connections.\n\n## Client configuration\n3. Add Bybit server to the Claude desktop config:\nExample:\n```\n{\n    \"mcpServers\": {\n      \"youtube\": {\n        \"command\": \"npx\",\n        \"args\": [\n          \"mcp-remote\",\n          \"http://localhost:7001/sse\",\n          \"--header\",\n          \"Authorization:YOUR-TOKEN\",\n          \"--allow-http\"\n        ],\n        \"disabled\": false\n      }\n    }\n}\n```\n## Client side\n```\n4. Restart Claude desktop\n5. Check that tws tools are listed in the tools list. Ask Claude to check ibkr account",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "youtube_mcp-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--name",
+          "youtube_mcp_main",
+          "-p",
+          "7001:7001",
+          "-e",
+          "MCP_KEY=YOUR-MCP-KEY",
+          "-e",
+          "OPENAI_API_KEY=YOUR-OPENAI-KRY",
+          "youtube_mcp"
+        ],
+        "env": {
+          "MCP_KEY": "YOUR-MCP-KEY",
+          "OPENAI_API_KEY": "YOUR-OPENAI-KRY"
+        },
+        "docker_image": "youtube_mcp"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "format37",
+    "repo": "youtube_mcp",
+    "url": "https://github.com/format37/youtube_mcp",
+    "name": "youtube_mcp",
+    "path": null,
+    "stars": 14,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8088308e89611ac98fba95385f65e1e11f332051"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:27.862Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "yt-dlp",
+      "importance": 8
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "pydub",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== mcp/requirements.txt ===\nyt-dlp==2025.5.22\nfastapi==0.115.12\nuvicorn==0.23.2\nmcp[cli]==1.8.0\nopenai==1.58.1\npydub==0.25.1"
+}

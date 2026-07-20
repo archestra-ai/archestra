@@ -1,0 +1,107 @@
+{
+  "name": "kukapay__token-minter-mcp",
+  "display_name": "token-minter-mcp",
+  "description": "An MCP server providing tools for AI agents to mint ERC-20 tokens across multiple blockchains.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {
+      "INFURA_KEY": "${user_config.infura_key}",
+      "PRIVATE_KEY": "${user_config.private_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "infura_key": {
+      "type": "string",
+      "title": "Infura API Key",
+      "description": "Your Infura API key for EVM network access.",
+      "sensitive": true,
+      "required": true
+    },
+    "private_key": {
+      "type": "string",
+      "title": "Ethereum Private Key",
+      "description": "Your Ethereum private key for signing transactions.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/mseep-audited.png)](https://mseep.ai/app/kukapay-token-minter-mcp)\n\n# Token Minter MCP\n\nAn MCP server providing tools for AI agents to mint ERC-20 tokens, supporting 21 blockchains.\n\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- Deploy new ERC-20 tokens with customizable parameters.\n- Query token metadata (name, symbol, decimals, total supply).\n- Initiate token transfers (returns transaction hash without confirmation).\n- Retrieve transaction details by hash.\n- Check native token balance of the current account.\n- Access token metadata via URI.\n- Interactive prompt for deployment guidance.\n\n### Tools\n\n- **deployToken**: Deploys a new ERC-20 token (name, symbol, initialSupply, decimals, chainId).\n- **transferToken**: Transfers ERC-20 tokens (tokenAddress, toAddress, amount, chainId).\n- **getTransactionInfo**: Retrieves transaction details (txHash, chainId).\n- **getTokenBalance**: Queries the balance of a specific ERC-20 token for the current account.\n- **getTokenInfo**: Queries ERC-20 token metadata (tokenAddress, chainId).\n- **getBalance**: Checks native token balance (chainId).\n\n### Resources\n\n- **tokenMetadata**: Exposes token metadata via `token://{chainId}/{address}`.\n\n### Prompts\n\n- **deployTokenGuide**: Guides token deployment with required parameters (chainId).\n\n## Prerequisites\n\n- [Node.js](https://nodejs.org/) v18.x or higher\n- [npm](https://www.npmjs.com/) (typically bundled with Node.js)\n- A valid [Infura API key](https://infura.io/) for EVM network access\n- An Ethereum private key for signing transactions\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/token-minter-mcp.git\n   cd token-minter-mcp/server\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n\n## Configuration\n\n```json\n{\n  \"mcpServers\": {\n    \"Token-Minter-MCP\": {\n      \"command\": \"node\",\n      \"args\": [\"path/to/token-minter-mcp/server/index.js\"],\n      \"env\": {\n        \"INFURA_KEY\": \"your infura key\",\n        \"PRIVATE_KEY\": \"your private key\"\n      }\n    }\n  }\n}\n```\n\n\n\n## Usage\n\n1. **Examples**:\n\n    > I want to create a new token called 'RewardToken' with the symbol 'RWD' on Arbitrum. It should have 5 million tokens in initial supply and use 6 decimal places.\n    \n    ```\n    Token deployment initiated on Arbitrum (chainId: 42161)!\n    Name: RewardToken\n    Symbol: RWD\n    Decimals: 6\n    Initial Supply: 5000000 tokens\n    Transaction Hash: 0xabc123...\n    Note: Use 'getTransactionInfo' to check deployment status.\n    ```\n\n    > Can you tell me how much POL I have in my wallet on the Polygon network?\n\n    ```\n    Account Balance on Polygon (chainId: 137):\n    Address: 0xYourAddressHere\n    Balance: 25.3478 POL\n    ```\n    \n    > What’s the balance of my newly created token on Polygon?\n    \n    ```\n    Token Balance on Polygon (chainId: 137):\n    Address: 0xYourAddressHere\n    Token: 0xYourTokenAddressHere\n    Symbol: ABCD\n    Balance: 10000000.00 ABCD\n    ```    \n\n    > Please transfer 150.75 USDC from my account to 0xRecipientAddressHere on Polygon.\"\n\n    ```\n    Transfer initiated on Polygon (chainId: 137)!\n    Token: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174\n    To: 0xRecipientAddressHere\n    Amount: 150.75 (150.75 tokens)\n    Transaction Hash: 0xdef456...\n    Note: Use 'getTransactionInfo' to check transfer status.\n    ```\n\n    > What’s the status of my token deployment transaction with hash 0xabc123... on Arbitrum?\n\n    ```\n    Transaction Info on Arbitrum (chainId: 42161):\n    Hash: 0xabc123...\n    From: 0xYourAddressHere\n    To: Contract Creation\n    Value: 0 ETH\n    Status: Success\n    Deployed Contract Address: 0xNewTokenAddressHere\n    ```\n\n    > Give me the details of the token at address 0xNewTokenAddressHere on Arbitrum.\n\n    ```\n    Token Info on Arbitrum (chainId: 42161):\n    Address: 0xNewTokenAddressHere\n    Name: RewardToken\n    Symbol: RWD\n    Decimals: 6\n    Total Supply: 5000000\n    ```\n\n    > How do I deploy a token on Polygon? What details do I need to provide?\n\n    ```\n    To deploy a token on Polygon (chainId: 137), use the \"deployToken\" tool with these parameters:\n    - name: The token's full name (e.g., \"MyToken\")\n    - symbol: The token's ticker (e.g., \"MTK\")\n    - initialSupply: Amount in token units (e.g., 1000000 for 1M tokens, default 1,000,000)\n    - decimals: Optional number of decimals (default is 18)\n    - chainId: Optional chain ID (default is 1 for Ethereum)\n    ```\n\n2. **Local Testing**:\n\n    Intall dependencies:\n    \n    ```bash\n    cd token-minter-mcp\n    npm install\n    ```\n\n    Start a local Hardhat node:\n    \n    ```\n    npx hardhat node\n    ```\n    \n    Use chainId: 1337 in your prompts to test locally.  \n\n## Supported Networks\n\n| Chain ID       | Network Name | Native Token |\n|----------------|--------------|--------------|\n| 1              | Ethereum     | ETH          |\n| 137            | Polygon      | POL          |\n| 56             | BSC          | BNB          |\n| 42161          | Arbitrum     | ETH          |\n| 10             | Optimism     | ETH          |\n| 59144          | Linea        | ETH          |\n| 8453           | Base         | ETH          |\n| 81457          | Blast        | ETH          |\n| 11297108109    | Palm         | PALM         |\n| 43114          | Avalanche    | AVAX         |\n| 42220          | Celo         | CELO         |\n| 324            | zkSync       | ETH          |\n| 5000           | Mantle       | MNT          |\n| 204            | opBNB        | BNB          |\n| 534352         | Scroll       | ETH          |\n| 1923           | Swellchain   | ETH          |\n| 130            | Unichain     | ETH          |\n| 23448594291968334 | Starknet  | ETH          |\n| 80094          | Berachain    | BERA         |\n| 999            | Hyperliquid  | HYPE         |\n| 146            | Sonic        | S            |\n| 1337           | Localhost    | ETH          |\n    \n\n## License\n\nThis project is licensed under the [MIT License](LICENSE). See the `LICENSE` file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Token-Minter-MCP": {
+        "command": "node",
+        "args": ["path/to/token-minter-mcp/server/index.js"],
+        "env": {
+          "INFURA_KEY": "your infura key",
+          "PRIVATE_KEY": "your private key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "token-minter-mcp",
+    "url": "https://github.com/kukapay/token-minter-mcp",
+    "name": "token-minter-mcp",
+    "path": null,
+    "stars": 15,
+    "contributors": 2,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ab2e6adf0958ba7fdf89ce47f5a7197f571a1718"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:14.932Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "ethers",
+      "importance": 9
+    },
+    {
+      "name": "@openzeppelin/contracts",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"token-minter-mcp\",\n  \"version\": \"1.0.1\",\n  \"homepage\": \"https://github.com/kukapay/token-minter-mcp\",\n  \"main\": \"index.js\",\n  \"license\": \"MIT\",\n  \"devDependencies\": {\n    \"@nomicfoundation/hardhat-chai-matchers\": \"^2.0.0\",\n    \"@nomicfoundation/hardhat-ethers\": \"^3.0.8\",\n    \"@nomicfoundation/hardhat-ignition\": \"^0.15.0\",\n    \"@nomicfoundation/hardhat-ignition-ethers\": \"^0.15.0\",\n    \"@nomicfoundation/hardhat-network-helpers\": \"^1.0.0\",\n    \"@nomicfoundation/hardhat-toolbox\": \"^5.0.0\",\n    \"@nomicfoundation/hardhat-verify\": \"^2.0.0\",\n    \"@typechain/ethers-v6\": \"^0.5.0\",\n    \"@typechain/hardhat\": \"^9.0.0\",\n    \"chai\": \"^4.2.0\",\n    \"hardhat\": \"^2.22.19\",\n    \"hardhat-gas-reporter\": \"^1.0.8\",\n    \"solidity-coverage\": \"^0.8.0\",\n    \"typechain\": \"^8.3.0\"\n  },\n  \"dependencies\": {\n    \"@openzeppelin/contracts\": \"^5.2.0\",\n    \"ethers\": \"^6.13.5\"\n  },\n  \"scripts\": {\n    \"build\": \"npx hardhat compile\",\n    \"test\": \"npx hardhat test\"\n  }\n}\n\n\n=== server/package.json ===\n{\n  \"name\": \"evm-tokendiy-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"ethers\": \"^6.13.5\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"scripts\": {\n    \"inspect\": \"npx @modelcontextprotocol/inspector node index.js\"\n  }\n}\n"
+}

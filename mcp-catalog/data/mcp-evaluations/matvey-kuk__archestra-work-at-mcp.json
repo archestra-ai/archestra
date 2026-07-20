@@ -1,0 +1,58 @@
+{
+  "name": "matvey-kuk__archestra-work-at-mcp",
+  "display_name": "Work at Archestra",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCA5OTQgOTUzIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgogIDxyZWN0IHdpZHRoPSI5OTMuOTU4IiBoZWlnaHQ9Ijk1Mi41NDMiIHJ4PSIyMDQuOTIiIGZpbGw9ImJsYWNrIi8+CiAgPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0zOTAuODcxIDY2NC44MThDNDI3LjY4IDY2NC44MTggNDYwLjYyOSA2NDEuOTg1IDQ3My41NTMgNjA3LjUxOUw1NjUuMjM4IDM2My4wMjZDNTg2Ljg4NyAzMDUuMjk2IDU0NC4yMTEgMjQzLjcxNSA0ODIuNTU2IDI0My43MTVDNDQ1Ljc0NyAyNDMuNzE1IDQxMi43OTggMjY2LjU0OCAzOTkuODc0IDMwMS4wMTRMMzA4LjE4OSA1NDUuNTA3QzI4Ni41NCA2MDMuMjM3IDMyOS4yMTYgNjY0LjgxOCAzOTAuODcxIDY2NC44MThaIiBmaWxsPSJ3aGl0ZSIvPgogIDxlbGxpcHNlIGN4PSI2MzguNDg3IiBjeT0iNTc3LjA5NSIgcng9Ijg3LjcyOTgiIHJ5PSI4MS4xNTAxIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K",
+  "description": "An MCP server that applies to a job at Archestra.",
+  "author": {
+    "name": "Matvey-Kuk"
+  },
+  "server": {
+    "type": "local",
+    "command": "npx",
+    "args": ["-y", "work-at-archestra"],
+    "env": {}
+  },
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "category": "Job Search",
+  "quality_score": null,
+  "github_info": {
+    "owner": "Matvey-Kuk",
+    "repo": "archestra-work-at-mcp",
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null,
+    "path": null,
+    "url": "https://github.com/Matvey-Kuk/archestra-work-at-mcp",
+    "name": "matvey-kuk__archestra-work-at-mcp"
+  },
+  "programming_language": "JavaScript",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "tools": [],
+  "prompts": [],
+  "readme": "# work-at-archestra\n\nAn MCP server that applies to a job at [archestra.ai](https://archestra.ai).\n\n## Use\n\n1. Install [Archestra](https://github.com/archestra-ai/archestra).\n2. Click \"Add an MCP server from the remote catalog.\"\n3. Search for **\"work at archestra\"**.",
+  "framework": null,
+  "last_scraped_at": "2026-04-29T00:00:00.000Z",
+  "evaluation_model": null,
+  "dependencies": [],
+  "raw_dependencies": null
+}

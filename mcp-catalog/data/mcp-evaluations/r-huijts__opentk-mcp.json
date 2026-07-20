@@ -1,0 +1,101 @@
+{
+  "name": "r-huijts__opentk-mcp",
+  "display_name": "opentk-mcp",
+  "description": "A Model Context Protocol (MCP) server providing access to Dutch parliamentary data (Tweede Kamer) through OpenTK . This server enables AI assistants to search, retrieve, and analyze parliamentary documents, activities, and information as published by parliament..",
+  "author": {
+    "name": "r-huijts"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@r-huijts/opentk-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# OpenTK Model Context Protocol Server\n\n> **Important Attribution**: This MCP server is built as a wrapper around the excellent [OpenTK project](https://berthub.eu/tkconv/) created by [Bert Hubert](https://berthub.eu/). The OpenTK project provides unprecedented access to Dutch parliamentary data through a user-friendly interface. Learn more about the project in Bert's article: [Welkom bij OpenTK](https://berthub.eu/articles/posts/welkom-bij-opentk/). All credit for the underlying data access and processing goes to Bert Hubert and his contributions to open government data.\n\nA bridge between large language models (LLMs) and Dutch parliamentary data through a standardized interface. This MCP server provides access to Dutch parliamentary documents, debates, and member information from the Tweede Kamer.\n\n<a href=\"https://glama.ai/mcp/servers/@r-huijts/opentk-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@r-huijts/opentk-mcp/badge\" alt=\"OpenTK Model Context Protocol Server MCP server\" />\n</a>\n\n## Real-World Natural Language Interaction Examples\n\n## Example 1: Comparing Party Positions on AI Policies\nUser Query: \"When comparing the activities of opposition parties PvdA, GroenLinks, and Volt with government party BBB in the Dutch House of Representatives in the field of AI, what are actions they can undertake together in the short term that align with the positions and views they have demonstrated over the past year? Please use sources from OpenTK.\"\n\n## Example 2: Researching Parliamentary Discussions on Climate Policy\nUser Query: \"I'd like to analyze recent parliamentary debates on climate policy and emission reduction targets in the Netherlands. Can you help me identify key discussions and the main positions taken by different parties over the past six months?\"\n\n## Example 3: Information About a Specific MP's Voting Record\nUser Query: \"What is MP Pieter Omtzigt's voting record on healthcare reform legislation, and how does his position differ from other independent members? Has he introduced any motions on this topic?\"\n\n## Example 4: Finding Recent Housing Legislation Developments\nUser Query: \"What are the most significant parliamentary documents and debates about affordable housing legislation from the past year? I'm particularly interested in proposals addressing the rental market crisis.\"\n\n## Example 5: Finding MPs with Specific Committee Memberships\nUser Query: \"Which MPs currently serve on both the Finance Committee and the Economic Affairs Committee? What parties do they represent, and have they recently submitted any joint initiatives?\"\n\n## Example 6: Identifying Upcoming Parliamentary Activities on Digital Security\nUser Query: \"Are there any scheduled committee meetings or debates about cybersecurity and digital infrastructure planned for the next month? Which ministers will be participating and what specific topics will be addressed?\"\n\n## Project Concept\n\nThe OpenTK project is a Model Context Protocol (MCP) server that provides access to Dutch parliamentary data through a standardized interface. It serves as a bridge between large language models (LLMs) and the Dutch Parliament's information systems, allowing AI assistants to search, retrieve, and analyze parliamentary documents, debates, and member information.\n\nThe server uses the `@modelcontextprotocol/sdk` to implement the MCP specification, which enables structured communication between AI models and external data sources. By exposing parliamentary data through well-defined tools and endpoints, OpenTK makes it possible for AI assistants to:\n\n1. Search for parliamentary documents using complex queries\n2. Access information about Members of Parliament\n3. Retrieve official documents in various formats and read the full content of the documents\n4. Analyze parliamentary activities and proceedings\n5. Track legislative cases and government pledges\n\nThe project leverages Bert Hubert's tkconv service as its primary data source, which provides a more accessible API than the official Dutch Parliament APIs.\n\n## Installation\n\n### 1. Quick Start with NPM Package (Recommended)\n\nThe fastest way to get started is using the published npm package:\n\n```bash\nnpx @r-huijts/opentk-mcp\n```\n\n### 2. Using Claude Desktop with NPM Package\n\nUpdate your Claude configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"opentk\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@r-huijts/opentk-mcp\"\n      ]\n    }\n  }\n}\n```\n\n**Alternative configurations:**\n\nFor MultiServerMCPClient (Python):\n```python\nmcp_client = MultiServerMCPClient({\n    \"opentk\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"@r-huijts/opentk-mcp\"],\n        \"transport\": \"stdio\",\n    }\n})\n```\n\n### 3. From Source (Development)\n\nIf you want to modify the code or contribute to development:\n\n**Clone Repository:**\n```bash\ngit clone https://github.com/r-huijts/opentk-mcp.git\ncd opentk-mcp\n```\n\n**Install Dependencies:**\n```bash\nnpm install\n```\n\n**Build the Project:**\n```bash\nnpm run build\n```\n\n**Start the Server:**\n```bash\nnpm start\n```\n\n**Configure Claude Desktop for local development:**\n\nUpdate your Claude configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"opentk-local\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/absolute/path/to/your/opentk-mcp/dist/index.js\"\n      ]\n    }\n  }\n}\n```\n\nMake sure to replace `/absolute/path/to/your/opentk-mcp/` with the actual path to your installation.\n\n### 4. Publishing (for maintainers)\n\nTo publish a new version of the scoped package:\n\n```bash\nnpm run build\nnpm publish --access=public\n```\n\nNote: Scoped packages require the `--access=public` flag to be publicly available.\n\n## Search Functionality\n\nThe search functionality is particularly sophisticated, supporting:\n\n- Simple keyword searches: `kunstmatige intelligentie`\n- Exact phrase searches: `\"kunstmatige intelligentie\"`\n- Exclusion searches: `Hubert NOT Bruls`\n- Boolean operators: `OR`, `NEAR()`\n\nThe implementation handles various edge cases:\n- Preserves quotes in search queries\n- Uses proper content type headers\n- Implements fallback mechanisms for API errors\n- Provides meaningful error messages\n\n## Error Handling\n\nThe API service includes robust error handling:\n- Graceful handling of API errors (4xx, 5xx)\n- Fallback to simplified queries when complex ones fail\n- Detailed error messages for debugging\n- Proper logging to stderr (not stdout, which would break the stdio transport)\n\n## Configuration\n\nThe server connects to Bert Hubert's [tkconv service](https://berthub.eu/tkconv/) as its primary data source, which provides a more accessible API than the official Dutch Parliament APIs. This service, created by Bert Hubert, does the heavy lifting of collecting, organizing, and making available Dutch parliamentary data in a developer-friendly format. Our MCP server builds upon this foundation to create a standardized interface for AI assistants to interact with this valuable data.\n\n## License\n\nMIT\n\n## Conclusion\n\nThe OpenTK MCP server provides a robust and well-structured interface to Dutch parliamentary data, making it accessible to AI assistants through the Model Context Protocol. Its modular design, comprehensive API, and thorough testing ensure reliable access to parliamentary information for AI-assisted research, analysis, and information retrieval.\n\nOnce configured, Claude will be able to access Dutch parliamentary data through the OpenTK MCP server. The server exposes all the tools described in the [Usage](#usage) section above.",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "r-huijts-opentk-mcp": {
+        "command": "npx",
+        "args": ["@r-huijts/opentk-mcp"],
+        "env": {}
+      },
+      "opentk": {
+        "command": "npx",
+        "args": ["-y", "@r-huijts/opentk-mcp"],
+        "env": {}
+      },
+      "opentk-stdio": {
+        "command": "npx",
+        "args": ["-y", "@r-huijts/opentk-mcp"],
+        "env": {}
+      },
+      "opentk-local": {
+        "command": "node",
+        "args": ["/absolute/path/to/your/opentk-mcp/dist/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "r-huijts",
+    "repo": "opentk-mcp",
+    "url": "https://github.com/r-huijts/opentk-mcp",
+    "name": "opentk-mcp",
+    "path": null,
+    "stars": 13,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "cff2328f416c8c8900978a5c604d9232cb7e1b66"
+  },
+  "programming_language": "HTML",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:31.000Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "form-data",
+      "importance": 5
+    },
+    {
+      "name": "mammoth",
+      "importance": 7
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "pdf-parse",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@r-huijts/opentk-mcp\",\n  \"version\": \"1.0.8\",\n  \"description\": \"MCP server for Dutch parliamentary data access via OpenTK\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"bin\": {\n    \"opentk-mcp\": \"dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"postbuild\": \"chmod +x dist/index.js\",\n    \"build:watch\": \"tsc --watch\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"ts-node-dev --respawn --transpile-only src/index.ts\",\n    \"test\": \"jest\",\n    \"test:watch\": \"jest --watch\",\n    \"test:coverage\": \"jest --coverage\",\n    \"lint\": \"eslint . --ext .ts\",\n    \"lint:fix\": \"eslint . --ext .ts --fix\",\n    \"clean\": \"rimraf dist\",\n    \"prepare\": \"npm run clean && npm run build\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"parliament\",\n    \"dutch\",\n    \"tweede-kamer\",\n    \"opendata\",\n    \"ai\",\n    \"llm\",\n    \"claude\",\n    \"government\",\n    \"politics\",\n    \"tkconv\"\n  ],\n  \"author\": \"r-huijts\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"form-data\": \"^4.0.0\",\n    \"mammoth\": \"^1.9.0\",\n    \"node-fetch\": \"^2.6.7\",\n    \"pdf-parse\": \"^1.1.1\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.0\",\n    \"@types/node\": \"^18.15.11\",\n    \"@types/node-fetch\": \"^2.6.3\",\n    \"@typescript-eslint/eslint-plugin\": \"^5.57.1\",\n    \"@typescript-eslint/parser\": \"^5.57.1\",\n    \"eslint\": \"^8.37.0\",\n    \"jest\": \"^29.5.0\",\n    \"rimraf\": \"^5.0.0\",\n    \"ts-jest\": \"^29.1.0\",\n    \"ts-node-dev\": \"^2.0.0\",\n    \"typescript\": \"^5.0.3\"\n  }\n}\n"
+}

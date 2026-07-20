@@ -1,0 +1,104 @@
+{
+  "name": "sdglbl__mcp-claude-code",
+  "display_name": "mcp-claude-code",
+  "description": "MCP implementation of Claude Code capabilities and more",
+  "author": {
+    "name": "SDGLBL"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Claude Code\n\nAn implementation of Claude Code capabilities using the Model Context Protocol (MCP).\n\n## Overview\n\nThis project provides an MCP server that implements Claude Code-like functionality, allowing Claude to directly execute instructions for modifying and improving project files. By leveraging the Model Context Protocol, this implementation enables seamless integration with various MCP clients including Claude Desktop.\n\n![example](./doc/example2.gif)\n\n## Features\n\n- **Code Understanding**: Analyze and understand codebases through file access and pattern searching\n- **Code Modification**: Make targeted edits to files with proper permission handling\n- **Enhanced Command Execution**: Run commands and scripts in various languages with improved error handling and shell support\n- **File Operations**: Manage files with proper security controls through shell commands\n- **Code Discovery**: Find relevant files and code patterns across your project with high-performance searching\n- **Agent Delegation**: Delegate complex tasks to specialized sub-agents that can work concurrently\n- **Multiple LLM Provider Support**: Configure any LiteLLM-compatible model for agent operations\n- **Jupyter Notebook Support**: Read and edit Jupyter notebooks with full cell and output handling\n\n## Tools Implemented\n\n| Tool              | Description                                                                                                                       |\n| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |\n| `read`            | Read file contents with line numbers, offset, and limit capabilities                                                              |\n| `write`           | Create or overwrite files                                                                                                         |\n| `edit`            | Make line-based edits to text files                                                                                               |\n| `multi_edit`      | Make multiple precise text replacements in a single file operation with atomic transactions                                       |\n| `directory_tree`  | Get a recursive tree view of directories                                                                                          |\n| `grep`            | Fast pattern search in files with ripgrep integration for best performance ([docs](./doc/migration_SearchContentTool_to_Grep.md)) |\n| `content_replace` | Replace patterns in file contents                                                                                                 |\n| `grep_ast`        | Search code with AST context showing matches within functions, classes, and other structures                                      |\n| `run_command`     | Execute shell commands (also used for directory creation, file moving, and directory listing)                                     |\n| `notebook_read`   | Extract and read source code from all cells in a Jupyter notebook with outputs                                                    |\n| `notebook_edit`   | Edit, insert, or delete cells in a Jupyter notebook                                                                               |\n| `think`           | Structured space for complex reasoning and analysis without making changes                                                        |\n| `dispatch_agent`  | Launch one or more agents that can perform tasks using read-only tools concurrently                                               |\n| `batch`           | Execute multiple tool invocations in parallel or serially in a single request                                                     |\n| `todo_write`      | Create and manage a structured task list                                                                                          |\n| `todo_read`       | Read a structured task list                                                                                                       |\n\n## Getting Started\n\nFor detailed installation and configuration instructions, please refer to [INSTALL.md](./doc/INSTALL.md).\n\nFor detailed tutorial of 0.3 version, please refer to [TUTORIAL.md](./doc/TUTORIAL.md)\n\n## Security\n\nThis implementation follows best practices for securing access to your filesystem:\n\n- Permission prompts for file modifications and command execution\n- Restricted access to specified directories only\n- Input validation and sanitization\n- Proper error handling and reporting\n\n## Development\n\nTo contribute to this project:\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n",
+  "category": "Development",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "SDGLBL",
+    "repo": "mcp-claude-code",
+    "url": "https://github.com/SDGLBL/mcp-claude-code",
+    "name": "sdglbl__mcp-claude-code",
+    "path": null,
+    "stars": 258,
+    "contributors": 4,
+    "issues": 17,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "5aa07a6bf55f6ec3009a6adc1698679132f44c90"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:42.763Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "litellm",
+      "importance": 9
+    },
+    {
+      "name": "grep-ast",
+      "importance": 7
+    },
+    {
+      "name": "GitPython",
+      "importance": 7
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "libtmux",
+      "importance": 6
+    },
+    {
+      "name": "bashlex",
+      "importance": 6
+    },
+    {
+      "name": "pytest-asyncio",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"mcp-claude-code\"\nversion = \"0.5.1\"\ndescription = \"MCP implementation of Claude Code capabilities\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\nlicense = { text = \"MIT\" }\nauthors = [{ name = \"SDGLBL\", email = \"sdglbl.me@gmail.com\" }]\nclassifiers = [\n  \"Programming Language :: Python :: 3\",\n  \"License :: OSI Approved :: MIT License\",\n  \"Operating System :: OS Independent\",\n]\ndependencies = [\n  \"httpx>=0.27.0\",\n  \"uvicorn>=0.23.1\",\n  \"openai>=1.50.0\",\n  \"python-dotenv>=1.0.0\",\n  \"litellm<=1.67.1\",\n  \"grep-ast>=0.8.1\",\n  \"GitPython>=3.1.0\",\n  \"fastmcp>=2.5.1\",\n  \"libtmux>=0.15.0\",\n  \"bashlex>=0.16\",\n  \"pytest-asyncio>=0.26.0\",\n]\n\n[project.optional-dependencies]\ndev = [\"pytest>=7.0.0\", \"pytest-cov>=4.1.0\", \"ruff>=0.1.0\", \"black>=23.3.0\"]\ntest = [\n  \"pytest>=7.0.0\",\n  \"pytest-cov>=4.1.0\",\n  \"pytest-mock>=3.10.0\",\n  \"pytest-asyncio>=0.25.3\",\n  \"twisted\",\n]\nperformance = [\"ujson>=5.7.0\", \"orjson>=3.9.0\"]\n\n[project.scripts]\nclaudecode = \"mcp_claude_code.cli:main\"\n\n[tool.setuptools.packages.find]\nwhere = [\".\"]\ninclude = [\"mcp_claude_code*\"]\n\n\n[tool.basedpyright]\ninclude = [\"mcp_claude_code\"]\n\nexclude = [\n  \"**/node_modules\",\n  \"**/__pycache__\",\n  \"src/experimental\",\n  \"src/typestubs\",\n]\n\npythonVersion = \"3.13\"\nreportUnknownVariableType = false\nreportUnknownMemberType = false\nreportUnknownParameterType = false\nreportUnusedCallResult = false\nreportIgnoreCommentWithoutRule = false\nreportUnusedParameter = false\nreportAny = false\nreportRedeclaration = false\nreportMissingTypeArgument = false\nreportExplicitAny = false\nreportUnusedFunction = false\n\n[tool.pytest.ini_options]\nasyncio_mode = \"strict\"\nasyncio_default_fixture_loop_scope = \"function\"\n"
+}

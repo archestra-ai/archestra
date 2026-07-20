@@ -1,0 +1,80 @@
+{
+  "name": "browsermcp__mcp",
+  "display_name": "mcp",
+  "description": "Browser MCP is a Model Context Provider (MCP) server that allows AI applications to control your browser",
+  "author": {
+    "name": "browsermcp"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<a href=\"https://browsermcp.io\">\n  <img src=\"./.github/images/banner.png\" alt=\"Browser MCP banner\">\n</a>\n\n<h3 align=\"center\">Browser MCP</h3>\n\n<p align=\"center\">\n  Automate your browser with AI.\n  <br />\n  <a href=\"https://browsermcp.io\"><strong>Website</strong></a> \n  •\n  <a href=\"https://docs.browsermcp.io\"><strong>Docs</strong></a>\n</p>\n\n## About\n\nBrowser MCP is an MCP server + Chrome extension that allows you to automate your browser using AI applications like VS Code, Claude, Cursor, and Windsurf.\n\n## Features\n\n- ⚡ Fast: Automation happens locally on your machine, resulting in better performance without network latency.\n- 🔒 Private: Since automation happens locally, your browser activity stays on your device and isn't sent to remote servers.\n- 👤 Logged In: Uses your existing browser profile, keeping you logged into all your services.\n- 🥷🏼 Stealth: Avoids basic bot detection and CAPTCHAs by using your real browser fingerprint.\n\n## Contributing\n\nThis repo contains all the core MCP code for Browser MCP, but currently cannot yet be built on its own due to dependencies on utils and types from the monorepo where it's developed.\n\n## Credits\n\nBrowser MCP was adapted from the [Playwright MCP server](https://github.com/microsoft/playwright-mcp) in order to automate the user's browser rather than creating new browser instances. This allows using the user's existing browser profile to use logged-in sessions and avoid bot detection mechanisms that commonly block automated browser use.\n",
+  "category": "Browser Automation",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "browsermcp",
+    "repo": "mcp",
+    "url": "https://github.com/browsermcp/mcp",
+    "name": "browsermcp__mcp",
+    "path": null,
+    "stars": 4125,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "9db12f2b4f61294f0bc11708986abc47db539d6c"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.818Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "ws",
+      "importance": 9
+    },
+    {
+      "name": "commander",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@browsermcp/mcp\",\n  \"version\": \"0.1.3\",\n  \"description\": \"MCP server for browser automation using Browser MCP\",\n  \"author\": \"Browser MCP\",\n  \"homepage\": \"https://browsermcp.io\",\n  \"bugs\": \"https://github.com/browsermcp/mcp/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-browsermcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"typecheck\": \"tsc --noEmit\",\n    \"build\": \"tsup src/index.ts --format esm && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsup src/index.ts --format esm --watch \",\n    \"inspector\": \"CLIENT_PORT=9001 SERVER_PORT=9002 pnpx @modelcontextprotocol/inspector node dist/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"commander\": \"^13.1.0\",\n    \"ws\": \"^8.18.1\",\n    \"zod\": \"^3.24.2\",\n    \"zod-to-json-schema\": \"^3.24.3\"\n  },\n  \"devDependencies\": {\n    \"@r2r/messaging\": \"workspace:*\",\n    \"@repo/config\": \"workspace:*\",\n    \"@repo/messaging\": \"workspace:*\",\n    \"@repo/types\": \"workspace:*\",\n    \"@repo/utils\": \"workspace:*\",\n    \"@types/ws\": \"^8.18.0\",\n    \"shx\": \"^0.3.4\",\n    \"tsup\": \"^8.4.0\",\n    \"typescript\": \"^5.6.2\"\n  }\n}\n"
+}

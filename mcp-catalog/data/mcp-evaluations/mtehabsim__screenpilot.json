@@ -1,0 +1,235 @@
+{
+  "name": "mtehabsim__screenpilot",
+  "display_name": "ScreenPilot",
+  "description": "MCP server to let LLM take full control on your device by providing screen automation toolkit for controlling and interacting with graphical user interface",
+  "author": {
+    "name": "Mtehabsim"
+  },
+  "server": {
+    "command": "${user_config.python_executable_path}",
+    "args": ["${user_config.main_script_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "python_executable_path": {
+      "type": "file",
+      "title": "Python Executable Path",
+      "description": "The full path to your Python executable, typically located in your virtual environment (e.g., C:\\Users\\YourUser\\ScreenPilot\\venv\\Scripts\\python.exe).",
+      "required": true
+    },
+    "main_script_path": {
+      "type": "file",
+      "title": "Main Script Path",
+      "description": "The full path to the ScreenPilot 'main.py' file (e.g., C:\\Users\\YourUser\\ScreenPilot\\main.py).",
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mtehabsim-screenpilot-badge.png)](https://mseep.ai/app/mtehabsim-screenpilot)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Mtehabsim/ScreenPilot)](https://archestra.ai/mcp-catalog/mtehabsim__screenpilot)\n\n# ScreenPilot\n\nMCP server to let LLM take full control on your device by providing screen automation toolkit for controlling and interacting with graphical user interfaces. Good for automation, education and having fun.\n\n\n## Main Features\n\n- 📷 Screen capture and analysis\n- 🖱️ Mouse control (clicking, positioning)\n- ⌨️ Keyboard input (typing, key presses, hotkeys)\n\n## watch demo\n\n\nhttps://github.com/user-attachments/assets/c18380c0-b3dd-4b7c-925d-28ef205ca11f\n\n\n\n## Installation\n0. Install python 3.12\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/Mtehabsim/ScreenPilot.git\n   ```\n2. create virtiual environment\n```bash\n\npython -m venv venv\n```\n3. activate the env\n```bash\nvenv\\Scripts\\activate\n```\n4. Install the required packages:\n   ```bash\n   pip install -r requirements.txt\n   ```\n5. Open Claude AI desktop\n6. file -> settings -> developer -> edit config\n7. open config file and paste this\n```bash\n{\n    \"mcpServers\": {\n        \"device-controll\": {\n            \"command\": \"pathToEnv\\\\venv\\\\Scripts\\\\python.exe\",\n            \"args\": [\n                \"pathToProject\\\\ScreenPilot\\\\main.py\"\n            ]\n        }\n    }\n}\n\n```\n8. Replace\n    \"pathToEnv\\\\venv\\\\Scripts\\\\python.exe\" → with the full path to your python.exe\n    \"pathToProject\\\\ScreenPilot\\\\main.py\" → with the full path to your main.py file\n\n9. Save the config file.\n\n10. Open Claude AI Desktop.\n\n11. Go to File → Exit\n\n12. You can now open Claude AI Desktop and enjoy ScreenPilot.\n\n\n### Available Tools\n\n- **Screen Capture**: Take screenshots and get screen information\n- **Mouse Control**: Move the mouse and perform clicks\n- **Keyboard Actions**: Type text, press keys, and use hotkey combinations\n- **Scrolling**: Scroll in different directions and to specific positions\n- **Element Detection**: Check if elements exist on screen and wait for them to appear\n- **Action Sequences**: Perform multiple actions in sequence\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n",
+  "category": "Browser Automation",
+  "quality_score": 24,
+  "archestra_config": {
+    "client_config_permutations": {
+      "device-controll": {
+        "command": "pathToEnv\\venv\\Scripts\\python.exe",
+        "args": ["pathToProject\\ScreenPilot\\main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Mtehabsim",
+    "repo": "ScreenPilot",
+    "url": "https://github.com/Mtehabsim/ScreenPilot",
+    "name": "ScreenPilot",
+    "path": null,
+    "stars": 38,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "349180db900d5aa6e70072a408e5e4550515616f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.889Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "starlette",
+      "importance": 9
+    },
+    {
+      "name": "PyAutoGUI",
+      "importance": 9
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "MouseInfo",
+      "importance": 8
+    },
+    {
+      "name": "PyGetWindow",
+      "importance": 8
+    },
+    {
+      "name": "PyMsgBox",
+      "importance": 8
+    },
+    {
+      "name": "pyperclip",
+      "importance": 8
+    },
+    {
+      "name": "PyRect",
+      "importance": 8
+    },
+    {
+      "name": "PyScreeze",
+      "importance": 8
+    },
+    {
+      "name": "pytweening",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 7
+    },
+    {
+      "name": "pydantic_core",
+      "importance": 7
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 7
+    },
+    {
+      "name": "httpx-sse",
+      "importance": 7
+    },
+    {
+      "name": "pillow",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "typer",
+      "importance": 5
+    },
+    {
+      "name": "click",
+      "importance": 5
+    },
+    {
+      "name": "anyio",
+      "importance": 5
+    },
+    {
+      "name": "sniffio",
+      "importance": 5
+    },
+    {
+      "name": "h11",
+      "importance": 5
+    },
+    {
+      "name": "httpcore",
+      "importance": 5
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "rich",
+      "importance": 3
+    },
+    {
+      "name": "markdown-it-py",
+      "importance": 3
+    },
+    {
+      "name": "mdurl",
+      "importance": 3
+    },
+    {
+      "name": "Pygments",
+      "importance": 3
+    },
+    {
+      "name": "colorama",
+      "importance": 3
+    },
+    {
+      "name": "shellingham",
+      "importance": 3
+    },
+    {
+      "name": "annotated-types",
+      "importance": 3
+    },
+    {
+      "name": "typing-inspection",
+      "importance": 3
+    },
+    {
+      "name": "typing_extensions",
+      "importance": 3
+    },
+    {
+      "name": "certifi",
+      "importance": 3
+    },
+    {
+      "name": "charset-normalizer",
+      "importance": 3
+    },
+    {
+      "name": "idna",
+      "importance": 3
+    },
+    {
+      "name": "urllib3",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\n﻿annotated-types==0.7.0\r\nanyio==4.9.0\r\ncertifi==2025.1.31\r\ncharset-normalizer==3.4.1\r\nclick==8.1.8\r\ncolorama==0.4.6\r\nh11==0.14.0\r\nhttpcore==1.0.7\r\nhttpx==0.28.1\r\nhttpx-sse==0.4.0\r\nidna==3.10\r\nmarkdown-it-py==3.0.0\r\nmcp==1.6.0\r\nmdurl==0.1.2\r\nMouseInfo==0.1.3\r\npillow==11.1.0\r\nPyAutoGUI==0.9.54\r\npydantic==2.11.2\r\npydantic-settings==2.8.1\r\npydantic_core==2.33.1\r\nPyGetWindow==0.0.9\r\nPygments==2.19.1\r\nPyMsgBox==1.0.9\r\npyperclip==1.9.0\r\nPyRect==0.2.0\r\nPyScreeze==1.0.1\r\npython-dotenv==1.1.0\r\npytweening==1.2.0\r\nrequests==2.32.3\r\nrich==14.0.0\r\nshellingham==1.5.4\r\nsniffio==1.3.1\r\nsse-starlette==2.2.1\r\nstarlette==0.46.1\r\ntyper==0.15.2\r\ntyping-inspection==0.4.0\r\ntyping_extensions==4.13.1\r\nurllib3==2.3.0\r\nuvicorn==0.34.0\r\n"
+}

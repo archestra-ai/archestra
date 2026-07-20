@@ -1,0 +1,79 @@
+{
+  "name": "automata-labs-team__mcp-server-playwright",
+  "display_name": "Playwright Browser Automation",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjM0ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDE5MiI+PHBhdGggZmlsbD0iIzJkNDU1MiIgZD0iTTg0LjM4IDEwOC4zNTJjLTkuNTU2IDIuNzEyLTE1LjgyNiA3LjQ2Ny0xOS45NTYgMTIuMjE4YzMuOTU2LTMuNDYxIDkuMjU1LTYuNjM5IDE2LjQwMi04LjY2NWM3LjMxMS0yLjA3MiAxMy41NDgtMi4wNTcgMTguNzAyLTEuMDYydi00LjAzYy00LjM5Ny0uNDAyLTkuNDM3LS4wODItMTUuMTQ4IDEuNTM5TTYzLjk4NyA3NC40NzVsLTM1LjQ5IDkuMzVzLjY0Ni45MTQgMS44NDQgMi4xMzNsMzAuMDkyLTcuOTNzLS40MjcgNS40OTUtNC4xMyAxMC40MWM3LjAwNS01LjI5OSA3LjY4NC0xMy45NjMgNy42ODQtMTMuOTYzbTI5LjcwOSA4My40MWMtNDkuOTQ2IDEzLjQ1Mi03Ni4zNy00NC40My04NC4zNy03NC40NzJjLTMuNjk2LTEzLjg2OC01LjMxLTI0LjM3LTUuNzQtMzEuMTQ4YTExLjUgMTEuNSAwIDAgMSAuMDI1LTEuODRDMS4wMjEgNTAuNTgtLjIyIDUxLjkyNy4wMzIgNTUuODJjLjQzIDYuNzczIDIuMDQ0IDE3LjI3NSA1Ljc0IDMxLjE0N2M3Ljk5NyAzMC4wMzggMzQuNDI0IDg3LjkyIDg0LjM3IDc0LjQ2OGMxMC44NzEtMi45MjkgMTkuMDM4LTguMjYzIDI1LjE3LTE1LjA3M2MtNS42NTIgNS4xMDQtMTIuNzI0IDkuMTIzLTIxLjYxNiAxMS41MjNNMTAzLjA4IDM5LjA1djMuNTU1aDE5LjU5Yy0uNDAxLTEuMjU5LS44MDYtMi4zOTMtMS4yMDgtMy41NTV6Ii8+PHBhdGggZmlsbD0iIzJkNDU1MiIgZD0iTTEyNy4wNSA2OC4zMjVjOC44MSAyLjUwMyAxMy40NyA4LjY4IDE1LjkzMyAxNC4xNDZsOS44MjQgMi43OXMtMS4zNC0xOS4xMzItMTguNjQ1LTI0LjA0N2MtMTYuMTg5LTQuNi0yNi4xNTEgOC45OTUtMjcuMzYzIDEwLjc1NGM0LjcxLTMuMzU1IDExLjU4Ni02LjEwMiAyMC4yNTEtMy42NDNtNzguMTk3IDE0LjIzNGMtMTYuMjA0LTQuNjItMjYuMTYyIDkuMDAzLTI3LjM1NiAxMC43MzdjNC43MTMtMy4zNTEgMTEuNTg2LTYuMDk5IDIwLjI0Ny0zLjYyOWM4Ljc5NyAyLjUwNiAxMy40NTIgOC42NzYgMTUuOTIzIDE0LjE0Nmw5LjgzNyAyLjhzLTEuMzYxLTE5LjEzNS0xOC42NTEtMjQuMDU0bS05Ljc2IDUwLjQ0M2wtODEuNzE4LTIyLjg0NXMuODg1IDQuNDg1IDQuMjc5IDEwLjI5M2w2OC44MDMgMTkuMjM0YzUuNjY0LTMuMjc3IDguNjM2LTYuNjgyIDguNjM2LTYuNjgybS01Ni42NTUgNDkuMTc0Qzc0LjEyNyAxNjQuODI4IDgxLjk0OSA4Mi4zODYgOTIuNDE5IDQzLjMyYzQuMzExLTE2LjEgOC43NDMtMjguMDY2IDEyLjQxOS0zNi4wODhjLTIuMTkzLS40NTEtNC4wMS43MDQtNS44MDQgNC4zNTRDOTUuMTMgMTkuNSA5MC4xNCAzMi4zODcgODUuMzEyIDUwLjQyN2MtMTAuNDY3IDM5LjA2Ni0xOC4yOSAxMjEuNTA2IDQ2LjQxMiAxMzguODU0YzMwLjQ5NyA4LjE3IDU0LjI1Ni00LjI0NyA3MS45NjYtMjMuNzQ5Yy0xNi44MSAxNS4yMjYtMzguMjc0IDIzLjc2My02NC44NTggMTYuNjQ0Ii8+PHBhdGggZmlsbD0iI2UyNTc0YyIgZD0iTTEwMy4wODEgMTM4LjU2NXYtMTYuNjM3bC00Ni4yMjMgMTMuMTA4czMuNDE1LTE5Ljg0NiAyNy41MjItMjYuNjg0YzcuMzExLTIuMDcyIDEzLjU0OS0yLjA1OCAxOC43MDEtMS4wNjNWMzkuMDVoMjMuMTQ1Yy0yLjUyLTcuNzg3LTQuOTU4LTEzLjc4Mi03LjAwNi0xNy45NDhjLTMuMzg3LTYuODk1LTYuODU5LTIuMzI0LTE0Ljc0MSA0LjI2OWMtNS41NTIgNC42MzgtMTkuNTgzIDE0LjUzMy00MC42OTggMjAuMjIyYy0yMS4xMTQgNS42OTQtMzguMTg1IDQuMTg0LTQ1LjMwNyAyLjk1Yy0xMC4wOTctMS43NDItMTUuMzc4LTMuOTYtMTQuODg0IDMuNzIxYy40MyA2Ljc3NCAyLjA0MyAxNy4yNzcgNS43NCAzMS4xNDhjNy45OTYgMzAuMDM5IDM0LjQyNCA4Ny45MiA4NC4zNyA3NC40NjhjMTMuMDQ2LTMuNTE1IDIyLjI1NC0xMC40NjQgMjguNjM3LTE5LjMyaC0xOS4yNTZ6bS03NC41ODgtNTQuNzRsMzUuNDk0LTkuMzVzLTEuMDM0IDEzLjY1NC0xNC4zNCAxNy4xNjJjLTEzLjMxIDMuNTA0LTIxLjE1NC03LjgxMi0yMS4xNTQtNy44MTIiLz48cGF0aCBmaWxsPSIjMmVhZDMzIiBkPSJNMjM2LjY2NCAzOS44NGMtOS4yMjYgMS42MTctMzEuMzYxIDMuNjMyLTU4LjcxNi0zLjdjLTI3LjM2My03LjMyOC00NS41MTctMjAuMTQ0LTUyLjcxLTI2LjE2OGMtMTAuMTk3LTguNTQtMTQuNjgyLTE0LjQ3Ni0xOS4wOTYtNS40OThjLTMuOTAyIDcuOTE4LTguODkzIDIwLjgwNS0xMy43MjMgMzguODQ2Yy0xMC40NjYgMzkuMDY2LTE4LjI4OSAxMjEuNTA1IDQ2LjQxMyAxMzguODUzYzY0LjY4NyAxNy4zMzMgOTkuMTI2LTU3Ljk3OCAxMDkuNTkzLTk3LjA0N2M0LjgzLTE4LjAzNyA2Ljk0OC0zMS42OTUgNy41My00MC41MDJjLjY2NS05Ljk3Ni02LjE4Ny03LjA4LTE5LjI5LTQuNzg0TTEwNi42NjggNzIuMTYxczEwLjE5Ni0xNS44NTkgMjcuNDktMTAuOTQzYzE3LjMwNSA0LjkxNSAxOC42NDUgMjQuMDQ2IDE4LjY0NSAyNC4wNDZ6bTQyLjIxNSA3MS4xNjNjLTMwLjQxOS04LjkxLTM1LjExLTMzLjE2Ny0zNS4xMS0zMy4xNjdsODEuNzE0IDIyLjg0NmMwLS4wMDQtMTYuNDk0IDE5LjEyLTQ2LjYwNCAxMC4zMm0yOC44OS00OS44NXMxMC4xODMtMTUuODQ3IDI3LjQ3NC0xMC45MThjMTcuMjkgNC45MjMgMTguNjUxIDI0LjA1NCAxOC42NTEgMjQuMDU0eiIvPjxwYXRoIGZpbGw9IiNkNjUzNDgiIGQ9Im04Ni45MjggMTI2LjUxbC0zMC4wNyA4LjUyMnMzLjI2Ni0xOC42MDkgMjUuNDE4LTI1Ljk4M0w2NS4yNSA0NS4xNDdsLTEuNDcxLjQ0N2MtMjEuMTE1IDUuNjk0LTM4LjE4NSA0LjE4NC00NS4zMDcgMi45NWMtMTAuMDk3LTEuNzQxLTE1LjM3OS0zLjk2LTE0Ljg4NSAzLjcyMmMuNDMgNi43NzQgMi4wNDQgMTcuMjc2IDUuNzQgMzEuMTQ3YzcuOTk3IDMwLjAzOSAzNC40MjUgODcuOTIgODQuMzcgNzQuNDY4bDEuNDcxLS40NjJ6TTI4LjQ5MyA4My44MjVsMzUuNDk0LTkuMzUxcy0xLjAzNCAxMy42NTQtMTQuMzQgMTcuMTYyYy0xMy4zMSAzLjUwNC0yMS4xNTQtNy44MTEtMjEuMTU0LTcuODExIi8+PHBhdGggZmlsbD0iIzFkOGQyMiIgZD0ibTE1MC4yNTUgMTQzLjY1OGwtMS4zNzYtLjMzNWMtMzAuNDE5LTguOTEtMzUuMTEtMzMuMTY2LTM1LjExLTMzLjE2Nmw0Mi4xMzcgMTEuNzc4bDIyLjMwOC04NS43MjRsLS4yNy0uMDdjLTI3LjM2Mi03LjMyOS00NS41MTYtMjAuMTQ1LTUyLjcxLTI2LjE3Yy0xMC4xOTYtOC41NC0xNC42ODItMTQuNDc1LTE5LjA5Ni01LjQ5N2MtMy44OTggNy45MTgtOC44ODkgMjAuODA1LTEzLjcxOSAzOC44NDZjLTEwLjQ2NiAzOS4wNjYtMTguMjg5IDEyMS41MDUgNDYuNDEzIDEzOC44NTJsMS4zMjYuM3pNMTA2LjY2OCA3Mi4xNnMxMC4xOTYtMTUuODU5IDI3LjQ5LTEwLjk0M2MxNy4zMDUgNC45MTUgMTguNjQ1IDI0LjA0NiAxOC42NDUgMjQuMDQ2eiIvPjxwYXRoIGZpbGw9IiNjMDRiNDEiIGQ9Im04OC40NiAxMjYuMDcybC04LjA2NCAyLjI4OWMxLjkwNiAxMC43NCA1LjI2NCAyMS4wNDcgMTAuNTM0IDMwLjE1MmMuOTE4LS4yMDIgMS44MjgtLjM3NiAyLjc2Mi0uNjMyYzIuNDQ5LS42NiA0LjcyLTEuNDc5IDYuOTA2LTIuMzcxYy01Ljg5LTguNzQtOS43ODUtMTguODA0LTEyLjEzNy0yOS40MzhtLTMuMTQ4LTc1LjY0NGMtNC4xNDQgMTUuNDY3LTcuODUyIDM3LjczLTYuODMxIDYwLjA2YzEuODI2LS43OTMgMy43NTYtMS41MzIgNS45LTIuMTRsMS40OTItLjMzNGMtMS44Mi0yMy44NTIgMi4xMTQtNDguMTU3IDYuNTQ2LTY0LjY5NGEzMjMgMzIzIDAgMCAxIDMuMzczLTExLjcwNGExMDUgMTA1IDAgMCAxLTUuOTc0IDMuNTQ3YTMwNyAzMDcgMCAwIDAtNC41MDYgMTUuMjY1Ii8+PC9zdmc+",
+  "description": "MCP server for browser automation using Playwright",
+  "author": {
+    "name": "Automata-Labs-team"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@automatalabs/mcp-server-playwright"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<h1 align=\"center\">MCP Server Playwright</h1>\n<p align=\"center\">\n  <a href=\"https://www.automatalabs.io\"><img alt=\"MCP Playwright\" src=\"https://automatalabs.io/icon.svg\" height=\"250\"/></a>\n</p>\n<p align=\"center\">\n  <b>A Model Context Protocol server that provides browser automation capabilities using Playwright</b></br>\n  <sub>Enable LLMs to interact with web pages, take screenshots, and execute JavaScript in a real browser environment</sub>\n</p>\n\n<p align=\"center\">\n  <a href=\"https://www.npmjs.com/package/@automatalabs/mcp-server-playwright\"><img alt=\"NPM Version\" src=\"https://img.shields.io/npm/v/@automatalabs/mcp-server-playwright.svg\" height=\"20\"/></a>\n  <a href=\"https://npmcharts.com/compare/@automatalabs/mcp-server-playwright?minimal=true\"><img alt=\"Downloads per month\" src=\"https://img.shields.io/npm/dm/@automatalabs/mcp-server-playwright.svg\" height=\"20\"/></a>\n  <a href=\"https://github.com/Automata-Labs-team/MCP-Server-Playwright/blob/main/LICENSE\"><img alt=\"License\" src=\"https://img.shields.io/github/license/Automata-Labs-team/MCP-Server-Playwright.svg\" height=\"20\"/></a>\n  <a href=\"https://smithery.ai/server/@automatalabs/mcp-server-playwright\"><img alt=\"Smithery Installs\" src=\"https://smithery.ai/badge/@automatalabs/mcp-server-playwright\" height=\"20\"/></a>\n</p>\n\n<a href=\"https://glama.ai/mcp/servers/9q4zck8po5\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/9q4zck8po5/badge\" alt=\"MCP-Server-Playwright MCP server\" /></a>\n\n## Table of Contents\n\n- [Features](#features)\n- [Installation](#installation)\n- [Configuration](#configuration)\n- [Components](#components)\n  - [Tools](#tools)\n  - [Resources](#resources)\n- [License](#license)\n\n## Features\n\n- 🌐 Full browser automation capabilities\n- 📸 Screenshot capture of entire pages or specific elements\n- 🖱️ Comprehensive web interaction (navigation, clicking, form filling)\n- 📊 Console log monitoring\n- 🔧 JavaScript execution in browser context\n\n## Installation\n\n### Installing via Smithery\n\nTo install MCP Server Playwright for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@automatalabs/mcp-server-playwright):\n\n```bash\nnpx -y @smithery/cli install @automatalabs/mcp-server-playwright --client claude\n```\n\nYou can install the package using either npx or mcp-get:\n\nUsing npx:\n```bash\nnpx @automatalabs/mcp-server-playwright install\n```\nThis command will:\n1. Check your operating system compatibility (Windows/macOS)\n2. Create or update the Claude configuration file\n3. Configure the Playwright server integration\n\nThe configuration file will be automatically created/updated at:\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\nUsing mcp-get:\n```bash\nnpx @michaellatman/mcp-get@latest install @automatalabs/mcp-server-playwright\n```\n\n## Configuration\n\nThe installation process will automatically add the following configuration to your Claude config file:\n\n```json\n{\n  \"mcpServers\": {\n    \"playwright\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@automatalabs/mcp-server-playwright\"]\n    }\n  }\n}\n```\n## Using with Cursor\n\nYou can also use MCP Server Playwright with [Cursor](https://www.cursor.so/), an AI-powered code editor. To enable browser automation in Cursor via MCP:\n\n1. **Install Playwright browsers** (if not already):\n    ```bash\n    npx playwright install\n    ```\n\n2. **Install MCP Server Playwright for Cursor** using Smithery:\n    ```bash\n    npx -y @smithery/cli install @automatalabs/mcp-server-playwright --client cursor\n    ```\n\n3. **Configuration file setup**:  \n   If you do not use Claude, the configuration file (`claude_desktop_config.json`) may not be created automatically.  \n   - On Windows, create a folder named `Claude` in `%APPDATA%` (usually `C:\\Users\\<YourName>\\AppData\\Roaming\\Claude`).\n   - Inside that folder, create a file named `claude_desktop_config.json` with the following content:\n   \n    ```json\n    {\n      \"serverPort\": 3456\n    }\n    ```\n\n4. **Follow the remaining steps in the [Installation](#installation) section above** to complete the setup.\n\nNow, you can use all the browser automation tools provided by MCP Server Playwright directly from Cursor’s AI features, such as web navigation, screenshot capture, and JavaScript execution.\n\n> **Note:** Make sure you have Node.js installed and `npx` available in your system PATH.\n\n## Components\n\n### Tools\n\n#### `browser_navigate`\nNavigate to any URL in the browser\n```javascript\n{\n  \"url\": \"https://stealthbrowser.cloud\"\n}\n```\n\n#### `browser_screenshot`\nCapture screenshots of the entire page or specific elements\n```javascript\n{\n  \"name\": \"screenshot-name\",     // required\n  \"selector\": \"#element-id\",     // optional\n  \"fullPage\": true              // optional, default: false\n}\n```\n\n#### `browser_click`\nClick elements on the page using CSS selector\n```javascript\n{\n  \"selector\": \"#button-id\"\n}\n```\n\n#### `browser_click_text`\nClick elements on the page by their text content\n```javascript\n{\n  \"text\": \"Click me\"\n}\n```\n\n#### `browser_hover`\nHover over elements on the page using CSS selector\n```javascript\n{\n  \"selector\": \"#menu-item\"\n}\n```\n\n#### `browser_hover_text`\nHover over elements on the page by their text content\n```javascript\n{\n  \"text\": \"Hover me\"\n}\n```\n\n#### `browser_fill`\nFill out input fields\n```javascript\n{\n  \"selector\": \"#input-field\",\n  \"value\": \"Hello World\"\n}\n```\n\n#### `browser_select`\nSelect an option in a SELECT element using CSS selector\n```javascript\n{\n  \"selector\": \"#dropdown\",\n  \"value\": \"option-value\"\n}\n```\n\n#### `browser_select_text`\nSelect an option in a SELECT element by its text content\n```javascript\n{\n  \"text\": \"Choose me\",\n  \"value\": \"option-value\"\n}\n```\n\n#### `browser_evaluate`\nExecute JavaScript in the browser console\n```javascript\n{\n  \"script\": \"document.title\"\n}\n```\n\n### Resources\n\n1. **Console Logs** (`console://logs`)\n   - Access browser console output in text format\n   - Includes all console messages from the browser\n\n2. **Screenshots** (`screenshot://<n>`)\n   - Access PNG images of captured screenshots\n   - Referenced by the name specified during capture\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](https://github.com/Automata-Labs-team/MCP-Server-Playwright/blob/main/LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 68,
+  "archestra_config": {
+    "client_config_permutations": {
+      "automatalabs-mcp-server-playwright": {
+        "command": "npx",
+        "args": ["-y", "@automatalabs/mcp-server-playwright"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "Automata-Labs-team",
+    "repo": "MCP-Server-Playwright",
+    "url": "https://github.com/Automata-Labs-team/MCP-Server-Playwright",
+    "name": "automata-labs-team__mcp-server-playwright",
+    "path": null,
+    "stars": 251,
+    "contributors": 5,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d84bf80a3b41aa2545aa6f453957e9d9969bc671"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.867Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "playwright",
+      "importance": 10
+    },
+    {
+      "name": "yargs",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@automatalabs/mcp-server-playwright\",\n  \"version\": \"1.2.1\",\n  \"description\": \"MCP server for browser automation using Playwright\",\n  \"license\": \"MIT\",\n  \"author\": \"Automata Labs (https://automatalabs.io)\",\n  \"homepage\": \"https://automatalabs.io\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/Automata-Labs-team/MCP-Server-Playwright.git\"\n  },\n  \"bugs\": \"https://github.com/Automata-Labs-team/MCP-Server-Playwright/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-playwright\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.5.0\",\n    \"playwright\": \"^1.48.0\",\n    \"yargs\": \"^17.7.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.10.2\",\n    \"@types/yargs\": \"^17.0.33\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

@@ -1,0 +1,182 @@
+{
+  "name": "aashari__mcp-server-aws-sso",
+  "display_name": "mcp-server-aws-sso",
+  "description": "Node.js/TypeScript MCP server for AWS Single Sign-On (SSO). Enables AI systems (LLMs) with tools to initiate SSO login (device auth flow), list accounts/roles, and securely execute AWS CLI commands using temporary credentials. Streamlines AI interaction with AWS resources.",
+  "author": {
+    "name": "aashari"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@aashari/mcp-server-aws-sso"],
+    "env": {
+      "AWS_REGION": "${user_config.aws_region}",
+      "AWS_SSO_START_URL": "${user_config.aws_sso_start_url}",
+      "DEBUG": "${user_config.debug}",
+      "TRANSPORT_MODE": "${user_config.transport_mode}",
+      "PORT": "${user_config.port}",
+      "AWS_SSO_REGION": "${user_config.aws_sso_region}",
+      "AWS_PROFILE": "${user_config.aws_profile}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "aws_region": {
+      "type": "string",
+      "title": "AWS Region",
+      "description": "Your AWS region (e.g., us-east-1).",
+      "required": false,
+      "default": "us-east-1"
+    },
+    "aws_sso_start_url": {
+      "type": "string",
+      "title": "AWS SSO Start URL",
+      "description": "Your AWS SSO start URL (e.g., https://your-sso-portal.awsapps.com/start).",
+      "sensitive": false,
+      "required": true
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Enable Debug Logging",
+      "description": "Enable debug logging for the server.",
+      "required": false,
+      "default": true
+    },
+    "transport_mode": {
+      "type": "string",
+      "title": "Transport Mode",
+      "description": "Set to 'stdio' for MCP clients or 'http' for server mode.",
+      "required": false,
+      "default": "http"
+    },
+    "port": {
+      "type": "number",
+      "title": "HTTP Server Port",
+      "description": "Port for the HTTP server.",
+      "required": false,
+      "default": 3000,
+      "min": 1,
+      "max": 65535
+    },
+    "aws_sso_region": {
+      "type": "string",
+      "title": "AWS SSO Region",
+      "description": "Your AWS SSO region.",
+      "required": false
+    },
+    "aws_profile": {
+      "type": "string",
+      "title": "AWS Profile Name",
+      "description": "Your AWS profile name (optional).",
+      "required": false
+    }
+  },
+  "readme": "# Connect AI to Your AWS Resources\n\nTransform how you manage and access your AWS infrastructure by connecting Claude, Cursor AI, and other AI assistants directly to your AWS accounts through Single Sign-On. Get instant access to your cloud resources, execute commands, and manage EC2 instances using natural language.\n\n[![NPM Version](https://img.shields.io/npm/v/@aashari/mcp-server-aws-sso)](https://www.npmjs.com/package/@aashari/mcp-server-aws-sso)\n\n## What You Can Do\n\n✅ **Ask AI about your AWS accounts**: *\"Show me all my AWS accounts and available roles\"*  \n✅ **Execute AWS commands**: *\"List all S3 buckets in my production account\"*  \n✅ **Manage EC2 instances**: *\"Check the disk usage on server i-123456789\"*  \n✅ **Access multi-account setups**: *\"Switch to the staging account and describe the VPCs\"*  \n✅ **Monitor resources**: *\"Get the status of all running EC2 instances\"*  \n✅ **Run shell commands**: *\"Execute 'df -h' on my web server via SSM\"*\n\n## Perfect For\n\n- **DevOps Engineers** managing multi-account AWS environments and infrastructure automation\n- **Cloud Architects** needing quick access to resource information across AWS accounts  \n- **Developers** who want to check deployments and run AWS CLI commands through AI\n- **SRE Teams** monitoring and troubleshooting AWS resources using natural language\n- **IT Administrators** managing EC2 instances and executing remote commands securely\n- **Anyone** who wants to interact with AWS using conversational AI\n\n## Quick Start\n\nGet up and running in 2 minutes:\n\n### 1. Get Your AWS SSO Setup\n\nSet up AWS IAM Identity Center:\n1. **Enable AWS IAM Identity Center** in your AWS account\n2. **Configure your identity source** (AWS directory, Active Directory, or external IdP)  \n3. **Set up permission sets** and assign users to AWS accounts\n4. **Note your AWS SSO Start URL** (e.g., `https://your-company.awsapps.com/start`)\n\n### 2. Try It Instantly\n\n```bash\n# Set your AWS SSO configuration\nexport AWS_SSO_START_URL=\"https://your-company.awsapps.com/start\"\nexport AWS_REGION=\"us-east-1\"\n\n# Start the authentication flow\nnpx -y @aashari/mcp-server-aws-sso login\n\n# List your accessible accounts and roles\nnpx -y @aashari/mcp-server-aws-sso ls-accounts\n\n# Execute an AWS command\nnpx -y @aashari/mcp-server-aws-sso exec-command \\\n  --account-id 123456789012 \\\n  --role-name ReadOnly \\\n  --command \"aws s3 ls\"\n```\n\n## Connect to AI Assistants\n\n### For Claude Desktop Users\n\nAdd this to your Claude configuration file (`~/.claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"aws-sso\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@aashari/mcp-server-aws-sso\"],\n      \"env\": {\n        \"AWS_SSO_START_URL\": \"https://your-company.awsapps.com/start\",\n        \"AWS_REGION\": \"us-east-1\"\n      }\n    }\n  }\n}\n```\n\nRestart Claude Desktop, and you'll see \"🔗 aws-sso\" in the status bar.\n\n### For Other AI Assistants\n\nMost AI assistants support MCP. Install the server globally:\n\n```bash\nnpm install -g @aashari/mcp-server-aws-sso\n```\n\nThen configure your AI assistant to use the MCP server with STDIO transport.\n\n### Alternative: Configuration File\n\nCreate `~/.mcp/configs.json` for system-wide configuration:\n\n```json\n{\n  \"aws-sso\": {\n    \"environments\": {\n      \"AWS_SSO_START_URL\": \"https://your-company.awsapps.com/start\",\n      \"AWS_REGION\": \"us-east-1\",\n      \"DEBUG\": \"false\"\n    }\n  }\n}\n```\n\n**Alternative config keys:** The system also accepts `\"@aashari/mcp-server-aws-sso\"` or `\"mcp-server-aws-sso\"` instead of `\"aws-sso\"`.\n\n## Real-World Examples\n\n### 🔐 Authenticate and Explore\n\nAsk your AI assistant:\n- *\"Log into AWS SSO and show me my authentication status\"*\n- *\"List all my AWS accounts and the roles I can assume\"*\n- *\"Check if I'm still authenticated to AWS\"*\n- *\"Show me which AWS accounts I have access to\"*\n\n### 🛠️ Execute AWS Commands\n\nAsk your AI assistant:\n- *\"List all S3 buckets in my production account using the ReadOnly role\"*\n- *\"Show me all running EC2 instances in the us-west-2 region\"*\n- *\"Describe the VPCs in my staging AWS account\"*\n- *\"Get the status of my RDS databases in account 123456789012\"*\n\n### 🖥️ Manage EC2 Instances\n\nAsk your AI assistant:\n- *\"Check the disk usage on EC2 instance i-1234567890abcdef0\"*\n- *\"Run 'uptime' on my web server via Systems Manager\"*\n- *\"Execute 'systemctl status nginx' on instance i-abc123 in production\"*\n- *\"Get memory usage from all my application servers\"*\n\n### 🔍 Infrastructure Monitoring\n\nAsk your AI assistant:\n- *\"List all Lambda functions in my development account\"*\n- *\"Show me the CloudFormation stacks in us-east-1\"*\n- *\"Check the health of my load balancers\"*\n- *\"Get the latest CloudWatch alarms that are in ALARM state\"*\n\n### 🔄 Multi-Account Operations\n\nAsk your AI assistant:\n- *\"Switch to account 987654321098 with AdminRole and list all security groups\"*\n- *\"Compare the running instances between staging and production accounts\"*\n- *\"Check backup policies across all my AWS accounts\"*\n- *\"Audit IAM users in the security account\"*\n\n<details>\n<summary><b>MCP Tool Examples (Click to expand)</b></summary>\n\n### `aws_sso_login`\n\n**Basic Login:**\n```json\n{}\n```\n\n**Custom Login Options:**\n```json\n{\n  \"launchBrowser\": false,\n  \"autoPoll\": true\n}\n```\n\n### `aws_sso_status`\n\n**Check Authentication Status:**\n```json\n{}\n```\n\n### `aws_sso_ls_accounts`\n\n**List All Accounts and Roles:**\n```json\n{}\n```\n\n### `aws_sso_exec_command`\n\n**List S3 Buckets:**\n```json\n{\n  \"accountId\": \"123456789012\", \n  \"roleName\": \"ReadOnly\",\n  \"command\": \"aws s3 ls\"\n}\n```\n\n**Describe EC2 Instances in a Specific Region:**\n```json\n{\n  \"accountId\": \"123456789012\",\n  \"roleName\": \"AdminRole\",\n  \"command\": \"aws ec2 describe-instances --query 'Reservations[*].Instances[*].[InstanceId,State.Name,InstanceType]' --output table\",\n  \"region\": \"us-west-2\"\n}\n```\n\n### `aws_sso_ec2_exec_command`\n\n**Check System Resources:**\n```json\n{\n  \"instanceId\": \"i-0a69e80761897dcce\",\n  \"accountId\": \"123456789012\",\n  \"roleName\": \"InfraOps\",\n  \"command\": \"uptime && df -h && free -m\"\n}\n```\n\n</details>\n\n## Transport Modes\n\nThis server supports two transport modes for different integration scenarios:\n\n### STDIO Transport (Default for MCP Clients)\n- Traditional subprocess communication via stdin/stdout\n- Ideal for local AI assistant integrations (Claude Desktop, Cursor AI)\n- Uses pipe-based communication for direct MCP protocol exchange\n\n```bash\n# Run with STDIO transport (default for AI assistants)\nTRANSPORT_MODE=stdio npx @aashari/mcp-server-aws-sso\n\n# Using npm scripts (after installation)\nnpm run mcp:stdio\n```\n\n### HTTP Transport (Default for Server Mode)\n- Modern HTTP-based transport with Server-Sent Events (SSE)\n- Supports multiple concurrent connections\n- Better for web-based integrations and development\n- Runs on port 3000 by default (configurable via PORT env var)\n- Endpoint: http://localhost:3000/mcp\n- Health check: http://localhost:3000/\n\n```bash\n# Run with HTTP transport (default when no CLI args)\nTRANSPORT_MODE=http npx @aashari/mcp-server-aws-sso\n\n# Using npm scripts (after installation)\nnpm run mcp:http\n\n# Test with MCP Inspector\nnpm run mcp:inspect\n```\n\n### Environment Variables\n\n**Transport Configuration:**\n- `TRANSPORT_MODE`: Set to `stdio` or `http` (default: `http` for server mode, `stdio` for MCP clients)\n- `PORT`: HTTP server port (default: 3000)\n- `DEBUG`: Enable debug logging (default: false)\n\n**Authentication:**\n- `AWS_SSO_START_URL`: Your AWS SSO start URL\n- `AWS_SSO_REGION`: Your AWS SSO region\n- `AWS_PROFILE`: Your AWS profile name (optional)\n- `AWS_REGION`: Your AWS region (optional)\n\n## CLI Commands\n\nCLI commands use `kebab-case`. Run `--help` for details (e.g., `mcp-aws-sso login --help`).\n\n- **login**: Authenticates via AWS SSO (`--no-launch-browser`, `--no-auto-poll`). Ex: `mcp-aws-sso login`.\n- **status**: Checks authentication status (no options). Ex: `mcp-aws-sso status`.\n- **ls-accounts**: Lists accounts/roles (no options). Ex: `mcp-aws-sso ls-accounts`.\n- **exec-command**: Runs AWS CLI command (`--account-id`, `--role-name`, `--command`, `--region`). Ex: `mcp-aws-sso exec-command --account-id 123456789012 --role-name ReadOnly --command \"aws s3 ls\"`.\n- **ec2-exec-command**: Runs shell command on EC2 (`--instance-id`, `--account-id`, `--role-name`, `--command`, `--region`). Ex: `mcp-aws-sso ec2-exec-command --instance-id i-0a69e80761897dcce --account-id 123456789012 --role-name InfraOps --command \"uptime\"`.\n\n<details>\n<summary><b>CLI Command Examples (Click to expand)</b></summary>\n\n### Login\n\n**Standard Login (launches browser and polls automatically):**\n```bash\nmcp-aws-sso login\n```\n\n**Login without Browser Launch:**\n```bash\nmcp-aws-sso login --no-launch-browser\n```\n\n### Execute AWS Commands\n\n**List S3 Buckets:**\n```bash\nmcp-aws-sso exec-command \\\n  --account-id 123456789012 \\\n  --role-name ReadOnly \\\n  --command \"aws s3 ls\"\n```\n\n**List EC2 Instances with Specific Region:**\n```bash\nmcp-aws-sso exec-command \\\n  --account-id 123456789012 \\\n  --role-name AdminRole \\\n  --region us-west-2 \\\n  --command \"aws ec2 describe-instances --output table\"\n```\n\n### Execute EC2 Commands\n\n**Check System Resources:**\n```bash\nmcp-aws-sso ec2-exec-command \\\n  --instance-id i-0a69e80761897dcce \\\n  --account-id 123456789012 \\\n  --role-name InfraOps \\\n  --command \"uptime && df -h && free -m\"\n```\n\n</details>\n\n## Troubleshooting\n\n### \"Authentication failed\" or \"Token expired\"\n\n1. **Re-authenticate with AWS SSO**:\n   ```bash\n   # Test your SSO configuration\n   npx -y @aashari/mcp-server-aws-sso login\n   ```\n\n2. **Check your AWS SSO configuration**:\n   - Verify your `AWS_SSO_START_URL` is correct (should be your organization's SSO portal)\n   - Ensure your `AWS_REGION` matches your SSO region configuration\n\n3. **Verify your SSO setup**:\n   - Make sure you can access the SSO portal in your browser\n   - Check that your AWS account assignments are active\n\n### \"Account not found\" or \"Role not found\"\n\n1. **Check available accounts and roles**:\n   ```bash\n   # List all accessible accounts\n   npx -y @aashari/mcp-server-aws-sso ls-accounts\n   ```\n\n2. **Verify account ID format**:\n   - Account ID should be exactly 12 digits\n   - Use the exact account ID from the `ls-accounts` output\n\n3. **Check role permissions**:\n   - Make sure you have permission to assume the specified role\n   - Use the exact role name from your permission sets\n\n### \"AWS CLI not found\" or Command execution errors\n\n1. **Install AWS CLI v2**:\n   - Download from [AWS CLI Installation Guide](https://aws.amazon.com/cli/)\n   - Ensure `aws` command is in your system PATH\n\n2. **Test AWS CLI independently**:\n   ```bash\n   aws --version\n   aws sts get-caller-identity\n   ```\n\n### \"EC2 command failed\" or \"SSM connection issues\"\n\n1. **Verify EC2 instance setup**:\n   - Instance must have SSM Agent installed and running\n   - Instance needs an IAM role with `AmazonSSMManagedInstanceCore` policy\n\n2. **Check your role permissions**:\n   - Your assumed role needs `ssm:SendCommand` and `ssm:GetCommandInvocation` permissions\n   - Verify the instance is in a running state\n\n3. **Test SSM connectivity**:\n   ```bash\n   # Test if instance is reachable via SSM\n   npx -y @aashari/mcp-server-aws-sso exec-command \\\n     --account-id YOUR_ACCOUNT \\\n     --role-name YOUR_ROLE \\\n     --command \"aws ssm describe-instance-information\"\n   ```\n\n### Claude Desktop Integration Issues\n\n1. **Restart Claude Desktop** after updating the config file\n2. **Check the status bar** for the \"🔗 aws-sso\" indicator\n3. **Verify config file location**:\n   - macOS: `~/.claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n### Getting Help\n\nIf you're still having issues:\n1. Run a simple test command to verify everything works\n2. Check the [GitHub Issues](https://github.com/aashari/mcp-server-aws-sso/issues) for similar problems\n3. Create a new issue with your error message and setup details\n\n## Frequently Asked Questions\n\n### What permissions do I need?\n\n**For AWS SSO Setup:**\n- You need an AWS SSO account with access to IAM Identity Center\n- Permission sets configured by your AWS administrator\n- Access to the specific AWS accounts you want to manage\n\n**For EC2 Commands via SSM:**\n- Your assumed role needs `ssm:SendCommand` and `ssm:GetCommandInvocation` permissions\n- EC2 instances need an IAM role with `AmazonSSMManagedInstanceCore` policy\n- SSM Agent must be installed and running on target instances\n\n### Can I use this with multiple AWS organizations?\n\nCurrently, each installation supports one AWS SSO start URL. For multiple organizations, you'd need separate configurations or manually switch the `AWS_SSO_START_URL` environment variable.\n\n### How long do the SSO credentials last?\n\nAWS SSO tokens typically last 8-12 hours. Temporary credentials for specific accounts/roles last about 1 hour. The tool automatically handles token refresh and credential caching for you.\n\n### What AI assistants does this work with?\n\nAny AI assistant that supports the Model Context Protocol (MCP):\n- Claude Desktop (most popular)\n- Cursor AI  \n- Continue.dev\n- Many others\n\n### Is my data secure?\n\nYes! This tool:\n- Runs entirely on your local machine\n- Uses your own AWS SSO credentials\n- Never sends your data to third parties\n- Only accesses what you give it permission to access\n- Uses temporary credentials that automatically expire\n\n### Do I need AWS CLI installed?\n\nYes, AWS CLI v2 is required for the `aws_sso_exec_command` tool. However, the authentication and account listing features work without it.\n\n### Can I use this with AWS CLI profiles?\n\nThis tool uses AWS SSO directly and doesn't rely on AWS CLI profiles. It manages its own credential cache independently of the AWS CLI configuration.\n\n<details>\n<summary><b>Response Format Examples (Click to expand)</b></summary>\n\n### MCP Tool Response Example (`aws_sso_exec_command`)\n\n```markdown\n# AWS SSO: Command Result\n\n**Account/Role:** 123456789012/ReadOnly\n**Region:** us-east-1 (Default: ap-southeast-1)\n\n## Command\n\n\taws s3 ls\n\n## Output\n\n\t2023-01-15 08:42:53 my-bucket-1\n\t2023-05-22 14:18:19 my-bucket-2\n\t2024-02-10 11:05:37 my-logs-bucket\n\n*Executed: 2025-05-19 06:21:49 UTC*\n```\n\n### Error Response Example\n\n```markdown\n# ❌ AWS SSO: Command Error\n\n**Account/Role:** 123456789012/ReadOnly\n**Region:** us-east-1 (Default: ap-southeast-1)\n\n## Command\n\t\n\taws s3api get-object --bucket restricted-bucket --key secret.txt output.txt\n\n## Error: Permission Denied\nThe role `ReadOnly` does not have permission to execute this command.\n\n## Error Details\n\n\tAn error occurred (AccessDenied) when calling the GetObject operation: Access Denied\n\n### Troubleshooting\n\n#### Available Roles\n- AdminAccess\n- PowerUserAccess\n- S3FullAccess\n\nTry executing the command again using one of the roles listed above that has appropriate permissions.\n\n*Executed: 2025-05-19 06:17:49 UTC*\n```\n\n</details>\n\n## Development\n\n```bash\n# Clone repository\ngit clone https://github.com/aashari/mcp-server-aws-sso.git\ncd mcp-server-aws-sso\n\n# Install dependencies\nnpm install\n\n# Run in development mode\nnpm run dev:server\n\n# Run tests\nnpm test\n```\n\n## Support\n\nNeed help? Here's how to get assistance:\n\n1. **Check the troubleshooting section above** - most common issues are covered there\n2. **Visit our GitHub repository** for documentation and examples: [github.com/aashari/mcp-server-aws-sso](https://github.com/aashari/mcp-server-aws-sso)\n3. **Report issues** at [GitHub Issues](https://github.com/aashari/mcp-server-aws-sso/issues)\n4. **Start a discussion** for feature requests or general questions\n\n---\n\n*Made with ❤️ for DevOps teams who want to bring AI into their AWS workflow.*\n\n",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "aashari-mcp-server-aws-sso": {
+        "command": "npx",
+        "args": ["-y", "@aashari/mcp-server-aws-sso"],
+        "env": {}
+      },
+      "aashari-mcp-server-aws-sso-stdio": {
+        "command": "npx",
+        "args": ["-y", "@aashari/mcp-server-aws-sso"],
+        "env": {
+          "TRANSPORT_MODE": "stdio"
+        }
+      },
+      "aashari-mcp-server-aws-sso-http": {
+        "command": "npx",
+        "args": ["-y", "@aashari/mcp-server-aws-sso"],
+        "env": {
+          "TRANSPORT_MODE": "http"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "aashari",
+    "repo": "mcp-server-aws-sso",
+    "url": "https://github.com/aashari/mcp-server-aws-sso",
+    "name": "aashari__mcp-server-aws-sso",
+    "path": null,
+    "stars": 4,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f093947a4fc2f169ba1b971a26d443122da78fca"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:15.576Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@aws-sdk/client-sso",
+      "importance": 9
+    },
+    {
+      "name": "@aws-sdk/client-sso-oidc",
+      "importance": 9
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "commander",
+      "importance": 6
+    },
+    {
+      "name": "@aws-sdk/client-ec2",
+      "importance": 5
+    },
+    {
+      "name": "@aws-sdk/client-ssm",
+      "importance": 5
+    },
+    {
+      "name": "open",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    },
+    {
+      "name": "cors",
+      "importance": 4
+    },
+    {
+      "name": "dotenv",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@aashari/mcp-server-aws-sso\",\n  \"version\": \"1.21.0\",\n  \"description\": \"Node.js/TypeScript MCP server for AWS Single Sign-On (SSO). Enables AI systems (LLMs) with tools to initiate SSO login (device auth flow), list accounts/roles, and securely execute AWS CLI commands using temporary credentials. Streamlines AI interaction with AWS resources.\",\n  \"main\": \"dist/index.js\",\n  \"types\": \"dist/index.d.ts\",\n  \"_moduleNotes\": \"Although source code uses ESM syntax, the build output target is CommonJS to align with Node.js compatibility and patterns seen in related MCP servers. tsconfig.json's 'module': 'NodeNext' handles the input syntax, while tsc outputs CJS.\",\n  \"type\": \"commonjs\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/aashari/mcp-server-aws-sso.git\"\n  },\n  \"bin\": {\n    \"mcp-aws-sso\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"prepare\": \"npm run build && node scripts/ensure-executable.js\",\n    \"postinstall\": \"node scripts/ensure-executable.js\",\n    \"test\": \"jest --passWithNoTests\",\n    \"test:coverage\": \"jest --coverage\",\n    \"test:cli\": \"jest src/cli/.*\\\\.cli\\\\.test\\\\.ts --runInBand --testTimeout=60000\",\n    \"lint\": \"eslint src --ext .ts --config eslint.config.mjs\",\n    \"format\": \"prettier --write 'src/**/*.ts' 'scripts/**/*.js'\",\n    \"publish:npm\": \"npm publish\",\n    \"update:check\": \"npx npm-check-updates\",\n    \"update:deps\": \"npx npm-check-updates -u && npm install --legacy-peer-deps\",\n    \"update:version\": \"node scripts/update-version.js\",\n    \"mcp:stdio\": \"TRANSPORT_MODE=stdio npm run build && node dist/index.js\",\n    \"mcp:http\": \"TRANSPORT_MODE=http npm run build && node dist/index.js\",\n    \"mcp:inspect\": \"TRANSPORT_MODE=http npm run build && (node dist/index.js &) && sleep 2 && npx @modelcontextprotocol/inspector http://localhost:3000/mcp\",\n    \"dev:stdio\": \"npm run build && npx @modelcontextprotocol/inspector -e TRANSPORT_MODE=stdio -e DEBUG=true node dist/index.js\",\n    \"dev:http\": \"DEBUG=true TRANSPORT_MODE=http npm run build && node dist/index.js\",\n    \"dev:server\": \"DEBUG=true npm run build && npx @modelcontextprotocol/inspector -e DEBUG=true node dist/index.js\",\n    \"dev:cli\": \"DEBUG=true npm run build && DEBUG=true node dist/index.js\",\n    \"start:server\": \"npm run build && npx @modelcontextprotocol/inspector node dist/index.js\",\n    \"start:cli\": \"npm run build && node dist/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"typescript\",\n    \"claude\",\n    \"anthropic\",\n    \"ai\",\n    \"aws\",\n    \"amazon-web-services\",\n    \"sso\",\n    \"single-sign-on\",\n    \"aws-sso\",\n    \"server\",\n    \"model-context-protocol\",\n    \"tools\",\n    \"resources\",\n    \"tooling\",\n    \"ai-integration\",\n    \"mcp-server\",\n    \"llm\",\n    \"ai-connector\",\n    \"external-tools\",\n    \"cli\",\n    \"mcp-inspector\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.33.0\",\n    \"@semantic-release/changelog\": \"^6.0.3\",\n    \"@semantic-release/exec\": \"^7.1.0\",\n    \"@semantic-release/git\": \"^10.0.1\",\n    \"@semantic-release/github\": \"^11.0.4\",\n    \"@semantic-release/npm\": \"^12.0.2\",\n    \"@types/cors\": \"^2.8.19\",\n    \"@types/express\": \"^5.0.3\",\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/node\": \"^24.3.0\",\n    \"@types/open\": \"^6.2.1\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.39.1\",\n    \"@typescript-eslint/parser\": \"^8.39.1\",\n    \"eslint\": \"^9.33.0\",\n    \"eslint-config-prettier\": \"^10.1.8\",\n    \"eslint-plugin-prettier\": \"^5.5.4\",\n    \"jest\": \"^30.0.5\",\n    \"nodemon\": \"^3.1.10\",\n    \"npm-check-updates\": \"^18.0.2\",\n    \"prettier\": \"^3.6.2\",\n    \"semantic-release\": \"^24.2.7\",\n    \"ts-jest\": \"^29.4.1\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.9.2\",\n    \"typescript-eslint\": \"^8.39.1\"\n  },\n  \"publishConfig\": {\n    \"registry\": \"https://registry.npmjs.org/\",\n    \"access\": \"public\"\n  },\n  \"dependencies\": {\n    \"@aws-sdk/client-ec2\": \"^3.868.0\",\n    \"@aws-sdk/client-ssm\": \"^3.864.0\",\n    \"@aws-sdk/client-sso\": \"^3.864.0\",\n    \"@aws-sdk/client-sso-oidc\": \"^3.864.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.17.3\",\n    \"commander\": \"^14.0.0\",\n    \"cors\": \"^2.8.5\",\n    \"dotenv\": \"^17.2.1\",\n    \"express\": \"^5.1.0\",\n    \"open\": \"^10.2.0\",\n    \"zod\": \"^3.25.76\"\n  },\n  \"directories\": {\n    \"example\": \"examples\"\n  },\n  \"jest\": {\n    \"preset\": \"ts-jest\",\n    \"testEnvironment\": \"node\",\n    \"testMatch\": [\n      \"**/src/**/*.test.ts\"\n    ],\n    \"collectCoverageFrom\": [\n      \"src/**/*.ts\",\n      \"!src/**/*.test.ts\",\n      \"!src/**/*.spec.ts\"\n    ],\n    \"coveragePathIgnorePatterns\": [\n      \"/node_modules/\",\n      \"/dist/\",\n      \"/coverage/\"\n    ],\n    \"coverageReporters\": [\n      \"text\",\n      \"lcov\",\n      \"json-summary\"\n    ],\n    \"transform\": {\n      \"^.+\\\\.tsx?$\": [\n        \"ts-jest\",\n        {\n          \"useESM\": true\n        }\n      ]\n    },\n    \"moduleNameMapper\": {\n      \"(.*)\\\\.(js|jsx)$\": \"$1\"\n    },\n    \"extensionsToTreatAsEsm\": [\n      \".ts\"\n    ],\n    \"moduleFileExtensions\": [\n      \"ts\",\n      \"tsx\",\n      \"js\",\n      \"jsx\",\n      \"json\",\n      \"node\"\n    ]\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n\n\n=== scripts/package.json ===\n{\n  \"type\": \"module\"\n} "
+}

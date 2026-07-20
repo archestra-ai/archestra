@@ -1,0 +1,106 @@
+{
+  "name": "lpigeon__ros-mcp-server",
+  "display_name": "ros-mcp-server",
+  "description": "Connect AI models like Claude & GPT with robots using MCP and ROS.",
+  "author": {
+    "name": "lpigeon"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "server.py"],
+    "env": {
+      "LOCAL_IP": "${user_config.local_ip}",
+      "ROSBRIDGE_IP": "${user_config.rosbridge_ip}",
+      "ROSBRIDGE_PORT": "${user_config.rosbridge_port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "local_ip": {
+      "type": "string",
+      "title": "Local IP Address",
+      "description": "The IP address of the local machine where the MCP server is running.",
+      "required": true
+    },
+    "rosbridge_ip": {
+      "type": "string",
+      "title": "ROSBridge IP Address",
+      "description": "The IP address of the machine running rosbridge.",
+      "required": true
+    },
+    "rosbridge_port": {
+      "type": "number",
+      "title": "ROSBridge Port",
+      "description": "The port number for rosbridge websocket connection.",
+      "default": 9090,
+      "required": false
+    }
+  },
+  "readme": "# ROS MCP Server 🧠⇄🤖\n\n![Static Badge](https://img.shields.io/badge/ROS-Available-green)\n![Static Badge](https://img.shields.io/badge/ROS2-Available-green)\n![Static Badge](https://img.shields.io/badge/License-Apache%202.0-blue)\n![Python](https://img.shields.io/badge/python-3.10%2B-blue)\n![GitHub Repo stars](https://img.shields.io/github/stars/robotmcp/ros-mcp-server?style=social)\n![GitHub last commit](https://img.shields.io/github/last-commit/robotmcp/ros-mcp-server)\n\n\n<p align=\"center\">\n  <img src=\"https://github.com/robotmcp/ros-mcp-server/blob/main/docs/images/framework.png\"/>\n</p>\n\nROS-MCP-Server connects large language models (such as Claude, GPT, and Gemini) with existing robots giving them bidirectional AI integration.  \n\nWith no changes to existing robot source code, this enables:\n- 🗣 **Commanding the robot in natural language** → instructions are translated into ROS/ROS2 commands.  \n- 👀 **Giving AI full visibility** → subscribe to topics, call services, read sensor data, and monitor robot state in real time.  \n\n\n### ✅ Key Benefits  \n\n- **No robot code changes** → only requires adding the `rosbridge` node.  \n- **True two-way communication** → LLMs can both *control* robots and *observe* everything happening in ROS (sensors, topics, parameters).  \n- **ROS1 & ROS2 support** → works with both versions out of the box.  \n- **MCP-compatible** → integrates with any MCP-enabled LLM (Claude Desktop, Gemini, ChatGPT, and beyond).   \n\n## 🎥 Examples in Action  \n\n🖥️ **Example - Controlling the MOCA mobile manipulator in NVIDIA Isaac Sim**  \nCommands are entered into Claude Desktop, which uses the MCP server to directly drive the simulated robot.  \n\n<p align=\"center\">\n  <img src=\"https://github.com/robotmcp/ros-mcp-server/blob/main/docs/images/result.gif\" />\n</p>  \n\n---\n🐕 **Example - Controlling Unitree Go with natural language**  ([video](https://contoroinc.sharepoint.com/:v:/s/SandboxNewBusiness/EY1sQlnMV1pPgMFtOfS1-fIBZmt6BN4m1kPRUm9YX8ExXQ?e=9najbm))  \nThe MCP server enables the Claude to interpret images from the robot's cameras, and then command the robot based on human natural language commands. \n\n<p align=\"left\">\n  <img src=\"https://contoro.com/asset/media/demo_go2.gif\" />\n</p>  \n\n---\n🏭 **Example - Debugging an industrial robot** ([Video](https://contoroinc.sharepoint.com/:v:/s/SandboxNewBusiness/EVh2t2_YG9BEl-Bw-8k6xucBcEv7XebJv1MtqLTIfrQpig?e=deu3YO))  \n- Connecting to an industrial robot enables the LLM to browse all ROS topics and services to assess the robot state. \n- With no predefined context, the MCP server enables the LLM to query details about custom topic and service types and their syntax (00:28). \n- Using only natural language, the operator calls the custom services to test and debug the robot(01:42). \n\n<p align=\"center\">\n  <a href=\"https://contoroinc.sharepoint.com/:v:/s/SandboxNewBusiness/EVh2t2_YG9BEl-Bw-8k6xucBcEv7XebJv1MtqLTIfrQpig?e=deu3YO\">\n    <img src=\"https://github.com/robotmcp/ros-mcp-server/blob/main/docs/images/Contoro_robot.png\" width=\"400\" alt=\"Testing and debugging an industrial robot\" />\n  </a>\n</p>\n\n---\n\n## ⚙️ Features of the ROS MCP Server  \n\n- **List topics, services, and message types** → explore everything available in your robot’s ROS environment.  \n- **View type definitions (incl. custom)** → understand the structure of any message.  \n- **Publish/subscribe to topics** → send commands or stream robot data in real time.  \n- **Call services (incl. custom)** → trigger robot functions directly.  \n- **Get/set parameters** → read or adjust robot settings on the fly.  \n- 🔜 **Action support** → upcoming support for ROS Actions.  \n- 🔜 **Permission controls** → manage access for safer deployments.  \n\n---\n\n## 🛠 Getting Started  \n\nThe MCP server is version-agnostic (ROS1 or ROS2) and works with any MCP-compatible LLM.  \n\n<p align=\"center\">\n  <img src=\"https://github.com/robotmcp/ros-mcp-server/blob/main/docs/images/MCP_topology.png\"/>\n</p>  \n\n### Installation  \n\nFollow the [installation guide](docs/installation.md) for step-by-step instructions:  \n1. Clone the repository  \n2. Install `uv` and `rosbridge`  \n3. Install Claude Desktop (or any MCP-enabled client)  \n4. Configure your client to connect to the ROS MCP Server  \n5. Start `rosbridge` on the target robot  \n\n---\n\n## 📚 More Examples & Tutorials  \n\nBrowse our [examples](examples) to see the server in action.  \nWe welcome community PRs with new examples and integrations!  \n\n---\n\n## 🤝 Contributing  \n\nWe love contributions of all kinds:  \n- Bug fixes and documentation updates  \n- New features (e.g., Action support, permissions)  \n- Additional examples and tutorials  \n\nCheck out the [contributing guidelines](docs/contributing.md) and see issues tagged **good first issue** to get started.  \n\n---\n\n## 📜 License  \n\nThis project is licensed under the [Apache License 2.0](LICENSE).  \n",
+  "category": "AI Tools",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ros-mcp-server": {
+        "command": "uv",
+        "args": ["--directory", "/ABSOLUTE/PATH/TO/PARENT/FOLDER/ros-mcp-server", "run", "server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "lpigeon",
+    "repo": "ros-mcp-server",
+    "url": "https://github.com/lpigeon/ros-mcp-server",
+    "name": "lpigeon__ros-mcp-server",
+    "path": null,
+    "stars": 225,
+    "contributors": 5,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "a528f98f7368453460d6158901fbf4bc5666951b"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:40.424Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "opencv-python",
+      "importance": 8
+    },
+    {
+      "name": "websocket",
+      "importance": 9
+    },
+    {
+      "name": "websocket-client",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"ros-mcp-server\"\nversion = \"0.2.0\"\ndescription = \"MCP tool server for ROS using rosbridge WebSocket\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = { text = \"Apache 2.0\" }\nauthors = [\n    { name = \"Rohit John Varghese\"},\n    { name = \"Jungsoo Lee\"}\n]\n\ndependencies = [\n    \"fastmcp>=2.11.3\",\n    \"mcp[cli]>=1.13.0\",\n    \"opencv-python>=4.11.0.86\",\n    \"pillow>=11.3.0\",\n    \"websocket-client>=1.8.0\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"ruff\",    # single tool for linting & formatting\n    \"pytest\"   # for tests\n]\n\n# ---------------- Ruff configuration ----------------\n[tool.ruff]\nline-length = 100\ntarget-version = \"py310\"\n\n# Linter config moved to new section\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\"]  # basic errors, pyflakes, import sorting\nignore = [\"E501\"]         # ignore long-line warnings (optional)\n\n# Formatter config stays here\n[tool.ruff.format]\nquote-style = \"double\"\nindent-style = \"space\"\nskip-magic-trailing-comma = false\ndocstring-code-format = true\n"
+}

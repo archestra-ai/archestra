@@ -1,0 +1,177 @@
+{
+  "name": "makenotion__notion-mcp-server",
+  "display_name": "notion-mcp-server",
+  "description": "Official Notion MCP Server",
+  "author": {
+    "name": "makenotion"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@notionhq/notion-mcp-server"],
+    "env": {
+      "NOTION_TOKEN": "${user_config.notion_token}",
+      "OPENAPI_MCP_HEADERS": "${user_config.openapi_mcp_headers}",
+      "AUTH_TOKEN": "${user_config.auth_token}"
+    },
+    "type": "local"
+  },
+  "readme": "# Notion MCP Server\n\n> [!NOTE] \n> \n> We’ve introduced **Notion MCP**, a remote MCP server with the following improvements:\n> - Easy installation via standard OAuth. No need to fiddle with JSON or API token anymore.\n> - Powerful tools tailored to AI agents. These tools are designed with optimized token consumption in mind.\n> \n> Learn more and try it out [here](https://developers.notion.com/docs/mcp)\n\n\n![notion-mcp-sm](https://github.com/user-attachments/assets/6c07003c-8455-4636-b298-d60ffdf46cd8)\n\nThis project implements an [MCP server](https://spec.modelcontextprotocol.io/) for the [Notion API](https://developers.notion.com/reference/intro). \n\n![mcp-demo](https://github.com/user-attachments/assets/e3ff90a7-7801-48a9-b807-f7dd47f0d3d6)\n\n### Installation\n\n#### 1. Setting up Integration in Notion:\nGo to [https://www.notion.so/profile/integrations](https://www.notion.so/profile/integrations) and create a new **internal** integration or select an existing one.\n\n![Creating a Notion Integration token](docs/images/integrations-creation.png)\n\nWhile we limit the scope of Notion API's exposed (for example, you will not be able to delete databases via MCP), there is a non-zero risk to workspace data by exposing it to LLMs. Security-conscious users may want to further configure the Integration's _Capabilities_. \n\nFor example, you can create a read-only integration token by giving only \"Read content\" access from the \"Configuration\" tab:\n\n![Notion Integration Token Capabilities showing Read content checked](docs/images/integrations-capabilities.png)\n\n#### 2. Connecting content to integration:\nEnsure relevant pages and databases are connected to your integration.\n\nTo do this, visit the **Access** tab in your internal integration settings. Edit access and select the pages you'd like to use.\n![Integration Access tab](docs/images/integration-access.png)\n\n![Edit integration access](docs/images/page-access-edit.png)\n\nAlternatively, you can grant page access individually. You'll need to visit the target page, and click on the 3 dots, and select \"Connect to integration\". \n\n![Adding Integration Token to Notion Connections](docs/images/connections.png)\n\n#### 3. Adding MCP config to your client:\n\n##### Using npm:\n\n**Cursor & Claude:**\n\nAdd the following to your `.cursor/mcp.json` or `claude_desktop_config.json` (MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`)\n\n**Option 1: Using NOTION_TOKEN (recommended)**\n```javascript\n{\n  \"mcpServers\": {\n    \"notionApi\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@notionhq/notion-mcp-server\"],\n      \"env\": {\n        \"NOTION_TOKEN\": \"ntn_****\"\n      }\n    }\n  }\n}\n```\n\n**Option 2: Using OPENAPI_MCP_HEADERS (for advanced use cases)**\n```javascript\n{\n  \"mcpServers\": {\n    \"notionApi\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@notionhq/notion-mcp-server\"],\n      \"env\": {\n        \"OPENAPI_MCP_HEADERS\": \"{\\\"Authorization\\\": \\\"Bearer ntn_****\\\", \\\"Notion-Version\\\": \\\"2022-06-28\\\" }\"\n      }\n    }\n  }\n}\n```\n\n**Zed**\n\nAdd the following to your `settings.json`\n\n```json\n{\n  \"context_servers\": {\n    \"some-context-server\": {\n      \"command\": {\n        \"path\": \"npx\",\n        \"args\": [\"-y\", \"@notionhq/notion-mcp-server\"],\n        \"env\": {\n          \"OPENAPI_MCP_HEADERS\": \"{\\\"Authorization\\\": \\\"Bearer ntn_****\\\", \\\"Notion-Version\\\": \\\"2022-06-28\\\" }\"\n        }\n      },\n      \"settings\": {}\n    }\n  }\n}\n```\n\n##### Using Docker:\n\nThere are two options for running the MCP server with Docker:\n\n###### Option 1: Using the official Docker Hub image:\n\nAdd the following to your `.cursor/mcp.json` or `claude_desktop_config.json`:\n\n**Using NOTION_TOKEN (recommended):**\n```javascript\n{\n  \"mcpServers\": {\n    \"notionApi\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\", \"NOTION_TOKEN\",\n        \"mcp/notion\"\n      ],\n      \"env\": {\n        \"NOTION_TOKEN\": \"ntn_****\"\n      }\n    }\n  }\n}\n```\n\n**Using OPENAPI_MCP_HEADERS (for advanced use cases):**\n```javascript\n{\n  \"mcpServers\": {\n    \"notionApi\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\", \"OPENAPI_MCP_HEADERS\",\n        \"mcp/notion\"\n      ],\n      \"env\": {\n        \"OPENAPI_MCP_HEADERS\": \"{\\\"Authorization\\\":\\\"Bearer ntn_****\\\",\\\"Notion-Version\\\":\\\"2022-06-28\\\"}\"\n      }\n    }\n  }\n}\n```\n\nThis approach:\n- Uses the official Docker Hub image\n- Properly handles JSON escaping via environment variables\n- Provides a more reliable configuration method\n\n###### Option 2: Building the Docker image locally:\n\nYou can also build and run the Docker image locally. First, build the Docker image:\n\n```bash\ndocker compose build\n```\n\nThen, add the following to your `.cursor/mcp.json` or `claude_desktop_config.json`:\n\n**Using NOTION_TOKEN (recommended):**\n```javascript\n{\n  \"mcpServers\": {\n    \"notionApi\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\",\n        \"NOTION_TOKEN=ntn_****\",\n        \"notion-mcp-server\"\n      ]\n    }\n  }\n}\n```\n\n**Using OPENAPI_MCP_HEADERS (for advanced use cases):**\n```javascript\n{\n  \"mcpServers\": {\n    \"notionApi\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\",\n        \"OPENAPI_MCP_HEADERS={\\\"Authorization\\\": \\\"Bearer ntn_****\\\", \\\"Notion-Version\\\": \\\"2022-06-28\\\"}\",\n        \"notion-mcp-server\"\n      ]\n    }\n  }\n}\n```\n\nDon't forget to replace `ntn_****` with your integration secret. Find it from your integration configuration tab:\n\n![Copying your Integration token from the Configuration tab in the developer portal](https://github.com/user-attachments/assets/67b44536-5333-49fa-809c-59581bf5370a)\n\n\n#### Installing via Smithery\n\n[![smithery badge](https://smithery.ai/badge/@makenotion/notion-mcp-server)](https://smithery.ai/server/@makenotion/notion-mcp-server)\n\nTo install Notion API Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@makenotion/notion-mcp-server):\n\n```bash\nnpx -y @smithery/cli install @makenotion/notion-mcp-server --client claude\n```\n\n### Transport Options\n\nThe Notion MCP Server supports two transport modes:\n\n#### STDIO Transport (Default)\nThe default transport mode uses standard input/output for communication. This is the standard MCP transport used by most clients like Claude Desktop.\n\n```bash\n# Run with default stdio transport\nnpx @notionhq/notion-mcp-server\n\n# Or explicitly specify stdio\nnpx @notionhq/notion-mcp-server --transport stdio\n```\n\n#### Streamable HTTP Transport\nFor web-based applications or clients that prefer HTTP communication, you can use the Streamable HTTP transport:\n\n```bash\n# Run with Streamable HTTP transport on port 3000 (default)\nnpx @notionhq/notion-mcp-server --transport http\n\n# Run on a custom port\nnpx @notionhq/notion-mcp-server --transport http --port 8080\n\n# Run with a custom authentication token\nnpx @notionhq/notion-mcp-server --transport http --auth-token \"your-secret-token\"\n```\n\nWhen using Streamable HTTP transport, the server will be available at `http://0.0.0.0:<port>/mcp`.\n\n##### Authentication\nThe Streamable HTTP transport requires bearer token authentication for security. You have three options:\n\n**Option 1: Auto-generated token (recommended for development)**\n```bash\nnpx @notionhq/notion-mcp-server --transport http\n```\nThe server will generate a secure random token and display it in the console:\n```\nGenerated auth token: a1b2c3d4e5f6789abcdef0123456789abcdef0123456789abcdef0123456789ab\nUse this token in the Authorization header: Bearer a1b2c3d4e5f6789abcdef0123456789abcdef0123456789abcdef0123456789ab\n```\n\n**Option 2: Custom token via command line (recommended for production)**\n```bash\nnpx @notionhq/notion-mcp-server --transport http --auth-token \"your-secret-token\"\n```\n\n**Option 3: Custom token via environment variable (recommended for production)**\n```bash\nAUTH_TOKEN=\"your-secret-token\" npx @notionhq/notion-mcp-server --transport http\n```\n\nThe command line argument `--auth-token` takes precedence over the `AUTH_TOKEN` environment variable if both are provided.\n\n##### Making HTTP Requests\nAll requests to the Streamable HTTP transport must include the bearer token in the Authorization header:\n\n```bash\n# Example request\ncurl -H \"Authorization: Bearer your-token-here\" \\\n     -H \"Content-Type: application/json\" \\\n     -H \"mcp-session-id: your-session-id\" \\\n     -d '{\"jsonrpc\": \"2.0\", \"method\": \"initialize\", \"params\": {}, \"id\": 1}' \\\n     http://localhost:3000/mcp\n```\n\n**Note:** Make sure to set either the `NOTION_TOKEN` environment variable (recommended) or the `OPENAPI_MCP_HEADERS` environment variable with your Notion integration token when using either transport mode.\n\n### Examples\n\n1. Using the following instruction\n```\nComment \"Hello MCP\" on page \"Getting started\"\n```\n\nAI will correctly plan two API calls, `v1/search` and `v1/comments`, to achieve the task\n\n2. Similarly, the following instruction will result in a new page named \"Notion MCP\" added to parent page \"Development\"\n```\nAdd a page titled \"Notion MCP\" to page \"Development\"\n```\n\n3. You may also reference content ID directly\n```\nGet the content of page 1a6b35e6e67f802fa7e1d27686f017f2\n```\n\n### Development\n\nBuild\n\n```\nnpm run build\n```\n\nExecute\n\n```\nnpx -y --prefix /path/to/local/notion-mcp-server @notionhq/notion-mcp-server\n```\n\nPublish\n\n```\nnpm publish --access public\n```\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "programming_language": "TypeScript",
+  "framework": null,
+  "github_info": {
+    "owner": "makenotion",
+    "repo": "notion-mcp-server",
+    "url": "https://github.com/makenotion/notion-mcp-server",
+    "name": "makenotion__notion-mcp-server",
+    "path": null,
+    "stars": 3064,
+    "contributors": 15,
+    "issues": 76,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@notionhq/client",
+      "importance": 10
+    }
+  ],
+  "user_config": {
+    "notion_token": {
+      "type": "string",
+      "title": "Notion Integration Token",
+      "description": "Your Notion integration token (ntn_****). This is the recommended way to authenticate for STDIO transport.",
+      "sensitive": true,
+      "required": true
+    },
+    "openapi_mcp_headers": {
+      "type": "string",
+      "title": "OpenAPI MCP Headers",
+      "description": "Custom headers for OpenAPI MCP (e.g., {\"Authorization\": \"Bearer ntn_****\", \"Notion-Version\": \"2022-06-28\" }). Use this for advanced cases instead of Notion Integration Token for STDIO transport.",
+      "sensitive": true,
+      "required": false
+    },
+    "auth_token": {
+      "type": "string",
+      "title": "HTTP Transport Authentication Token",
+      "description": "A secret token for authenticating with the Streamable HTTP transport. Only required if using '--transport http'.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "archestra_config": {
+    "client_config_permutations": {
+      "notionhq-notion-mcp-server-notion-token": {
+        "command": "npx",
+        "args": ["-y", "@notionhq/notion-mcp-server"],
+        "env": {
+          "NOTION_TOKEN": "<YOUR_NOTION_TOKEN>"
+        }
+      },
+      "notionhq-notion-mcp-server-openapi-headers": {
+        "command": "npx",
+        "args": ["-y", "@notionhq/notion-mcp-server"],
+        "env": {
+          "OPENAPI_MCP_HEADERS": "<YOUR_OPENAPI_MCP_HEADERS_JSON_STRING>"
+        }
+      },
+      "mcp-notion-docker-notion-token": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-e", "NOTION_TOKEN", "mcp/notion"],
+        "env": {
+          "NOTION_TOKEN": "<YOUR_NOTION_TOKEN>"
+        },
+        "docker_image": "mcp/notion"
+      },
+      "mcp-notion-docker-openapi-headers": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-e", "OPENAPI_MCP_HEADERS", "mcp/notion"],
+        "env": {
+          "OPENAPI_MCP_HEADERS": "<YOUR_OPENAPI_MCP_HEADERS_JSON_STRING>"
+        },
+        "docker_image": "mcp/notion"
+      },
+      "notion-mcp-server-docker-local-notion-token": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-e", "NOTION_TOKEN=<YOUR_NOTION_TOKEN>", "notion-mcp-server"],
+        "env": {
+          "NOTION_TOKEN": "<YOUR_NOTION_TOKEN>"
+        },
+        "docker_image": "notion-mcp-server"
+      },
+      "notion-mcp-server-docker-local-openapi-headers": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-e",
+          "OPENAPI_MCP_HEADERS=<YOUR_OPENAPI_MCP_HEADERS_JSON_STRING>",
+          "notion-mcp-server"
+        ],
+        "env": {
+          "OPENAPI_MCP_HEADERS": "<YOUR_OPENAPI_MCP_HEADERS_JSON_STRING>"
+        },
+        "docker_image": "notion-mcp-server"
+      },
+      "notionhq-notion-mcp-server-stdio-default": {
+        "command": "npx",
+        "args": ["@notionhq/notion-mcp-server"],
+        "env": {}
+      },
+      "notionhq-notion-mcp-server-stdio-explicit": {
+        "command": "npx",
+        "args": ["@notionhq/notion-mcp-server", "--transport", "stdio"],
+        "env": {}
+      },
+      "notionhq-notion-mcp-server-http-default": {
+        "command": "npx",
+        "args": ["@notionhq/notion-mcp-server", "--transport", "http"],
+        "env": {}
+      },
+      "notionhq-notion-mcp-server-http-port-8080": {
+        "command": "npx",
+        "args": ["@notionhq/notion-mcp-server", "--transport", "http", "--port", "8080"],
+        "env": {}
+      },
+      "notionhq-notion-mcp-server-http-auth-token-cli": {
+        "command": "npx",
+        "args": ["@notionhq/notion-mcp-server", "--transport", "http", "--auth-token", "<YOUR_SECRET_TOKEN>"],
+        "env": {}
+      },
+      "notionhq-notion-mcp-server-http-auth-token-env": {
+        "command": "npx",
+        "args": ["@notionhq/notion-mcp-server", "--transport", "http"],
+        "env": {
+          "AUTH_TOKEN": "<YOUR_SECRET_TOKEN>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "evaluation_model": "gemini-2.5-flash",
+  "raw_dependencies": null,
+  "last_scraped_at": "2025-09-09T13:06:56.148Z"
+}

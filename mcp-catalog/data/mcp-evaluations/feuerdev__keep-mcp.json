@@ -1,0 +1,111 @@
+{
+  "name": "feuerdev__keep-mcp",
+  "display_name": "keep-mcp",
+  "description": "MCP server for Google Keep",
+  "author": {
+    "name": "feuerdev"
+  },
+  "server": {
+    "command": "pipx",
+    "args": ["run", "keep-mcp"],
+    "env": {
+      "GOOGLE_EMAIL": "${user_config.google_email}",
+      "GOOGLE_MASTER_TOKEN": "${user_config.google_master_token}",
+      "UNSAFE_MODE": "${user_config.unsafe_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "google_email": {
+      "type": "string",
+      "title": "Google Email",
+      "description": "Your Google account email address",
+      "required": true
+    },
+    "google_master_token": {
+      "type": "string",
+      "title": "Google Master Token",
+      "description": "Your Google account master token - see README.md",
+      "sensitive": true,
+      "required": true
+    },
+    "unsafe_mode": {
+      "type": "boolean",
+      "title": "Unsafe Mode",
+      "description": "Set to true to bypass restrictions on destructive and modification operations for notes not created by the MCP server.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# keep-mcp\n\nMCP server for Google Keep\n\n![keep-mcp](https://github.com/user-attachments/assets/f50c4ae6-4d35-4bb6-a494-51c67385f1b6)\n\n## How to use\n\n1. Add the MCP server to your MCP servers:\n\n```json\n  \"mcpServers\": {\n    \"keep-mcp-pipx\": {\n      \"command\": \"pipx\",\n      \"args\": [\n        \"run\",\n        \"keep-mcp\"\n      ],\n      \"env\": {\n        \"GOOGLE_EMAIL\": \"Your Google Email\",\n        \"GOOGLE_MASTER_TOKEN\": \"Your Google Master Token - see README.md\"\n      }\n    }\n  }\n```\n\n2. Add your credentials:\n* `GOOGLE_EMAIL`: Your Google account email address\n* `GOOGLE_MASTER_TOKEN`: Your Google account master token\n\nCheck https://gkeepapi.readthedocs.io/en/latest/#obtaining-a-master-token and https://github.com/simon-weber/gpsoauth?tab=readme-ov-file#alternative-flow for more information.\n\n## Features\n\n* `find`: Search for notes based on a query string\n* `create_note`: Create a new note with title and text (automatically adds keep-mcp label)\n* `update_note`: Update a note's title and text\n* `delete_note`: Mark a note for deletion\n\nBy default, all destructive and modification operations are restricted to notes that have were created by the MCP server (i.e. have the keep-mcp label). Set `UNSAFE_MODE` to `true` to bypass this restriction.\n\n```\n\"env\": {\n  ...\n  \"UNSAFE_MODE\": \"true\"\n}\n```\n\n## Publishing\n\nTo publish a new version to PyPI:\n\n1. Update the version in `pyproject.toml`\n2. Build the package:\n   ```bash\n   pipx run build\n   ```\n3. Upload to PyPI:\n   ```bash\n   pipx run twine upload --repository pypi dist/*\n   ```\n\n## Troubleshooting\n\n* If you get \"DeviceManagementRequiredOrSyncDisabled\" check https://admin.google.com/ac/devices/settings/general and turn \"Turn off mobile management (Unmanaged)\"\n",
+  "category": "Knowledge",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "keep-mcp-pipx": {
+        "command": "pipx",
+        "args": ["run", "keep-mcp"],
+        "env": {
+          "GOOGLE_EMAIL": "Your Google Email",
+          "GOOGLE_MASTER_TOKEN": "Your Google Master Token - see README.md"
+        }
+      },
+      "keep-mcp-pipx-unsafe": {
+        "command": "pipx",
+        "args": ["run", "keep-mcp"],
+        "env": {
+          "GOOGLE_EMAIL": "Your Google Email",
+          "GOOGLE_MASTER_TOKEN": "Your Google Master Token - see README.md",
+          "UNSAFE_MODE": "true"
+        }
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "feuerdev",
+    "repo": "keep-mcp",
+    "url": "https://github.com/feuerdev/keep-mcp",
+    "name": "keep-mcp",
+    "path": null,
+    "stars": 27,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "e75b41cda187a5cce84eb48ffab1575cae686afd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.604Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "gkeepapi",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"keep-mcp\"\nversion = \"0.2.0\"\ndescription = \"MCP Server for Google Keep\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"gkeepapi>=0.16.0\",\n    \"mcp[cli]\",\n]\nauthors = [\n    { name = \"Jannik Feuerhahn\", email = \"jannik@feuer.dev\" }\n]\nlicense = { file = \"LICENSE\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Environment :: Console\",\n    \"Intended Audience :: End Users/Desktop\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Topic :: Utilities\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/feuerdev/keep-mcp\"\nRepository = \"https://github.com/feuerdev/keep-mcp\"\n\n[project.scripts]\nmcp = \"server.cli:main\"\n\n[build-system]\nrequires = [\"hatchling >= 1.26\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/server\"]"
+}

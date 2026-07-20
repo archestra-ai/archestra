@@ -1,0 +1,110 @@
+{
+  "name": "micl2e2__code-to-tree",
+  "display_name": "code-to-tree",
+  "description": "A runtime-free MCP server that converts source code into AST🌲, regardless of language.",
+  "author": {
+    "name": "micl2e2"
+  },
+  "server": {
+    "command": "${user_config.code_to_tree_path}",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "code_to_tree_path": {
+      "type": "file",
+      "title": "Code-to-tree Executable Path",
+      "description": "The absolute path to the code-to-tree executable (e.g., C:\\path\\to\\code-to-tree.exe for Windows or /path/to/code-to-tree for macOS).",
+      "required": true
+    }
+  },
+  "readme": "\n# Table of Contents\n\n-   [MCP Server: code-to-tree](#orgf542482)\n-   [Using code-to-tree](#org862e7dc)\n-   [Configure MCP Clients](#orge54fa87)\n-   [Building (Windows)](#org48a8180)\n-   [Building (macOS)](#orgbaa740e)\n\n\n\n<a id=\"orgf542482\"></a>\n\n# MCP Server: code-to-tree\n\nThe code-to-tree server's goals are:\n\n1.  Give LLMs the capability of **accurately** converting source code into\n    AST(Abstract Syntax Tree), regardless of language.\n2.  One **standalone** binary should be everything the MCP client needs.\n\nThese goals imply:\n\n1.  The underlying syntax parser should be **versatile** enough. Here we\n    choose [tree-sitter](https://github.com/tree-sitter/tree-sitter), and languages are: C, C++, Rust, Ruby, Go, Java, Python.\n2.  The server should be able to carry all capabilities within\n    itself, imposing **minimum** software dependencies on the end user's\n    machine. Here we choose [mcpc](https://github.com/micl2e2/mcpc).\n\n**Screenshots:**\n\n<img src=\"./chathistory.png\" width=\"450px\" /><img src=\"./wholeast.png\" width=\"200px\" />\n\nThe above screenshots are obtained by asking the question specified\nin `q.md`. \n\n(**IMPORTANT NOTE**: LLMs have no responsibility of generating the identical\nresult for the same question,  you will likely get a completely different\nstyle or content. The screenshots or questions provided here are just for the reference)\n\n\n<a id=\"org862e7dc\"></a>\n\n# Using code-to-tree\n\nBefore everthing, you need to have the code-to-tree executable on your\nmachine (`code-to-tree.exe` for Windows, `code-to-tree` for macOS),\nyou can download at GitHub release [page](https://github.com/micl2e2/code-to-tree/releases) or build it yourself. Once\ndownloaded, you configure your MCP clients to install it, check the section\n*\"Configure MCP Clients\"* for more details.\n\n\n<a id=\"orge54fa87\"></a>\n\n# Configure MCP Clients\n\nHere we use Claude as the example.\n\n\n## Windows\n\nIn your Claude configuration\n(`C:\\Users\\YOUR_NAME\\AppData\\Roaming\\Claude\\claude_desktop_config.json`),\nspecify the location of `code-to-tree.exe`:\n\n    {\n        \"mcpServers\": {\n    \t    \"code-to-tree\": { \"command\": \"C:\\\\path\\\\to\\\\code-to-tree.exe\" }\n        }\n    }\n\n\n## macOS\n\nIn your Claude configuration,\n(`~/Library/Application Support/Claude/claude_desktop_config.json`)\nspecify the location of `code-to-tree`\n\n    {\n        \"mcpServers\": {\n    \t    \"code-to-tree\": { \"command\": \"/path/to/code-to-tree\" }\n        }\n    }\n\n\n<a id=\"org48a8180\"></a>\n\n# Building (Windows)\n\n\n## 1. Prepare environment\n\n1.  download & install MSYS2.\n2.  open application \"MSYS2 MINGW64\"\n3.  run `pacman -S make gcc git`\n\n\n## 2. Prepare tree-sitter libraries\n\nHere we need to compile and install tree-sitter and all related grammars.\n\nClone them:\n\n    git clone https://github.com/tree-sitter/tree-sitter\n    \n    git clone https://github.com/tree-sitter/tree-sitter-c\n    \n    git clone https://github.com/tree-sitter/tree-sitter-cpp\n    \n    git clone https://github.com/tree-sitter/tree-sitter-rust\n    \n    git clone https://github.com/tree-sitter/tree-sitter-ruby\n    \n    git clone https://github.com/tree-sitter/tree-sitter-go\n    \n    git clone https://github.com/tree-sitter/tree-sitter-java\n\nCompile and install them:\n\n    cd tree-sitter && OS=1 make install\n    \n    cd tree-sitter-c && OS=1 make install\n    \n    cd tree-sitter-cpp && OS=1 make install\n    \n    cd tree-sitter-rust && OS=1 make install\n    \n    cd tree-sitter-ruby && OS=1 make install\n    \n    cd tree-sitter-go && OS=1 make install\n    \n    cd tree-sitter-java && OS=1 make install\n\n\n## 3. Build code-to-tree\n\nInstall mcpc:\n\n    git clone https://github.com/micl2e2/mcpc\n    cd mcpc && make install\n\nCompile code-to-tree:\n\n    cd mcpc/example/code-to-tree\n    \n    CFLAGS=\"-I/usr/local/include -L/usr/local/lib\" make\n    \n    # Check the binary\n    file code-to-tree.exe\n    \n    # Remember the binary's location\n    pwd\n    # Assume the output is: /c/path/to/code-to-tree.exe\n\n\n<a id=\"orgbaa740e\"></a>\n\n# Building (macOS)\n\n\n## 1. Prepare environment\n\n1.  Xcode Command Line Tools\n\n\n## 2. Prepare tree-sitter libraries\n\nHere we need to compile and install tree-sitter and all related grammars.\n\nClone them:\n\n    git clone https://github.com/tree-sitter/tree-sitter\n    \n    git clone https://github.com/tree-sitter/tree-sitter-c\n    \n    git clone https://github.com/tree-sitter/tree-sitter-cpp\n    \n    git clone https://github.com/tree-sitter/tree-sitter-rust\n    \n    git clone https://github.com/tree-sitter/tree-sitter-ruby\n    \n    git clone https://github.com/tree-sitter/tree-sitter-go\n    \n    git clone https://github.com/tree-sitter/tree-sitter-java\n\nCompile and install them:\n\n    cd tree-sitter && make install\n    \n    cd tree-sitter-c && make install\n    \n    cd tree-sitter-cpp && make install\n    \n    cd tree-sitter-rust && make install\n    \n    cd tree-sitter-ruby && make install\n    \n    cd tree-sitter-go && make install\n    \n    cd tree-sitter-java && make install\n\n\n## 3. Build code-to-tree\n\nInstall mcpc:\n\n    git clone https://github.com/micl2e2/mcpc\n    cd mcpc && make install\n\nCompile code-to-tree:\n\n    cd mcpc/example/code-to-tree\n    \n    make\n    \n    # Check the binary\n    file ./code-to-tree\n    \n    # Remember the binary's location\n    pwd\n    # Assume the output is: /path/to/code-to-tree\n\n",
+  "category": "Development",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "code-to-tree-windows": {
+        "command": "C:\\path\\to\\code-to-tree.exe",
+        "args": [],
+        "env": {}
+      },
+      "code-to-tree-macos": {
+        "command": "/path/to/code-to-tree",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "micl2e2",
+    "repo": "code-to-tree",
+    "url": "https://github.com/micl2e2/code-to-tree",
+    "name": "micl2e2__code-to-tree",
+    "path": null,
+    "stars": 49,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "700a234b7ff4ceeb2a8ae8d9980b0bbaf3aaef6d"
+  },
+  "programming_language": "C",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.767Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "tree-sitter",
+      "importance": 10
+    },
+    {
+      "name": "mcpc",
+      "importance": 10
+    },
+    {
+      "name": "tree-sitter-c",
+      "importance": 9
+    },
+    {
+      "name": "tree-sitter-cpp",
+      "importance": 9
+    },
+    {
+      "name": "tree-sitter-rust",
+      "importance": 9
+    },
+    {
+      "name": "tree-sitter-ruby",
+      "importance": 9
+    },
+    {
+      "name": "tree-sitter-go",
+      "importance": 9
+    },
+    {
+      "name": "tree-sitter-java",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": null
+}

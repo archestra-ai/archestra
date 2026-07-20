@@ -1,0 +1,119 @@
+{
+  "name": "growthbook__growthbook-mcp",
+  "display_name": "growthbook-mcp",
+  "description": "Official GrowthBook MCP server for creating flags, getting experiments, and more.",
+  "author": {
+    "name": "growthbook"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@growthbook/mcp"],
+    "env": {
+      "GB_API_KEY": "${user_config.gb_api_key}",
+      "GB_USER": "${user_config.gb_user}",
+      "GB_API_URL": "${user_config.gb_api_url}",
+      "GB_APP_ORIGIN": "${user_config.gb_app_origin}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "gb_api_key": {
+      "type": "string",
+      "title": "GrowthBook API Key",
+      "description": "A GrowthBook API key.",
+      "sensitive": true,
+      "required": true
+    },
+    "gb_user": {
+      "type": "string",
+      "title": "GrowthBook User Name",
+      "description": "Your name. Used when creating a feature flag.",
+      "sensitive": false,
+      "required": true
+    },
+    "gb_api_url": {
+      "type": "string",
+      "title": "GrowthBook API URL",
+      "description": "Your GrowthBook API URL. Defaults to https://api.growthbook.io.",
+      "default": "https://api.growthbook.io",
+      "sensitive": false,
+      "required": false
+    },
+    "gb_app_origin": {
+      "type": "string",
+      "title": "GrowthBook App URL",
+      "description": "Your GrowthBook app URL Defaults to https://app.growthbook.io.",
+      "default": "https://app.growthbook.io",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# GrowthBook MCP Server\n\nWith the GrowthBook MCP server, you can interact with GrowthBook right from your LLM client. See experiment details, add a feature flag, and more.\n\n<a href=\"https://glama.ai/mcp/servers/@growthbook/growthbook-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@growthbook/growthbook-mcp/badge\" alt=\"GrowthBook Server MCP server\" />\n</a>\n\n## Setup\n\n**Environment Variables**\nUse the following env variables to configure the MCP server.\n\n| Variable Name | Status   | Description                                                       |\n| ------------- | -------- | ----------------------------------------------------------------- |\n| GB_API_KEY    | Required | A GrowthBook API key or PAT. When using a PAT, MCP server capabilities are limited by its permissions. E.g., if the user can't create an experiment in the app, they also won't be able to create one with the MCP server.                                             |\n| GB_EMAIL      | Required | Your email address used with GrowthBook. Used when creating feature flags and experiments.|\n| GB_API_URL    | Optional | Your GrowthBook API URL. Defaults to `https://api.growthbook.io`. |\n| GB_APP_ORIGIN | Optional | Your GrowthBook app URL Defaults to `https://app.growthbook.io`.  |\n\nFind instructions below to add the MCP server to a client. Any client that supports MCP is also compatible. Consult its documentation for how to add the server.\n\n### Cursor\n\n1. Open **Cursor Settings** &rarr; **MCP**\n2. Click **Add new global MCP server**\n3. Add an entry for the GrowthBook MCP, following the pattern below:\n\n```json\n{\n  \"mcpServers\": {\n    \"growthbook\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@growthbook/mcp\"],\n      \"env\": {\n        \"GB_API_KEY\": \"YOUR_API_KEY\",\n        \"GB_API_URL\": \"YOUR_API_URL\",\n        \"GB_APP_ORIGIN\": \"YOUR_APP_ORIGIN\",\n        \"GB_EMAIL\": \"YOUR_EMAIL\"\n      }\n    }\n  }\n}\n```\n\n3. Save the settings.\n\nYou should now see a green active status after the server successfully connects!\n\n### VS Code\n\n1. Open **User Settings (JSON)**\n2. Add an MCP entry:\n\n```json\n \"mcp\": {\n    \"servers\": {\n      \"growthbook\": {\n        \"command\": \"npx\",\n        \"args\": [\n          \"-y\", \"@growthbook/mcp\"\n        ],\n        \"env\": {\n          \"GB_API_KEY\": \"YOUR_API_KEY\",\n          \"GB_API_URL\": \"YOUR_API_URL\",\n          \"GB_APP_ORIGIN\": \"YOUR_APP_ORIGIN\",\n          \"GB_EMAIL\": \"YOUR_EMAIL\"\n        }\n      }\n    }\n  }\n```\n\n3. Save your settings.\n\nGrowthBook MCP is now ready to use in VS Code.\n\n### Claude Desktop\n\n1. **Open Settings** &rarr; **Developer**\n2. Click **Edit Config**\n3. Open `claude_desktop_config.json`\n4. Add the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"growthbook\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@growthbook/mcp\"],\n      \"env\": {\n        \"GB_API_KEY\": \"YOUR_API_KEY\",\n        \"GB_API_URL\": \"YOUR_API_URL\",\n        \"GB_APP_ORIGIN\": \"YOUR_APP_ORIGIN\",\n        \"GB_EMAIL\": \"YOUR_EMAIL\"\n      }\n    }\n  }\n}\n```\n\n5. Save the config and restart Claude\n\nA hammer icon should appear in the chat window, indicating that your GrowthBook MCP server is connected and available!\n\n---\n\n## Tools\n\n- **Feature Flags**\n\n  - `create_feature_flag`: Create, add, or wrap an element with a feature flag. Specify key, type, default value, and metadata.\n  - `get_feature_flags`: List all feature flags in your GrowthBook instance.\n  - `get_single_feature_flag`: Fetch details for a specific feature flag by ID.\n  - `get_stale_safe_rollouts`: List all safe rollout rules that have been rolled back or released.\n  - `create_force_rule`: Create a feature flag with a targeting condition.\n  - `generate_flag_types`: Generates types for feature flags\n\n- **Experiments**\n\n  - `get_experiments`: List all experiments in GrowthBook.\n  - `get_experiment`: Fetch details for a specific experiment by ID.\n  - `get_attributes`: List all user attributes tracked in GrowthBook (useful for targeting).\n  - `create_experiment`: Creates a feature-flag based experiment.\n  - `get_defaults`: Get default values for experiments including hypothesis, description, datasource, and assignment query. (Runs automatically when the create experiment tool is called.)\n  - `create_defaults`: Set custom default values for experiments that will be used when creating new experiments.\n  - `clear_user_defaults`: Clear user-defined defaults and revert to automatic defaults.\n\n- **Environments**\n\n  - `get_environments`: List all environments (e.g., production, staging) configured in GrowthBook.\n\n- **Projects**\n\n  - `get_projects`: List all projects in your GrowthBook instance.\n\n- **SDK Connections**\n\n  - `get_sdk_connections`: List all SDK connections (how GrowthBook connects to your apps).\n  - `create_sdk_connection`: Create a new SDK connection for your app, specifying language and environment.\n\n- **Documentation Search**\n  - `search_growthbook_docs`: Search the GrowthBook documentation for information on how to use a feature, by keyword or question.",
+  "category": "Development",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "growthbook-mcp": {
+        "command": "npx",
+        "args": ["-y", "@growthbook/mcp"],
+        "env": {
+          "GB_API_KEY": "YOUR_API_KEY",
+          "GB_API_URL": "YOUR_API_URL",
+          "GB_APP_ORIGIN": "YOUR_APP_ORIGIN",
+          "GB_USER": "YOUR_NAME"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "growthbook",
+    "repo": "growthbook-mcp",
+    "url": "https://github.com/growthbook/growthbook-mcp",
+    "name": "growthbook__growthbook-mcp",
+    "path": null,
+    "stars": 14,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "a1e6ffbe183845485a550c7a07443f36d4e418b2"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:05.064Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "env-paths",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@growthbook/mcp\",\n  \"version\": \"1.0.2\",\n  \"description\": \"\",\n  \"access\": \"public\",\n  \"homepage\": \"https://github.com/growthbook/growthbook-mcp\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\n    \"build\": \"tsc\",\n    \"bump:patch\": \"pnpm version patch --no-git-tag-version\",\n    \"bump:minor\": \"pnpm version minor --no-git-tag-version\",\n    \"bump:major\": \"pnpm version major --no-git-tag-version\"\n  },\n  \"bin\": {\n    \"mcp\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [],\n  \"author\": \"GrowthBook\",\n  \"license\": \"MIT\",\n  \"packageManager\": \"pnpm@10.6.1\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.2\",\n    \"env-paths\": \"^3.0.0\",\n    \"zod\": \"^3.25.67\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.2.1\",\n    \"typescript\": \"^5.9.2\"\n  },\n  \"type\": \"module\"\n}\n"
+}

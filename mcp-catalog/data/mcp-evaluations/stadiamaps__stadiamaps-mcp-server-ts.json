@@ -1,0 +1,82 @@
+{
+  "name": "stadiamaps__stadiamaps-mcp-server-ts",
+  "display_name": "stadiamaps-mcp-server-ts",
+  "description": "A TypeScript MCP server for interacting with the Stadia Maps APIs",
+  "author": {
+    "name": "stadiamaps"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "API_KEY": "${user_config.api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Stadia Maps API Key",
+      "description": "Your Stadia Maps API key for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Stadia Maps MCP Server (TypeScript)\n\nThis is a Model Context Protocol (MCP) server\nthat provides AI assistants with access to Stadia Maps APIs for location services, geocoding, routing, and mapping capabilities.\n\n<a href=\"https://glama.ai/mcp/servers/@stadiamaps/stadiamaps-mcp-server-ts\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@stadiamaps/stadiamaps-mcp-server-ts/badge\" alt=\"Stadia Maps Location API Server MCP server\" />\n</a>\n\n## Capabilities\n\n- Time information anywhere on earth\n  - Current time\n  - Time zone info (ID, UTC offset, and whether a special offset like daylight saving/summer time is in effect)\n- Geocoding\n  - Address lookup\n  - Place search (POIs like restaurants, cafes, etc.)\n- Static map image generation (including markers and route overlays)\n- Routing & travel time\n- Isochrones (reachable range; both time and distance contours)\n\n### Use cases\n\nHere are just a few of the ways you can prompt an LLM\nto make use of the tools:\n\n- \"What time is it in Tokyo?\"\n- \"Make me a map showing the walking route from Depoo Turg to the Põhjala Tap Room.\"\n- \"Is the Põhjala Tap Room open right now? Use Stadia Maps to get this information.\"\n- \"Geocode the addresses in the attached spreadsheet.\"\n\n## Quickstart\n\n## Building\n\nWe'll use `bun` for all of our instructions,\nbut you can use `npm` too.\n\n1. Run `bun install` to fetch the dependencies.\n2. Then, execute the build script: `bun run build`.\n\nThe built code should be in the `build` directory now.\n\n### Configuration\n\nThis MCP server requires a Stadia Maps API key.\nFollow the directions [here](https://docs.stadiamaps.com/authentication/#api-keys) to get your free key.\nThen, set the `API_KEY` environment variable when running the server.\n\n## Integration Examples\n\nAPI key in hand, here are a few ways you can use the MCP server.\n\n### Claude Desktop\n\nSee [Claude Desktop Setup](claude-desktop-setup.md) for detailed instructions\non configuring this MCP server with Claude Desktop.\nClaude Desktop is a great tool for testing out workflows.\n\n### Warp\n\nSee [Warp Setup](warp-setup.md) for detailed instructions\non setting up Warp with this MCP server.\nWarp is a powerful agentic environment that uses LLMs to do things on your behalf.\nWhereas you would need to upload a file to Claude,\nWarp can directly access files,\nwrite code, and execute programs on your computer.\n\nPaired with the Stadia Maps MCP, it's a powerful tool for tasks like bulk geocoding,\nspatially filtering datasets, and more.\n\n### Programmatic Integration with Anthropic SDK\n\nFor developers who want to integrate the MCP server programmatically into their TypeScript applications,\nwe have an [Anthropic SDK Integration Example](examples/README.md#anthropic-sdk-demo).\nThis example demonstrates how to:\n\n- Connect to the MCP server from your code\n- Integrate with Claude's API for natural language queries\n- Enhance Claude with spatial intelligence using the Stadia Maps APIs via an MCP server\n\n## Tips and Tricks\n\nLLMs are far from perfect,\nand sometimes you need to put some thought into crafting prompts\nto get good results.\n\n### When possible, be specific about which tool(s) to use\n\nSometimes the model needs a nudge to use the right tool.\nFor example, if you ask for opening hours,\nmany models will try to search the web.\nThis information isn't always easily available for the model to find online.\n\nFor example, watch what a model does here:\n\n![A model struggling to find opening hours online](opening-hours-web-search-failure.png)\n\nYou can nudge the model to use the tools in this MCP like so:\n\n![A model using the Stadia Maps API after a different prompt](opening-hours-successful-prompt.png)\n\n### Get creative\n\nLLMs are capable of a lot, but they can't always do everything.\nAs an example, let's look at one way to bulk geocode addresses in a spreadsheet.\n\nFirst, attach an Excel sheet in Claude Desktop which has a few addresses in a column.\n\n**Prompt:** Geocode all the addresses in this spreadsheet. Add the geocoded latitude and longitude as new columns in the sheet.\n\nAt the time of this writing, Claude cannot generate a spreadsheet attachment\ndirectly, but it _can_ generate an HTML page or other code which generates it for you!\nIn fact, Claude Desktop may actually ask you if you want an Excel sheet download,\nbut it will just go ahead and generate this for you instead.\n\nThis sort of creativity is necessary, particularly when interacting with current\ngeneration LLMs through the usual user interfaces.\nA lot of the power of MCPs\nis that you can interact with them through code,\nwhich can overcome some of these limitations to provide a delightful user experience.\n\n### Customize it!\n\nJust like a human, LLMs do better when given the right tools for the job.\nAnd just like a master craftsman, you'll probably need _some_ expert knowledge\nto know how best to combine the right tools and materials.\n\nAdditionally, models have a context limit.\nWhile there are advanced techniques to squeeze more out of this,\nyou can only benefit by tailoring the MCP to the specific API functionality you need.\nNot to mention, it will be _much_ cheaper for you to operate with just the tools you need\nfor a specific context.\n**Tool schemas are vast majority of the context cost, in a simple demo!**\nIf you build the suite out to ~10 tools, you can end up with tens of thousands of input tokens.\n\n**This project is a starting point**,\nand we've left comments throughout [`index.ts`](src/index.ts) noting our approach to building tools,\nand how you can tailor them for your use case.",
+  "category": "Location",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "stadiamaps",
+    "repo": "stadiamaps-mcp-server-ts",
+    "url": "https://github.com/stadiamaps/stadiamaps-mcp-server-ts",
+    "name": "stadiamaps-mcp-server-ts",
+    "path": null,
+    "stars": 13,
+    "contributors": 0,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1412d4b4132e9e34f9df6b268e057ad1d4c78f82"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.948Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@stadiamaps/api",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"stadiamaps-mcp-server\",\n  \"version\": \"0.1.0\",\n  \"description\": \"\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\",\n    \"build:examples\": \"cd examples && bun run build\",\n    \"lint\": \"prettier -c .\",\n    \"lint:fix\": \"prettier --write .\",\n    \"test\": \"vitest run\",\n    \"test:continuous\": \"vitest\",\n    \"test:ui\": \"vitest --ui\",\n    \"examples:check\": \"cd examples && tsc --noEmit\",\n    \"examples:demo\": \"cd examples && bun run start:anthropic-demo\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.16.0\",\n    \"@stadiamaps/api\": \"^8.0.1\",\n    \"zod\": \"^3.25.58\"\n  },\n  \"devDependencies\": {\n    \"@anthropic-ai/sdk\": \"^0.54.0\",\n    \"@types/node\": \"^22.15.31\",\n    \"@vitest/ui\": \"^2.1.8\",\n    \"msw\": \"^2.10.2\",\n    \"prettier\": \"3.5.3\",\n    \"typescript\": \"^5.8.3\",\n    \"vitest\": \"^2.1.8\"\n  },\n  \"files\": [\n    \"build\"\n  ]\n}\n\n\n=== examples/package.json ===\n{\n  \"name\": \"stadiamaps-mcp-examples\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start:anthropic-demo\": \"bun run anthropic-sdk-demo.ts\"\n  },\n  \"dependencies\": {\n    \"@anthropic-ai/sdk\": \"^0.54.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\"\n  }\n}\n"
+}

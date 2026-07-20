@@ -1,0 +1,70 @@
+{
+  "name": "ferrislucas__iterm-mcp",
+  "display_name": "iTerm",
+  "description": "A Model Context Protocol server that executes commands in the current iTerm session - useful for REPL and CLI assistance",
+  "author": {
+    "name": "ferrislucas"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "iterm-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# iterm-mcp \nA Model Context Protocol server that provides access to your iTerm session.\n\n![Main Image](.github/images/demo.gif)\n\n### Features\n\n**Efficient Token Use:** iterm-mcp gives the model the ability to inspect only the output that the model is interested in. The model typically only wants to see the last few lines of output even for long running commands. \n\n**Natural Integration:** You share iTerm with the model. You can ask questions about what's on the screen, or delegate a task to the model and watch as it performs each step.\n\n**Full Terminal Control and REPL support:** The model can start and interact with REPL's as well as send control characters like ctrl-c, ctrl-z, etc.\n\n**Easy on the Dependencies:** iterm-mcp is built with minimal dependencies and is runnable via npx. It's designed to be easy to add to Claude Desktop and other MCP clients. It should just work.\n\n\n## Safety Considerations\n\n* The user is responsible for using the tool safely.\n* No built-in restrictions: iterm-mcp makes no attempt to evaluate the safety of commands that are executed.\n* Models can behave in unexpected ways. The user is expected to monitor activity and abort when appropriate.\n* For multi-step tasks, you may need to interrupt the model if it goes off track. Start with smaller, focused tasks until you're familiar with how the model behaves. \n\n### Tools\n- `write_to_terminal` - Writes to the active iTerm terminal, often used to run a command. Returns the number of lines of output produced by the command.\n- `read_terminal_output` - Reads the requested number of lines from the active iTerm terminal.\n- `send_control_character` - Sends a control character to the active iTerm terminal.\n\n### Requirements\n\n* iTerm2 must be running\n* Node version 18 or greater\n\n\n## Installation\n\nTo use with Claude Desktop, add the server config:\n\nOn macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"iterm-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"iterm-mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Installing via Smithery\n\nTo install iTerm for Claude Desktop automatically via [Smithery](https://smithery.ai/server/iterm-mcp):\n\n```bash\nnpx -y @smithery/cli install iterm-mcp --client claude\n```\n[![smithery badge](https://smithery.ai/badge/iterm-mcp)](https://smithery.ai/server/iterm-mcp)\n\n## Development\n\nInstall dependencies:\n```bash\nyarn install\n```\n\nBuild the server:\n```bash\nyarn run build\n```\n\nFor development with auto-rebuild:\n```bash\nyarn run watch\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nyarn run inspector\nyarn debug <command>\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n",
+  "category": "CLI Tools",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "iterm-mcp": {
+        "command": "npx",
+        "args": ["-y", "iterm-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ferrislucas",
+    "repo": "iterm-mcp",
+    "url": "https://github.com/ferrislucas/iterm-mcp",
+    "name": "ferrislucas__iterm-mcp",
+    "path": null,
+    "stars": 440,
+    "contributors": 6,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "40ef538278d2994292b84517538e6720830e8d6c"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.229Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"iterm-mcp\",\n  \"version\": \"1.2.5\",\n  \"description\": \"A Model Context Protocol server that provides access to the currently active tab of iTerm\",\n  \"homepage\": \"https://github.com/ferrislucas/iterm-mcp#readme\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/ferrislucas/iterm-mcp.git\"\n  },\n  \"author\": \"Ferris Lucas\",\n  \"bugs\": {\n    \"url\": \"https://github.com/ferrislucas/iterm-mcp/issues\"\n  },\n  \"type\": \"module\",\n  \"license\": \"MIT\",\n  \"bin\": {\n    \"iterm-mcp\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepublishOnly\": \"yarn run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"test\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js --config=jest.config.cjs\",\n    \"e2e\": \"ts-node --esm test/e2e/CommandExecutor.test.ts\",\n    \"test:watch\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js --config=jest.config.cjs --watch\",\n    \"test:coverage\": \"node --experimental-vm-modules node_modules/jest/bin/jest.js --config=jest.config.cjs --coverage\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^20.11.24\",\n    \"jest\": \"^29.7.0\",\n    \"jest-environment-node\": \"^29.7.0\",\n    \"ts-jest\": \"^29.3.2\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

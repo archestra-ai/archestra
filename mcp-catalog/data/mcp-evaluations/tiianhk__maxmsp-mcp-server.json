@@ -1,0 +1,236 @@
+{
+  "name": "tiianhk__maxmsp-mcp-server",
+  "display_name": "MaxMSP-MCP-Server",
+  "description": "MCP (Model Context Protocol) Server for Max (Max/MSP/Jitter)",
+  "author": {
+    "name": "tiianhk"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MaxMSP-MCP Server\n\nThis project uses the [Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) to let LLMs directly understand and generate Max patches.\n\n### Understand: LLM Explaining a Max Patch\n\n![img](./assets/understand.gif)\n[Video link](https://www.youtube.com/watch?v=YKXqS66zrec). Acknowledgement: the patch being explained is downloaded from [here](https://github.com/jeffThompson/MaxMSP_TeachingSketches/blob/master/02_MSP/07%20Ring%20Modulation.maxpat). Text comments in the original file are deleted.\n\n### Generate: LLM Making an FM Synth\n\n![img](./assets/generate.gif)\nCheck out the [full video](https://www.youtube.com/watch?v=Ns89YuE5-to) where you can listen to the synthesised sounds.\n\nThe LLM agent has access to the official documentation of each object, as well as objects in the current patch and subpatch windows, which helps in retrieving and explaining objects, debugging, and verifying their own actions.\n\n## Installation  \n\n### Prerequisites  \n\n - Python 3.8 or newer  \n - [uv package manager](https://github.com/astral-sh/uv)  \n - Max 9 or newer (because some of the scripts require the Javascript V8 engine), we have not tested it on Max 8 or earlier versions of Max yet.  \n\n### Installing the MCP server\n\n1. Install uv:\n```\n# On macOS and Linux:\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n# On Windows:\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n2. Clone this repository and open its directory:\n```\ngit clone https://github.com/tiianhk/MaxMSP-MCP-Server.git\ncd MaxMSP-MCP-Server\n```\n3. Start a new environment and install python dependencies:\n```\nuv venv\nuv pip install -r requirements.txt\n```\n4. Connect the MCP server to a MCP client (which hosts LLMs):\n```\n# Claude:\npython install.py --client claude\n# or Cursor:\npython install.py --client cursor\n```\nTo use other clients (check the [list](https://modelcontextprotocol.io/clients)), you need to download, mannually add the configuration file path to [here](https://github.com/tiianhk/MaxMSP-MCP-Server/blob/main/install.py#L6-L13), and connect by running `python install.py --client {your_client_name}`.\n\n### Installing to a Max patch  \n\nUse or copy from `MaxMSP_Agent/demo.maxpat`. In the first tab, click the `script npm version` message to verify that [npm](https://github.com/npm/cli) is installed. Then click `script npm install` to install the required dependencies. Switch to the second tab to access the agent. Click `script start` to initiate communication with Python. Once connected, you can interact with the LLM interface to have it explain, modify, or create Max objects within the patch.\n\n## Disclaimer\n\nThis is a third party implementation and not made by Cycling '74.\n",
+  "category": "Development",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "MaxMSP-MCP-Server-claude": {
+        "command": "python",
+        "args": ["install.py", "--client", "claude"],
+        "env": {}
+      },
+      "MaxMSP-MCP-Server-cursor": {
+        "command": "python",
+        "args": ["install.py", "--client", "cursor"],
+        "env": {}
+      },
+      "MaxMSP-MCP-Server-other-client": {
+        "command": "python",
+        "args": ["install.py", "--client", "{your_client_name}"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tiianhk",
+    "repo": "MaxMSP-MCP-Server",
+    "url": "https://github.com/tiianhk/MaxMSP-MCP-Server",
+    "name": "tiianhk__maxmsp-mcp-server",
+    "path": null,
+    "stars": 84,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "f31a9d4681173dfef974773708852d6d1dedd26a"
+  },
+  "programming_language": "Max",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.337Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "aiohappyeyeballs",
+      "importance": 3
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "aiosignal",
+      "importance": 3
+    },
+    {
+      "name": "annotated-types",
+      "importance": 4
+    },
+    {
+      "name": "anyio",
+      "importance": 7
+    },
+    {
+      "name": "attrs",
+      "importance": 4
+    },
+    {
+      "name": "bidict",
+      "importance": 3
+    },
+    {
+      "name": "certifi",
+      "importance": 5
+    },
+    {
+      "name": "click",
+      "importance": 5
+    },
+    {
+      "name": "frozenlist",
+      "importance": 3
+    },
+    {
+      "name": "h11",
+      "importance": 3
+    },
+    {
+      "name": "httpcore",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "httpx-sse",
+      "importance": 8
+    },
+    {
+      "name": "idna",
+      "importance": 5
+    },
+    {
+      "name": "markdown-it-py",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "mdurl",
+      "importance": 5
+    },
+    {
+      "name": "multidict",
+      "importance": 3
+    },
+    {
+      "name": "propcache",
+      "importance": 3
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pydantic-core",
+      "importance": 4
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 8
+    },
+    {
+      "name": "pygments",
+      "importance": 5
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    },
+    {
+      "name": "python-engineio",
+      "importance": 8
+    },
+    {
+      "name": "python-socketio",
+      "importance": 9
+    },
+    {
+      "name": "rich",
+      "importance": 7
+    },
+    {
+      "name": "shellingham",
+      "importance": 4
+    },
+    {
+      "name": "simple-websocket",
+      "importance": 7
+    },
+    {
+      "name": "sniffio",
+      "importance": 3
+    },
+    {
+      "name": "socket.io",
+      "importance": 9
+    },
+    {
+      "name": "sse-starlette",
+      "importance": 8
+    },
+    {
+      "name": "starlette",
+      "importance": 10
+    },
+    {
+      "name": "typer",
+      "importance": 8
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 4
+    },
+    {
+      "name": "typing-inspection",
+      "importance": 3
+    },
+    {
+      "name": "uvicorn",
+      "importance": 10
+    },
+    {
+      "name": "wsproto",
+      "importance": 7
+    },
+    {
+      "name": "yarl",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\naiohappyeyeballs==2.6.1\naiohttp==3.11.16\naiosignal==1.3.2\nannotated-types==0.7.0\nanyio==4.9.0\nattrs==25.3.0\nbidict==0.23.1\ncertifi==2025.1.31\nclick==8.1.8\nfrozenlist==1.6.0\nh11==0.14.0\nhttpcore==1.0.8\nhttpx==0.28.1\nhttpx-sse==0.4.0\nidna==3.10\nmarkdown-it-py==3.0.0\nmcp==1.6.0\nmdurl==0.1.2\nmultidict==6.4.3\npropcache==0.3.1\npydantic==2.11.3\npydantic-core==2.33.1\npydantic-settings==2.9.1\npygments==2.19.1\npython-dotenv==1.1.0\npython-engineio==4.12.0\npython-socketio==5.13.0\nrich==14.0.0\nshellingham==1.5.4\nsimple-websocket==1.1.0\nsniffio==1.3.1\nsse-starlette==2.2.1\nstarlette==0.46.2\ntyper==0.15.2\ntyping-extensions==4.13.2\ntyping-inspection==0.4.0\nuvicorn==0.34.2\nwsproto==1.2.0\nyarl==1.20.0\n\n\n=== MaxMSP_Agent/package.json ===\n{\n  \"name\": \"temp\",\n  \"version\": \"1.0.0\",\n  \"description\": \"\",\n  \"main\": \"boxtext.js\",\n  \"directories\": {\n    \"test\": \"test\"\n  },\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"socket.io\": \"^4.8.1\"\n  }\n}\n"
+}

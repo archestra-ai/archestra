@@ -1,0 +1,91 @@
+{
+  "name": "gmailmcp__remote-mcp",
+  "display_name": "Gmail",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjMzZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDE5MyI+PHBhdGggZmlsbD0iIzQyODVmNCIgZD0iTTU4LjE4MiAxOTIuMDVWOTMuMTRMMjcuNTA3IDY1LjA3N0wwIDQ5LjUwNHYxMjUuMDkxYzAgOS42NTggNy44MjUgMTcuNDU1IDE3LjQ1NSAxNy40NTV6Ii8+PHBhdGggZmlsbD0iIzM0YTg1MyIgZD0iTTE5Ny44MTggMTkyLjA1aDQwLjcyN2M5LjY1OSAwIDE3LjQ1NS03LjgyNiAxNy40NTUtMTcuNDU1VjQ5LjUwNWwtMzEuMTU2IDE3LjgzN2wtMjcuMDI2IDI1Ljc5OHoiLz48cGF0aCBmaWxsPSIjZWE0MzM1IiBkPSJtNTguMTgyIDkzLjE0bC00LjE3NC0zOC42NDdsNC4xNzQtMzYuOTg5TDEyOCA2OS44NjhsNjkuODE4LTUyLjM2NGw0LjY2OSAzNC45OTJsLTQuNjY5IDQwLjY0NEwxMjggMTQ1LjUwNHoiLz48cGF0aCBmaWxsPSIjZmJiYzA0IiBkPSJNMTk3LjgxOCAxNy41MDRWOTMuMTRMMjU2IDQ5LjUwNFYyNi4yMzFjMC0yMS41ODUtMjQuNjQtMzMuODktNDEuODktMjAuOTQ1eiIvPjxwYXRoIGZpbGw9IiNjNTIyMWYiIGQ9Im0wIDQ5LjUwNGwyNi43NTkgMjAuMDdMNTguMTgyIDkzLjE0VjE3LjUwNEw0MS44OSA1LjI4NkMyNC42MS03LjY2IDAgNC42NDYgMCAyNi4yM3oiLz48L3N2Zz4=",
+  "description": "Official Google remote MCP server for Gmail. Search threads, read conversations, manage labels, and draft messages. OAuth 2.0.",
+  "homepage": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "instructions": "**⚠️ Apply for the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview) first.** The Gmail MCP server (`gmailmcp.googleapis.com`) is preview-only. You can enable the API and list its tools without enrollment, but every tool call fails with \"The caller does not have permission\" until your Google Workspace organization is accepted into the program. A Workspace super-admin must enroll and wait for acceptance before this connection will work.\n\n**Requires your own Google Cloud OAuth client** — these servers do not support dynamic client registration.\n\n1. Enable the APIs in your Google Cloud project:\n   ```\n   gcloud services enable gmail.googleapis.com gmailmcp.googleapis.com\n   ```\n2. Configure the OAuth consent screen, then add these scopes:\n- `https://www.googleapis.com/auth/gmail.readonly`\n- `https://www.googleapis.com/auth/gmail.compose`\n3. Create an OAuth client (**Web application**) and register this redirect URI:\n   `http://localhost:3000/oauth-callback`\n4. Paste the **Client ID** and **Client Secret** into this form.\n\nEndpoints (if not auto-discovered from the server URL):\n- Authorization Server URL — `https://accounts.google.com`\n- Authorization Endpoint — `https://accounts.google.com/o/oauth2/v2/auth`\n- Token Endpoint — `https://oauth2.googleapis.com/token`\n\nSetup guide: https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "tools": [
+    {
+      "name": "create_draft",
+      "description": "Generate email messages in the drafts folder for review"
+    },
+    {
+      "name": "create_label",
+      "description": "Establish new organizational labels"
+    },
+    {
+      "name": "get_thread",
+      "description": "Retrieve the full content of a conversation"
+    },
+    {
+      "name": "label_message",
+      "description": "Apply labels to individual messages"
+    },
+    {
+      "name": "label_thread",
+      "description": "Apply labels to entire conversations"
+    },
+    {
+      "name": "list_drafts",
+      "description": "List unsent email compositions"
+    },
+    {
+      "name": "list_labels",
+      "description": "Show available organizational labels"
+    },
+    {
+      "name": "search_threads",
+      "description": "Find conversations matching search criteria"
+    },
+    {
+      "name": "unlabel_message",
+      "description": "Remove labels from individual messages"
+    },
+    {
+      "name": "unlabel_thread",
+      "description": "Remove labels from entire conversations"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["google", "google-workspace", "gmail", "email", "mail", "drafts", "labels", "oauth"],
+  "user_config": {},
+  "oauth_config": {
+    "name": "Gmail",
+    "server_url": "https://gmailmcp.googleapis.com/mcp/v1",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.compose"],
+    "description": "Gmail MCP Server (Google OAuth 2.0)",
+    "default_scopes": [
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.compose"
+    ],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Email",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "Google"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://gmailmcp.googleapis.com/mcp/v1",
+    "docs_url": "https://developers.google.com/workspace/guides/configure-mcp-servers"
+  },
+  "github_info": null,
+  "programming_language": null
+}

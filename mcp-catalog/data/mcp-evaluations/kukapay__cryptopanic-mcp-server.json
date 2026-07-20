@@ -1,0 +1,99 @@
+{
+  "name": "kukapay__cryptopanic-mcp-server",
+  "display_name": "cryptopanic-mcp-server",
+  "description": "Provide latest cryptocurrency news to AI agents.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {
+      "CRYPTOPANIC_API_PLAN": "${user_config.cryptopanic_api_plan}",
+      "CRYPTOPANIC_API_KEY": "${user_config.cryptopanic_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "cryptopanic_api_plan": {
+      "type": "string",
+      "title": "CryptoPanic API Plan",
+      "description": "Your CryptoPanic API plan (e.g., 'free', 'startup', 'business').",
+      "sensitive": false,
+      "required": true
+    },
+    "cryptopanic_api_key": {
+      "type": "string",
+      "title": "CryptoPanic API Key",
+      "description": "Your CryptoPanic API key for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# cryptopanic-mcp-server\n\n[![Discord](https://img.shields.io/discord/1353556181251133481?cacheSeconds=3600)](https://discord.gg/aRnuu2eJ)\n![GitHub License](https://img.shields.io/github/license/kukapay/blockbeats-mcp)\n\nProvide the latest cryptocurrency news to AI agents, powered by [CryptoPanic](https://cryptopanic.com/).\n\n<a href=\"https://glama.ai/mcp/servers/dp6kztv7yx\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/dp6kztv7yx/badge\" alt=\"cryptopanic-mcp-server MCP server\" />\n</a>\n\n## Tools\n\nThe server implements only one tool: \n\n```python\nget_crypto_news(kind: str = \"news\", num_pages: int = 1) -> str\n```\n- `kind`: Content type (news, media)\n- `num_pages`: Number of pages to fetch (default: 1, max: 10)\n\nExample Output: \n\n```\n- Bitcoin Breaks $60k Resistance Amid ETF Optimism\n- Ethereum Layer 2 Solutions Gain Traction\n- New Crypto Regulations Proposed in EU\n- ...\n```\n\n\n## Configuration\n\n- CryptoPanic API key & API plan: get one [here](https://cryptopanic.com/developers/api/)\n- Add a server entry to your configuration file:\n\n```\n\"mcpServers\": { \n  \"cryptopanic-mcp-server\": { \n    \"command\": \"uv\", \n    \"args\": [ \n      \"--directory\", \n      \"/your/path/to/cryptopanic-mcp-server\", \n      \"run\", \n      \"main.py\" \n    ], \n    \"env\": { \n      \"CRYPTOPANIC_API_PLAN\": \"your_api_plan\",\n      \"CRYPTOPANIC_API_KEY\": \"your_api_key\" \n    } \n  } \n}\n```\n\n- Replace `/your/path/to/cryptopanic-mcp-server` with your actual installation path.\n- Replace `CRYPTOPANIC_API_PLAN` and `CRYPTOPANIC_API_KEY` with your API plan and key from CryptoPanic. \n\n## License\n\nMIT License - see `LICENSE` file",
+  "category": "Finance",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "cryptopanic-mcp-server": {
+        "command": "uv",
+        "args": ["--directory", "/your/path/to/cryptopanic-mcp-server", "run", "main.py"],
+        "env": {
+          "CRYPTOPANIC_API_PLAN": "your_api_plan",
+          "CRYPTOPANIC_API_KEY": "your_api_key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "cryptopanic-mcp-server",
+    "url": "https://github.com/kukapay/cryptopanic-mcp-server",
+    "name": "cryptopanic-mcp-server",
+    "path": null,
+    "stars": 49,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.881Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

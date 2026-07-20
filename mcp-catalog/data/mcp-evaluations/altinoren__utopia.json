@@ -1,0 +1,74 @@
+{
+  "name": "altinoren__utopia",
+  "display_name": "Utopia",
+  "description": "An MCP Server that simulates a set of smart home and lifestyle devices, allowing you to interact with them through AI agents.",
+  "author": {
+    "name": "altinoren"
+  },
+  "server": {
+    "command": "dotnet",
+    "args": ["run", "--project", "${__dirname}/Utopia.csproj"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Utopia MCP Server\n\nUtopia is a simulation MCP Server designed to test and experiment with common household items, both those available today and those likely to exist in the near future, using AI Agents. This project provides a set of simulated smart home and lifestyle devices, allowing you to interact with them through AI agents.\n\nThe main idea is to explore how AI agents can discover and utilize multiple MCP endpoints simultaneously to achieve complex, user-requested tasks in household environments.\n\nIn a new chat, for the prompt ```\"I'm going to bed. Adjust everything by using the available tools.\"```, **Claude Desktop** using **Claude Sonnet 4** performs necessary MCP Server calls and ends up with the following:\n\n```\nPerfect! I've adjusted everything for a good night's sleep:\n✅ Completed adjustments:\n\nBlinds closed - Bedroom, living room, and kitchen blinds are now closed for privacy and to block out light\nTemperature set - Bedroom thermostat set to a comfortable 18°C for sleeping\nSecurity confirmed - Front door is locked\nAll lights confirmed off - Throughout the house\nAudio confirmed off - No music playing anywhere\nVacuum confirmed idle - Won't disturb your sleep\n\nYour home is now set up perfectly for bedtime. Sweet dreams! 🌙\n```\nThis demonstrates how AI agents can orchestrate multiple real-life devices to fulfill a complex, user-centered task.\n\nThe striking things is, we don't need to program this workflow, it is automatically discovered by the AI Agent and executed. We can give detailed instructions where necessary to make sure the agent is not confused, but for common cases like planning the going to bed scenario, the current reasoning capability of most SOTA models can be sufficient.\n\n## Available MCP Tools\n\n- **HumidityControl**: Monitor and control humidity in each room.\n- **AirQualityControl**: Simulate and manage air quality.\n- **Lighting**: Control smart lighting in any room.\n- **MultiRoomAudio**: Play music or playlists in one or more rooms.\n- **Refrigerator**: Provides the picture of contents that can be used to check stock status inside.\n- **RobotVacuum**: Simulate a robot vacuum's cleaning schedule and state.\n- **SmartBed**: Monitor sleep and provide adjustable climate control.\n- **SmartBlinds**: Adjust or schedule the position of smart blinds.\n- **SmartLock**: Lock or unlock the front door.\n- **SmartThermostat**: Set and monitor room temperatures.\n- **AutonomousElectricVehicle**: Simulate an autonomous EV's driving, charging, and trip scheduling. Send to a coordinate, start charging, auto-park.\n- **ACMEBank**: Simulate basic banking operations, accounts, and credit card management.\n- **ACMEGrocery**: Simulate grocery shopping with access to past shopping data. Can be combined with refrigerator's output.\n\n## Available MCP Resources\n\n- **Rooms**: List of rooms in the house. Can be used with tools that require a room, like lightning or room audio.\n- **Locations**: List of well known locations. Currently can be used with EV tool.\n\n## TODO: Example tools to implement in the future\n- **PickupDrone**: Simulate a drone for short-distance pickups from neighbors or local shops.\n- **GardenManagementRobot**: Automate weeding, planting, plant care, and produce harvesting.\n- **RoboticKitchen**: Simulate meal preparation, cooking, and kitchen management.\n- **MedicationAndCareAssistant**: Assist with medication schedules and basic care, supporting elderly users.\n\n\n## How to Add to Claude Desktop\n\nYou'll need [.NET 9](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) to build the MCP Server in your system.\n\nTo add this MCP server to Claude Desktop, add the following to your configuration:\n\n```\n{\n  \"mcpServers\": {\n    \"Utopia\": {\n      \"command\": \"dotnet\",\n      \"args\": [\n        \"run\",\n        \"--project\",\n        \"<path_to_project_folder>/Utopia.csproj\"\n      ]\n    }\n  }\n}\n```",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "Utopia": {
+        "command": "dotnet",
+        "args": ["run", "--project", "<path_to_project_folder>/Utopia.csproj"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "altinoren",
+    "repo": "Utopia",
+    "url": "https://github.com/altinoren/Utopia",
+    "name": "Utopia",
+    "path": null,
+    "stars": 6,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1d1ba870894fbf15af63f62f0094ef0c9c8e0e59"
+  },
+  "programming_language": "C#",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:41.669Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "ASP.NET Core",
+      "importance": 10
+    },
+    {
+      "name": "ModelContextProtocol.Sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

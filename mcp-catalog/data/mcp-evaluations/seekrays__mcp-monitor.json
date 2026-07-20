@@ -1,0 +1,78 @@
+{
+  "name": "seekrays__mcp-monitor",
+  "display_name": "mcp-monitor",
+  "description": "A system monitoring tool that exposes system metrics via the Model Context Protocol (MCP). This tool allows LLMs to retrieve real-time system information through an MCP-compatible interface.",
+  "author": {
+    "name": "seekrays"
+  },
+  "server": {
+    "command": "./mcp-monitor",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP System Monitor\n![Go](https://github.com/seekrays/mcp-monitor/actions/workflows/go.yml/badge.svg)\n![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/seekrays/mcp-monitor?sort=semver)\n[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-blue?style=flat&logo=discord)](https://discord.gg/kbMJ9Qpf)\n\nA system monitoring tool that exposes system metrics via the Model Context Protocol (MCP). This tool allows LLMs to retrieve real-time system information through an MCP-compatible interface.\n\n![](./doc/snapshot-1.png)\n\n## Features\n\nThis tool provides the following monitoring capabilities:\n\n- **CPU Information**: Usage percentage, core count, and detailed CPU info\n- **Memory Information**: Virtual and swap memory usage\n- **Disk Information**: Disk usage, partitions, and I/O statistics\n- **Network Information**: Network interfaces, connections, and traffic statistics\n- **Host Information**: System details, uptime, boot time, and users\n- **Process Information**: Process listing, sorting, and detailed per-process statistics\n\n\n## Available Tools\n\n### 1. CPU Information\n\n```\nTool: get_cpu_info\nDescription: Get CPU information and usage\nParameters:\n  - per_cpu (boolean, default: false): Whether to return data for each core\n```\n\n### 2. Memory Information\n\n```\nTool: get_memory_info\nDescription: Get system memory usage information\nParameters: None\n```\n\n### 3. Disk Information\n\n```\nTool: get_disk_info\nDescription: Get disk usage information\nParameters:\n  - path (string, default: \"/\"): Specify the disk path to query\n  - all_partitions (boolean, default: false): Whether to return information for all partitions\n```\n\n### 4. Network Information\n\n```\nTool: get_network_info\nDescription: Get network interface and traffic information\nParameters:\n  - interface (string, optional): Specify the network interface name to query\n```\n\n### 5. Host Information\n\n```\nTool: get_host_info\nDescription: Get host system information\nParameters: None\n```\n\n### 6. Process Information\n\n```\nTool: get_process_info\nDescription: Get process information\nParameters:\n  - pid (number, optional): Process ID to get detailed information for a specific process\n  - limit (number, default: 10): Limit the number of processes returned\n  - sort_by (string, default: \"cpu\"): Sort field (cpu, memory, pid, name)\n```\n\n\n## Installation\n\n```bash\ngit clone https://github.com/seekrays/mcp-monitor.git\ncd mcp-monitor\nmake build\n```\n\n## Usage\n\nRun the compiled binary:\n\n```bash\n./mcp-monitor\n```\n\nThe server starts in stdio mode, ready to communicate with an MCP-compatible LLM client.\n\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request. ",
+  "category": "Monitoring",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-monitor-stdio": {
+        "command": "./mcp-monitor",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "seekrays",
+    "repo": "mcp-monitor",
+    "url": "https://github.com/seekrays/mcp-monitor",
+    "name": "mcp-monitor",
+    "path": null,
+    "stars": 55,
+    "contributors": 0,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "003a3285110d48e7fa0ca41bb4fdec0575250ad7"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:24.473Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "coreos/go-systemd",
+      "importance": 7
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "shirou/gopsutil",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/seekrays/mcp-monitor\n\ngo 1.23\n\nrequire (\n\tgithub.com/coreos/go-systemd/v22 v22.5.0\n\tgithub.com/mark3labs/mcp-go v0.14.1\n\tgithub.com/shirou/gopsutil/v4 v4.25.2\n)\n\nrequire (\n\tgithub.com/ebitengine/purego v0.8.2 // indirect\n\tgithub.com/go-ole/go-ole v1.2.6 // indirect\n\tgithub.com/godbus/dbus/v5 v5.0.4 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect\n\tgithub.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect\n\tgithub.com/tklauser/go-sysconf v0.3.12 // indirect\n\tgithub.com/tklauser/numcpus v0.6.1 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgithub.com/yusufpapurcu/wmi v1.2.4 // indirect\n\tgolang.org/x/sys v0.28.0 // indirect\n)\n"
+}

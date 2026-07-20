@@ -1,0 +1,117 @@
+{
+  "name": "gomarble-ai__google-ads-mcp-server",
+  "display_name": "google-ads-mcp-server",
+  "description": "This repo helps us to analyze googla ads performance data",
+  "author": {
+    "name": "gomarble-ai"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server.py"],
+    "env": {
+      "GOOGLE_ADS_DEVELOPER_TOKEN": "${user_config.google_ads_developer_token}",
+      "GOOGLE_ADS_OAUTH_CONFIG_PATH": "${user_config.google_ads_oauth_config_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "google_ads_developer_token": {
+      "type": "string",
+      "title": "Google Ads Developer Token",
+      "description": "Your Google Ads API Developer Token (e.g., ABCDEFG1234567890). Obtain this from the API Center in Google Ads.",
+      "sensitive": true,
+      "required": true
+    },
+    "google_ads_oauth_config_path": {
+      "type": "file",
+      "title": "Google Ads OAuth Credentials File",
+      "description": "Full path to your OAuth 2.0 client secret JSON file, downloaded from Google Cloud Platform (e.g., /Users/john/client_secret_file.json).",
+      "sensitive": true,
+      "required": true,
+      "default": "${HOME}/client_secret.json"
+    }
+  },
+  "readme": "# Google Ads MCP Server 🚀\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)\n[![FastMCP](https://img.shields.io/badge/FastMCP-v2.8.0-green.svg)](https://github.com/jlowin/fastmcp)\n\n**A FastMCP-powered Model Context Protocol server for Google Ads API integration with automatic OAuth 2.0 authentication**\n\nConnect Google Ads API directly to Claude Desktop and other MCP clients with seamless OAuth 2.0 authentication, automatic token refresh, GAQL querying, and keyword research capabilities.\n\n<video controls width=\"1920\" height=\"512\" src=\"https://github.com/user-attachments/assets/1dc62f47-ace4-4dcf-8009-593ef7194b43\">Your browser does not support the video tag.</video>\n\n## Easy One-Click Setup\n\nFor a simpler setup experience, we offer ready-to-use installers:\n\n👉 **Download installer -** [https://gomarble.ai/mcp](https://gomarble.ai/mcp)\n\n## Join our community for help and updates\n\n👉 **Slack Community -** [AI in Ads](https://join.slack.com/t/ai-in-ads/shared_invite/zt-36hntbyf8-FSFixmwLb9mtEzVZhsToJQ)\n\n## Try Facebook ads mcp server also\n\n👉 **Facebook Ads MCP -** [Facebook Ads MCP](https://github.com/gomarble-ai/facebook-ads-mcp-server)\n\n## ✨ Features\n\n- 🔐 **Automatic OAuth 2.0** - One-time browser authentication with auto-refresh\n- 🔄 **Smart Token Management** - Handles expired tokens automatically\n- 📊 **GAQL Query Execution** - Run any Google Ads Query Language queries\n- 🏢 **Account Management** - List and manage Google Ads accounts\n- 🔍 **Keyword Research** - Generate keyword ideas with search volume data\n- 🚀 **FastMCP Framework** - Built on the modern MCP standard\n- 🖥️ **Claude Desktop Ready** - Direct integration with Claude Desktop\n- 🛡️ **Secure Local Storage** - Tokens stored locally, never exposed\n\n## 📋 Available Tools\n\n| Tool | Description | Parameters | Example Usage |\n|------|-------------|------------|---------------|\n| `list_accounts` | List all accessible Google Ads accounts | None | \"List all my Google Ads accounts\" |\n| `run_gaql` | Execute GAQL queries with custom formatting | `customer_id`, `query`, `manager_id` (optional) | \"Show me campaign performance for account 1234567890\" |\n| `run_keyword_planner` | Generate keyword ideas with metrics | `customer_id`, `keywords`, `manager_id`, `page_url`, date range options | \"Generate keyword ideas for 'digital marketing'\" |\n\n**Note:** All tools automatically handle authentication - no token parameters required!\n\n## 🚀 Quick Start\n\n### Prerequisites\n\nBefore setting up the MCP server, you'll need:\n- Python 3.10+ installed\n- A Google Cloud Platform account\n- A Google Ads account with API access\n\n## 🔧 Step 1: Google Cloud Platform Setup\n\n### 1.1 Create Google Cloud Project\n\n1. **Go to [Google Cloud Console](https://console.cloud.google.com/)**\n2. **Create a new project:**\n   - Click \"Select a project\" → \"New Project\"\n   - Enter project name (e.g., \"Google Ads MCP\")\n   - Click \"Create\"\n\n### 1.2 Enable Google Ads API\n\n1. **In your Google Cloud Console:**\n   - Go to \"APIs & Services\" → \"Library\"\n   - Search for \"Google Ads API\"\n   - Click on it and press \"Enable\"\n\n### 1.3 Create OAuth 2.0 Credentials\n\n1. **Go to \"APIs & Services\" → \"Credentials\"**\n2. **Click \"+ CREATE CREDENTIALS\" → \"OAuth 2.0 Client ID\"**\n3. **Configure consent screen (if first time):**\n   - Click \"Configure Consent Screen\"\n   - Choose \"External\" (unless you have Google Workspace)\n   - Fill required fields:\n     - App name: \"Google Ads MCP\"\n     - User support email: Your email\n     - Developer contact: Your email\n   - Click \"Save and Continue\" through all steps\n4. **Create OAuth Client:**\n   - Application type: **\"Desktop application\"**\n   - Name: \"Google Ads MCP Client\"\n   - Click \"Create\"\n5. **Download credentials:**\n   - Click \"Download JSON\" button\n   - Save file as `client_secret_[long-string].json` in your project directory\n\n## 🔧 Step 2: Google Ads API Setup\n\n### 2.1 Get Developer Token\n\n1. **Sign in to [Google Ads](https://ads.google.com)**\n2. **Go to Tools & Settings** (wrench icon in top navigation)\n3. **Under \"Setup\", click \"API Center\"**\n4. **Accept Terms of Service** if prompted\n5. **Click \"Apply for token\"**\n6. **Fill out application form:**\n   - Describe your use case (e.g., \"MCP integration for campaign analysis\")\n   - Provide technical details about your implementation\n7. **Submit and wait for approval** (usually 1-3 business days)\n\n**Note:** You'll initially get a test token with limited functionality. After testing, you can apply for production access.\n\n### 2.2 Find Your Developer Token\n\nOnce approved:\n1. **Return to API Center in Google Ads**\n2. **Copy your Developer Token** (format: `XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX`)\n\n## 🔧 Step 3: Installation & Setup\n\n### 3.1 Clone and Install\n\n```bash\n# Clone the repository\ngit clone https://github.com/yourusername/google-ads-mcp-server.git\ncd google-ads-mcp-server\n\n# Create virtual environment (recommended)\npython3 -m venv .venv\nsource .venv/bin/activate  # On Windows: .venv\\Scripts\\activate\n\n# Install dependencies\npip install -r requirements.txt\n```\n\n### 3.2 Environment Configuration\n\nCreate a `.env` file in your project directory:\n\n```bash\n# Copy the example file\ncp .env.example .env\n```\n\nEdit `.env` with your credentials:\n\n```bash\n# Required: Google Ads API Developer Token\nGOOGLE_ADS_DEVELOPER_TOKEN=your_developer_token_here\n\n# Required: Path to OAuth credentials JSON file (downloaded from Google Cloud)\nGOOGLE_ADS_OAUTH_CONFIG_PATH=/full/path/to/your/client_secret_file.json\n```\n\n**Example `.env` file:**\n```bash\nGOOGLE_ADS_DEVELOPER_TOKEN=ABCDEFG1234567890\nGOOGLE_ADS_OAUTH_CONFIG_PATH=/Users/john/google-ads-mcp/client_secret_138737274875-abc123.apps.googleusercontent.com.json\n```\n\n## 🖥️ Step 4: Claude Desktop Integration\n\n### 4.1 Locate Claude Configuration\n\nFind your Claude Desktop configuration file:\n\n**macOS:**\n```bash\n~/Library/Application Support/Claude/claude_desktop_config.json\n```\n\n**Windows:**\n```bash\n%APPDATA%\\Claude\\claude_desktop_config.json\n```\n\n### 4.2 Add MCP Server Configuration\n\nEdit the configuration file and add your Google Ads MCP server:\n\n```json\n{\n  \"mcpServers\": {\n    \"google-ads\": {\n      \"command\": \"/full/path/to/your/project/.venv/bin/python\",\n      \"args\": [\n        \"/full/path/to/your/project/server.py\"\n      ]\n    }\n  }\n}\n```\n\n**Real Example:**\n```json\n{\n  \"mcpServers\": {\n    \"google-ads\": {\n      \"command\": \"/Users/marble-dev-01/workspace/google_ads_with_fastmcp/.venv/bin/python\",\n      \"args\": [\n        \"/Users/marble-dev-01/workspace/google_ads_with_fastmcp/server.py\"\n      ]\n    }\n  }\n}\n```\n\n**Important:** \n- Use **absolute paths** for all file locations\n- On Windows, use forward slashes `/` or double backslashes `\\\\` in paths\n- Replace `your_developer_token_here` with your actual developer token\n\n### 4.3 Restart Claude Desktop\n\nClose and restart Claude Desktop to load the new configuration.\n\n## 🔐 Step 5: First-Time Authentication\n\n### 5.1 Trigger OAuth Flow\n\n1. **Open Claude Desktop**\n2. **Try any Google Ads command**, for example:\n   ```\n   \"List all my Google Ads accounts\"\n   ```\n\n### 5.2 Complete Authentication\n\n1. **Browser opens automatically** to Google OAuth page\n2. **Sign in** with your Google account (the one with Google Ads access)\n3. **Grant permissions** by clicking \"Allow\"\n4. **Browser shows success page**\n5. **Return to Claude** - your command will complete automatically!\n\n### 5.3 Verify Setup\n\nAfter authentication, you should see:\n- A `google_ads_token.json` file created in your project directory\n- Your Google Ads accounts listed in Claude's response\n\n## 📖 Usage Examples\n\n### Basic Account Operations\n\n```\n\"List all my Google Ads accounts\"\n\n\"Show me the account details and which ones have active campaigns\"\n```\n\n### Campaign Analysis\n\n```\n\"Show me campaign performance for account 1234567890 in the last 30 days\"\n\n\"Get conversion data for all campaigns in the last week\"\n\n\"Which campaigns have the highest cost per conversion?\"\n```\n\n### Keyword Research\n\n```\n\"Generate keyword ideas for 'digital marketing' using account 1234567890\"\n\n\"Find keyword opportunities for 'AI automation' with search volume data\"\n\n\"Research keywords for the page https://example.com/services\"\n```\n\n### Custom GAQL Queries\n\n```\n\"Run this GAQL query for account 1234567890:\nSELECT campaign.name, metrics.clicks, metrics.cost_micros \nFROM campaign \nWHERE segments.date DURING LAST_7_DAYS\"\n\n\"Get keyword performance data:\nSELECT ad_group_criterion.keyword.text, metrics.ctr, metrics.average_cpc\nFROM keyword_view \nWHERE metrics.impressions > 100\"\n```\n\n## 🔍 Advanced GAQL Examples\n\n### Campaign Performance with Revenue\n```sql\nSELECT \n  campaign.id,\n  campaign.name, \n  metrics.clicks, \n  metrics.impressions,\n  metrics.cost_micros,\n  metrics.conversions,\n  metrics.conversions_value\nFROM campaign \nWHERE segments.date DURING LAST_30_DAYS\nORDER BY metrics.cost_micros DESC\n```\n\n### Keyword Performance Analysis\n```sql\nSELECT \n  campaign.name,\n  ad_group_criterion.keyword.text, \n  ad_group_criterion.keyword.match_type,\n  metrics.ctr,\n  metrics.average_cpc,\n  metrics.quality_score\nFROM keyword_view \nWHERE segments.date DURING LAST_7_DAYS\n  AND metrics.impressions > 100\nORDER BY metrics.conversions DESC\n```\n\n### Device Performance Breakdown\n```sql\nSELECT \n  campaign.name,\n  segments.device,\n  metrics.clicks,\n  metrics.cost_micros,\n  metrics.conversions\nFROM campaign\nWHERE segments.date DURING LAST_30_DAYS\n  AND campaign.status = 'ENABLED'\n```\n\n## 📁 Project Structure\n\n```\ngoogle-ads-mcp-server/\n├── server.py                           # Main MCP server\n├── oauth/\n│   ├── __init__.py                     # Package initialization\n│   └── google_auth.py                  # OAuth authentication logic\n├── google_ads_token.json               # Auto-generated token storage (gitignored)\n├── client_secret_[long-string].json    # Your OAuth credentials (gitignored)\n├── .env                                # Environment variables (gitignored)\n├── .env.example                        # Environment template\n├── .gitignore                          # Git ignore file\n├── requirements.txt                    # Python dependencies\n├── LICENSE                             # MIT License\n└── README.md                           # This file\n```\n\n## 🔒 Security & Best Practices\n\n### File Security\n- ✅ **Credential files are gitignored** - Never committed to version control\n- ✅ **Local token storage** - Tokens stored in `google_ads_token.json` locally\n- ✅ **Environment variables** - Sensitive data in `.env` file\n- ✅ **Automatic refresh** - Minimal token exposure time\n\n### Recommended File Permissions\n```bash\n# Set secure permissions for sensitive files\nchmod 600 .env\nchmod 600 google_ads_token.json\nchmod 600 client_secret_*.json\n```\n\n### Production Considerations\n1. **Use environment variables** instead of `.env` files in production\n2. **Implement rate limiting** to respect API quotas\n3. **Monitor API usage** in Google Cloud Console\n4. **Secure token storage** with proper access controls\n5. **Regular token rotation** for enhanced security\n\n## 🛠️ Troubleshooting\n\n### Authentication Issues\n\n| Issue | Symptoms | Solution |\n|-------|----------|----------|\n| **No tokens found** | \"Starting OAuth flow\" message | ✅ Normal for first-time setup - complete browser authentication |\n| **Token refresh failed** | \"Refreshing token failed\" error | ✅ Delete `google_ads_token.json` and re-authenticate |\n| **OAuth flow failed** | Browser error or no response | Check credentials file path and internet connection |\n| **Permission denied** | \"Access denied\" in browser | Ensure Google account has Google Ads access |\n\n### Configuration Issues\n\n| Issue | Symptoms | Solution |\n|-------|----------|----------|\n| **Environment variables missing** | \"Environment variable not set\" | Check `.env` file and Claude config `env` section |\n| **File not found** | \"FileNotFoundError\" | Verify absolute paths in configuration |\n| **Module import errors** | \"ModuleNotFoundError\" | Run `pip install -r requirements.txt` |\n| **Python path issues** | \"Command not found\" | Use absolute path to Python executable |\n\n### Claude Desktop Issues\n\n| Issue | Symptoms | Solution |\n|-------|----------|----------|\n| **Server not connecting** | No Google Ads tools available | Restart Claude Desktop, check config file syntax |\n| **Invalid JSON config** | Claude startup errors | Validate JSON syntax in config file |\n| **Permission errors** | \"Permission denied\" on startup | Check file permissions and paths |\n\n### API Issues\n\n| Issue | Symptoms | Solution |\n|-------|----------|----------|\n| **Invalid customer ID** | \"Customer not found\" | Use 10-digit format without dashes: `1234567890` |\n| **API quota exceeded** | \"Quota exceeded\" error | Wait for quota reset or request increase |\n| **Invalid developer token** | \"Authentication failed\" | Verify token in Google Ads API Center |\n| **GAQL syntax errors** | \"Invalid query\" | Check GAQL syntax and field names |\n\n### Debug Mode\n\nEnable detailed logging for troubleshooting:\n\n```python\n# Add to server.py for debugging\nimport logging\nlogging.basicConfig(level=logging.DEBUG)\n```\n\n### Getting Help\n\nIf you encounter issues:\n\n1. **Check the error message carefully** - it usually indicates the exact problem\n2. **Verify all file paths** are absolute and correct\n3. **Ensure environment variables** are properly set\n4. **Check Google Cloud Console** for API quotas and billing\n5. **Restart Claude Desktop** after any configuration changes\n\n## 🚀 Advanced Configuration\n\n### HTTP Transport Mode\n\nFor web deployment or remote access:\n\n```bash\n# Start server in HTTP mode\npython3 server.py --http\n```\n\n**Claude Desktop config for HTTP:**\n```json\n{\n  \"mcpServers\": {\n    \"google-ads\": {\n      \"url\": \"http://127.0.0.1:8000/mcp\"\n    }\n  }\n}\n```\n\n### Custom Token Storage\n\nModify token storage location in `oauth/google_auth.py`:\n\n```python\n# Custom token file location\ndef get_token_path():\n    return \"/custom/secure/path/google_ads_token.json\"\n```\n\n### Manager Account Configuration\n\nFor managing multiple accounts under an MCC:\n\n```bash\n# Add to .env file\nGOOGLE_ADS_LOGIN_CUSTOMER_ID=123-456-7890\n```\n\n## 🤝 Contributing\n\nWe welcome contributions! Here's how to get started:\n\n### Development Setup\n\n```bash\n# Fork and clone the repository\ngit clone https://github.com/yourusername/google-ads-mcp-server.git\ncd google-ads-mcp-server\n\n# Create development environment\npython3 -m venv .venv\nsource .venv/bin/activate\n\n# Install dependencies\npip install -r requirements.txt\n\n# Set up development environment\ncp .env.example .env\n# Add your development credentials to .env\n```\n\n### Making Changes\n\n1. **Create a feature branch:** `git checkout -b feature/amazing-feature`\n2. **Make your changes** with appropriate tests\n3. **Test thoroughly** with different account configurations\n4. **Update documentation** as needed\n5. **Commit changes:** `git commit -m 'Add amazing feature'`\n6. **Push to branch:** `git push origin feature/amazing-feature`\n7. **Open a Pull Request** with detailed description\n\n### Testing Your Changes\n\n```bash\n# Test authentication flow\npython3 server.py --test-auth\n\n# Test API connectivity\npython3 -c \"\nfrom oauth.google_auth import get_oauth_credentials\ncreds = get_oauth_credentials()\nprint('✅ Authentication successful!')\n\"\n\n# Test with Claude Desktop\n# Add your server to Claude config and test various commands\n```\n\n## 📊 API Limits and Quotas\n\n### Google Ads API Quotas\n\n- **Basic access:** 15,000 operations per day\n- **Standard access:** 40,000 operations per day\n- **Request rate:** 1,600 requests per minute per developer token\n\n### Best Practices for API Usage\n\n1. **Cache results** when possible to reduce API calls\n2. **Use date ranges** to limit data volume\n3. **Batch requests** when supported\n4. **Monitor usage** in Google Cloud Console\n5. **Implement retry logic** for rate limit errors\n\n### Quota Management\n\n```bash\n# Monitor usage in Google Cloud Console\n# Go to APIs & Services → Quotas\n# Search for \"Google Ads API\" to see current usage\n```\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n---\n\n### MIT License\n\n```\nCopyright (c) 2025 Google Ads MCP Server Contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n```\n\n## 📈 Roadmap\n\n### Upcoming Features\n- 🔄 **Enhanced keyword research** with competitor analysis\n- 📊 **Built-in data visualization** with charts and graphs\n- 🤖 **AI-powered optimization suggestions**\n- 📝 **Campaign creation and management tools**\n- 🔍 **Advanced reporting capabilities**\n- 🌐 **Multi-language support**\n\n---\n\n**Made with ❤️ for the MCP community**\n\n*Connect your Google Ads data directly to AI assistants and unlock powerful advertising insights through natural language conversations.*\n",
+  "category": "Marketing",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "google-ads": {
+        "command": "/full/path/to/your/project/.venv/bin/python",
+        "args": ["/full/path/to/your/project/server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "gomarble-ai",
+    "repo": "google-ads-mcp-server",
+    "url": "https://github.com/gomarble-ai/google-ads-mcp-server",
+    "name": "google-ads-mcp-server",
+    "path": null,
+    "stars": 33,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a48cb4a118d628924cf334d2efb0b0193271c3ee"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:23.004Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    },
+    {
+      "name": "google-auth",
+      "importance": 9
+    },
+    {
+      "name": "google-auth-oauthlib",
+      "importance": 9
+    },
+    {
+      "name": "google-auth-httplib2",
+      "importance": 8
+    },
+    {
+      "name": "urllib3",
+      "importance": 5
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nfastmcp>=0.8.0\n\n# HTTP requests for API calls\nrequests>=2.31.0\n\n# Environment configuration\npython-dotenv>=1.0.0\n\n# Google OAuth and Authentication (cohnen's approach)\ngoogle-auth>=2.23.0\ngoogle-auth-oauthlib>=1.1.0\ngoogle-auth-httplib2>=0.1.1\n\n# Additional dependencies\nurllib3>=2.0.0\ntyping-extensions>=4.0.0\n"
+}

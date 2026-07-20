@@ -1,0 +1,82 @@
+{
+  "name": "mikechao__metmuseum-mcp",
+  "display_name": "metmuseum-mcp",
+  "description": "Met Museum MCP integration to discover the art collection at The Metropolitan Museum of Art in New York",
+  "author": {
+    "name": "mikechao"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "metmuseum-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "[![themet logo](https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/The_Metropolitan_Museum_of_Art_Logo.svg/250px-The_Metropolitan_Museum_of_Art_Logo.svg.png)](https://www.metmuseum.org/)\n\n# Met Museum MCP Server\n\nA Model Context Protocol (MCP) server that provides access to the Metropolitan Museum of Art Collection through natural language interactions. This server allows AI models to search The Met's art collection and have art works available as a Resource.\n\n<a href=\"https://glama.ai/mcp/servers/@mikechao/metmuseum-mcp\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@mikechao/metmuseum-mcp/badge\" alt=\"Met Museum MCP Server\" /></a>\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mikechao-metmuseum-mcp-badge.png)](https://mseep.ai/app/mikechao-metmuseum-mcp)\n\n[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/ccc75a48-9b33-4a9a-8ef7-8dc3848db263)\n\n## Features\n\nThis server provides AI models the following tools to interact with the art collection of The Met\n\n### 1. List Departments (list-departments)\n\nLists all the valid departments at The Met\n\n- Inputs:\n  - None\n- Output:\n  ```\n  Department ID: 1, Display Name: American Decorative Arts\n  Department ID: 3, Display Name: Ancient Near Eastern Art\n  ...\n  ```\n\n### 2. Search Museum Objects (search-museum-objects)\n\nSearch for various objects in The Met based on the inputs.\n\n- Inputs:\n  - `q` (string): The search term e.g. sunflowers\n  - `hasImages` (boolean, optional, default: false): Only search for objects with images\n  - `title` (boolean, optional, default: false): Returns objects that match the query, specifically searching against the title field for objects.\n  - `departmentId` (number, optional): Returns objects that are a part of a specific department.\n- Outputs:\n\n  ```\n  Total objects found: 54\n  Object IDs: 436532, 789578, 436840, 438722,...\n  ```\n\n### 3. Get Museum Objects (get-museum-object)\n\nGet a specific object from The Met containing all open access data about that object, including its image (if the image is available under Open Access).\n\nIf there is an image it is added to the Resource of the server via the title of the object.\n\n- Inputs:\n  - `objectId` (number): The id of the object to retrieve\n  - `returnImage` (boolean, optional, default: true): Whether to return the image (if available) of the object and add it to the server resources\n- Outputs:\n  ```\n  Title: Self-Portrait with a Straw Hat (obverse: The Potato Peeler)\n  Artist: Vincent van Gogh\n  Artist Bio: Dutch, Zundert 1853–1890 Auvers-sur-Oise\n  Department: European Paintings\n  Credit Line: Bequest of Miss Adelaide Milton de Groot (1876-1967), 1967\n  Medium: Oil on canvas\n  Dimensions: 16 x 12 1/2 in. (40.6 x 31.8 cm)\n  Primary Image URL: https://images.metmuseum.org/CRDImages/ep/original/DT1502_cropped2.jpg\n  Tags: Men, Self-portraits\n  ```\n  If returnImage is true\n  ```\n  **base64 encoding of jpeg image**\n  ```\n\n### Usage with Claude Desktop\n\n## Via Desktop Extension (DXT)\n\n1. Download the `dxt` file from the [Releases](https://github.com/mikechao/metmuseum-mcp/releases)\n2. Open it with Claude Desktop\n   or\n   Go to File -> Settings -> Extensions and drag the .DXT file to the window to install it\n\n## Via npx\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcp-servers\": {\n    \"met-museum\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"metmuseum-mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Usage with LibreChat\n\nAdd the following in your `librechat.yaml`\n\n```yaml\nmcpServers:\n  metmuseum:\n    command: npx\n    args:\n      - -y\n      - metmuseum-mcp\n```\n\n## Example queries\n\nHere some questions you can ask the AI model when this server in connected:\n\n```\nCan you show me a few painting from the Asian Art department?\nCan you find the painting titled \"Corridor in the Asylum\"?\nCan you find any art that has \"cat\" in the title or features \"cats\"?\n```\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n\n## Disclaimer\n\nThis library is not officially associated with The Metropolitan Museum of Art in New York. It is a third-party implementation of the [The Metropolitan Museum of Art Collection API](https://metmuseum.github.io/) with a MCP Server.\n",
+  "category": "Art & Culture",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "metmuseum-mcp": {
+        "command": "npx",
+        "args": ["-y", "metmuseum-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mikechao",
+    "repo": "metmuseum-mcp",
+    "url": "https://github.com/mikechao/metmuseum-mcp",
+    "name": "mikechao__metmuseum-mcp",
+    "path": null,
+    "stars": 10,
+    "contributors": 4,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "63e298d090107171d512877b37b668962ceff826"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.239Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "image-to-base64",
+      "importance": 6
+    },
+    {
+      "name": "mcpscout",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"metmuseum-mcp\",\n  \"type\": \"module\",\n  \"version\": \"0.9.5\",\n  \"private\": false,\n  \"description\": \"A Model Context Protocol (MCP) server that provides access to the Metropolitan Museum of Art Collection through natural language interactions. This server allows AI models to search The Met's art collection and have art works available as a Resource.\",\n  \"author\": \"mike.chao.one@gmail.com\",\n  \"license\": \"MIT\",\n  \"homepage\": \"https://github.com/mikechao/metmuseum-mcp\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/mikechao/metmuseum-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/mikechao/metmuseum-mcp/issues\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"the-met\",\n    \"metropolitan-museum-of-art\",\n    \"art\",\n    \"museum\"\n  ],\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"metmuseum-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"LICENSE\",\n    \"README.md\",\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"lint\": \"eslint . --ext .ts,.js,.mjs,.cjs --fix\",\n    \"lint:check\": \"eslint . --ext .ts,.js,.mjs,.cjs\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"check\": \"npm run lint:check && npm run typecheck\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.1\",\n    \"image-to-base64\": \"^2.2.0\",\n    \"mcpscout\": \"^0.0.1\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@antfu/eslint-config\": \"^4.11.0\",\n    \"@types/image-to-base64\": \"^2.1.2\",\n    \"@types/node\": \"^22.14.0\",\n    \"eslint\": \"^9.23.0\",\n    \"eslint-plugin-format\": \"^1.0.1\",\n    \"shx\": \"^0.4.0\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

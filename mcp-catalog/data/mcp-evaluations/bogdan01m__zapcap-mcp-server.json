@@ -1,0 +1,110 @@
+{
+  "name": "bogdan01m__zapcap-mcp-server",
+  "display_name": "zapcap-mcp-server",
+  "description": "MCP Server for ZapCap.ai",
+  "author": {
+    "name": "bogdan01m"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["zapcap-mcp-server"],
+    "env": {
+      "ZAPCAP_API_KEY": "${user_config.zapcap_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "zapcap_api_key": {
+      "type": "string",
+      "title": "ZapCap API Key",
+      "description": "Your API key for ZapCap authentication",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# ZapCap MCP Server\n\n[![PyPI version](https://badge.fury.io/py/zapcap-mcp-server.svg)](https://pypi.org/project/zapcap-mcp-server/)\n[![MCP Server](https://img.shields.io/badge/MCP-Server-blue?logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJMMTMuMDkgOC4yNkwyMCA5TDEzLjA5IDE1Ljc0TDEyIDIyTDEwLjkxIDE1Ljc0TDQgOUwxMC45MSA4LjI2TDEyIDJaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K)](https://modelcontextprotocol.io/)\n[![Author](https://img.shields.io/badge/by-Bogdan%20Minko-purple?style=flat)](https://bogdan01m.github.io/)\n\n**NOTE**: This is an unofficial implementation of MCP Server for ZapCap.\n\n<a href=\"https://glama.ai/mcp/servers/@bogdan01m/zapcap-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@bogdan01m/zapcap-mcp-server/badge\" alt=\"zapcap-mcp-server MCP server\" />\n</a>\n\nAn MCP (Model Context Protocol) server that provides tools for uploading videos, creating processing tasks, and monitoring their progress through the [ZapCap API](https://zapcap.ai/).\n\n## Requirements\n\n- uv \n- ZapCap API key\n\nYou can install uv from here: https://docs.astral.sh/uv/\n\nYou can get api key from ZapCap API after registation at https://zapcap.ai/ in their platform here: https://platform.zapcap.ai/dashboard/api-key\n\n## Installation in MCP-client\n\nAdd to your MCP client `mcp.json` configuration (e.g., Claude Desktop, Cursor and etc.):\n\n```json\n{\n  \"mcpServers\": {\n    \"zapcap\": {\n      \"command\": \"uvx\",\n      \"args\": [\"zapcap-mcp-server\"],\n      \"env\": {\n        \"ZAPCAP_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n## Alternative Installation\n\n```bash\nuv tool install zapcap-mcp-server\n```\n\n## Docker Installation\n\nYou can also run the MCP server in a Docker container using the pre-built image from Docker Hub:\n\n### Using pre-built image from Docker Hub:\n```json\n{\n  \"mcpServers\": {\n    \"zapcap\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\", \n        \"--rm\", \n        \"--init\",\n        \"-i\",\n        \"--net=host\",\n        \"-v\", \"/home/$USER:/host/home/$USER\",\n        \"-e\", \"ZAPCAP_API_KEY=your_api_key_here\",\n        \"bogdan01m/zapcap-mcp-server:latest\"\n      ],\n      \"env\": {\n        \"DOCKER_CLI_HINTS\": \"false\"\n      }\n    }\n  }\n}\n```\n\n## Configuration\n\nSet your ZapCap API key as an environment variable:\n\n```bash\nexport ZAPCAP_API_KEY=\"your_api_key_here\"\n```\n\n## Usage\n\n### Demo Videos\n\n**How to use:**\n\n[<img src=\"https://img.youtube.com/vi/GcoyTgTVd6Q/maxresdefault.jpg\" width=\"100%\">](https://youtu.be/GcoyTgTVd6Q)\n\n**Results:**\n\n[<img src=\"https://img.youtube.com/vi/rxqAQZRiyxA/maxresdefault.jpg\" width=\"100%\">](https://youtu.be/rxqAQZRiyxA)\n\n### Available Tools\n\nThe server provides the following tools:\n\n### zapcap_mcp_upload_video\nUpload a video file to ZapCap.\n\n**Parameters:**\n- `file_path`: Path to the video file\n\n### zapcap_mcp_upload_video_by_url\nUpload a video by URL to ZapCap.\n\n**Parameters:**\n- `url`: URL to the video file\n\n### zapcap_mcp_get_templates\nGet available processing templates from ZapCap.\n\n### zapcap_mcp_create_task\nCreate a video processing task with full customization options.\n\n**Parameters:**\n- `video_id`: Video ID from upload\n- `template_id`: Template ID\n- `auto_approve`: Auto approve the task (default: true)\n- `language`: Language code (default: \"en\")\n- `enable_broll`: Enable B-roll (default: false)\n- `broll_percent`: B-roll percentage 0-100 (default: 30)\n\n**Subtitle options:**\n- `emoji`: Enable emoji in subtitles (default: true)\n- `emoji_animation`: Enable emoji animation (default: true)\n- `emphasize_keywords`: Emphasize keywords (default: true)\n- `animation`: Enable subtitle animation (default: true)\n- `punctuation`: Include punctuation (default: true)\n- `display_words`: Number of words to display (default: 1)\n\n**Style options:**\n- `position_top`: Subtitle position from top (default: 60)\n- `font_uppercase`: Use uppercase font (default: true)\n- `font_size`: Font size (default: 30)\n- `font_weight`: Font weight (default: 900)\n- `font_color`: Font color (default: \"#ffffff\")\n- `font_shadow`: Font shadow s/m/l (default: \"l\")\n- `stroke`: Stroke style (default: \"s\")\n- `stroke_color`: Stroke color (default: \"#000000\")\n- `highlight_color_1`: First highlight color (default: \"#2bf82a\")\n- `highlight_color_2`: Second highlight color (default: \"#fdfa14\")\n- `highlight_color_3`: Third highlight color (default: \"#f01916\")\n\n### zapcap_mcp_monitor_task\nMonitor task progress.\n\n**Parameters:**\n- `video_id`: Video ID\n- `task_id`: Task ID\n\n## Benefits Over Direct API Usage\n\n### Token Management\nUnlike using curl or direct API calls where you need to manually include your API key in every request:\n\n```bash\n# Traditional curl approach - token needed every time\ncurl -X POST \"https://api.zapcap.ai/upload\" \\\n  -H \"Authorization: Bearer your_token_here\" \\\n  -F \"file=@video.mp4\"\n```\n\nWith this MCP server, your API key is configured once in the environment and automatically used for all operations:\n\n```json\n{\n  \"env\": {\n    \"ZAPCAP_API_KEY\": \"your_api_key_here\"\n  }\n}\n```\n\n### Natural Language Interface\nInstead of constructing complex API requests with parameters, you can describe what you want:\n\n**Traditional API:** \n```bash\ncurl -X POST \"https://api.zapcap.ai/tasks\" \\\n  -H \"Authorization: Bearer token\" \\\n  -d '{\n    \"video_id\": \"abc123\",\n    \"template_id\": \"viral\",\n    \"font_size\": 30,\n    \"highlight_color_1\": \"#00ff00\",\n    \"enable_broll\": true,\n    \"broll_percent\": 40\n  }'\n```\n\n**MCP Server:**\n```\n\"Add green highlighted subtitles with 40% B-roll using viral template\"\n```\n\n### Type Safety & Validation\n- **Pydantic Integration**: All parameters are validated automatically with type checking\n\n## Future Plans\n\n### Testing Integration\nWe're planning to add basic testing capabilities:\n\n- **API Integration Tests**: Verify that ZapCap API calls work correctly\n- **MCP Tool Tests**: Ensure all MCP tools respond properly to requests\n\n### Planned Features\n- **Named configurations**: Save frequently used parameter combinations (\"my_brand\", \"youtube_style\")\n- **Template enhancement**: Override template defaults with consistent brand colors/fonts\n\n## License\n\nMIT licence",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "zapcap-mcp-server": {
+        "command": "uvx",
+        "args": ["zapcap-mcp-server"],
+        "env": {
+          "ZAPCAP_API_KEY": "your_api_key_here"
+        }
+      },
+      "bogdan01m-zapcap-mcp-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "--init",
+          "-i",
+          "--net=host",
+          "-v",
+          "/home/$USER:/host/home/$USER",
+          "-e",
+          "ZAPCAP_API_KEY=your_api_key_here",
+          "bogdan01m/zapcap-mcp-server:latest"
+        ],
+        "env": {
+          "DOCKER_CLI_HINTS": "false",
+          "ZAPCAP_API_KEY": "your_api_key_here"
+        },
+        "docker_image": "bogdan01m/zapcap-mcp-server:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "bogdan01m",
+    "repo": "zapcap-mcp-server",
+    "url": "https://github.com/bogdan01m/zapcap-mcp-server",
+    "name": "zapcap-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "1e2c3485334620ec29943ae23ce7aa00c521cdf4"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:24.384Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"zapcap-mcp-server\"\nversion = \"0.1.8\"\ndescription = \"MCP server for ZapCap.ai video processing and caption generation\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.10.1\",\n    \"pydantic>=2.11.7\",\n]\n\n[project.scripts]\nzapcap-mcp-server = \"zapcap_mcp_server.server:main\"\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[tool.setuptools.package-dir]\n\"\" = \"src\""
+}

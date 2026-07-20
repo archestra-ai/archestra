@@ -1,0 +1,109 @@
+{
+  "name": "codex-data__codex-mcp",
+  "display_name": "Codex",
+  "description": "A Model Context Protocol server for the Codex API",
+  "author": {
+    "name": "Codex-Data"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@codex-data/codex-mcp"],
+    "env": {
+      "CODEX_API_KEY": "${user_config.codex_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "codex_api_key": {
+      "type": "string",
+      "title": "Codex API Key",
+      "description": "Your API key to access the Codex API. You can get your key from the Codex Dashboard.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Codex MCP Server\n\nAn [MCP](https://modelcontextprotocol.org/) server that provides enriched blockchain data from [Codex](https://codex.io). This server can be used with any MCP-compatible client like [Claude Desktop](https://www.anthropic.com/news/claude-desktop).\n\n## Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/codex-data/codex-mcp.git\ncd codex-mcp\n\n# Install dependencies\npnpm install\n\n# Build the project\npnpm build\n```\n\n## Usage\n\nTo use the MCP Codex Server, you need to have a Codex API key. You can get your key from the [Codex Dashboard](https://dashboard.codex.io).\n\n### Using npx (No Installation Required)\n\nYou can run the MCP Codex Server directly without installation using npx:\n\n```bash\n# Run the server in stdio mode (for CLI tools)\nnpx @codex-data/codex-mcp\n```\n\n### Running the Server Locally\n\nStart the server using stdio (for embedding in CLI tools):\n\n```bash\npnpm start\n```\n\nFor development with auto-reload:\n\n```bash\npnpm dev\n```\n\n### Integration with Claude Desktop\n\n1. Open Claude Desktop settings\n2. Go to the Developer tab and click \"Edit Config\"\n3. Add a new server configuration:\n\nNo installation:\n\n```json\n{\n  \"mcpServers\": {\n    \"codex-data\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@codex-data/codex-mcp\"],\n      \"env\": {\n        \"CODEX_API_KEY\": \"<your-codex-api-key>\"\n      }\n    }\n  }\n}\n```\n\nLocal installation:\n\n```json\n{\n  \"mcpServers\": {\n    \"codex-data\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/codex-mcp/build/index.js\"],\n      \"env\": {\n        \"CODEX_API_KEY\": \"<your-codex-api-key>\"\n      }\n    }\n  }\n}\n```\n\n4. Replace `/path/to/codex-mcp` with the actual path to your installation\n5. Replace `<your-codex-api-key>` with your actual Codex API key\n\n### Connecting using Claude CLI\n\nIf you're using Claude CLI:\n\n```bash\n# Add the MCP server\nclaude mcp add codex-data -e CODEX_API_KEY=<your-codex-api-key> npx @codex-data/codex-mcp\n\n# Start Claude with the MCP server enabled\nclaude\n```\n\n## License\n\nISC\n",
+  "category": "AI Tools",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "codex-data-codex-mcp-stdio": {
+        "command": "npx",
+        "args": ["@codex-data/codex-mcp"],
+        "env": {}
+      },
+      "codex-data-codex-mcp-configured": {
+        "command": "npx",
+        "args": ["-y", "@codex-data/codex-mcp"],
+        "env": {
+          "CODEX_API_KEY": "<your-codex-api-key>"
+        }
+      },
+      "codex-data-codex-mcp-local-configured": {
+        "command": "node",
+        "args": ["/path/to/codex-mcp/build/index.js"],
+        "env": {
+          "CODEX_API_KEY": "<your-codex-api-key>"
+        }
+      },
+      "codex-data-codex-mcp-cli-configured": {
+        "command": "npx",
+        "args": ["@codex-data/codex-mcp"],
+        "env": {
+          "CODEX_API_KEY": "<your-codex-api-key>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Codex-Data",
+    "repo": "codex-mcp",
+    "url": "https://github.com/Codex-Data/codex-mcp",
+    "name": "codex-data__codex-mcp",
+    "path": null,
+    "stars": 16,
+    "contributors": 0,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": null
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.681Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@codex-data/sdk",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": null
+}

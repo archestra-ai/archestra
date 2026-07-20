@@ -1,0 +1,115 @@
+{
+  "name": "quentincody__shopify-storefront-mcp-server",
+  "display_name": "shopify-storefront-mcp-server",
+  "description": "MCP server from QuentinCody/shopify-storefront-mcp-server",
+  "author": {
+    "name": "QuentinCody"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "shopify_storefront_mcp_server"],
+    "env": {
+      "SHOPIFY_STOREFRONT_ACCESS_TOKEN": "${user_config.shopify_storefront_access_token}",
+      "SHOPIFY_STORE_NAME": "${user_config.shopify_store_name}",
+      "SHOPIFY_API_VERSION": "${user_config.shopify_api_version}",
+      "SHOPIFY_BUYER_IP": "${user_config.shopify_buyer_ip}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "shopify_storefront_access_token": {
+      "type": "string",
+      "title": "Shopify Storefront Access Token",
+      "description": "Your Storefront API access token (starts with shpsa_ or shpat_)",
+      "sensitive": true,
+      "required": true
+    },
+    "shopify_store_name": {
+      "type": "string",
+      "title": "Shopify Store Name",
+      "description": "Your Shopify store name (e.g., 'your-store-name', without .myshopify.com)",
+      "required": true
+    },
+    "shopify_api_version": {
+      "type": "string",
+      "title": "Shopify API Version",
+      "description": "The Shopify Storefront API version to use (e.g., '2025-04')",
+      "required": false,
+      "default": "2025-04"
+    },
+    "shopify_buyer_ip": {
+      "type": "string",
+      "title": "Shopify Buyer IP",
+      "description": "The IP address of the buyer for cart operations",
+      "required": false,
+      "default": "127.0.0.1"
+    }
+  },
+  "readme": "# Shopify Storefront MCP Server\n\nThis server provides access to the Shopify Storefront API via MCP, allowing AI assistants to query and interact with your Shopify store data.\n\n## Features\n\n- Access to product, collection, and inventory data\n- Cart creation and management\n- Support for GraphQL queries and mutations\n- Automatic token handling and validation\n- Easy integration with MCP-compatible AI assistants\n\n## Setup Instructions\n\n1. Clone this repository\n2. Install dependencies: `pip install -r requirements.txt`\n3. Copy `.env.example` to `.env` and configure your environment variables\n4. Generate a Storefront API token via Shopify Admin (see below)\n5. Run the server: `python -m shopify_storefront_mcp_server`\n\n## Environment Variables\n\nCreate a `.env` file using the provided `.env.example` as a template:\n\n```\n# Required\nSHOPIFY_STOREFRONT_ACCESS_TOKEN=your_storefront_token\nSHOPIFY_STORE_NAME=your-store-name\n\n# Optional\nSHOPIFY_API_VERSION=2025-04\nSHOPIFY_BUYER_IP=127.0.0.1\n```\n\n## Generating a Storefront API Token\n\n1. Log in to your Shopify admin\n2. Go to **Apps and sales channels** > **Develop apps** > **Create an app**\n3. Name your app (e.g., \"MCP Storefront\")\n4. Go to **API credentials** > **Configure Storefront API scopes**\n5. Select necessary scopes:\n   - `unauthenticated_read_product_listings`\n   - `unauthenticated_read_product_inventory`\n   - `unauthenticated_read_product_pricing`\n   - `unauthenticated_write_checkouts`\n   - `unauthenticated_read_content`\n6. Save and copy the generated Storefront API access token\n7. Add the token to your `.env` file as `SHOPIFY_STOREFRONT_ACCESS_TOKEN`\n\n## Usage Examples\n\nRunning with the MCP server:\n\n```\npython -m shopify_storefront_mcp_server\n```\n\nThe server exposes the following MCP tools:\n\n- `shopify_discover`: Detect if a URL belongs to a Shopify storefront and discover authentication tokens\n- `shopify_storefront_graphql`: Execute GraphQL queries against the Storefront API\n- `customer_data`: Unified tool for all customer data operations (Create, Read, Update, Delete)\n\n### Customer Resources\n\nThis server also provides MCP resources for customer information:\n\n- `customer://name`: Customer's full name\n- `customer://email`: Customer's email address\n- `customer://phone`: Customer's phone number\n- `customer://shipping_address`: Customer's shipping address (including address1, address2, city, state, postal_code, country)\n- `customer://billing_address`: Customer's billing address (including address1, address2, city, state, postal_code, country)\n- `customer://profile`: Complete customer profile\n\nCustomer data is stored in `user_data/customer.json` and should be managed using the `customer_data` tool.\n\n### Managing Customer Data\n\nThe server provides a unified `customer_data` tool for managing all customer information. This tool consolidates create, read, update, and delete operations into a single interface.\n\nExamples:\n\n```\n# Get all customer data\ncustomer_data(operation=\"get\")\n\n# Get a specific field\ncustomer_data(operation=\"get\", field=\"name\")\ncustomer_data(operation=\"get\", field=\"shipping_address\")\n\n# Update a specific field\ncustomer_data(operation=\"update\", field=\"name\", value=\"Jane Doe\")\ncustomer_data(\n    operation=\"update\",\n    shipping_address={\n        \"address1\": \"123 Main St\",\n        \"address2\": \"Apt 4B\",\n        \"city\": \"New York\",\n        \"state\": \"NY\",\n        \"postal_code\": \"10001\",\n        \"country\": \"US\"\n    }\n)\n\n# Add custom fields\ncustomer_data(\n    operation=\"update\",\n    custom_fields={\n        \"preferences\": {\n            \"theme\": \"dark\",\n            \"notifications\": \"email\",\n            \"language\": \"en-US\"\n        },\n        \"loyalty_tier\": \"gold\",\n        \"last_purchase_date\": \"2023-06-15\"\n    }\n)\n\n# Get a custom field\ncustomer_data(operation=\"get\", field=\"preferences\")\ncustomer_data(operation=\"get\", field=\"loyalty_tier\")\n\n# Update single custom field\ncustomer_data(operation=\"update\", field=\"loyalty_tier\", value=\"platinum\")\n\n# Delete a specific field\ncustomer_data(operation=\"delete\", field=\"phone\")\ncustomer_data(operation=\"delete\", field=\"preferences\")\n\n# Delete all customer data\ncustomer_data(operation=\"delete\")\n```\n\nThis consolidated tool simplifies integration with AI assistants by providing a consistent interface for all customer data operations, including both standard customer information and any custom fields that may be useful for personalization.\n\n### Data Privacy & Storage\n\nCustomer data is stored in `user_data/customer.json`. This file contains personal information and should not be committed to version control. The repository includes:\n\n- `user_data/customer.json.example`: A template file showing the expected structure with dummy data\n- Entries in `.gitignore` to prevent accidental commits of actual customer data\n\nWhen deploying this server, the `user_data/customer.json` file will be created automatically when the `customer_data` tool is first used. You can also copy and rename the example file to get started:\n\n```bash\ncp user_data/customer.json.example user_data/customer.json\n```\n\nAll data stored in the customer file persists between server restarts. The file supports both standard customer fields (name, email, addresses) and arbitrary custom fields for AI personalization.\n\n### Creating Checkouts with Customer Data\n\nThe server makes it easy to create Shopify checkouts that include customer information by combining the `customer_data` and `shopify_storefront_graphql` tools.\n\nExample workflow:\n\n```\n# Step 1: Get customer data\ncustomer_profile = customer_data(operation=\"get\")\n\n# Step 2: Create a cart with GraphQL\ncart_mutation = \"\"\"\nmutation createCart($lines: [CartLineInput!]!) {\n  cartCreate(input: {lines: $lines}) {\n    cart {\n      id\n      checkoutUrl\n    }\n    userErrors {\n      field\n      message\n    }\n  }\n}\n\"\"\"\n\ncart_variables = {\n  \"lines\": [\n    {\n      \"merchandiseId\": \"gid://shopify/ProductVariant/12345678901234\",\n      \"quantity\": 1\n    }\n  ]\n}\n\ncart_result = shopify_storefront_graphql(\n  mode=\"execute\",\n  host=\"your-store.myshopify.com\",\n  token=\"your_storefront_token\",\n  query=cart_mutation,\n  variables=cart_variables\n)\n\n# Step 3: Apply customer attributes to the cart\ncart_id = # extract from cart_result\ncustomer_info = json.loads(customer_profile)\n\nattributes_mutation = \"\"\"\nmutation updateCartAttributes($cartId: ID!, $attributes: [AttributeInput!]!) {\n  cartAttributesUpdate(cartId: $cartId, attributes: $attributes) {\n    cart {\n      id\n      checkoutUrl\n    }\n    userErrors {\n      field\n      message\n    }\n  }\n}\n\"\"\"\n\nattributes_variables = {\n  \"cartId\": cart_id,\n  \"attributes\": [\n    {\n      \"key\": \"email\",\n      \"value\": customer_info[\"email\"]\n    },\n    {\n      \"key\": \"deliveryAddress\",\n      \"value\": json.dumps(customer_info[\"shipping_address\"])\n    }\n  ]\n}\n\nshopify_storefront_graphql(\n  mode=\"execute\",\n  host=\"your-store.myshopify.com\",\n  token=\"your_storefront_token\",\n  query=attributes_mutation,\n  variables=attributes_variables\n)\n```\n\nThis approach gives you complete control over the checkout process while leveraging the stored customer information.\n\n## Troubleshooting\n\nIf you encounter authentication errors:\n\n1. Verify token format: Storefront API tokens should start with `shpsa_` (newer) or `shpat_` (older)\n2. Check store name: Ensure SHOPIFY_STORE_NAME is correct (without .myshopify.com)\n3. Check API version: Make sure the API version is supported\n4. Test token: Use cURL to test your token directly:\n   ```\n   curl -X POST \\\n     https://your-store.myshopify.com/api/2025-04/graphql.json \\\n     -H \"Content-Type: application/json\" \\\n     -H \"X-Shopify-Storefront-Access-Token: your_token\" \\\n     -d '{\"query\": \"query { shop { name } }\"}'\n   ```\n5. Regenerate token: If issues persist, create a new token with proper scopes\n\n## Security Considerations\n\n- Never commit your `.env` file or any files containing API tokens\n- Use environment variables for all sensitive information\n- Consider setting up IP restrictions in your Shopify Admin\n- Review the permissions granted to your Storefront API token\n\n",
+  "category": "AI Tools",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "shopify_storefront_mcp_server": {
+        "command": "python",
+        "args": ["-m", "shopify_storefront_mcp_server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "QuentinCody",
+    "repo": "shopify-storefront-mcp-server",
+    "url": "https://github.com/QuentinCody/shopify-storefront-mcp-server",
+    "name": "shopify-storefront-mcp-server",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f4774bd9db07929122d28dd9d1430730a493e8cc"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.847Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "bs4",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nhttpx>=0.25.0\npython-dotenv>=1.0.0\nmcp>=0.2.0 \nbs4>=0.0.1\n"
+}

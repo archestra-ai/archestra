@@ -1,0 +1,76 @@
+{
+  "name": "waystation-ai__mcp",
+  "display_name": "mcp",
+  "description": "The only MCP Server you need. Connect any MCP host with the tools you use daily through our no-code, secure integration hub.",
+  "author": {
+    "name": "waystation-ai"
+  },
+  "server": {
+    "command": "mcp-remote-proxy",
+    "args": ["https://waystation.ai/mcp/${user_config.user_unique_id}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "user_unique_id": {
+      "type": "string",
+      "title": "WayStation User Unique ID",
+      "description": "Your unique pre-authenticated ID from the WayStation dashboard (e.g., Iddq66dIdkfARDNb3K). Get one at https://waystation.ai/dashboard",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "# What is WayStation\n<img src=\"https://waystation.ai/images/logo.svg\" width=\"50\" align=\"left\"/> [WayStation](https://waystation.ai) connects Claude Desktop, ChatGPT and any MCP host with the productivity tools you use daily such as Notion, Monday, Airtable, Jira etc. through a no-code, secure integration hub. \n\n***The original local WayStation MCP server has been deprecated in favor of the new remote MCP server hosted at https://waystation.ai/mcp. Please refer to the new WayStation MCP server documentation here***\n\n## Overview\nWayStation MCP server is a universal remote MCP server that seamlessly connects Claude (and other clients) to a broad range of productivity tools, including Notion, Monday, AirTable, etc.\n\n- WayStation MCP supports both Streamable HTTPS and SSE transports\n- The default endpoint is https://waystation.ai/mcp. It does transport negotiation and authorization if necessary\n- WayStation also provides preauthenticated individual endpoints like https://waystation.ai/mcp/Iddq66dIdkfARDNb3K. Any registered user can get one in their dashboard at https://waystation.ai/dashboard\n\n## Supported providers\n- WayStation supports the following productivity apps: [Notion](https://waystation.ai/connect/notion), [Monday](https://waystation.ai/connect/monday), [Asana](https://waystation.ai/connect/asana), [Linear](https://waystation.ai/connect/linear), [Atlassian JIRA/Confluence](https://waystation.ai/connect/atlassian), [Slack](https://waystation.ai/connect/slack), [Teams](https://waystation.ai/connect/teams), [Google Drive](https://waystation.ai/connect/gdrive) (including Docs and Sheets), [Office 365](https://waystation.ai/connect/office), [Airtable](https://waystation.ai/connect/airtable), [Miro](https://waystation.ai/connect/miro), [Intercom](https://waystation.ai/connect/intercom), [PayPal](https://waystation.ai/connect/paypal).\n- Users can browse available integrations/providers in the [Integrations Marketplace](https://waystation.ai/marketplace)\n- New integrations are added regularly based on customer requests or community contributions. If you have an integration request, please contact us at support@waystation.ai.\n- Users can connect their apps in the [dashboard](https://waystation.ai/dashboard). The connection process may vary by app but generally involves OAuth2 authentication flow with some additional steps for certain apps.\n\n## Supported AI apps\n- WayStation remote MCP was tested with Claude, Cursor, Cline, WindSurf, and MCP-remote STDIO proxy provider\n- For Claude, user should go into their Settings, then Integrations and click \"Add Integration\". Then enter \"WayStation\" as the Server Name and unique MCP URL from user's dashboard\n- For Cline, user should simply go into the MCP Server screen, switch to the Remote Servers tab, enter \"WayStation\" as the Server Name and unique MCP URL from user's dashboard\n- For Cursor, user should go to the Cursor Settings, MCP tab and click \"Add new global MCP server\". In mcp.json file user should add the entry for WayStation as following:\n```json\n\"WayStation\": {\n      \"url\": \"https://waystation.ai/mcp/<user_unique_id>\"\n}\n```\n\n## Use Cases\nWayStation supports a variety of productivity and automation use cases listed below:\n- [Project Management](https://waystation.ai/ai/project-management)\n- [Task Automation](https://waystation.ai/ai/task-automation)\n- [Meeting Summaries & Action Items](https://waystation.ai/ai/meeting-summaries)\n- [Workflow Automation & Process Optimization](https://waystation.ai/ai/workflow-automation)\n- [Resource & Capacity Planning](https://waystation.ai/ai/resource-capacity-planning)\n- [Risk & Issue Management](https://waystation.ai/ai/risk-issue-management)\n- [Reporting & Insights](https://waystation.ai/ai/reporting-insights)\n- [Portfolio Management](https://waystation.ai/ai/portfolio-management)\n- [Team Collaboration Assistant](https://waystation.ai/ai/team-collaboration-assistant)\n- [Creative Production Management](https://waystation.ai/ai/creative-production-management)\n- [Campaign Management](https://waystation.ai/ai/campaign-management)\n- [Product Management & Roadmapping](https://waystation.ai/ai/product-management-roadmapping)\n- [Product Launch Coordination](https://waystation.ai/ai/product-launch-coordination)\n- [Operations Management](https://waystation.ai/ai/operations-management)\n- [IT Project Coordination](https://waystation.ai/ai/it-project-coordination)\n- [Project Intake & Triage](https://waystation.ai/ai/project-intake-triage)\n- [Knowledge Management Integration](https://waystation.ai/ai/knowledge-management-integration)\n- [Goal Tracking & OKR Alignment](https://waystation.ai/ai/goal-tracking-okr-alignment)\n- [Compliance & Audit Trail Management](https://waystation.ai/ai/compliance-audit-trail)\n- [Timeline & Deadline Optimization](https://waystation.ai/ai/timeline-deadline-optimization)\n",
+  "category": "Aggregators",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "waystation-ai",
+    "repo": "mcp",
+    "url": "https://github.com/waystation-ai/mcp",
+    "name": "waystation-ai__mcp",
+    "path": null,
+    "stars": 27,
+    "contributors": 1,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "7ef32ff809e4bf1b6b894f169e8f979c6162d96c"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.278Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@waystation/mcp\",\n  \"version\": \"0.3.1\",\n  \"homepage\": \"https://waystation.ai/connect/mcp\",\n  \"description\": \"MCP server for WayStation\",\n  \"main\": \"index.js\",\n  \"bin\": {\n    \"mcp\": \"build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [\n    \"mcp\",\n    \"modelcontextprotocol\",\n    \"waystation\"\n  ],\n  \"author\": \"WayStation <support@waystation.ai> (https://waystation.ai)\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.5.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.4\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n"
+}

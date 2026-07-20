@@ -1,0 +1,74 @@
+{
+  "name": "kukapay__crypto-feargreed-mcp",
+  "display_name": "crypto-feargreed-mcp",
+  "description": "Providing real-time and historical Crypto Fear & Greed Index data",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto Fear & Greed Index MCP Server\n\nA mcp server that provides real-time and historical Crypto Fear & Greed Index data, powered by the Alternative.me.\n\nThis server exposes resources and tools for fetching and analyzing the Fear & Greed Index, making it easy to integrate into MCP-compatible clients, including Claude Desktop.\n\n![GitHub](https://img.shields.io/github/license/kukapay/crypto-feargreed-mcp) \n![GitHub last commit](https://img.shields.io/github/last-commit/kukapay/crypto-feargreed-mcp) \n![Python](https://img.shields.io/badge/python-3.10%2B-blue)\n\n## Features\n\n- **Current Index**: Retrieve the latest Fear & Greed Index value and classification.\n- **Historical Data**: Fetch historical index values for a specified number of days.\n- **Trend Analysis**: Analyze trends over time with statistics like average value and trend direction.\n- **Tool-Only Support**: Includes tool versions of all resources for compatibility with tool-only MCP clients.\n- **Prompt Generation**: Provides a prompt template for interpreting index values.\n\n### Resources\n\n- `fng://current`. Current crypto Fear & Greed Index. Output: \n```\nCrypto Fear & Greed Index (as of 2025-03-15 00:00:00 UTC):\nValue: 45\nClassification: Fear\n```\n\n- `fng://history/{days}`. Historical Data of Crypto Fear & Greed Index.Output:\n```\nHistorical Crypto Fear & Greed Index:\n2025-03-15 00:00:00 UTC: 45 (Fear)\n2025-03-14 00:00:00 UTC: 48 (Fear)\n...\n```\n\n### Tools\n\n- `get_current_fng_tool() -> str`. \n\nCurrent Index. Same as `fng://current`\n\n- `get_historical_fng_tool(days: int) -> str`. \n\nHistorical Index Data. Same as `fng://history/{days}`\n\n- `analyze_fng_trend(days: int) -> str`. \n\nIndex trend Analysis. Output:\n```\nFear & Greed Index Analysis (30 days):\nLatest Value: 45 (Fear) at 2025-03-15 00:00:00 UTC\nAverage Value: 47.3\nTrend: falling\nData points analyzed: 30\n```\n\n### Prompts\n\n- `interpret_fng`\n\nIndex Data Interpretation.\n\nOutput:\n```\nPlease interpret this Crypto Fear & Greed Index value and explain what it means for cryptocurrency markets (specifically Bitcoin): 45\n```\n\n## Installation\n\n### Installing via Smithery\n\nTo install Crypto Fear & Greed Index for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kukapay/crypto-feargreed-mcp):\n\n```bash\nnpx -y @smithery/cli install @kukapay/crypto-feargreed-mcp --client claude\n```\n\nClone the repository:\n\n```bash\ngit clone https://github.com/kukapay/crypto-feargreed-mcp.git\ncd crypto-feargreed-mcp\n```  \n\nInstall for Claude Desktop\n```\nmcp install main.py --name \"CryptoFearGreed\"\n```\nThen enable it in your Claude Desktop configuration.\n\nFor other clients, add a server entry to your configuration file:\n\n```\n\"mcpServers\": { \n  \"crypto-feargreed-mcp\": { \n    \"command\": \"uv\", \n    \"args\": [ \n      \"--directory\", \"/your/path/to/crypto-feargreed-mcp\", \n      \"run\", \n      \"main.py\" \n    ]\n  } \n}\n```\n\n## Examples\n\nAfter installation, ask:\n\n- \"What's the current Crypto Fear & Greed Index?\"\n- \"Show me the Crypto Fear & Greed Index trend for the last 30 days.\" \n\nClaude will automatically call the appropriate tools and provide responses.\n\n## License\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n## Acknowledgments\n\n- Built with [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk).\n- Data provided by [Alternative.me Fear & Greed Index API](https://api.alternative.me/fng/).",
+  "category": "Finance",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kukapay-crypto-feargreed-mcp": {
+        "command": "uv",
+        "args": ["--directory", "/your/path/to/crypto-feargreed-mcp", "run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-feargreed-mcp",
+    "url": "https://github.com/kukapay/crypto-feargreed-mcp",
+    "name": "crypto-feargreed-mcp",
+    "path": null,
+    "stars": 34,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b1f22947d81be0e34a502dfed0b866024db46e6a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.069Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"crypto-feargreed-mcp\"\nversion = \"0.1.0\"\ndescription = \"Providing real-time and historical Crypto Fear & Greed Index data\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.4.1\",\n]\n"
+}

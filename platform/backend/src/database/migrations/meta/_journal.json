@@ -2444,6 +2444,13 @@
       "when": 1784552325718,
       "tag": "0348_gorgeous_bloodscream",
       "breakpoints": true
+    },
+    {
+      "idx": 349,
+      "version": "7",
+      "when": 1784559417851,
+      "tag": "0349_opposite_nico_minoru",
+      "breakpoints": true
     }
   ]
 }

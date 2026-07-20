@@ -1939,6 +1939,13 @@ const config = {
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
     vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
+    /**
+     * One-boot escape hatch for a deliberate ARCHESTRA_AUTH_SECRET rotation:
+     * lets startup accept an encryption key that cannot decrypt previously
+     * stored secrets instead of aborting.
+     */
+    acceptNewEncryptionKey:
+      process.env.ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY === "true",
   },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",

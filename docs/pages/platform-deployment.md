@@ -848,6 +848,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
   - Example: `something-really-really-secret-12345`
   - **Warning:** Do not change this value after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
+  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch. See `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY` to accept a deliberate rotation.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
   - Default: `admin@example.com`
@@ -904,6 +905,11 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `DB` (database storage)
   - Options: `DB`, `VAULT`, or `READONLY_VAULT`
   - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
+
+- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate `ARCHESTRA_AUTH_SECRET` change.
+  - Default: `false`
+  - Startup aborts when the current auth secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
+  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
   - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`

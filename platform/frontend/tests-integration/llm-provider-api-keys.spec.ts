@@ -44,8 +44,14 @@ test.describe("LLM Provider API Keys", () => {
 
     await expect(llmKeysPage.rowFor(KEY_NAME)).toBeVisible();
 
-    // Update flow — stage the PATCH and the post-update list refetch.
+    // Update flow — stage the PATCH, the deep-link dialog's by-id refetch,
+    // and the post-update list refetch.
     const updated = { ...created, name: UPDATED_NAME };
+    await mswControl.use({
+      method: "get",
+      url: "/api/llm-provider-api-keys/:id",
+      body: created,
+    });
     await mswControl.use({
       method: "patch",
       url: "/api/llm-provider-api-keys/:id",

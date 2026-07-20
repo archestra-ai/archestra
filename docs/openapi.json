@@ -118404,7 +118404,8 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
-                                  "app:llm_complete"
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
                                 ]
                               },
                               "authMethod": {
@@ -140755,7 +140756,8 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
-                            "app:llm_complete"
+                            "app:llm_complete",
+                            "app:recording_enhancement"
                           ]
                         },
                         "authMethod": {

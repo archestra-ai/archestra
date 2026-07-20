@@ -111,7 +111,7 @@ A DM with the bot behaves just like another channel — each user can choose whi
 
 When a user interacts with the bot but hasn't signed up in Archestra yet, they are automatically provisioned with the **Member** role and no teams assigned. The user receives a unique invitation link via Slack DM that they can use to complete sign-up and become a full Archestra user. Until they do, they cannot log in to the Archestra web app.
 
-Admins can view autoprovisioned users on the **Settings → Members** page — from there they can copy the invitation link or delete the user.
+Admins can view autoprovisioned users on the **Settings → Users** page — from there they can copy the invitation link or delete the user.
 
 ![Autoprovisioned Slack Users](/docs/autoprovisioned-users-slack.webp)
 

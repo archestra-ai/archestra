@@ -83,7 +83,7 @@ export function TwoFactorCard() {
         onContinue={() => {
           if (!enableResult) return;
           router.push(
-            `/auth/two-factor?totpURI=${encodeURIComponent(enableResult.totpURI)}&redirectTo=${encodeURIComponent("/settings/account")}`,
+            `/auth/two-factor?totpURI=${encodeURIComponent(enableResult.totpURI)}&redirectTo=${encodeURIComponent("/account")}`,
           );
         }}
       />

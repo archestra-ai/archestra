@@ -2351,7 +2351,7 @@ export function ChatPageContent({
   // in the same session, right after the first key is added (`firstKeyAdded`).
   // If the admin skips it or navigates away mid-onboarding, they are not
   // re-prompted on later visits — they set the default anytime in Settings →
-  // Agents (which links here from its "Default Model" copy). Deriving it purely
+  // Chat (which links here from its "Default Model" copy). Deriving it purely
   // from server state (keys exist && no org default) would re-show it on every
   // /chat visit until a default is set, which nags.
   //

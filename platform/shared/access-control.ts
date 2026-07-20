@@ -1605,12 +1605,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/knowledge/connectors": { knowledgeSource: ["read"] },
 
   // Settings
-  "/settings/account": {},
-  "/settings/api-keys": { apiKey: ["read"] },
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/mcp": { mcpSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
+  "/settings/security": { agentSettings: ["read"] },
   "/settings/environments": { environment: ["admin"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },

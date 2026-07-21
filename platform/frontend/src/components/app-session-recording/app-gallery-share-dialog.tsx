@@ -167,7 +167,7 @@ export function AppGalleryShareButton(props: {
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex">
+          <span className="inline-flex" data-tour="share">
             <Button
               type="button"
               variant="ghost"

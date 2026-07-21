@@ -5208,6 +5208,13 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
     text: "Final cut with all your edits applied.",
     note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
   },
+  // Absent (and skipped) on deployments that don't offer the gallery — the
+  // share button renders nothing there.
+  {
+    key: "share",
+    title: "Share to the App Gallery",
+    text: "Submit this session to the public App Gallery — a pull request from your own GitHub account.",
+  },
   {
     key: "tour",
     title: "That's it",
@@ -5378,7 +5385,10 @@ function PlayerTour({
           left: spot.left - 4,
           width: spot.width + 8,
           height: spot.height + (step.padTop ?? 4) + 4,
-          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.55)",
+          // 0.8, not the usual 0.5-ish scrim: the player is itself a dark
+          // surface over a dark app, so a lighter dim barely reads and the
+          // spotlight doesn't pop.
+          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.8)",
         }}
       />
       {/* The way out lives on the dimmed page itself, not in the bubble. */}

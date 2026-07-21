@@ -59,6 +59,7 @@ import config, {
   shouldRunWorker,
 } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
+import { dropLegacyPayloadTrgmIndexes } from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -1279,6 +1280,11 @@ const startWebServer = async () => {
       registerTaskHandlers(taskQueueService);
       await taskQueueService.seedPeriodicTasks();
       taskQueueService.startWorker();
+      // Fire-and-forget: concurrent (non-write-blocking) drop of legacy
+      // interactions payload indexes on deployments upgrading from before
+      // migration 0116 stopped creating them. Idempotent; errors are logged
+      // inside and retried next boot.
+      void dropLegacyPayloadTrgmIndexes();
     }
 
     // Background job to renew email subscriptions before they expire
@@ -1598,6 +1604,9 @@ const startWorker = async () => {
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
+    // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
+    // for the dedicated worker Deployment.
+    void dropLegacyPayloadTrgmIndexes();
 
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(

@@ -366,6 +366,8 @@ function isDenylisted(url: string, routePattern: string | undefined): boolean {
         return url.startsWith(entry.value);
       case "route":
         return routePattern === entry.value;
+      default:
+        return false;
     }
   });
 }

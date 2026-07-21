@@ -597,7 +597,6 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("defaultDiscoveredToolResultPolicy");
   });
 
-
   test("AgentModel.findByIdForAudit returns null for wrong org", async ({
     makeOrganization,
   }) => {

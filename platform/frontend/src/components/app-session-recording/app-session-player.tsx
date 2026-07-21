@@ -818,6 +818,9 @@ function PlayerSurface({
   const segmentIndexRef = useRef(0);
   segmentIndexRef.current = segmentIndex;
   const iframeElRef = useRef<HTMLIFrameElement | null>(null);
+  /** `frameReady` for non-reactive readers: seeks and the filming driver. */
+  const frameReadyRef = useRef(frameReady);
+  frameReadyRef.current = frameReady;
 
   // A remount (version switch, restart, or seek) makes the frame not-ready
   // until its SDK reconnects. The deps ARE the remount triggers even though the
@@ -1276,7 +1279,16 @@ function PlayerSurface({
       setDisplayClock(target);
       if (playState === "ended" && target < duration) setPlayState("paused");
       if (!rewind) {
-        applyEventsUpTo(target);
+        // Only a READY frame can take the skipped events now. While the frame
+        // is still (re)connecting — the player just opened, or another seek's
+        // remount is in flight — posting would consume the events into a frame
+        // whose replay listener isn't attached yet: the proxy drops them and
+        // the applied cursor moves past them for good. The recording then
+        // looks broken from this point on (an intro-dismissal that never
+        // replays, an app that never appears). Moving only the clock leaves
+        // delivery to the frame-ready catch-up effect, which applies
+        // everything up to the latest clock once the frame connects.
+        if (frameReadyRef.current) applyEventsUpTo(target);
         return;
       }
       const segStart = segments[seg]?.atMs ?? 0;
@@ -1304,8 +1316,6 @@ function PlayerSurface({
   // It seeks to an exact millisecond per frame and screenshots the result, so
   // nothing here may depend on wall-clock time. Playback stays paused
   // throughout — the renderer advances the clock itself.
-  const frameReadyRef = useRef(frameReady);
-  frameReadyRef.current = frameReady;
   useEffect(() => {
     if (!filming) return;
     const settled = async () => {

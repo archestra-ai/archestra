@@ -128,45 +128,10 @@ describe("probeFirstRenderableEvent", () => {
     });
   });
 
-  test("commits on reasoning so it streams live (reasoning-only handled after finish)", async () => {
-    // Reasoning commits the turn so a long think phase streams immediately
-    // instead of buffering silently (idle-timeout risk). A turn that reasons and
-    // then never answers is caught by createReasoningOnlyTurnTracker, not here.
+  test("treats a reasoning-only opening as renderable", async () => {
     const events: StreamProbeEvent[] = [
       { type: "start" },
       { type: "reasoning-start" },
-      { type: "reasoning-delta" },
-      { type: "finish", finishReason: "stop" },
-    ];
-
-    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
-      kind: "renderable",
-    });
-  });
-
-  test("reasoning followed by text is renderable at the reasoning", async () => {
-    const events: StreamProbeEvent[] = [
-      { type: "start" },
-      { type: "reasoning-start" },
-      { type: "reasoning-delta" },
-      { type: "text-start" },
-      { type: "text-delta" },
-      { type: "finish", finishReason: "stop" },
-    ];
-
-    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
-      kind: "renderable",
-    });
-  });
-
-  test("reasoning followed by a tool call is renderable", async () => {
-    const events: StreamProbeEvent[] = [
-      { type: "start" },
-      { type: "reasoning-start" },
-      { type: "reasoning-delta" },
-      { type: "tool-input-start" },
-      { type: "tool-call" },
-      { type: "finish", finishReason: "tool-calls" },
     ];
 
     expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({

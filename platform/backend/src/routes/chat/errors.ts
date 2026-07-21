@@ -1570,27 +1570,6 @@ export function buildAbortiveTurnError(
 }
 
 /**
- * Build the error surfaced when a reasoning ("thinking") turn streams its
- * reasoning and then finishes without any text or tool call. The reasoning
- * commits the turn (so it streams live and can't be silently retried), so the
- * empty-response probe never sees it as empty — this trailing error is what
- * stops a "thought but never answered" turn from reading as a successful reply.
- * Retryable EmptyResponse, matching a cleanly-empty turn.
- */
-export function buildReasoningOnlyTurnError(
-  provider: SupportedProvider,
-): ChatErrorResponse {
-  return createErrorResponse(
-    ChatErrorCode.EmptyResponse,
-    provider,
-    undefined,
-    ChatErrorMessages[ChatErrorCode.EmptyResponse],
-    "ReasoningOnlyTurn",
-    undefined,
-  );
-}
-
-/**
  * Map a provider error to a normalized ChatErrorResponse.
  * Uses provider-specific parsing and mapping for accurate error classification.
  *

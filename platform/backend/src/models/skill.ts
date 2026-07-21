@@ -486,24 +486,38 @@ class SkillModel {
   }
 
   /**
-   * Count one activation: bump `usageCount` and stamp `lastUsedAt`.
-   * `updatedAt` is explicitly preserved — a usage tick is not an edit.
-   * Fire-and-forget: never throws and needs no awaiting (metrics must not
-   * fail or slow an activation); the write is registered as background work
-   * so the test teardown can drain it.
+   * Count one activation: bump `usageCount`, stamp `lastUsedAt`, and append a
+   * `skill_usage_events` row attributing the activation to `userId` (which
+   * backs per-user usage analytics). `updatedAt` is explicitly preserved — a
+   * usage tick is not an edit. Fire-and-forget: never throws and needs no
+   * awaiting (metrics must not fail or slow an activation); the writes are
+   * registered as background work so the test teardown can drain them, and
+   * they are independent so an event failure never loses the counter tick.
    */
-  static recordUsage(id: string): void {
-    const write = db
+  static recordUsage(params: { skillId: string; userId: string | null }): void {
+    const { skillId, userId } = params;
+    const usedAt = new Date();
+    const counterWrite = db
       .update(schema.skillsTable)
       .set({
         usageCount: sql`${schema.skillsTable.usageCount} + 1`,
-        lastUsedAt: new Date(),
+        lastUsedAt: usedAt,
         updatedAt: sql`${schema.skillsTable.updatedAt}`,
       })
-      .where(eq(schema.skillsTable.id, id));
+      .where(eq(schema.skillsTable.id, skillId));
+    const eventWrite = db
+      .insert(schema.skillUsageEventsTable)
+      .values({ skillId, userId, createdAt: usedAt });
     trackBackgroundWork(
-      Promise.resolve(write).catch((error) => {
-        logger.warn({ error, skillId: id }, "[Skills] Failed to record usage");
+      Promise.allSettled([counterWrite, eventWrite]).then((results) => {
+        for (const result of results) {
+          if (result.status === "rejected") {
+            logger.warn(
+              { error: result.reason, skillId },
+              "[Skills] Failed to record usage",
+            );
+          }
+        }
       }),
     );
   }

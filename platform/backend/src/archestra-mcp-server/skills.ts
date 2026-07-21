@@ -297,7 +297,10 @@ const registry = defineArchestraTools([
 
       const files = await SkillVersionModel.findFiles(version.id);
       // a name-only load is an activation; file reads above don't count.
-      SkillModel.recordUsage(skill.id);
+      SkillModel.recordUsage({
+        skillId: skill.id,
+        userId: ctx.userId ?? null,
+      });
       logger.info(
         {
           organizationId: ctx.organizationId,

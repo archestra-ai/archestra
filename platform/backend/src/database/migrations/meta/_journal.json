@@ -2493,6 +2493,13 @@
       "when": 1784623364626,
       "tag": "0355_split-deploy-to-restricted",
       "breakpoints": true
+    },
+    {
+      "idx": 356,
+      "version": "7",
+      "when": 1784632376267,
+      "tag": "0356_natural_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

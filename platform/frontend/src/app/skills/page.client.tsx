@@ -5,6 +5,7 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   BookOpen,
   Braces,
+  ChartColumn,
   ChevronDown,
   ChevronUp,
   Info,
@@ -59,6 +60,7 @@ import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { withOpenEditRewritten } from "./_parts/editor-url";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
+import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
 
@@ -177,6 +179,7 @@ function SkillsList() {
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
   const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
+  const [usageSkill, setUsageSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -346,13 +349,38 @@ function SkillsList() {
         </div>
       ),
       cell: ({ row }) => (
-        <div className="text-right text-sm">
-          <div>{row.original.usageCount}</div>
-          <div className="text-xs text-muted-foreground">
-            {formatRelativeTimeFromNow(row.original.lastUsedAt, {
-              neverLabel: "Never used",
-            })}
-          </div>
+        <div className="flex justify-end">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="w-full rounded px-1.5 py-0.5 text-right text-sm hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setUsageSkill(row.original);
+                }}
+              >
+                <div>
+                  {row.original.usageCount}
+                  {row.original.usageUserCount > 0 && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      by {row.original.usageUserCount}{" "}
+                      {row.original.usageUserCount === 1 ? "user" : "users"}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {formatRelativeTimeFromNow(row.original.lastUsedAt, {
+                    neverLabel: "Never used",
+                  })}
+                </div>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Who used this skill over the last month
+            </TooltipContent>
+          </Tooltip>
         </div>
       ),
     },
@@ -375,6 +403,12 @@ function SkillsList() {
             label: "Chat",
             permissions: { chat: ["read", "create"] },
             href: `/chat/new?skill_id=${skill.id}`,
+          },
+          {
+            icon: <ChartColumn className="h-4 w-4" />,
+            label: "Usage",
+            permissions: { skill: ["read"] },
+            onClick: () => setUsageSkill(skill),
           },
           ...(isBuiltIn
             ? [
@@ -513,6 +547,15 @@ function SkillsList() {
           skill={resettingSkill}
           open={!!resettingSkill}
           onOpenChange={(open) => !open && setResettingSkill(null)}
+        />
+      )}
+
+      {usageSkill && (
+        <SkillUsageDialog
+          skillId={usageSkill.id}
+          skillName={usageSkill.name}
+          open={!!usageSkill}
+          onOpenChange={(open) => !open && setUsageSkill(null)}
         />
       )}
     </LoadingWrapper>

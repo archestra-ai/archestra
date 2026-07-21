@@ -132,6 +132,7 @@ describe("config routes", () => {
       "minimax",
       "mistral",
       "ollama",
+      "ollama-native",
       "openai",
       "openrouter",
       "perplexity",

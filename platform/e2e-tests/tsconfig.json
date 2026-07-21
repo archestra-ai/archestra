@@ -6,7 +6,6 @@
     "utils/**/*.ts"
   ],
   "compilerOptions": {
-    "target": "ES2022",
     "types": ["node"]
   }
 }

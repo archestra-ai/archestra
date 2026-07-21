@@ -454,18 +454,18 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
  * that hold a full/branded tool name should resolve the short name first
  * (branding-aware) and pass it here.
  */
+const groupIdByShortName = new Map<string, ArchestraToolGroupId>(
+  Object.entries(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME) as [
+    string,
+    ArchestraToolGroupId,
+  ][],
+);
+
 export function getArchestraToolGroupId(
   shortName: string | null | undefined,
 ): ArchestraToolGroupId | null {
-  if (
-    shortName &&
-    Object.hasOwn(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME, shortName)
-  ) {
-    return ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME[
-      shortName as ArchestraToolShortName
-    ];
-  }
-  return null;
+  if (!shortName) return null;
+  return groupIdByShortName.get(shortName) ?? null;
 }
 
 export type ArchestraMcpIdentityOptions = {

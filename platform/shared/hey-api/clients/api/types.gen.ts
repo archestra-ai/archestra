@@ -28467,11 +28467,11 @@ export type GetConfigResponse = GetConfigResponses[keyof GetConfigResponses];
 export type GetConnectionHealthData = {
     body?: never;
     path?: never;
-    query: {
-        kind: 'mcp-gateway' | 'llm-proxy';
-        ref: string;
+    query?: {
+        mcp?: string;
+        llm?: string;
     };
-    url: '/api/connection-health';
+    url: '/v1/health';
 };
 
 export type GetConnectionHealthErrors = {
@@ -28544,7 +28544,8 @@ export type GetConnectionHealthResponses = {
      * Default Response
      */
     200: {
-        status: 'ok' | 'missing';
+        mcp?: 'ok' | 'down';
+        llm?: 'ok' | 'down';
     };
 };
 

@@ -2520,17 +2520,9 @@ export const getPublicConfig = <ThrowOnError extends boolean = false>(options?: 
 export const getConfig = <ThrowOnError extends boolean = false>(options?: Options<GetConfigData, ThrowOnError>) => (options?.client ?? client).get<GetConfigResponses, unknown, ThrowOnError>({ url: '/api/config', ...options });
 
 /**
- * Whether a connected remote (MCP gateway or LLM proxy) still exists. Public: used by the Claude Code startup guard before every launch, from machines with no session. Deliberately discloses nothing beyond ok/missing for a caller-supplied id or slug.
- *
- * Authentication:
- *
- * Not required.
- *
- * Authorization:
- *
- * None (no additional RBAC permission required)
+ * Health of the remotes a connected client is wired to, one request for all of them. Public: used by the Claude Code startup guard before every launch, from machines with no session. Reports only ok/down per requested remote.
  */
-export const getConnectionHealth = <ThrowOnError extends boolean = false>(options: Options<GetConnectionHealthData, ThrowOnError>) => (options.client ?? client).get<GetConnectionHealthResponses, GetConnectionHealthErrors, ThrowOnError>({ url: '/api/connection-health', ...options });
+export const getConnectionHealth = <ThrowOnError extends boolean = false>(options?: Options<GetConnectionHealthData, ThrowOnError>) => (options?.client ?? client).get<GetConnectionHealthResponses, GetConnectionHealthErrors, ThrowOnError>({ url: '/v1/health', ...options });
 
 /**
  * Persist /connection wizard selections and return a one-time `curl | bash` command. The command's setup token is shown exactly once and expires after 15 minutes.

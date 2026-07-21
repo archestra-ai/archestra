@@ -101073,25 +101073,23 @@
         }
       }
     },
-    "/api/connection-health": {
+    "/v1/health": {
       "get": {
         "operationId": "getConnectionHealth",
         "tags": [
           "Connection Setups"
         ],
-        "description": "Whether a connected remote (MCP gateway or LLM proxy) still exists. Public: used by the Claude Code startup guard before every launch, from machines with no session. Deliberately discloses nothing beyond ok/missing for a caller-supplied id or slug.\n\nAuthentication:\n\nNot required.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Health of the remotes a connected client is wired to, one request for all of them. Public: used by the Claude Code startup guard before every launch, from machines with no session. Reports only ok/down per requested remote.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "mcp-gateway",
-                "llm-proxy"
-              ]
+              "minLength": 1,
+              "maxLength": 256
             },
             "in": "query",
-            "name": "kind",
-            "required": true
+            "name": "mcp",
+            "required": false
           },
           {
             "schema": {
@@ -101100,8 +101098,8 @@
               "maxLength": 256
             },
             "in": "query",
-            "name": "ref",
-            "required": true
+            "name": "llm",
+            "required": false
           }
         ],
         "responses": {
@@ -101112,17 +101110,21 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {
+                    "mcp": {
                       "type": "string",
                       "enum": [
                         "ok",
-                        "missing"
+                        "down"
+                      ]
+                    },
+                    "llm": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "down"
                       ]
                     }
                   },
-                  "required": [
-                    "status"
-                  ],
                   "additionalProperties": false
                 }
               }
@@ -101356,11 +101358,6 @@
               }
             }
           }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
         }
       }
     },

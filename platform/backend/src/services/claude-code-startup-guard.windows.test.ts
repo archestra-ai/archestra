@@ -19,18 +19,18 @@ import {
 
 const CTX: ClaudeCodeStartupGuardContext = {
   appName: "Archestra",
+  healthUrl:
+    "https://archestra.example.com/v1/health?mcp=prod-gateway&llm=profile-123",
   proxy: {
     provider: "anthropic",
     providerLabel: "Anthropic",
     url: "https://archestra.example.com/v1/anthropic/profile-123",
-    healthUrl:
-      "https://archestra.example.com/api/connection-health?kind=llm-proxy&ref=profile-123",
+    ref: "profile-123",
   },
   mcp: {
     serverName: "prod_gateway",
     url: "https://archestra.example.com/v1/mcp/prod-gateway",
-    healthUrl:
-      "https://archestra.example.com/api/connection-health?kind=mcp-gateway&ref=prod-gateway",
+    ref: "prod-gateway",
   },
   skills: {
     marketplaceName: "acme-skills",
@@ -40,7 +40,7 @@ const CTX: ClaudeCodeStartupGuardContext = {
 };
 
 describe("renderClaudeCodeStartupGuardPowerShell", () => {
-  test("probes the remotes in pre-loader order with the demo visuals", () => {
+  test("shows the remotes in pre-loader order with the demo visuals", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     const proxyAt = script.indexOf("LLM proxy (Anthropic)");
     const mcpAt = script.indexOf("MCP gateway (prod_gateway)");
@@ -50,38 +50,34 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(skillsAt).toBeGreaterThan(mcpAt);
     expect(script).toContain("Pre-loader");
     expect(script).toContain("Connecting claude via:");
-    for (const url of [CTX.proxy?.url, CTX.mcp?.url, CTX.skills?.cloneUrl]) {
-      expect(script).toContain(`'${url}'`);
-    }
   });
 
-  test("gateway and proxy get existence checks; skills stays reachability-only", () => {
+  test("makes ONE health request for the launch; skills has no per-resource marker", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
-    expect(script).toContain(`'${CTX.proxy?.healthUrl}'`);
-    expect(script).toContain(`'${CTX.mcp?.healthUrl}'`);
-    expect(script).toContain(`'"status":"missing"'`);
-    // skills entry carries an empty HealthUrl
-    expect(script).toContain("HealthUrl = ''");
-    // reachable-but-erroring servers still count as reachable on both editions
+    expect(script).toContain(`$HealthUrl = '${CTX.healthUrl}'`);
+    expect(script).toContain(`DownMarker = '"mcp":"down"'`);
+    expect(script).toContain(`DownMarker = '"llm":"down"'`);
+    expect(script).toContain("DownMarker = ''");
+    expect(script).toContain("Wait-ArchHealth");
+    expect(script).toContain("-TimeoutSec 3");
+    // reachable-but-erroring servers still count as answered on both editions
     expect(script).toContain(
       "$_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response",
     );
-    expect(script).toContain("-TimeoutSec 3");
   });
 
-  test("a missing remote prompts immediately instead of burning the retry budget", () => {
+  test("a down resource stops the turn with the failure copy naming type and id-or-slug", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
-    expect(script).toContain("Show-ArchMissingPrompt");
-    expect(script).toContain("was removed on ");
+    expect(script).toContain("'✖ Failed to connect to ' + $r.FailName");
+    expect(script).toContain("FailName = 'LLM proxy profile-123'");
+    expect(script).toContain("FailName = 'MCP gateway prod-gateway'");
+    expect(script).toContain("FailName = 'Skills marketplace acme-skills'");
     expect(script).toContain(
-      "[d] disconnect it from Claude Code (recommended)   [s] keep it (default)",
-    );
-    expect(script).toMatch(
-      /if \(\$state -eq 'missing'\) \{ Show-ArchMissingPrompt \$r\.Label \$r\.Kind; return \}\n {2}\$start =/,
+      "[d] disconnect it from Claude Code   [s] continue without it (default)",
     );
   });
 
-  test("encodes the retry contract: 15s budget, notice at 3s, hang-tight at 10s, live skip/disconnect keys", () => {
+  test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, live keys", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain("$RetryTotalSeconds = 15");
     expect(script).toContain("$NoticeAfterSeconds = 3");
@@ -93,7 +89,7 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("Get-Random -Minimum 0 -Maximum 2");
   });
 
-  test("paces every check with an animated spinner and a minimum display time", () => {
+  test("paces every resource's turn with an animated spinner and a minimum display time", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain(
       "$Frames = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')",
@@ -116,16 +112,14 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(whiteLabel).toContain("Pre-loader");
   });
 
-  test("never blocks: opt-out env var, non-interactive stderr warnings for down AND removed, exit 0", () => {
+  test("never blocks: opt-out env var, non-interactive stderr warnings with the failure copy, exit 0", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
     expect(script).toContain("[Console]::IsInputRedirected");
     expect(script).toContain("[Console]::Error.WriteLine");
     expect(script).toContain("'-p' -or $a -eq '--print'");
-    expect(script).toContain("' is unreachable — claude may fail");
-    expect(script).toContain("' was removed on '");
     expect(script).toContain(
-      "[s] continue without it (default)   [d] disconnect it from Claude Code",
+      "'archestra: failed to connect to ' + $r.FailName",
     );
     expect(script.trimEnd().endsWith("exit 0")).toBe(true);
   });
@@ -155,8 +149,7 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
         provider: "bedrock",
         providerLabel: "AWS Bedrock",
         url: "https://archestra.example.com/v1/bedrock/profile-123",
-        healthUrl:
-          "https://archestra.example.com/api/connection-health?kind=llm-proxy&ref=profile-123",
+        ref: "profile-123",
       },
     });
     for (const key of CLAUDE_CODE_PROXY_ENV_KEYS.bedrock) {
@@ -165,9 +158,10 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("AWS_BEARER_TOKEN_BEDROCK");
   });
 
-  test("omitted sections render no probe or disconnect machinery for them", () => {
+  test("omitted sections render no row or disconnect machinery for them", () => {
     const script = renderClaudeCodeStartupGuardPowerShell({
       ...CTX,
+      healthUrl: "https://archestra.example.com/v1/health?mcp=prod-gateway",
       skills: null,
       proxy: null,
     });

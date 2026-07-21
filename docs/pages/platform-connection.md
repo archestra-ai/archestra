@@ -80,9 +80,9 @@ The `claude` CLI must be on your `PATH`.
 
 #### Startup Guard
 
-The guard runs each time you start `claude`. It checks the configured Archestra remotes — the LLM proxy, the MCP gateway, and the skills marketplace — two ways: that they answer, and that they still exist on the platform. Each check shows a brief spinner; when everything passes, `claude` starts after about half a second per remote.
+The guard runs each time you start `claude`. It makes a single health request to the platform covering the configured remotes — the LLM proxy and the MCP gateway; the skills marketplace rides on the same origin — and then plays each remote's check in turn with a brief spinner. When everything is healthy, `claude` starts after about half a second per remote.
 
-A remote that was deleted on the platform gets an immediate prompt — press `d` to disconnect it from Claude Code (recommended), the same reverse-of-connect steps as the Disconnect panel. An unreachable remote is retried for 15 seconds with a status line; press `s` to skip it for this session or `d` to disconnect. Every path ends with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
+The turn stops on a remote the platform reports down — "Failed to connect to …" — and prompts: `d` disconnects it from Claude Code (the same reverse-of-connect steps as the Disconnect panel), `s` continues without it. When the platform itself is unreachable, the guard retries that one request for up to 15 seconds with a status line (`s` and `d` stay live the whole time), then treats every remote as down and prompts the same way. Every path ends with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
 
 On macOS and Linux the guard lives at `~/.archestra/claude-startup-guard.sh`, hooked in by a marked `claude()` block in your shell profile. On Windows it is `~/.archestra/claude-startup-guard.ps1`, hooked in by the same marked block in each PowerShell edition's `profile.ps1`. Set `ARCHESTRA_CLAUDE_GUARD=0` to disable it without uninstalling. The Disconnect panel has per-OS one-liners that remove both pieces.
 

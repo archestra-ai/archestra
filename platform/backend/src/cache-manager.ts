@@ -42,6 +42,7 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
+  ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
   /** App Gallery share (GitHub device-flow) sign-in rate limiting per user */

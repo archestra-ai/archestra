@@ -429,14 +429,11 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain(`MCP gateway (${MCP.serverName})`);
     expect(script).toContain(`Skills marketplace (${SKILLS.marketplaceName})`);
     expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
-    // Existence-check URLs are derived from the connect-wired data-plane URLs,
-    // so the guard can tell a DELETED remote (prompt immediately) from an
-    // unreachable platform (retry ladder).
+    // The single health URL is derived from the connect-wired data-plane
+    // URLs, so the guard can tell a resource the platform reports down
+    // (prompt immediately) from an unreachable platform (retry ladder).
     expect(script).toContain(
-      "https://archestra.example.com/api/connection-health?kind=mcp-gateway&ref=prod-gateway",
-    );
-    expect(script).toContain(
-      "https://archestra.example.com/api/connection-health?kind=llm-proxy&ref=profile-123",
+      "https://archestra.example.com/v1/health?mcp=prod-gateway&llm=profile-123",
     );
   });
 

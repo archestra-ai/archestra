@@ -4,7 +4,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
-import { VirtualApiKeyModel } from "@/models";
+import { AgentLabelModel, AgentModel, VirtualApiKeyModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import {
@@ -55,6 +55,37 @@ describe("resolveAgent", () => {
   });
 
   test("throws 400 when no agentId and no default profile", async () => {
+    await expect(resolveAgent(undefined)).rejects.toThrow(
+      "Please specify an LLMProxy ID in the URL path.",
+    );
+  });
+
+  // The proxy resolves a lean GatewayAgent (agents row + labels): labels feed
+  // metric/span label values, so they must survive the lean lookup.
+  test("resolved agent carries its labels", async ({ makeAgent }) => {
+    const agent = await makeAgent();
+    await AgentLabelModel.syncAgentLabels(agent.id, [
+      { key: "environment", value: "production", keyId: "", valueId: "" },
+    ]);
+
+    const result = await resolveAgent(agent.id);
+    expect(result.labels).toEqual([
+      expect.objectContaining({ key: "environment", value: "production" }),
+    ]);
+  });
+
+  test("does not resolve a soft-deleted default profile", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const profile = await makeAgent({
+      organizationId: org.id,
+      agentType: "profile",
+      isDefault: true,
+    });
+    await AgentModel.delete(profile.id);
+
     await expect(resolveAgent(undefined)).rejects.toThrow(
       "Please specify an LLMProxy ID in the URL path.",
     );

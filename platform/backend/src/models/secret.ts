@@ -87,6 +87,14 @@ class SecretModel {
   }
 
   /**
+   * All secret rows exactly as stored, without decryption. Used by the
+   * startup encryption-key canary check, which probes decryptability itself.
+   */
+  static async findAllRaw(): Promise<SelectSecret[]> {
+    return db.select().from(schema.secretsTable);
+  }
+
+  /**
    * Delete a secret by ID
    */
   static async delete(id: string): Promise<boolean> {

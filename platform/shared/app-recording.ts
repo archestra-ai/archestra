@@ -18,6 +18,40 @@ import { z } from "zod";
 // nothing else — unknown keys (a vector for smuggling payloads) are rejected.
 // =============================================================================
 
+/**
+ * The Apps Hackathon window: 00:00 on 22 July 2026 until 00:00 on 29 July
+ * 2026, UK time. July is BST (UTC+1), so those instants are 23:00 UTC on the
+ * 21st and the 28th — spelled in UTC rather than local time so every
+ * deployment agrees on them regardless of server zone.
+ *
+ * Outside this window the recorder hard-disables everywhere, whatever a
+ * deployment or an organization still has switched on. The bounds are read at
+ * REQUEST time, never captured at boot: a pod started before the window would
+ * otherwise keep its answer frozen as the clock crosses either edge. The one
+ * exception is the staging override, which bypasses the window entirely (see
+ * the recorder route and useAppsHackathonOffered).
+ */
+export const APPS_HACKATHON_OPENS_AT_MS = Date.UTC(2026, 6, 21, 23, 0, 0);
+export const APPS_HACKATHON_CLOSES_AT_MS = Date.UTC(2026, 6, 28, 23, 0, 0);
+
+/**
+ * The window above rendered as human copy for the UI. Kept here, next to the
+ * epochs it describes, so the composer tooltip and the settings block share one
+ * string that cannot drift from each other or lag the gate: whoever moves the
+ * dates edits this in the same place. The label reads a day later than the UTC
+ * epochs because the hackathon's dates are stated in its own timezone (UTC+1:
+ * the 21st 23:00 UTC is already the 22nd there), so it is written out rather
+ * than formatted from the epochs, which would shift per viewer.
+ */
+export const APPS_HACKATHON_DATE_RANGE_LABEL = "July 22–29";
+
+/** Whether the Apps Hackathon is currently running (start reached, end not). */
+export function isAppsHackathonOpen(nowMs: number = Date.now()): boolean {
+  return (
+    nowMs >= APPS_HACKATHON_OPENS_AT_MS && nowMs < APPS_HACKATHON_CLOSES_AT_MS
+  );
+}
+
 /** Upper bound on a single recording's timeline (24h in ms). */
 const MAX_EVENT_T_MS = 86_400_000;
 
@@ -583,4 +617,126 @@ export function validateRecordingBundle(
     };
   }
   return { ok: true, bundle };
+}
+
+// =============================================================================
+// Trailing-trim pruning — drop a cut-away tail from the bundle
+// =============================================================================
+
+type RecordingCut = NonNullable<AppRecordingBundle["edits"]>["cuts"][number];
+
+/**
+ * How close to the data's end a cut must reach to count as an END trim rather
+ * than a mid cut — a few frames of slop, so a trim dragged to the very end still
+ * registers as one. MUST match the player's tail-trim detection in buildPlayback
+ * (both import this), or a pruned bundle could diverge from what the player
+ * renders.
+ */
+export const TRIM_EDGE_EPS_MS = 25;
+
+/**
+ * Merge stored cuts into sorted, non-overlapping ranges. Cuts may be authored
+ * overlapping (each edit just appends a range); playback and pruning both reason
+ * over the merged set. Shared so the player and the pruner cannot disagree on
+ * what a cut covers.
+ */
+export function normalizeCuts(cuts: RecordingCut[]): RecordingCut[] {
+  const sorted = cuts
+    .filter((cut) => cut.toMs > cut.fromMs)
+    .sort((a, b) => a.fromMs - b.fromMs);
+  const merged: RecordingCut[] = [];
+  for (const cut of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && cut.fromMs <= last.toMs) {
+      last.toMs = Math.max(last.toMs, cut.toMs);
+    } else {
+      merged.push({ ...cut });
+    }
+  }
+  return merged;
+}
+
+/**
+ * Drop captured events that a trailing END trim removes, so a trimmed recording
+ * ships — and renders — without its cut-away tail. A size optimization only: the
+ * result replays and renders byte-for-byte the same as the original.
+ *
+ * Why it is lossless. The player already excludes events past a trailing trim
+ * when it builds playback (its `withinEnd` filter), so those events never reach
+ * a rendered frame. This persists exactly that exclusion into the bundle, and
+ * ONLY for a trailing trim — mid cuts are left whole, because the player still
+ * applies their events (collapsed to one instant) to keep the app's state
+ * correct for what plays AFTER them, so removing them would change the replay.
+ *
+ * What is kept, so the replay's timing is identical:
+ *  - `viewport` events at any time — the stage size is a whole-recording
+ *    aggregate (`dominantViewport`), so dropping one could resize the video;
+ *  - events at or before the trim's start (they still play), and events PAST the
+ *    trim's end (their timeline anchor sits outside the collapsed range and so
+ *    still shapes the playback clock);
+ *  - an `mcp` event that STRADDLES the trim start — its own time is past it, but
+ *    it plants a second compression anchor at `t - durationMs` which is not, so
+ *    it lands in the kept region and must be preserved (see the filter);
+ *  - cuts, durationMs, segments and transcript, all verbatim.
+ *
+ * Only events whose every timeline anchor falls strictly inside the trailing
+ * cut's own [fromMs, toMs] are removed — where playback collapses to zero time,
+ * so those anchors carry none. A self-guard bails out entirely in the unusual
+ * case where data runs past the recorded duration and removal would move the
+ * trim boundary itself.
+ */
+export function pruneTrailingTrimEvents(
+  bundle: AppRecordingBundle,
+): AppRecordingBundle {
+  const cuts = bundle.edits?.cuts;
+  if (!cuts || cuts.length === 0) return bundle;
+
+  const { events, segments, transcript, durationMs } = bundle.recording;
+
+  // The last moment of real data — mirrors buildPlayback's rawDataEnd, which
+  // starts at the recorded duration and grows to the furthest event, segment or
+  // message. A trailing trim is a cut that reaches this end.
+  const dataEndOf = (
+    keptEvents: AppRecordingBundle["recording"]["events"],
+  ): number => {
+    let end = Math.max(0, durationMs);
+    for (const event of keptEvents) end = Math.max(end, event.t);
+    for (const segment of segments) end = Math.max(end, segment.atMs);
+    for (const message of transcript) end = Math.max(end, message.atMs);
+    return end;
+  };
+  const rawDataEnd = dataEndOf(events);
+
+  const tail = normalizeCuts(cuts).find(
+    (cut) =>
+      cut.toMs >= rawDataEnd - TRIM_EDGE_EPS_MS && cut.fromMs < rawDataEnd,
+  );
+  if (!tail) return bundle;
+
+  const kept = events.filter((event) => {
+    // Keep viewport events (stage sizing is a whole-recording aggregate) and
+    // anything whose timeline anchor sits OUTSIDE the collapsed range: at or
+    // before the trim start (it still plays) or past the trim end (its anchor
+    // still shapes the playback clock).
+    if (event.kind === "viewport" || event.t > tail.toMs) return true;
+    // An mcp event with a duration plants a SECOND compression anchor at its
+    // start — max(0, t - durationMs), mirroring buildPlayback. If that start
+    // lands at or before the trim it sits in the KEPT region and shapes idle-gap
+    // compression (whose per-gap cap is non-additive), so the event must stay.
+    // Playback still excludes it from the rendered events — its own time is past
+    // the trim — so only the anchor is preserved, at no render cost.
+    const anchorStart =
+      event.kind === "mcp" && event.durationMs
+        ? Math.max(0, event.t - event.durationMs)
+        : event.t;
+    return anchorStart <= tail.fromMs;
+  });
+  if (kept.length === events.length) return bundle;
+
+  // Never let the pruned data end fall short of the original: that would move
+  // the tail-trim boundary and change the replay. Holds whenever the recorded
+  // duration already covers all the data (the normal case).
+  if (dataEndOf(kept) !== rawDataEnd) return bundle;
+
+  return { ...bundle, recording: { ...bundle.recording, events: kept } };
 }

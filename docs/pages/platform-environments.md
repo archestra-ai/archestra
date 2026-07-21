@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-19
+lastUpdated: 2026-07-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,8 +11,8 @@ lastUpdated: 2026-07-19
 <!--
 This document is the canonical reference for deployment Environments. Include:
 - What an environment is and the implicit "Default" environment (null)
-- Who can view vs. manage environments (environment:admin), Settings > Environments
-- Restricted environments and the environment:deploy-to-restricted / environment:admin permissions
+- Who can view vs. manage environments (environment:read / create / update / delete), Settings > Environments
+- Restricted environments and the per-resource deploy-to-restricted permissions
 - Environment isolation: how an environment scopes which tools, knowledge,
   skills, and delegation targets an agent / MCP gateway / LLM proxy can use
   (strict matching; Default is a peer, not a wildcard; built-in servers and
@@ -25,7 +25,7 @@ This document is the canonical reference for deployment Environments. Include:
 
 An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Environments partition an organization's resources so that what an agent or gateway can reach is scoped to where it runs: a "dev" gateway cannot use "prod" tools or knowledge, and spend can be capped per environment. Each environment carries a name, an optional Kubernetes namespace, and an optional network egress policy.
 
-Any member can view the list of environments; creating, editing, and deleting them requires the `environment:admin` permission. Admins manage environments in **Settings → Environments**.
+Viewing environments requires the `environment:read` permission — every predefined role includes it. Creating, editing, and deleting environments require `environment:create`, `environment:update`, and `environment:delete`. Environments are managed in **Settings → Environments**.
 
 ## The Default environment
 
@@ -33,7 +33,7 @@ Every organization has an implicit **Default** environment. Any resource whose e
 
 ## Restricted environments
 
-An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign resources to a restricted environment. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
+An environment can be marked **restricted**. Assigning a resource to a restricted environment requires the `deploy-to-restricted` permission on that resource — `mcpRegistry:deploy-to-restricted` for MCP servers, or `llmProxy:deploy-to-restricted` for LLM proxies, for example. Each resource is gated on its own permission, so an organization can allow agents, apps, and proxies in a restricted environment while still limiting who deploys MCP servers there. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
 
 ## Trusted image registries
 

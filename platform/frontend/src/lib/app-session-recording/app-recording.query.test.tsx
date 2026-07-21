@@ -173,6 +173,52 @@ describe("useRenderAppRecordingVideo", () => {
     await waitFor(() => expect(result.current.data).toBeNull());
   });
 
+  it("rides out a transient status-poll failure instead of failing the render", async () => {
+    // A backend blip mid-render — a 5xx from a pod being drained in a rolling
+    // deploy, a dropped connection — used to abort the whole render on the
+    // first failed poll and surface a raw error. It must instead keep polling:
+    // the render is still fine and the video still downloads once the server
+    // answers again. Only a definitive "no such job" 404 ends it early.
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:mock");
+    const revokeObjectURL = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockReturnValue(undefined);
+    try {
+      sdk.getAppRecordingRenderStatus
+        .mockReset()
+        // A transient 5xx (not a missing-job 404) on the first poll...
+        .mockResolvedValueOnce({ error: { status: 500 } } as never)
+        // ...then the render reports finished.
+        .mockResolvedValue({ data: { status: "done" } } as never);
+      sdk.downloadAppRecordingVideo.mockResolvedValue({
+        data: new Blob(["mp4"], { type: "video/mp4" }),
+      } as never);
+
+      await startRender("conv-a", 1);
+
+      await waitFor(
+        () =>
+          expect(toast.success).toHaveBeenCalledWith(
+            "Video downloaded.",
+            expect.anything(),
+          ),
+        { timeout: 8_000 },
+      );
+      // The blip was ridden out: the video was collected, not reported as an
+      // error the author has to decode.
+      expect(sdk.downloadAppRecordingVideo).toHaveBeenCalledWith({
+        path: { jobId: "job-a" },
+        parseAs: "blob",
+      });
+      expect(toast.error).not.toHaveBeenCalled();
+    } finally {
+      createObjectURL.mockRestore();
+      revokeObjectURL.mockRestore();
+    }
+  });
+
   it("stops every running render when the export button calls them off", async () => {
     await startRender("conv-a", 1);
     await startRender("conv-b", 2);

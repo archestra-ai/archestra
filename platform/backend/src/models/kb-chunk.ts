@@ -144,6 +144,44 @@ class KbChunkModel {
     return rows.rows as unknown as VectorSearchResult[];
   }
 
+  /**
+   * Return the set of embedding dimensions that actually have stored vectors for
+   * the given connectors (one entry per non-empty per-dimension column). Used to
+   * diagnose a dimension mismatch when a search returns nothing: if documents
+   * were ingested at a dimension other than the one now configured, the search
+   * targets an empty column and silently finds nothing.
+   */
+  static async getPopulatedEmbeddingDimensions(
+    connectorIds: string[],
+  ): Promise<Set<number>> {
+    if (connectorIds.length === 0) return new Set();
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const result = await db.execute(sql`
+      SELECT
+        bool_or(c.embedding IS NOT NULL) AS "d1536",
+        bool_or(c.embedding_1024 IS NOT NULL) AS "d1024",
+        bool_or(c.embedding_768 IS NOT NULL) AS "d768",
+        bool_or(c.embedding_384 IS NOT NULL) AS "d384",
+        bool_or(c.embedding_3072 IS NOT NULL) AS "d3072"
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      WHERE d.connector_id IN (${ids})
+    `);
+    const row = result.rows[0] as Record<string, boolean | null> | undefined;
+    const dimensions = new Set<number>();
+    if (row) {
+      if (row.d1536) dimensions.add(1536);
+      if (row.d1024) dimensions.add(1024);
+      if (row.d768) dimensions.add(768);
+      if (row.d384) dimensions.add(384);
+      if (row.d3072) dimensions.add(3072);
+    }
+    return dimensions;
+  }
+
   static async fullTextSearch(params: {
     connectorIds: string[];
     queryText: string;

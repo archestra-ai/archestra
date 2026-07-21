@@ -482,10 +482,17 @@ export const RouteId = {
   UpdateGithubAppConfig: "updateGithubAppConfig",
   DeleteGithubAppConfig: "deleteGithubAppConfig",
 
+  // Stored GitHub personal access tokens
+  ListGithubPats: "listGithubPats",
+  CreateGithubPat: "createGithubPat",
+  UpdateGithubPat: "updateGithubPat",
+  DeleteGithubPat: "deleteGithubPat",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
   TestEmbeddingConnection: "testEmbeddingConnection",
+  TestRerankerConnection: "testRerankerConnection",
 
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
@@ -617,11 +624,13 @@ export const RouteId = {
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
   ResetSkill: "resetSkill",
+  UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+  GetSkillUsageStatistics: "getSkillUsageStatistics",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
   GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",

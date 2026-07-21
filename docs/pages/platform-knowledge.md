@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
-lastUpdated: 2026-07-14
+lastUpdated: 2026-07-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -79,7 +79,26 @@ Auto-sync connectors are gated by the dedicated `knowledgeSourceAutoSync` permis
 
 Auto-sync permissions mirrors the data source system's access control into Archestra. When a user queries the knowledge base, they get back only the content they are allowed to see in the source system. A user with the `knowledgeSource:admin` role bypasses the ACL and sees everything.
 
-Supported connectors: **GitHub**, **Confluence**, and **Jira**. Support for Google Drive, Salesforce, and SharePoint is planned.
+Auto-sync permissions works with the connectors marked *Supported* below. The others do not support it yet.
+
+| Connector    | Auto-sync permissions |
+| ------------ | --------------------- |
+| Confluence   | Supported             |
+| GitHub       | Supported             |
+| Jira         | Supported             |
+| Google Drive | Planned               |
+| Salesforce   | Planned               |
+| SharePoint   | Planned               |
+| Asana        | Not supported         |
+| Dropbox      | Not supported         |
+| GitLab       | Not supported         |
+| Linear       | Not supported         |
+| Notion       | Not supported         |
+| OneDrive     | Not supported         |
+| Outline      | Not supported         |
+| Perforce     | Not supported         |
+| ServiceNow   | Not supported         |
+| Web Crawler  | Not supported         |
 
 **Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
 

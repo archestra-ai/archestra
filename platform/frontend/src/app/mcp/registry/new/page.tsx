@@ -4,7 +4,8 @@ import { MCP_CATALOG_CLONE_QUERY_PARAM } from "@archestra/shared";
 import { ArrowLeft, Copy, PencilRuler, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import type { UseFormReturn } from "react-hook-form";
 import { LoadingSpinner } from "@/components/loading";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  getCatalogMutationErrorCode,
+  REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -50,9 +53,14 @@ export default function NewMcpCatalogItemPage() {
   const cloneSource = cloneSourceId
     ? catalogItems?.find((item) => item.id === cloneSourceId)
     : undefined;
-  const cloneValues = cloneSource
-    ? buildCloneFormValues(cloneSource)
-    : undefined;
+  // Memoized: the form resets itself whenever its `formValues` prop changes
+  // identity, so rebuilding this object on every render (e.g. the re-render
+  // from the create mutation entering its pending state) would wipe the
+  // user's edits back to the pre-filled clone values.
+  const cloneValues = useMemo(
+    () => (cloneSource ? buildCloneFormValues(cloneSource) : undefined),
+    [cloneSource],
+  );
 
   const [step, setStep] = useState<SourceSubStep>(
     cloneSourceId ? "configure" : "source",
@@ -62,18 +70,42 @@ export default function NewMcpCatalogItemPage() {
     McpCatalogFormValues | undefined
   >(undefined);
 
-  const onSubmit = async (values: McpCatalogFormValues) => {
+  const onSubmit = (
+    values: McpCatalogFormValues,
+    form: UseFormReturn<McpCatalogFormValues>,
+  ) => {
     const apiData = {
       ...transformFormToApiData(values),
       // Record clone lineage (null for a plain "Add Server").
       clonedFrom: cloneSource ? cloneSource.id : null,
     };
-    const createdItem = await createMutation.mutateAsync(apiData);
-    if (!createdItem) return;
-
-    // Continue the setup wizard on the created item: test the connection,
-    // review tools, configure guardrails.
-    router.push(`/mcp/registry/${createdItem.id}/edit?step=test`);
+    createMutation.mutate(apiData, {
+      onSuccess: (createdItem) => {
+        if (!createdItem) return;
+        // Continue the setup wizard on the created item: test the connection,
+        // review tools, configure guardrails.
+        router.push(`/mcp/registry/${createdItem.id}/edit?step=test`);
+      },
+      onError: (error) => {
+        // Network-policy rejections point at the Server URL — show them
+        // inline on that field rather than as a toast (the mutation's shared
+        // onError intentionally skips the toast for this code). Without this,
+        // e.g. binding a clone to an environment whose egress policy blocks
+        // the cloned URL failed with no feedback at all.
+        if (
+          getCatalogMutationErrorCode(error) ===
+          REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+        ) {
+          form.setError("serverUrl", {
+            type: "server",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Server URL is not allowed by the environment's network policy.",
+          });
+        }
+      },
+    });
   };
 
   const handleSelectFromCatalog = (formValues: McpCatalogFormValues) => {

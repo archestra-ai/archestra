@@ -97,13 +97,56 @@ describe("resolveAuditableRouteConfig", () => {
     expect(resolved?.cfg.resourceType).toBe("mcpServer");
   });
 
+  test("swept child routes resolve directly with an explicit non-.deleted action", () => {
+    // POST children (would otherwise be dropped as walk-up → unknown.created)
+    // and DELETE children (would otherwise derive parent.deleted).
+    const cases: Array<[string, string, string]> = [
+      ["/api/teams/:id/members", "team", "team.updated"],
+      ["/api/teams/:id/members/:userId", "team", "team.updated"],
+      ["/api/connectors/:id/sync", "connector", "connector.synced"],
+      [
+        "/api/connectors/:id/documents/:docId",
+        "connector",
+        "connector.updated",
+      ],
+      [
+        "/api/internal_mcp_catalog/:id/reinstall",
+        "internalMcpCatalog",
+        "internalMcpCatalog.reinstalled",
+      ],
+      [
+        "/api/schedule-triggers/:id/run-now",
+        "scheduleTrigger",
+        "scheduleTrigger.triggered",
+      ],
+      [
+        "/api/mcp-oauth-clients/:id/rotate-secret",
+        "mcpOauthClient",
+        "mcpOauthClient.rotated",
+      ],
+      [
+        "/api/service-accounts/:id/tokens/:tokenId",
+        "serviceAccount",
+        "serviceAccount.updated",
+      ],
+      ["/api/teams/:teamId/vault-folder", "team", "team.updated"],
+    ];
+    for (const [route, resourceType, action] of cases) {
+      const resolved = resolveAuditableRouteConfig(route);
+      expect(resolved?.viaWalkUp).toBe(false);
+      expect(resolved?.cfg.resourceType).toBe(resourceType);
+      expect(resolved?.cfg.action).toBe(action);
+      expect(typeof resolved?.cfg.fetchById).toBe("function");
+    }
+  });
+
   test("walk-up match two levels deep returns viaWalkUp=true", () => {
-    // /api/connectors/:id/knowledge-bases has no direct entry; inherits connector
+    // No direct entry two levels down; inherits the knowledgeBase parent.
     const resolved = resolveAuditableRouteConfig(
-      "/api/connectors/:id/knowledge-bases",
+      "/api/knowledge-bases/:id/documents/:docId",
     );
     expect(resolved?.viaWalkUp).toBe(true);
-    expect(resolved?.cfg.resourceType).toBe("connector");
+    expect(resolved?.cfg.resourceType).toBe("knowledgeBase");
   });
 
   test("no match returns undefined", () => {

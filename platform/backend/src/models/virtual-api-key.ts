@@ -798,15 +798,28 @@ class VirtualApiKeyModel {
     const row = await VirtualApiKeyModel.findById(id);
     if (!row || row.organizationId !== organizationId) return null;
 
-    const teamIds = await VirtualApiKeyModel.getTeamIdsForVirtualApiKey(id);
+    const [teamIds, providerKeyRows] = await Promise.all([
+      VirtualApiKeyModel.getTeamIdsForVirtualApiKey(id),
+      db
+        .select({
+          providerApiKeyId:
+            schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+        })
+        .from(schema.virtualApiKeyProviderApiKeysTable)
+        .where(
+          eq(schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId, id),
+        ),
+    ]);
 
     return {
       id: row.id,
       organizationId: row.organizationId,
       name: row.name,
       scope: row.scope,
+      keyType: row.keyType,
       authorId: row.authorId,
       teamIds: [...teamIds].sort(),
+      providerApiKeyIds: providerKeyRows.map((r) => r.providerApiKeyId).sort(),
       tokenStart: row.tokenStart,
       expiresAt: row.expiresAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),

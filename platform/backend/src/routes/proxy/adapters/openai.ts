@@ -1074,6 +1074,26 @@ export class OpenAIStreamAdapter
 
     const delta = choice.delta;
 
+    // Forward reasoning ("thinking") deltas. OpenAI-compatible reasoning models
+    // (qwen3, DeepSeek-R1, GLM, ... via Ollama/vLLM/OpenRouter) stream their
+    // thinking in a `reasoning_content` (or `reasoning`) field that isn't part
+    // of the typed delta. A reasoning-only chunk has no `content`, so without
+    // this it would be dropped and the client never sees the thinking. Forward
+    // the raw chunk unchanged so the field reaches the client's reasoning parser.
+    // Skip when the same chunk also carries a tool call: that must go through the
+    // tool-call branch's blocking-policy buffering below (which replays the full
+    // chunk — reasoning included — only once the call is approved), so reasoning
+    // never streams unapproved tool-call data past the gate.
+    const reasoning = (delta as { reasoning_content?: unknown })
+      .reasoning_content;
+    const reasoningAlt = (delta as { reasoning?: unknown }).reasoning;
+    const hasReasoning =
+      (typeof reasoning === "string" && reasoning.length > 0) ||
+      (typeof reasoningAlt === "string" && reasoningAlt.length > 0);
+    if (hasReasoning && !delta.tool_calls) {
+      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+    }
+
     // Handle text content
     if (delta.content) {
       this.state.text += delta.content;

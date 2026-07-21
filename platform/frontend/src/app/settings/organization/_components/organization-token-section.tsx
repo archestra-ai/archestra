@@ -3,10 +3,12 @@
 import { Key } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
 import { PlatformTokenCard } from "@/components/tokens/platform-token-card";
 import { Button } from "@/components/ui/button";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 
 export function OrganizationTokenSection() {
@@ -17,6 +19,7 @@ export function OrganizationTokenSection() {
   const searchParams = useSearchParams();
   const highlight = searchParams.get("highlight");
   const orgTokenExists = !!orgToken;
+  const authDocsUrl = getFrontendDocsUrl("mcp-authentication", "bearer-token");
 
   // Deep link from connection instructions ("Manage your organization
   // token"): ?highlight=organization-token opens the token dialog once the
@@ -34,7 +37,27 @@ export function OrganizationTokenSection() {
     >
       <PlatformTokenCard
         title="Organization Token"
-        description="Organization-wide authentication token for Agents / MCP Gateways."
+        description={
+          <>
+            Organization-wide token for calling any Agent through MCP Gateways
+            and A2A, not tied to a user or team. It does not grant access to the
+            platform API.
+            {authDocsUrl && (
+              <>
+                {" "}
+                See{" "}
+                <ExternalDocsLink
+                  href={authDocsUrl}
+                  className="text-inherit underline underline-offset-4"
+                  showIcon={false}
+                >
+                  MCP authentication
+                </ExternalDocsLink>
+                .
+              </>
+            )}
+          </>
+        }
         isLoading={tokensLoading}
         error={error}
         tokenExists={!!orgToken}
@@ -56,7 +79,7 @@ export function OrganizationTokenSection() {
           token={orgToken as TeamToken}
           open={tokenDialogOpen}
           onOpenChange={setTokenDialogOpen}
-          description="Organization-wide token for Agents / MCP Gateways."
+          description="Organization-wide token for calling any Agent through MCP Gateways and A2A."
         />
       )}
     </WithPermissions>

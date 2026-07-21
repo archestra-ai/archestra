@@ -210,6 +210,12 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 **Orchestrator Settings**:
 
 - `archestra.orchestrator.baseImage` - Base Docker image for MCP server containers (defaults to official Archestra MCP server base image)
+- `archestra.orchestrator.mcpServerResources.requests.cpu` - CPU request for generated MCP server containers (default: `50m`)
+- `archestra.orchestrator.mcpServerResources.requests.memory` - Memory request for generated MCP server containers (default: `128Mi`)
+- `archestra.orchestrator.mcpServerResources.requests.ephemeralStorage` - Ephemeral-storage request for generated MCP server containers (default: `256Mi`)
+- `archestra.orchestrator.mcpServerResources.limits.memory` - Memory limit for generated MCP server containers (default: `512Mi`)
+- `archestra.orchestrator.mcpServerResources.limits.ephemeralStorage` - Ephemeral-storage limit for generated MCP server containers (default: `1Gi`)
+- `archestra.orchestrator.failedPodReapIntervalSeconds` - How often Failed or Evicted MCP server pods are garbage-collected (default: `600`, `0` disables)
 
 **Kubernetes Settings**:
 
@@ -554,7 +560,7 @@ MCP server pods are protected from SSRF automatically: each pod's egress is conf
 
 ## Infrastructure as Code
 
-Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one under Settings → API Keys (see [API Reference](/docs/platform-api-reference#authentication)).
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section on Your Account (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
 
 ### Terraform
 
@@ -848,6 +854,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
   - Example: `something-really-really-secret-12345`
   - **Warning:** Do not change this value after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
+  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch. See `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY` to accept a deliberate rotation.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
   - Default: `admin@example.com`
@@ -905,6 +912,11 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Options: `DB`, `VAULT`, or `READONLY_VAULT`
   - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
 
+- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate `ARCHESTRA_AUTH_SECRET` change.
+  - Default: `false`
+  - Startup aborts when the current auth secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
+  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
+
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
   - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`
   - Example: `http://localhost:8200`
@@ -938,7 +950,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
 
 ### LLM Provider Configuration
 
-These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Settings > LLM API Keys** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
+These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Model Providers** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
   - Default: `https://api.openai.com/v1`
@@ -1074,6 +1086,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: unset, i.e. undici's defaults (5 minutes for both headers and body timeout)
   - Opt-in: set a larger value (e.g. `600000` for 10 minutes) when an upstream's time-to-first-token can exceed 5 minutes — typically a slow CPU-only Ollama or vLLM model — which otherwise fails with `Headers Timeout Error`
   - Keep it finite so genuinely-dead upstreams still surface as errors
+
+- **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify subscription credentials as subscription usage.
+  - Default: `true`
+  - When on, traffic fulfilled by a subscription credential — detected from the credential format, e.g. Anthropic `sk-ant-oat…` OAuth tokens from a Claude Max/Pro login — is recorded as `subscription` billing mode and reported as $0 billed spend, keeping its list-price estimate for comparison
+  - Set to `false` to treat all traffic as metered
+  - See: [Costs and Limits](/docs/platform-costs-and-limits#subscription-vs-metered-cost)
 
 - **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
   - Default: `false`
@@ -1232,6 +1250,25 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
   - Can be overridden per individual MCP server.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for generated MCP server containers, as a Kubernetes quantity.
+  - Default: `50m`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST`** - Memory request for generated MCP server containers.
+  - Default: `128Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT`** - Memory limit for generated MCP server containers.
+  - Default: `512Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST`** - Ephemeral-storage request for generated MCP server containers. Keeps the Kubernetes scheduler aware of disk usage so nodes are not over-packed into DiskPressure evictions.
+  - Default: `256Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT`** - Ephemeral-storage limit for generated MCP server containers.
+  - Default: `1Gi`
+
+- **`ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS`** - How often the platform deletes Failed or Evicted MCP server pods left behind by node-pressure evictions.
+  - Default: `600`
+  - Set to `0` to disable.
 
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
   - Default: `true`

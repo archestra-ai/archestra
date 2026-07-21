@@ -47,7 +47,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/lib/config/config", () => ({
+vi.mock("@/lib/config/config", async (importOriginal) => ({
+  // Partial: the auth client reads this module's default export at import
+  // time, and it is reachable from here through the recorder's organization
+  // query — a factory without it takes the whole suite down on load.
+  ...(await importOriginal<typeof import("@/lib/config/config")>()),
   getMcpSandboxBaseUrl: () => ({
     baseUrl: "http://127.0.0.1:9000",
     hasCrossOrigin: true,

@@ -627,7 +627,9 @@ describe("MCP server installation request authorization & state transitions", ()
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toBe("Forbidden");
+    expect(response.json().error.message).toBe(
+      "You can only view your own installation requests. Viewing other users' requests requires the mcpServerInstallation:admin permission.",
+    );
   });
 
   test("PATCH /:id forbids a non-admin from setting status (403)", async () => {
@@ -673,7 +675,9 @@ describe("MCP server installation request authorization & state transitions", ()
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toBe("Forbidden");
+    expect(response.json().error.message).toBe(
+      "You can only add notes to your own installation requests. Updating other users' requests requires the mcpServerInstallation:admin permission.",
+    );
   });
 
   test("POST /:id/approve is idempotent for an already-approved request", async () => {

@@ -1811,11 +1811,16 @@ describe("model router proxy routes", () => {
     expect(anthropicAdapterFactory.createClient).toHaveBeenCalledOnce();
     expect(anthropicAdapterFactory.createClient).toHaveBeenCalledWith(
       "test-anthropic-key",
-      // The proxy re-fetches the agent, so the object passed downstream carries
-      // the server-resolved LLM metadata (resolvedLlmProvider, etc.) that the
-      // freshly-created object doesn't — objectContaining tolerates those.
+      // The proxy resolves a lean GatewayAgent (agents row + labels, no
+      // tools/teams hydration), so assert the identity fields adapters and
+      // observability actually consume rather than the full fixture object.
       expect.objectContaining({
-        agent: expect.objectContaining(agent),
+        agent: expect.objectContaining({
+          id: agent.id,
+          name: agent.name,
+          organizationId: agent.organizationId,
+          agentType: agent.agentType,
+        }),
       }),
     );
     expect(response.json()).toMatchObject({

@@ -84,7 +84,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { mcpServerInstallation: ["admin"] },
         headers,
       );
-      let allServers = await McpServerModel.findAll(user.id, isMcpServerAdmin);
+      let allServers = await McpServerModel.findAll(
+        user.id,
+        isMcpServerAdmin,
+        organizationId,
+      );
 
       // serverType:"app" backings are managed on the Apps surface, not listed as
       // MCP servers — keep them out of the user-facing server list (and its
@@ -127,7 +131,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, user, headers }, reply) => {
+    async ({ params: { id }, user, headers, organizationId }, reply) => {
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
@@ -136,6 +140,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         user.id,
         isMcpServerAdmin,
+        organizationId,
       );
 
       if (!server) {

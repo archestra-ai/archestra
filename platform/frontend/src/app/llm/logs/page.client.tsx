@@ -14,6 +14,7 @@ import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
   ClientFilterOption,
@@ -22,7 +23,6 @@ import {
   UserFilterOption,
 } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Savings } from "@/components/savings";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
 import { TableFilters } from "@/components/table-filters";
@@ -433,8 +433,10 @@ function SessionsTable({
         cell: ({ row }) =>
           row.original.totalCost ? (
             <TooltipProvider>
-              <Savings
+              <BilledCost
                 cost={row.original.totalCost}
+                billedCost={row.original.totalBilledCost}
+                subscriptionCost={row.original.totalSubscriptionCost}
                 baselineCost={
                   row.original.totalBaselineCost || row.original.totalCost
                 }

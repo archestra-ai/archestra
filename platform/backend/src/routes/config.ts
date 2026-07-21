@@ -94,6 +94,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               kbAutoSyncPermissionsEnabled: z.boolean(),
               /** App session recording (record/replay/download app demos). */
               hackathonRecorderEnabled: z.boolean(),
+              /** Staging override active: recorder bypasses the hackathon date window. */
+              hackathonRecorderOverrideActive: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -146,6 +148,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
+          hackathonRecorderOverrideActive:
+            config.hackathonRecorder.overrideActive,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

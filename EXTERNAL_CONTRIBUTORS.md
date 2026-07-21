@@ -717,3 +717,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @familom
 - @OshTekk
 - @harshitsinghbhandari
+- @harshkg948
+- @jishei-128

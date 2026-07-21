@@ -20,27 +20,30 @@ import {
 } from "@/auth/skill-permissions";
 import { userHasPermission } from "@/auth/utils";
 import { withDbTransaction } from "@/database";
-import { resolveInstallationToken } from "@/integrations/github/app-auth";
 import logger from "@/logging";
 import {
   AgentModel,
-  GithubAppConfigModel,
   MemberModel,
   OrganizationModel,
   SkillFileModel,
   SkillModel,
   SkillTeamModel,
+  SkillUsageEventModel,
+  TaskModel,
   TeamModel,
   ToolModel,
   UserModel,
 } from "@/models";
-import { secretManager } from "@/secrets-manager";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
   builtInSkillShippedWrite,
   findBuiltInSkillBySourceRef,
 } from "@/skills/built-in-skills";
+import {
+  resolveGithubAppInstallationToken,
+  resolveGithubPatToken,
+} from "@/skills/github-app-token";
 import {
   discoverSkills,
   importSkills,
@@ -63,13 +66,18 @@ import {
   toSkillFiles,
   toSkillInsertFields,
 } from "@/skills/validation";
+import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
   constructResponseSchema,
+  createSortingQuerySchema,
   DeleteObjectResponseSchema,
   SelectSkillSchema,
   type Skill,
   SkillFileEncodingSchema,
+  SkillGithubSyncIntervalSchema,
+  SkillSortBy,
+  SkillUsageStatisticsSchema,
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
@@ -77,25 +85,36 @@ import { isForeignKeyConstraintError } from "@/utils/db";
 
 /**
  * Shared fields identifying a GitHub skill source. Authentication is optional
- * and at most one method may be supplied: a transient PAT (`githubToken`, never
- * stored) or a reference to a stored GitHub App config (`githubAppConfigId`).
+ * and at most one method may be supplied: a transient one-time PAT
+ * (`githubToken`, never stored), a stored PAT (`githubPatId`, managed at
+ * /settings/github), or a stored GitHub App config (`githubAppConfigId`).
  */
 const githubSkillSourceShape = {
   repoUrl: z.string().min(1),
   path: z.string().optional(),
   githubToken: z.string().optional(),
   githubAppConfigId: z.string().uuid().optional(),
+  githubPatId: z.string().uuid().optional(),
 };
 
 function hasSingleGithubAuth(source: {
   githubToken?: string;
   githubAppConfigId?: string;
+  githubPatId?: string;
 }): boolean {
-  return !(source.githubToken && source.githubAppConfigId);
+  return (
+    [source.githubToken, source.githubAppConfigId, source.githubPatId].filter(
+      Boolean,
+    ).length <= 1
+  );
 }
 
+/** Usage analytics look back this far ("the last month"). */
+const USAGE_STATISTICS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 const singleGithubAuthError = {
-  message: "Provide either githubToken or githubAppConfigId, not both",
+  message:
+    "Provide at most one of githubToken, githubPatId, or githubAppConfigId",
   path: ["githubAppConfigId"],
 };
 
@@ -111,6 +130,11 @@ const SkillListItemSchema = SelectSkillSchema.extend({
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
   authorName: z.string().nullable(),
+  /**
+   * Distinct users the usage-event log attributes activations to. 0 when all
+   * recorded uses are unattributed or predate per-event tracking.
+   */
+  usageUserCount: z.number(),
 });
 
 /** A skill with its resource files and team assignments. */
@@ -222,7 +246,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Restrict results to skills visible from this agent's " +
               "environment (strict match, built-in skills exempt).",
           ),
-        }),
+        }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
         ),
@@ -230,7 +254,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, sourceRepo, forAgentId },
+        query: { limit, offset, search, sourceRepo, forAgentId, ...sorting },
         organizationId,
         user,
       },
@@ -268,6 +292,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          sorting,
         }),
         SkillModel.countByOrganization({
           organizationId,
@@ -286,11 +311,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .filter((id): id is string => id !== null),
         ),
       ];
-      const [fileCounts, teamsBySkill, authorNames] = await Promise.all([
-        SkillFileModel.countBySkillIds(skillIds),
-        SkillTeamModel.getTeamDetailsForSkills(skillIds),
-        UserModel.getNamesByIds(authorIds),
-      ]);
+      const [fileCounts, teamsBySkill, authorNames, usageUserCounts] =
+        await Promise.all([
+          SkillFileModel.countBySkillIds(skillIds),
+          SkillTeamModel.getTeamDetailsForSkills(skillIds),
+          UserModel.getNamesByIds(authorIds),
+          SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
+        ]);
 
       return reply.send({
         data: skills.map((skill) => ({
@@ -302,6 +329,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
             : null,
+          usageUserCount: usageUserCounts.get(skill.id) ?? 0,
         })),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
@@ -562,6 +590,44 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/skills/:id/usage-statistics",
+    {
+      schema: {
+        operationId: RouteId.GetSkillUsageStatistics,
+        description:
+          "Per-user activation counts for a skill over the last 30 days",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(SkillUsageStatisticsSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const skill = await findSkillOrThrow(id, organizationId);
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
+        userId: user.id,
+        skill,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      const since = new Date(Date.now() - USAGE_STATISTICS_WINDOW_MS);
+      return reply.send(
+        await SkillUsageEventModel.getUsageStatistics({
+          skillId: skill.id,
+          since,
+        }),
+      );
+    },
+  );
+
   fastify.put(
     "/api/skills/:id",
     {
@@ -587,6 +653,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+
+      // A GitHub-synced skill's content is owned by its source repo: reject
+      // manifest/file changes (Archestra-side settings — scope, teams,
+      // environment — stay editable below). Disconnecting the skill from
+      // GitHub makes it editable.
+      if (existing.githubSyncInterval !== null) {
+        assertSyncedSkillContentUnchanged({ existing, parsed, body });
+      }
 
       // Re-authorize and re-sync teams only when scope or team assignments
       // actually change. A content-only edit that echoes the existing teams
@@ -776,6 +850,99 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.patch(
+    "/api/skills/:id/github-sync",
+    {
+      schema: {
+        operationId: RouteId.UpdateSkillGithubSync,
+        description:
+          "Manage a GitHub-synced skill: change its pull frequency, trigger " +
+          "an immediate pull, or disconnect it from the GitHub source " +
+          "(interval null) — a disconnected skill keeps its content and " +
+          "provenance and becomes editable in the app.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        body: z
+          .object({
+            interval: SkillGithubSyncIntervalSchema.optional().describe(
+              "New pull frequency.",
+            ),
+            syncNow: z
+              .literal(true)
+              .optional()
+              .describe("Trigger an immediate pull from the source repo."),
+            disconnect: z
+              .literal(true)
+              .optional()
+              .describe(
+                "Disconnect the skill from its GitHub source: it keeps its " +
+                  "content and becomes editable in the app.",
+              ),
+          })
+          .refine(
+            (body) =>
+              [
+                body.interval !== undefined,
+                body.syncNow ?? false,
+                body.disconnect ?? false,
+              ].filter(Boolean).length === 1,
+            {
+              message:
+                "Pass exactly one of `interval`, `syncNow`, or `disconnect`",
+              path: ["interval"],
+            },
+          ),
+        response: constructResponseSchema(SkillDetailSchema),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      const skill = await findSkillOrThrow(id, organizationId);
+      // Scope-visibility first (404), before revealing sync state via a 400 —
+      // matching the reset route and the authorizeSkillModify contract.
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
+
+      if (skill.githubSyncInterval === null) {
+        throw new ApiError(
+          400,
+          "This skill is not synced from GitHub. Sync is chosen when " +
+            "importing from a repository.",
+        );
+      }
+
+      if (body.syncNow) {
+        // one pull at a time per skill — same in-flight guard as the
+        // scheduled check-due tick.
+        const active = await TaskModel.findActivePayloadValues(
+          "skill_github_sync",
+          "skillId",
+        );
+        if (!active.has(skill.id)) {
+          await taskQueueService.enqueue({
+            taskType: "skill_github_sync",
+            payload: { skillId: skill.id },
+          });
+        }
+        return reply.send(await loadSkillDetail(skill));
+      }
+
+      const updated = await SkillModel.setGithubSync(
+        id,
+        body.disconnect ? null : { interval: body.interval ?? "1d" },
+      );
+      if (!updated) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      logger.info(
+        { skillId: id, organizationId, interval: body.interval ?? null },
+        body.disconnect
+          ? "[Skills] Skill disconnected from GitHub source"
+          : "[Skills] GitHub sync frequency changed",
+      );
+      return reply.send(await loadSkillDetail(updated));
+    },
+  );
+
   fastify.post(
     "/api/skills/enable-defaults",
     {
@@ -862,6 +1029,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const githubToken = await resolveGithubImportToken({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
+        githubPatId: body.githubPatId,
         organizationId,
         userId: user.id,
       });
@@ -939,6 +1107,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const githubToken = await resolveGithubImportToken({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
+        githubPatId: body.githubPatId,
         organizationId,
         userId: user.id,
       });
@@ -976,8 +1145,24 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skillPaths: z.array(z.string()).min(1),
             scope: ResourceVisibilityScopeSchema.optional(),
             teamIds: z.array(z.string()).optional(),
+            sync: z
+              .object({ interval: SkillGithubSyncIntervalSchema })
+              .default({ interval: "1d" })
+              .describe(
+                "Pull schedule for the imported skills. Every import is " +
+                  "synced from the repo and read-only in the app until " +
+                  "disconnected. Defaults to daily.",
+              ),
           })
-          .refine(hasSingleGithubAuth, singleGithubAuthError),
+          .refine(hasSingleGithubAuth, singleGithubAuthError)
+          .refine((body) => !body.githubToken, {
+            message:
+              "Imports are always kept in sync, and a transient token is " +
+              "never stored, so scheduled pulls could not authenticate. " +
+              "Save the token or use a GitHub App configuration " +
+              "(Settings → GitHub), or import a public repository.",
+            path: ["githubToken"],
+          }),
         response: constructResponseSchema(
           z.object({
             created: z.array(SelectSkillSchema),
@@ -1014,6 +1199,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const githubToken = await resolveGithubImportToken({
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
+        githubPatId: body.githubPatId,
         organizationId,
         userId: user.id,
       });
@@ -1040,6 +1226,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               sourceRef: item.sourceRef,
               sourceCommit: item.sourceCommit,
               scope,
+              // every import is synced: record the schedule, tracking ref
+              // (null = default branch), and the stored credential scheduled
+              // pulls reuse (App config or saved PAT).
+              githubSyncInterval: body.sync.interval,
+              githubSyncRef: item.requestedRef,
+              githubAppConfigId: body.githubAppConfigId ?? null,
+              githubPatId: body.githubPatId ?? null,
             },
             files: item.files,
             teamIds,
@@ -1078,10 +1271,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // ===== Internal helpers =====
 
 /**
- * Assigning a skill to a restricted environment is gated by the same
- * environment:deploy-to-restricted permission the agent and MCP-catalog
- * assignment paths use (environment:admin implies it). Throws 403/404 if the
- * caller may not assign the environment.
+ * Assigning a skill to a restricted environment is gated by
+ * skill:deploy-to-restricted, mirroring the per-resource permissions the agent
+ * and MCP-catalog assignment paths use. Throws 403/404 if the caller may not
+ * assign the environment.
  */
 async function assertSkillEnvironmentAssignable(params: {
   userId: string;
@@ -1089,39 +1282,44 @@ async function assertSkillEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
-    userHasPermission(userId, organizationId, "environment", "admin"),
-    userHasPermission(
-      userId,
-      organizationId,
-      "environment",
-      "deploy-to-restricted",
-    ),
-  ]);
+  const hasSkillDeploy = await userHasPermission(
+    userId,
+    organizationId,
+    "skill",
+    "deploy-to-restricted",
+  );
   await assertCanAssignEnvironment({
     environmentId,
     organizationId,
-    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+    canDeployToRestricted: hasSkillDeploy,
   });
 }
 
 /**
  * Resolve the token a GitHub skill import authenticates with. A stored GitHub
  * App config (org-scoped, github.com only) is exchanged for a short-lived
- * installation token; otherwise the transient PAT (if any) is passed through.
+ * installation token; a stored PAT is read from the secret manager; otherwise
+ * the transient one-time PAT (if any) is passed through.
  */
 async function resolveGithubImportToken(params: {
   githubToken?: string;
   githubAppConfigId?: string;
+  githubPatId?: string;
   organizationId: string;
   userId: string;
 }): Promise<string | undefined> {
-  const { githubToken, githubAppConfigId, organizationId, userId } = params;
-  if (!githubAppConfigId) {
+  const {
+    githubToken,
+    githubAppConfigId,
+    githubPatId,
+    organizationId,
+    userId,
+  } = params;
+  if (!githubAppConfigId && !githubPatId) {
     return githubToken;
   }
 
-  // using a stored App config requires read access to GitHub App configs
+  // using a stored credential requires read access to GitHub credentials
   const allowed = await userHasPermission(
     userId,
     organizationId,
@@ -1129,52 +1327,54 @@ async function resolveGithubImportToken(params: {
     "read",
   );
   if (!allowed) {
-    throw new ApiError(
-      403,
-      "You do not have access to GitHub App configurations",
-    );
+    throw new ApiError(403, "You do not have access to GitHub credentials");
   }
 
-  const appConfig = await GithubAppConfigModel.findByIdForOrganization({
-    id: githubAppConfigId,
+  if (githubPatId) {
+    return resolveGithubPatToken({ githubPatId, organizationId });
+  }
+  return resolveGithubAppInstallationToken({
+    // hasSingleGithubAuth guarantees exactly one stored-credential id here
+    githubAppConfigId: githubAppConfigId as string,
     organizationId,
-  });
-  if (!appConfig) {
-    throw new ApiError(404, "GitHub App configuration not found");
-  }
-  if (!isGithubDotComUrl(appConfig.githubUrl)) {
-    throw new ApiError(
-      400,
-      "Skill import via GitHub App is only supported for github.com",
-    );
-  }
-
-  if (!appConfig.secretId) {
-    throw new ApiError(
-      400,
-      "GitHub App configuration has no stored private key",
-    );
-  }
-  const secret = await secretManager().getSecret(appConfig.secretId);
-  if (!secret) {
-    throw new ApiError(404, "GitHub App private key not found");
-  }
-  const privateKey =
-    ((secret.secret as Record<string, unknown>).apiToken as string) || "";
-
-  return resolveInstallationToken({
-    githubUrl: appConfig.githubUrl,
-    appId: appConfig.appId,
-    installationId: appConfig.installationId,
-    privateKey,
   });
 }
 
-function isGithubDotComUrl(url: string): boolean {
-  try {
-    return new URL(url).host === "api.github.com";
-  } catch {
-    return false;
+/**
+ * Reject a PUT that would change a GitHub-synced skill's content. The manifest
+ * must parse to exactly the stored fields and `files` must be omitted — an
+ * echo of the current manifest (how the editor submits settings-only changes)
+ * passes; any drift means an attempted edit of repo-owned content.
+ */
+function assertSyncedSkillContentUnchanged(params: {
+  existing: Skill;
+  parsed: ReturnType<typeof parseSkillManifest>;
+  body: { files?: unknown; allowedTools?: string[] };
+}): void {
+  const { existing, parsed, body } = params;
+  const next = {
+    ...toSkillInsertFields(parsed),
+    allowedTools: resolveAllowedTools(body, parsed),
+  };
+  const scalarChanged = (
+    [
+      "name",
+      "description",
+      "content",
+      "license",
+      "compatibility",
+      "allowedTools",
+      "agentName",
+      "templated",
+    ] as const
+  ).some((field) => next[field] !== existing[field]);
+  const metadataChanged =
+    JSON.stringify(next.metadata) !== JSON.stringify(existing.metadata);
+  if (scalarChanged || metadataChanged || body.files !== undefined) {
+    throw new ApiError(
+      409,
+      "This skill is synced from GitHub and its content is read-only. Disconnect it from the GitHub source to edit it in the app.",
+    );
   }
 }
 

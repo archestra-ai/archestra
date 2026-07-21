@@ -5,6 +5,7 @@ import db, { schema } from "@/database";
 import { InteractionModel, ModelModel } from "@/models";
 import { metrics } from "@/observability";
 import {
+  buildEmbeddingInteraction,
   getProviderChatInteractionType,
   withKbObservability,
 } from "./kb-interaction";
@@ -41,6 +42,41 @@ async function kbInteractions(source: InteractionSource) {
 }
 
 // ===== Tests =====
+
+describe("buildEmbeddingInteraction", () => {
+  const responseWith = (embedding: number[]) => ({
+    object: "list",
+    data: [{ object: "embedding", embedding, index: 0 }],
+    model: "text-embedding-3-small",
+    usage: { prompt_tokens: 1, total_tokens: 1 },
+  });
+
+  const loggedData = (embedding: number[]) =>
+    (
+      buildEmbeddingInteraction({
+        model: "text-embedding-3-small",
+        input: "hello",
+        dimensions: 1536,
+        response: responseWith(embedding),
+      }).response as {
+        data: Array<{ embedding: number[]; truncatedFrom?: number }>;
+      }
+    ).data[0];
+
+  it("stores a truncated preview plus the full length, not the whole vector", () => {
+    const fullVector = Array.from({ length: 1536 }, (_, i) => i / 1000);
+    const item = loggedData(fullVector);
+    expect(item.embedding).toEqual(fullVector.slice(0, 8));
+    expect(item.embedding.length).toBeLessThan(fullVector.length);
+    expect(item.truncatedFrom).toBe(1536);
+  });
+
+  it("keeps an empty vector empty, with no truncation marker", () => {
+    const item = loggedData([]);
+    expect(item.embedding).toEqual([]);
+    expect(item.truncatedFrom).toBeUndefined();
+  });
+});
 
 describe("getProviderChatInteractionType", () => {
   it("maps standard chat providers to chatCompletions", () => {

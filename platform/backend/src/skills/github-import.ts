@@ -94,6 +94,12 @@ interface ImportedSkill {
   sourceRef: string;
   /** Commit SHA the snapshot was taken at. */
   sourceCommit: string;
+  /**
+   * The ref the caller asked for (branch/tag from the URL), or null when the
+   * repo's default branch (HEAD) was used. Unlike `sourceRef` this never pins
+   * a resolved SHA, so it is the tracking target for a recurring sync.
+   */
+  requestedRef: string | null;
 }
 
 interface RepoLocation {
@@ -333,6 +339,7 @@ export async function importSkills(params: {
       skippedFiles: plan.skippedFiles,
       sourceRef: `${location.owner}/${location.repo}@${ref}:${plan.skillPath}`,
       sourceCommit: snapshot.commitSha,
+      requestedRef: location.ref,
     });
   }
 

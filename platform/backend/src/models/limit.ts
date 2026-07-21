@@ -668,6 +668,7 @@ class LimitModel {
       mcpServerName: row.mcpServerName ?? null,
       toolName: row.toolName ?? null,
       model: row.model ?? null,
+      cleanupInterval: row.cleanupInterval ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

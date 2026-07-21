@@ -228,7 +228,9 @@
   }
 }
 
-button, div[role="menuitem"] {
+/* Menu items get cursor-pointer in ui/dropdown-menu.tsx itself, which also
+   covers asChild items that render as anchors instead of divs. */
+button {
   cursor: pointer;
 }
 button:disabled {

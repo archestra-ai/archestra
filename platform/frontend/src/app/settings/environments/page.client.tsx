@@ -12,7 +12,7 @@ import { useSetSettingsAction } from "../layout";
 export default function EnvironmentsPageClient() {
   const setActionButton = useSetSettingsAction();
   const { data: canEdit } = useHasPermissions({
-    environment: ["admin"],
+    environment: ["update"],
   });
   const router = useRouter();
   const pathname = usePathname();
@@ -30,7 +30,7 @@ export default function EnvironmentsPageClient() {
   useEffect(() => {
     setActionButton(
       <PermissionButton
-        permissions={{ environment: ["admin"] }}
+        permissions={{ environment: ["create"] }}
         onClick={openCreate}
       >
         <Plus className="h-4 w-4" />

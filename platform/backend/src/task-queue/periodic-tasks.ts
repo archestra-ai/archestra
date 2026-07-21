@@ -26,6 +26,14 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 60,
     payload: {},
   },
+  // Enqueues skill_github_sync for GitHub-synced skills whose per-skill
+  // interval (15m/1h/1d) has elapsed. 60s tick keeps the finest interval
+  // within a minute of schedule.
+  {
+    taskType: "check_due_skill_github_syncs",
+    intervalSeconds: 60,
+    payload: {},
+  },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
 ];
 

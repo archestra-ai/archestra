@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@archestra/shared";
 import { EnvironmentModel, SkillModel } from "@/models";
 import { expect, test } from "@/test";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { injectSkillActivation } from "./inject-skill-activation";
 
 async function seedSkill(
@@ -62,6 +63,10 @@ test("prepends the skill activation block to the last user message", async ({
   expect(text).toContain("summarize this paper");
   // the original message is left untouched for persistence / display
   expect(messages[0].parts?.[0]?.text).toBe("summarize this paper");
+
+  // the activation counts one use
+  await drainBackgroundWork();
+  expect((await SkillModel.findById(skill.id))?.usageCount).toBe(1);
 });
 
 test("ignores a skill that belongs to another organization", async ({

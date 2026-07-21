@@ -67,7 +67,10 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (server) serverAccessCache.set(cacheKey, server);
       }
       if (!server || !server.catalogId) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(
+          403,
+          "You don't have access to this MCP server, or it doesn't exist.",
+        );
       }
       const { catalogId } = server;
 

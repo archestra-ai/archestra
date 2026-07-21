@@ -283,6 +283,30 @@ export function McpServerCard({
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   })();
 
+  // Auto-mode agents (implicit access to all tools) can reach this server
+  // without an explicit assignment. The set is org-wide, so the same list rides
+  // on every install of this catalog item — dedupe across them.
+  const autoModeAgents = (() => {
+    const byId = new Map<string, { id: string; name: string }>();
+    for (const server of allServersForCatalog) {
+      for (const agent of server.autoModeAgents ?? []) {
+        byId.set(agent.id, agent);
+      }
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  // An auto-mode agent may also carry an explicit assignment to this server
+  // (a legacy pin, or "Auto except some"), which would otherwise list it in
+  // both sections. An explicit assignment is the more specific fact, so show it
+  // once — under assigned tools — and drop it from the auto-mode list. The
+  // badge counts the distinct agents across both sections.
+  const assignedAgentIds = new Set(assignedAgents.map((agent) => agent.id));
+  const autoModeOnlyAgents = autoModeAgents.filter(
+    (agent) => !assignedAgentIds.has(agent.id),
+  );
+  const totalAgentCount = assignedAgents.length + autoModeOnlyAgents.length;
+
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
     const install = personalServersForCatalog
@@ -558,7 +582,7 @@ export function McpServerCard({
   const hasCompactInfoContent =
     showAuthorAvatar ||
     toolsCount > 0 ||
-    assignedAgents.length > 0 ||
+    totalAgentCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
     (!isBuiltinVariant &&
       (connectionAvatars.length > 0 ||
@@ -600,7 +624,7 @@ export function McpServerCard({
           <div className="h-4 w-px bg-border" />
         </>
       )}
-      {assignedAgents.length > 0 && (
+      {totalAgentCount > 0 && (
         <>
           <TooltipProvider>
             <Tooltip>
@@ -608,24 +632,48 @@ export function McpServerCard({
                 <div className="flex items-center gap-1 cursor-help">
                   <Bot className="h-3.5 w-3.5" />
                   <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
-                    {assignedAgents.length}
+                    {totalAgentCount}
                   </span>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="font-medium">
-                  Used by {assignedAgents.length}{" "}
-                  {assignedAgents.length === 1 ? "agent" : "agents"} (assigned
-                  tools)
-                </p>
-                <div className="mt-1 space-y-0.5">
-                  {assignedAgents.slice(0, 8).map((agent) => (
-                    <div key={agent.id}>{agent.name}</div>
-                  ))}
-                  {assignedAgents.length > 8 && (
-                    <div>+{assignedAgents.length - 8} more</div>
-                  )}
-                </div>
+                {assignedAgents.length > 0 && (
+                  <>
+                    <p className="font-medium">
+                      Used by {assignedAgents.length}{" "}
+                      {assignedAgents.length === 1 ? "agent" : "agents"}{" "}
+                      (assigned tools)
+                    </p>
+                    <div className="mt-1 space-y-0.5">
+                      {assignedAgents.slice(0, 8).map((agent) => (
+                        <div key={agent.id}>{agent.name}</div>
+                      ))}
+                      {assignedAgents.length > 8 && (
+                        <div>+{assignedAgents.length - 8} more</div>
+                      )}
+                    </div>
+                  </>
+                )}
+                {assignedAgents.length > 0 && autoModeOnlyAgents.length > 0 && (
+                  <div className="my-1.5 h-px bg-border" />
+                )}
+                {autoModeOnlyAgents.length > 0 && (
+                  <>
+                    <p className="font-medium">
+                      {autoModeOnlyAgents.length} auto-mode{" "}
+                      {autoModeOnlyAgents.length === 1 ? "agent" : "agents"}{" "}
+                      (access all tools)
+                    </p>
+                    <div className="mt-1 space-y-0.5">
+                      {autoModeOnlyAgents.slice(0, 8).map((agent) => (
+                        <div key={agent.id}>{agent.name}</div>
+                      ))}
+                      {autoModeOnlyAgents.length > 8 && (
+                        <div>+{autoModeOnlyAgents.length - 8} more</div>
+                      )}
+                    </div>
+                  </>
+                )}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

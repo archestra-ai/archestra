@@ -1,15 +1,11 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
-import { CallPolicyToggle } from "@/components/call-policy-toggle";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResultPolicyToggle } from "@/components/result-policy-toggle";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -25,6 +21,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOrgScopedAgents } from "@/lib/agent.query";
+import {
+  APPS_HACKATHON_DATE_RANGE_LABEL,
+  APPS_HACKATHON_REGISTER_URL,
+  APPS_HACKATHON_SETTING_ANCHOR,
+  useAppsHackathonOffered,
+} from "@/lib/app-session-recording/apps-hackathon";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -33,7 +35,6 @@ import {
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
-import type { CallPolicyAction, ResultPolicyAction } from "@/lib/policy.utils";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -58,22 +59,21 @@ export default function AgentSettingsPage() {
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
-  const [defaultInvocationPolicy, setDefaultInvocationPolicy] =
-    useState<CallPolicyAction>("allow_when_context_is_untrusted");
-  const [defaultResultPolicy, setDefaultResultPolicy] =
-    useState<ResultPolicyAction>("mark_as_untrusted");
+  const [hackathonRecorder, setHackathonRecorder] =
+    useState<FileUploadsEnabled>("enabled");
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
     defaultModel: "",
     defaultAgentId: "",
   });
-  const savedSecurityStateRef = useRef({
-    fileUploads: "enabled" as FileUploadsEnabled,
-    defaultInvocationPolicy:
-      "allow_when_context_is_untrusted" as CallPolicyAction,
-    defaultResultPolicy: "mark_as_untrusted" as ResultPolicyAction,
-  });
+  const savedFileUploadsRef = useRef<FileUploadsEnabled>("enabled");
+  const savedHackathonRecorderRef = useRef<FileUploadsEnabled>("enabled");
+  // Only offered while this deployment carries the hackathon and it is still
+  // running; an enterprise deployment never does, so there is nothing here to
+  // switch on. Past the closing date the whole section goes rather than
+  // lingering as a switch that no longer changes anything.
+  const hackathonOffered = useAppsHackathonOffered();
 
   const {
     data: allModels,
@@ -94,12 +94,12 @@ export default function AgentSettingsPage() {
   const isLoadError = isApiKeysLoadError || isModelsLoadError;
 
   const updateAgentMutation = useUpdateAgentSettings(
-    "Agent settings updated",
-    "Failed to update agent settings",
+    "Chat settings updated",
+    "Failed to update chat settings",
   );
   const updateSecurityMutation = useUpdateSecuritySettings(
-    "Agent settings updated",
-    "Failed to update agent settings",
+    "Chat settings updated",
+    "Failed to update chat settings",
   );
 
   useEffect(() => {
@@ -110,26 +110,17 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(state.selectedApiKeyId);
     setDefaultModel(state.defaultModel);
     setDefaultAgentId(state.defaultAgentId);
-    setFileUploads(
-      (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
-    );
-    setDefaultInvocationPolicy(
-      organization.defaultDiscoveredToolInvocationPolicy ??
-        "allow_when_context_is_untrusted",
-    );
-    setDefaultResultPolicy(
-      organization.defaultDiscoveredToolResultPolicy ?? "mark_as_untrusted",
-    );
+    const savedFileUploads: FileUploadsEnabled =
+      (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled";
+    setFileUploads(savedFileUploads);
+    const savedHackathonRecorder: FileUploadsEnabled =
+      (organization.appsHackathonRecorderEnabled ?? true)
+        ? "enabled"
+        : "disabled";
+    setHackathonRecorder(savedHackathonRecorder);
     savedStateRef.current = state;
-    savedSecurityStateRef.current = {
-      fileUploads:
-        (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
-      defaultInvocationPolicy:
-        organization.defaultDiscoveredToolInvocationPolicy ??
-        "allow_when_context_is_untrusted",
-      defaultResultPolicy:
-        organization.defaultDiscoveredToolResultPolicy ?? "mark_as_untrusted",
-    };
+    savedFileUploadsRef.current = savedFileUploads;
+    savedHackathonRecorderRef.current = savedHackathonRecorder;
     initializedRef.current = true;
   }, [organization, apiKeys]);
 
@@ -143,10 +134,8 @@ export default function AgentSettingsPage() {
 
   const changes = detectChanges(localState, savedStateRef.current);
   const securityHasChanges =
-    fileUploads !== savedSecurityStateRef.current.fileUploads ||
-    defaultInvocationPolicy !==
-      savedSecurityStateRef.current.defaultInvocationPolicy ||
-    defaultResultPolicy !== savedSecurityStateRef.current.defaultResultPolicy;
+    fileUploads !== savedFileUploadsRef.current ||
+    hackathonRecorder !== savedHackathonRecorderRef.current;
 
   const handleSave = async () => {
     if (!apiKeys) return;
@@ -160,14 +149,16 @@ export default function AgentSettingsPage() {
     if (securityHasChanges) {
       await updateSecurityMutation.mutateAsync({
         allowChatFileUploads: fileUploads === "enabled",
-        defaultDiscoveredToolInvocationPolicy: defaultInvocationPolicy,
-        defaultDiscoveredToolResultPolicy: defaultResultPolicy,
+        // Only sent when the section was actually shown. Otherwise every
+        // unrelated save here would carry a value for a setting this admin was
+        // never offered — and on a deployment without the hackathon that value
+        // is a default, not a decision.
+        ...(hackathonOffered
+          ? { appsHackathonRecorderEnabled: hackathonRecorder === "enabled" }
+          : {}),
       });
-      savedSecurityStateRef.current = {
-        fileUploads,
-        defaultInvocationPolicy,
-        defaultResultPolicy,
-      };
+      savedFileUploadsRef.current = fileUploads;
+      savedHackathonRecorderRef.current = hackathonRecorder;
     }
 
     initializedRef.current = false;
@@ -178,11 +169,8 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(saved.selectedApiKeyId);
     setDefaultModel(saved.defaultModel);
     setDefaultAgentId(saved.defaultAgentId);
-    setFileUploads(savedSecurityStateRef.current.fileUploads);
-    setDefaultInvocationPolicy(
-      savedSecurityStateRef.current.defaultInvocationPolicy,
-    );
-    setDefaultResultPolicy(savedSecurityStateRef.current.defaultResultPolicy);
+    setFileUploads(savedFileUploadsRef.current);
+    setHackathonRecorder(savedHackathonRecorderRef.current);
   };
 
   const modelItems = useMemo(() => {
@@ -268,7 +256,7 @@ export default function AgentSettingsPage() {
                     triggerVariant="select"
                     triggerClassName="w-80"
                     popoverClassName="w-80"
-                    emptyTriggerLabel="Select API key..."
+                    emptyTriggerLabel="Select provider key..."
                   />
                   <LlmModelSearchableSelect
                     value={defaultModel}
@@ -277,7 +265,7 @@ export default function AgentSettingsPage() {
                     freeFilterable={canFilterFreeModels}
                     placeholder={
                       !selectedApiKeyId
-                        ? "Select API key first..."
+                        ? "Select provider key first..."
                         : modelsPending
                           ? "Loading models..."
                           : "Select model..."
@@ -339,79 +327,6 @@ export default function AgentSettingsPage() {
         }
       />
       <SettingsBlock
-        title="Default Guardrails for MCP Tools"
-        description={
-          <>
-            Every new tool your agents use — whether discovered through the LLM
-            Proxy or added from an MCP server — starts with these guardrails.{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformAiToolGuardrails)}
-              className="text-primary hover:underline"
-              showIcon={false}
-            >
-              Learn how guardrails work.
-            </ExternalDocsLink>
-          </>
-        }
-        control={null}
-        notice={
-          <span className="text-muted-foreground">
-            Existing tools keep their policies; adjust any tool under{" "}
-            <Link
-              href="/mcp/tool-guardrails"
-              className="text-primary hover:underline"
-            >
-              Guardrails
-            </Link>
-            .
-          </span>
-        }
-      >
-        <WithPermissions
-          permissions={{ agentSettings: ["update"] }}
-          noPermissionHandle="tooltip"
-        >
-          {({ hasPermission }) => (
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">Call Policy</p>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    This policy controls whether a tool may run in the current
-                    context.
-                  </p>
-                </div>
-                <div className="flex w-[150px] shrink-0 justify-start">
-                  <CallPolicyToggle
-                    size="sm"
-                    value={defaultInvocationPolicy}
-                    onChange={setDefaultInvocationPolicy}
-                    disabled={isSaving || !hasPermission}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">Results are</p>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    This policy controls how tool output is treated after a tool
-                    runs.
-                  </p>
-                </div>
-                <div className="flex w-[150px] shrink-0 justify-start">
-                  <ResultPolicyToggle
-                    size="sm"
-                    value={defaultResultPolicy}
-                    onChange={setDefaultResultPolicy}
-                    disabled={isSaving || !hasPermission}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </WithPermissions>
-      </SettingsBlock>
-      <SettingsBlock
         title="Chat File Uploads"
         description={`Allow users to upload files in the ${appName} chat UI.`}
         control={
@@ -445,6 +360,51 @@ export default function AgentSettingsPage() {
           </span>
         }
       />
+      {hackathonOffered && (
+        <SettingsBlock
+          id={APPS_HACKATHON_SETTING_ANCHOR}
+          title="Apps Hackathon Recorder"
+          description={
+            <>
+              Show the session recorder control panel in chat composer to
+              participate in Archestra Apps Hackathon{" "}
+              {APPS_HACKATHON_DATE_RANGE_LABEL}.{" "}
+              <a
+                href={APPS_HACKATHON_REGISTER_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                Learn more.
+              </a>
+            </>
+          }
+          control={
+            <WithPermissions
+              permissions={{ agentSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <Select
+                  value={hackathonRecorder}
+                  onValueChange={(value: FileUploadsEnabled) =>
+                    setHackathonRecorder(value)
+                  }
+                  disabled={isSaving || !hasPermission}
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="enabled">Enabled</SelectItem>
+                    <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </WithPermissions>
+          }
+        />
+      )}
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={selectedApiKeyId !== "" && defaultModel === ""}

@@ -402,8 +402,13 @@ export default function StatisticsPage() {
       label: formatTimestamp(point.timestamp),
       nonOptimized: point.baselineCost,
       actual: point.actualCost,
+      subscription: point.subscriptionCost,
     }));
   }, [costSavingsData, formatTimestamp]);
+
+  // Whether any subscription-covered (unbilled) usage exists in the window, so
+  // the extra series/legend only appears when it's relevant.
+  const hasSubscriptionCost = (costSavingsData?.totalSubscriptionCost ?? 0) > 0;
 
   const costSavingsChartConfig: ChartConfig = {
     nonOptimized: {
@@ -411,9 +416,17 @@ export default function StatisticsPage() {
       color: "var(--chart-4)",
     },
     actual: {
-      label: "Actual Cost",
+      label: "Actual Cost (Billed)",
       color: "var(--chart-2)",
     },
+    ...(hasSubscriptionCost
+      ? {
+          subscription: {
+            label: "Subscription (Not Billed)",
+            color: "var(--chart-5)",
+          },
+        }
+      : {}),
   };
 
   // Savings breakdown chart data
@@ -583,6 +596,21 @@ export default function StatisticsPage() {
                   dot={{ strokeWidth: 0, r: 3, fill: "var(--color-actual)" }}
                   activeDot={{ strokeWidth: 0, r: 5 }}
                 />
+                {hasSubscriptionCost && (
+                  <Line
+                    dataKey="subscription"
+                    type="monotone"
+                    stroke="var(--color-subscription)"
+                    strokeWidth={2}
+                    strokeDasharray="4 4"
+                    dot={{
+                      strokeWidth: 0,
+                      r: 3,
+                      fill: "var(--color-subscription)",
+                    }}
+                    activeDot={{ strokeWidth: 0, r: 5 }}
+                  />
+                )}
               </LineChart>
             </ChartContainerWrapper>
           </CardContent>

@@ -1575,6 +1575,7 @@ export function AgentDialog({
                       <EnvironmentSelector
                         value={environmentId ?? null}
                         onChange={setEnvironmentId}
+                        resource={getResourceForAgentType(agentType)}
                         helpText={environmentHelpText}
                       />
                     )}

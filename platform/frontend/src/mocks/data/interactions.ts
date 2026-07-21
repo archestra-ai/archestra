@@ -44,6 +44,8 @@ export function makeSessionSummary(
     totalCacheReadTokens: 0,
     totalCacheWriteTokens: 0,
     totalCost: "0.01",
+    totalBilledCost: "0.01",
+    totalSubscriptionCost: null,
     totalBaselineCost: "0.01",
     totalToonCostSavings: null,
     totalCacheSavings: null,
@@ -85,6 +87,7 @@ export function makeInteraction(
     environmentId: null,
     sessionId: "test-session-id",
     sessionSource: null,
+    billingMode: "metered",
     authenticatedAppId: null,
     authenticatedAppName: null,
     request: {

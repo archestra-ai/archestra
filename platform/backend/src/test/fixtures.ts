@@ -881,6 +881,9 @@ async function makeInteraction(
       | "baselineCost"
       | "toonCostSavings"
       | "cacheSavings"
+      | "billingMode"
+      | "sessionId"
+      | "cacheReadTokens"
     >
   > = {},
 ) {

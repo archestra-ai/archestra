@@ -8,6 +8,7 @@
 import {
   ApiError,
   ArchestraInternalErrorCode,
+  type BillingMode,
   type InteractionSource,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
@@ -21,9 +22,9 @@ import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
 import { getTokenizer } from "@/tokenizers";
 import type {
-  Agent,
   CommonMcpToolDefinition,
   DualLlmAnalysis,
+  GatewayAgent,
   InsertInteraction,
   InteractionAuthMethod,
   InteractionRequest,
@@ -215,9 +216,10 @@ export function applyInputTokenFallback(params: {
  * Pure function — callers handle `InteractionModel.create()` and error handling.
  */
 export function buildInteractionRecord(params: {
-  agent: Agent;
+  agent: GatewayAgent;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
+  billingMode: BillingMode;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -252,6 +254,7 @@ export function buildInteractionRecord(params: {
     profileId: params.agent.id,
     externalAgentId: params.externalAgentId,
     authMethod: params.authMethod,
+    billingMode: params.billingMode,
     authenticatedAppId: params.authenticatedApp?.id,
     authenticatedAppName: params.authenticatedApp?.name,
     executionId: params.executionId,
@@ -294,7 +297,7 @@ export function buildInteractionRecord(params: {
 export function recordBlockedToolCallMetrics(params: {
   allToolCallNames: string[];
   reason: string;
-  agent: Agent;
+  agent: GatewayAgent;
   teams?: SpanTeamInfo[];
   userTeams?: SpanTeamInfo[];
   sessionId?: string | null;

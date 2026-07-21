@@ -22,7 +22,7 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "j
 url = "2"
 percent-encoding = "2"
 jsonschema = "0.29"
-rmcp = { version = "1.7", features = ["server", "macros", "transport-streamable-http-server"] }
+rmcp = { version = "2.2", features = ["server", "macros", "transport-streamable-http-server"] }
 axum = "0.8"
 nix = { version = "0.31", features = ["process", "signal"] }
 indicatif = "0.18"

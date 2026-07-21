@@ -377,7 +377,17 @@ export class TaskQueueService {
           if (connectorRunId) {
             try {
               const { ConnectorRunModel } = await import("@/models");
-              await ConnectorRunModel.completeBatch(connectorRunId);
+              // Record the failure on the run, not just advance the batch —
+              // otherwise a dead-lettered batch finalizes the run as "success"
+              // and hides incomplete ingestion.
+              const documentIds =
+                (payload.documentIds as string[] | undefined) ?? [];
+              await ConnectorRunModel.completeBatch(connectorRunId, {
+                failedItems: documentIds.length,
+                error:
+                  errorMessage ||
+                  "Embedding task failed after exhausting retries.",
+              });
             } catch (batchError) {
               logger.error(
                 {

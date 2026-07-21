@@ -1,4 +1,5 @@
 import {
+  BillingModeSchema,
   InteractionSourceSchema,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
@@ -86,9 +87,29 @@ export const InteractionRequestSchema = z.union([
   Azure.API.ResponsesRequestSchema,
 ]);
 
+/**
+ * Embedding interactions are logged with a truncated vector preview (see
+ * `buildEmbeddingInteraction`): each vector holds only its first few values plus
+ * `truncatedFrom` = the full length. This interaction-only schema permits that
+ * marker (on both the write and read sides) so it survives read-back
+ * serialization, without polluting the canonical OpenAI embedding response
+ * contract used for live proxy responses.
+ */
+const EmbeddingInteractionResponseSchema =
+  OpenAi.API.EmbeddingResponseSchema.extend({
+    data: z.array(
+      z.object({
+        object: z.literal("embedding"),
+        embedding: z.array(z.number()),
+        index: z.number(),
+        truncatedFrom: z.number().optional(),
+      }),
+    ),
+  });
+
 export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
-  OpenAi.API.EmbeddingResponseSchema,
+  EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
   Anthropic.API.MessagesResponseSchema,
   Bedrock.API.ConverseResponseSchema,
@@ -126,7 +147,12 @@ const extendedFields = {
  */
 const BaseSelectInteractionSchema = createSelectSchema(
   schema.interactionsTable,
-  extendedFields,
+  {
+    ...extendedFields,
+    // Required on read: the column is NOT NULL, so every row carries a concrete
+    // BillingMode. (The default override belongs on the insert schema only.)
+    billingMode: BillingModeSchema,
+  },
 );
 
 /**
@@ -214,7 +240,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
   }),
   // Gemini embeddings are persisted through the OpenAI-compatible embedding
   // client, so they share OpenAI's embedding request/response shape.
@@ -224,7 +250,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
+  }),
+  // Bedrock (Titan) embeddings are normalized to the OpenAI embedding shape.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["bedrock:embeddings"]),
+    request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(EmbeddingInteractionResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),
@@ -477,6 +512,9 @@ export const InsertInteractionSchema = createInsertSchema(
   schema.interactionsTable,
   {
     ...extendedFields,
+    // Optional on write: the column has a DB default ("metered"), so callers may
+    // omit it. The proxy write path sets it explicitly (buildInteractionRecord).
+    billingMode: BillingModeSchema.optional(),
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),
@@ -521,7 +559,12 @@ export const SessionSummarySchema = z.object({
   totalOutputTokens: z.number(),
   totalCacheReadTokens: z.number(),
   totalCacheWriteTokens: z.number(),
+  /** Full list-price estimate for the session (all rows, regardless of billing mode). */
   totalCost: z.string().nullable(),
+  /** Billed spend: list-price `cost` of metered rows only (null when none). */
+  totalBilledCost: z.string().nullable(),
+  /** Would-be list-price cost of subscription-covered rows (null when none). */
+  totalSubscriptionCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
   totalToonCostSavings: z.string().nullable(),
   totalCacheSavings: z.string().nullable(),

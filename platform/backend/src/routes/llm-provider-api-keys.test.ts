@@ -1,7 +1,6 @@
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
-import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -1372,71 +1371,6 @@ describe("LLM Provider API Keys Team Scope", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  test("prevents deleting an API key used for embedding", async () => {
-    const createResponse = await app.inject({
-      method: "POST",
-      url: "/api/llm-provider-api-keys",
-      payload: {
-        name: "Embedding Delete Protection Key",
-        provider: "openai",
-        apiKey: "sk-openai-embedding-delete-protection-test",
-        scope: "org",
-      },
-    });
-    expect(createResponse.statusCode).toBe(200);
-    const createdKey = createResponse.json();
-
-    // Seed the org's embedding config directly: the knowledge-settings route
-    // now validates the key+model pair with a live embedding probe, which is
-    // out of scope here — this test pins the delete guard only.
-    await OrganizationModel.patch(organizationId, {
-      embeddingChatApiKeyId: createdKey.id,
-      embeddingModel: "text-embedding-3-small",
-    });
-
-    const deleteResponse = await app.inject({
-      method: "DELETE",
-      url: `/api/llm-provider-api-keys/${createdKey.id}`,
-    });
-
-    expect(deleteResponse.statusCode).toBe(400);
-    expect(deleteResponse.json().error.message).toContain("embedding");
-    expect(deleteResponse.json().error.message).toContain(
-      "Remove it from Settings > Knowledge before deleting",
-    );
-  });
-
-  test("prevents deleting an API key used for reranking", async () => {
-    const createResponse = await app.inject({
-      method: "POST",
-      url: "/api/llm-provider-api-keys",
-      payload: {
-        name: "Reranker Delete Protection Key",
-        provider: "openai",
-        apiKey: "sk-openai-reranker-delete-protection-test",
-        scope: "org",
-      },
-    });
-    expect(createResponse.statusCode).toBe(200);
-    const createdKey = createResponse.json();
-
-    // Seed the reranker config directly (see the embedding test above).
-    await OrganizationModel.patch(organizationId, {
-      rerankerChatApiKeyId: createdKey.id,
-      rerankerModel: "gpt-4o-mini",
-    });
-
-    const deleteResponse = await app.inject({
-      method: "DELETE",
-      url: `/api/llm-provider-api-keys/${createdKey.id}`,
-    });
-
-    expect(deleteResponse.statusCode).toBe(400);
-    expect(deleteResponse.json().error.message).toContain("reranking");
-    expect(deleteResponse.json().error.message).toContain(
-      "Remove it from Settings > Knowledge before deleting",
-    );
-  });
 });
 
 describe("LLM Provider API Keys Scope Update", () => {

@@ -101,8 +101,10 @@ class OpenAiCodexResponsesClient {
 /**
  * Applies the mandatory Codex-backend transforms to an inbound Responses request
  * without reshaping the caller's content: force `store:false`/`stream:true`, add
- * encrypted reasoning to `include`, and supply the Codex persona only when the
- * caller (e.g. a non-Codex client) omitted its own instructions.
+ * encrypted reasoning to `include`, drop `max_output_tokens` (the Codex backend
+ * rejects it with 400 "Unsupported parameter" — the chat⇄responses translator
+ * path likewise never forwards an output cap), and supply the Codex persona only
+ * when the caller (e.g. a non-Codex client) omitted its own instructions.
  */
 function applyCodexResponsesTransforms(
   request: ResponsesRequest & { stream?: boolean },
@@ -114,8 +116,10 @@ function applyCodexResponsesTransforms(
   const existingInclude = Array.isArray(loose.include)
     ? (loose.include as string[])
     : [];
+  const { max_output_tokens: _maxOutputTokens, ...rest } =
+    request as unknown as Record<string, unknown>;
   return {
-    ...request,
+    ...rest,
     store: false,
     stream: true,
     include: Array.from(

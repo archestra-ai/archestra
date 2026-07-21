@@ -272,6 +272,10 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
 export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
   openai: [
+    // Sol is the 5.6 flagship tier; Terra the balanced one. Luna (nano tier)
+    // is deliberately absent so it is never marked best over a 5.5 model.
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
     "gpt-5.5-pro",
     "gpt-5.5",
     "gpt-5.4",
@@ -392,15 +396,25 @@ export const CACHE_PRICE_MULTIPLIERS: Partial<
 };
 
 /**
- * True for OpenAI "pro" reasoning models, which OpenAI serves only through the
- * Responses API (`/v1/responses`). Calling them on `/v1/chat/completions`
- * returns `api_not_found_error` ("not a chat model"), so the chat client must
- * route these models to the Responses transport instead. "pro" is matched as a
- * hyphen/slash-delimited token, so dated snapshots (`gpt-5.5-pro-2026-01-01`)
- * are covered.
+ * True for OpenAI models served only (or only fully) through the Responses API
+ * (`/v1/responses`), so the chat client must route them to the Responses
+ * transport instead of `/v1/chat/completions`:
+ *
+ * - "pro" reasoning models: `/chat/completions` returns `api_not_found_error`
+ *   ("not a chat model"). "pro" is matched as a hyphen/slash-delimited token,
+ *   so dated snapshots (`gpt-5.5-pro-2026-01-01`) are covered.
+ * - the gpt-5.6 family (sol/terra/luna): reasoning is on by default and
+ *   `/chat/completions` rejects function tools with any reasoning effort
+ *   (400 api_validation_error: "use /v1/responses or set reasoning_effort to
+ *   'none'"). Disabling reasoning would degrade the model, so route the whole
+ *   family to Responses. "gpt-5.6" is matched up to a `-`/`.`/end boundary so
+ *   tiers and dated snapshots are covered without matching e.g. `gpt-5.61`.
  */
 export function requiresOpenAiResponsesApi(modelId: string): boolean {
-  return /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId);
+  return (
+    /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
+    /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId)
+  );
 }
 
 /**

@@ -58,6 +58,10 @@ overrides:
   express: 5.2.0
   express-rate-limit: 8.3.1
   jws: 4.0.1
+  # CVE-2026-59869 (HIGH, uncontrolled resource consumption) affects >=4.0.0,
+  # fixed in 4.3.0. Bounded to <5 so consumers expecting the 4.x API aren't
+  # force-jumped onto the js-yaml 5 major.
+  js-yaml: '>=4.3.0 <5'
   qs: 6.15.2
   d3-path: 3.1.0
   # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25.
@@ -69,7 +73,8 @@ overrides:
   samlify: '>=2.13.0'
   fast-uri: '>=3.1.2'
   ajv: 8.18.0
-  axios: '>=1.15.2'
+  # GHSA-gcfj-64vw-6mp9 (HIGH, prototype pollution) affects >=1.15.2, fixed in 1.18.0.
+  axios: '>=1.18.0'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
   # CVE-2026-9697 (HIGH, improper certificate validation) fixed in 7.28.0.
@@ -86,7 +91,8 @@ overrides:
   postcss: '>=8.5.10'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.1.1'
-  brace-expansion: '>=5.0.6'
+  # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7.
+  brace-expansion: '>=5.0.7'
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0

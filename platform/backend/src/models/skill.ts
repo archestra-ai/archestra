@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   and,
   asc,
@@ -532,8 +533,62 @@ class SkillModel {
       )
       .limit(1);
 
-    return row ?? null;
+    if (!row) return null;
+
+    // Resource files and team assignments live in child tables that are
+    // audited:false ("parent carries the signal" in AUDIT_DECISIONS), so the
+    // skill snapshot must reflect them — a file-only or team-only edit would
+    // otherwise diff as nothing but a latestVersion bump. Files are captured
+    // as compact fingerprints (path + size + content hash) rather than full
+    // contents: resource files can be large base64 assets, and a changed hash
+    // is enough for the diff to show which file changed.
+    const [files, teams] = await Promise.all([
+      db
+        .select({
+          path: schema.skillFilesTable.path,
+          content: schema.skillFilesTable.content,
+          encoding: schema.skillFilesTable.encoding,
+        })
+        .from(schema.skillFilesTable)
+        .where(eq(schema.skillFilesTable.skillId, id))
+        .orderBy(asc(schema.skillFilesTable.path)),
+      db
+        .select({ name: schema.teamsTable.name })
+        .from(schema.skillTeamsTable)
+        .innerJoin(
+          schema.teamsTable,
+          eq(schema.skillTeamsTable.teamId, schema.teamsTable.id),
+        )
+        .where(eq(schema.skillTeamsTable.skillId, id)),
+    ]);
+
+    return {
+      ...row,
+      files: files.map(fileAuditFingerprint),
+      teams: teams.map((t) => t.name).sort(),
+    };
   }
+}
+
+/**
+ * Compact per-file fingerprint for audit snapshots: enough for the audit diff
+ * to show a file being added, removed, or edited in place (hash change)
+ * without persisting potentially large or binary contents in the audit row.
+ */
+function fileAuditFingerprint(file: {
+  path: string;
+  content: string;
+  encoding: SkillFileEncoding;
+}): string {
+  const bytes =
+    file.encoding === "base64"
+      ? Buffer.from(file.content, "base64").length
+      : Buffer.byteLength(file.content);
+  const hash = createHash("sha256")
+    .update(file.content)
+    .digest("hex")
+    .slice(0, 12);
+  return `${file.path} (${bytes} bytes, sha256:${hash})`;
 }
 
 /** Normalize a resource file set into the shape a version snapshot stores. */

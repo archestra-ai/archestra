@@ -12,6 +12,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
@@ -814,6 +815,21 @@ class ModelModel {
    * Get model capabilities for API response.
    * Uses getEffectivePricing for pricing resolution.
    */
+  /**
+   * The context window to DISPLAY and gate on. A native-Ollama model with a
+   * configured `num_ctx` enforces exactly that window (Archestra sends it on
+   * every turn), so it takes precedence over the architectural `context_length`
+   * — which would otherwise overstate the window and produce the "context ring
+   * shows 262K while Ollama truncates at 8K" symptom. Falls back to the stored
+   * architectural value when no valid `num_ctx` is configured.
+   */
+  static resolveEffectiveContextLength(model: Model): number | null {
+    return (
+      sanitizeOutputLimit(model.configuredParameters?.num_ctx) ??
+      model.contextLength
+    );
+  }
+
   static toCapabilities(model: Model | null): ModelCapabilities {
     if (!model) {
       return {
@@ -834,7 +850,7 @@ class ModelModel {
     const pricing = ModelModel.getEffectivePricing(model);
 
     return {
-      contextLength: model.contextLength,
+      contextLength: ModelModel.resolveEffectiveContextLength(model),
       inputModalities: model.inputModalities,
       outputModalities: model.outputModalities,
       supportsToolCalling: model.supportsToolCalling,

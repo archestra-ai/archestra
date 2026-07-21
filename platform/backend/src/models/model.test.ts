@@ -1332,6 +1332,30 @@ describe("ModelModel", () => {
       expect(cleared?.configuredParameters).toBeNull();
     });
 
+    test("resolveEffectiveContextLength prefers a configured num_ctx over the architectural value", async () => {
+      const created = await ModelModel.create({
+        externalId: "ollama/nemotron",
+        provider: "ollama-native",
+        modelId: "nemotron",
+        contextLength: 262144,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      // No configured num_ctx → architectural value.
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBe(262144);
+
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 8192 },
+      });
+      // Configured num_ctx wins (the window Ollama actually enforces).
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(8192);
+    });
+
     test("leaves configured parameters untouched when the field is omitted", async () => {
       const created = await makeNativeModel();
       await ModelModel.update(created.id, {

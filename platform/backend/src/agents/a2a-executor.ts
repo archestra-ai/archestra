@@ -435,6 +435,8 @@ export async function executeA2AMessage(
       maxOutputTokens: resolveAgentMaxOutputTokens({
         outputLength: modelRow?.outputLength ?? null,
         ceiling: config.chat.maxOutputTokensCeiling,
+        provider,
+        contextLength: modelRow ? ModelModel.resolveEffectiveContextLength(modelRow) : null,
       }),
       // Per-step context guard: cap oversized tool results and keep the
       // accumulated step history inside the model's context window, compacting
@@ -443,7 +445,7 @@ export async function executeA2AMessage(
       // persisted/streamed UIMessage) keeps the full tool outputs.
       prepareStep: createStepContextGuard({
         model,
-        contextLength: modelRow?.contextLength ?? null,
+        contextLength: modelRow ? ModelModel.resolveEffectiveContextLength(modelRow) : null,
         systemPrompt,
         abortSignal,
         logContext: { agentId: agent.id, sessionId },

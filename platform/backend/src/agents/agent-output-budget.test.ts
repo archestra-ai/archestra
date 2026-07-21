@@ -44,4 +44,63 @@ describe("resolveAgentMaxOutputTokens", () => {
       resolveAgentMaxOutputTokens({ outputLength: null, ceiling: 4096 }),
     ).toBe(4096);
   });
+
+  describe("Ollama providers (unknown output ceiling)", () => {
+    for (const provider of ["ollama", "ollama-native"] as const) {
+      test(`${provider}: falls back to the context window, not 8192`, () => {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: null,
+            ceiling,
+            provider,
+            contextLength: 16384,
+          }),
+        ).toBe(16384);
+      });
+
+      test(`${provider}: the operator ceiling still caps the context fallback`, () => {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: null,
+            ceiling,
+            provider,
+            contextLength: 262144,
+          }),
+        ).toBe(ceiling);
+      });
+
+      test(`${provider}: a real output ceiling still wins over the context window`, () => {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: 4096,
+            ceiling,
+            provider,
+            contextLength: 262144,
+          }),
+        ).toBe(4096);
+      });
+
+      test(`${provider}: unknown context still falls back to 8192`, () => {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: null,
+            ceiling,
+            provider,
+            contextLength: null,
+          }),
+        ).toBe(UNKNOWN_MODEL_OUTPUT_TOKENS);
+      });
+    }
+
+    test("non-Ollama providers keep the 8192 fallback even with a context length", () => {
+      expect(
+        resolveAgentMaxOutputTokens({
+          outputLength: null,
+          ceiling,
+          provider: "openai",
+          contextLength: 128000,
+        }),
+      ).toBe(UNKNOWN_MODEL_OUTPUT_TOKENS);
+    });
+  });
 });

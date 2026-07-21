@@ -1034,7 +1034,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   const breakdown = buildContextWindowBreakdown({
                     provider,
                     model: selectedModel,
-                    contextLength: modelRow?.contextLength ?? null,
+                    contextLength: modelRow ? ModelModel.resolveEffectiveContextLength(modelRow) : null,
                     inputPricePerToken: breakdownPricePerToken,
                     systemPrompt,
                     tools: supportsToolCalling ? mcpTools : undefined,
@@ -1304,6 +1304,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 streamTextConfig.maxOutputTokens = resolveAgentMaxOutputTokens({
                   outputLength: modelRow?.outputLength ?? null,
                   ceiling: config.chat.maxOutputTokensCeiling,
+                  provider,
+                  contextLength: modelRow ? ModelModel.resolveEffectiveContextLength(modelRow) : null,
                 });
 
                 const { result, getAbortiveFinishReason } =

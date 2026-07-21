@@ -51,6 +51,12 @@
   const push = (event) => {
     if (!recording) return;
     event.ts = Date.now();
+    // Recorded input doubles as an activity signal for the canvas sampler: an
+    // event-driven draw (a click repainting a chart) follows input, not rAF.
+    // Canvas frames themselves must not count, or capture would self-sustain.
+    if (event.kind !== "canvas") {
+      inputActivityUntil = event.ts + INPUT_ACTIVITY_MS;
+    }
     buffer.push(event);
     if (buffer.length >= FLUSH_BUFFER_MAX) flush();
   };
@@ -155,10 +161,21 @@
    * A canvas is invisible to a MutationObserver — an app can repaint its entire
    * screen without producing a single mutation — and its contents cannot be
    * re-derived from input. Sampled rather than hooked: wrapping every 2D
-   * context method would be far more code and still miss WebGL. Frames are
-   * emitted only when the bytes change, so a still or paused app costs nothing.
+   * context method would be far more code and still miss WebGL.
+   *
+   * Sampling runs on requestAnimationFrame, so an animating app is captured at
+   * the rate it is presented — full motion, not a slideshow — and the encode
+   * backpressure gate below is the throughput governor: a machine that can't
+   * encode at display rate degrades to the rate it sustains instead of
+   * stalling the app. Three layers keep a quiet app cheap: frames are only
+   * attempted while the app looks active (it scheduled animation frames, or
+   * recorded input just happened), an inactive app drops to a slow keepalive
+   * probe, and a frame whose bytes didn't change is never emitted.
    */
-  const CANVAS_SAMPLE_MS = 100;
+  /** Capture floor while the app shows no animation or input activity. */
+  const CANVAS_KEEPALIVE_MS = 500;
+  /** How long a recorded input event counts as activity (event-driven draws). */
+  const INPUT_ACTIVITY_MS = 1_000;
   /**
    * Captured frames are capped at this many pixels. Encode cost is linear in
    * pixel count, and a full-viewport canvas on a 2x display is ~6MP — encoding
@@ -170,7 +187,13 @@
   const canvasLastFrame = new WeakMap();
   /** Canvases with a capture currently encoding — see the backpressure note. */
   const canvasCaptureBusy = new WeakSet();
-  let canvasTimer = null;
+  /** When each canvas last attempted a capture, for the idle keepalive. */
+  const canvasLastAttemptAt = new WeakMap();
+  let canvasRafId = null;
+  /** The app scheduled an animation frame since the sampler last looked. */
+  let appRafScheduled = false;
+  /** Until when recorded input keeps counting as app activity. */
+  let inputActivityUntil = 0;
   let scratchCanvas = null;
 
   /**
@@ -222,7 +245,7 @@
     }
   };
 
-  const sampleCanvases = (sync) => {
+  const sampleCanvases = (sync, idle) => {
     let canvases;
     try {
       canvases = document.querySelectorAll("canvas");
@@ -230,13 +253,25 @@
       return;
     }
     for (const canvas of canvases) {
-      // One capture in flight per canvas: a tick that lands while the previous
-      // frame is still encoding is skipped, not queued, so on a machine where
-      // encoding outpaces the interval the capture rate backs off by itself
-      // instead of stacking encodes. The stop-time sync capture bypasses the
-      // gate — any in-flight encode it overlaps can only complete after the
-      // recording gate has closed, where its late push is discarded.
+      const now = Date.now();
+      // A quiet app is probed, not filmed: with no animation or input signal,
+      // a canvas only re-attempts at the keepalive rate (catching the odd draw
+      // made outside rAF and input handlers), and the byte-identical check
+      // below discards probes that found nothing new.
+      if (
+        idle &&
+        now - (canvasLastAttemptAt.get(canvas) || 0) < CANVAS_KEEPALIVE_MS
+      ) {
+        continue;
+      }
+      // One capture in flight per canvas: a frame that lands while the
+      // previous one is still encoding is skipped, not queued, so on a machine
+      // where encoding is slower than the display rate the capture rate backs
+      // off by itself instead of stacking encodes. The stop-time sync capture
+      // bypasses the gate — any in-flight encode it overlaps can only complete
+      // after the recording gate has closed, where its late push is discarded.
       if (!sync && canvasCaptureBusy.has(canvas)) continue;
+      canvasLastAttemptAt.set(canvas, now);
       if (!sync) canvasCaptureBusy.add(canvas);
       captureCanvas(canvas, sync, (data) => {
         canvasCaptureBusy.delete(canvas);
@@ -246,6 +281,24 @@
         push({ kind: "canvas", sel: selectorFor(canvas).slice(0, 1000), data });
       });
     }
+  };
+
+  /**
+   * The per-presented-frame sampling loop, alive only while recording. Runs on
+   * the browser's own frame clock so captures line up with what the viewer was
+   * actually shown, and pause with the tab. The activity flag is consumed each
+   * frame: an app animating via rAF re-sets it every frame it schedules, so
+   * "active" decays the moment the app's loop stops.
+   */
+  const canvasCaptureLoop = () => {
+    if (!recording) {
+      canvasRafId = null;
+      return;
+    }
+    canvasRafId = origRaf(canvasCaptureLoop);
+    const idle = !appRafScheduled && Date.now() >= inputActivityUntil;
+    appRafScheduled = false;
+    sampleCanvases(false, idle);
   };
 
   /**
@@ -348,10 +401,12 @@
     // the observers that capture everything after.
     captureInitialDom();
     flushTimer = setInterval(flush, FLUSH_INTERVAL_MS);
-    // What the app becomes, alongside what is done to it.
+    // What the app becomes, alongside what is done to it. The seed sample is
+    // unconditional (idle apps still show their first frame); the loop then
+    // captures at presented-frame rate while the app is active.
     startDomCapture();
     sampleCanvases();
-    canvasTimer = setInterval(sampleCanvases, CANVAS_SAMPLE_MS);
+    canvasRafId = origRaf(canvasCaptureLoop);
 
     listen(window, "resize", () => {
       push({
@@ -516,9 +571,9 @@
       clearInterval(flushTimer);
       flushTimer = null;
     }
-    if (canvasTimer) {
-      clearInterval(canvasTimer);
-      canvasTimer = null;
+    if (canvasRafId != null) {
+      origCancelRaf(canvasRafId);
+      canvasRafId = null;
     }
     if (domObserver) {
       // One last look, so the final frame and the last DOM change are in the
@@ -944,7 +999,11 @@
   let freezeStyleEl = null;
   const rafQueue = [];
   const origRaf = window.requestAnimationFrame.bind(window);
+  const origCancelRaf = window.cancelAnimationFrame.bind(window);
   window.requestAnimationFrame = (cb) => {
+    // An app scheduling animation frames is the record-side sampler's cue that
+    // pixels are moving (the sampler itself uses origRaf, so it never counts).
+    appRafScheduled = true;
     if (replayFrozen) {
       rafQueue.push(cb);
       return 0;

@@ -1079,12 +1079,23 @@ function PlayerSurface({
   const applyEventsUpTo = useCallback(
     (clock: number) => {
       sendAppClock(clock);
+      // Canvas frames in the advanced range are coalesced to the newest per
+      // canvas. Frames are captured at presented-frame rate, so a deep
+      // catch-up (a seek, a remount) spans hundreds of them — and decoding
+      // every superseded frame only for the replay's paint-order guard to
+      // throw it away is pure waste. During normal playback the range is a
+      // frame or two wide and the coalescing is a no-op. The survivor posts
+      // after the loop: recorded later than everything else in the range, so
+      // painting it last also lands it on the range's final DOM.
+      const latestCanvas = new Map<string, TimelineEvent>();
       while (
         appliedRef.current < events.length &&
         events[appliedRef.current].t <= clock
       ) {
         const event = events[appliedRef.current++];
-        if (event.kind === "canvas" || event.kind === "dom") {
+        if (event.kind === "canvas") {
+          latestCanvas.set(event.sel, event);
+        } else if (event.kind === "dom") {
           // What the app produced, put back exactly. The replayed document runs
           // none of the app's own code, so these are not corrections applied
           // over a live app — they ARE the app, played back.
@@ -1111,6 +1122,12 @@ function PlayerSurface({
             "*",
           );
         }
+      }
+      for (const event of latestCanvas.values()) {
+        iframeElRef.current?.contentWindow?.postMessage(
+          { type: REPLAY_CONTROL_TYPE, action: "paint", event },
+          "*",
+        );
       }
     },
     [events, sendAppClock],

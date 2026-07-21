@@ -776,6 +776,35 @@ describe("organization routes", () => {
       );
     });
 
+    test("allows a patch that does not touch embedding fields even when embedding is half-configured", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      // Half-configured pre-existing state (key, no model), seeded directly.
+      await OrganizationModel.patch(organizationId, {
+        embeddingChatApiKeyId: apiKey.id,
+      });
+
+      // An empty patch (what a stripped unrelated-field patch reduces to) must
+      // not be blocked by — or fire a live probe for — state it doesn't change.
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(embeddingClients.callEmbedding).not.toHaveBeenCalled();
+    });
+
     test("rejects embedding models that are missing configured dimensions", async ({
       makeSecret,
     }) => {

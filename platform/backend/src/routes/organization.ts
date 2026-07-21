@@ -534,10 +534,22 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Only validate the embedding/reranker pairs when the patch actually
+      // touches them: a patch to an unrelated knowledge setting (e.g.
+      // permissionSyncSchedule) must not be blocked by — or fire a live probe
+      // for — pre-existing embedding state it doesn't change.
+      const patchTouchesEmbedding =
+        body.embeddingChatApiKeyId !== undefined ||
+        body.embeddingModel !== undefined;
+      const patchTouchesReranker =
+        body.rerankerChatApiKeyId !== undefined ||
+        body.rerankerModel !== undefined;
+
       // Embedding is mandatory: a half-configured pair (a key with no model, or a
       // model with no key) is invalid and blocks save. To clear the embedding
       // entirely, use the drop-embedding route.
       if (
+        patchTouchesEmbedding &&
         Boolean(effectiveEmbeddingKeyId) !== Boolean(effectiveEmbeddingModel)
       ) {
         throw new ApiError(
@@ -553,7 +565,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // must be valid when set, and a half-configured reranker blocks save. The
       // failing field is carried in the ApiError's internal_code so the UI can
       // show it per-field.
-      if (effectiveEmbeddingKeyId && effectiveEmbeddingModel) {
+      if (
+        patchTouchesEmbedding &&
+        effectiveEmbeddingKeyId &&
+        effectiveEmbeddingModel
+      ) {
         const result = await knowledgeSettingsService.validateEmbeddingConfig({
           keyId: effectiveEmbeddingKeyId,
           model: effectiveEmbeddingModel,
@@ -568,14 +584,21 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      if (Boolean(effectiveRerankerKeyId) !== Boolean(effectiveRerankerModel)) {
+      if (
+        patchTouchesReranker &&
+        Boolean(effectiveRerankerKeyId) !== Boolean(effectiveRerankerModel)
+      ) {
         throw new ApiError(
           400,
           "Both a reranker API key and model are required, or clear both.",
           "reranker_validation_failed",
         );
       }
-      if (effectiveRerankerKeyId && effectiveRerankerModel) {
+      if (
+        patchTouchesReranker &&
+        effectiveRerankerKeyId &&
+        effectiveRerankerModel
+      ) {
         const result = await knowledgeSettingsService.validateRerankerConfig({
           keyId: effectiveRerankerKeyId,
           model: effectiveRerankerModel,

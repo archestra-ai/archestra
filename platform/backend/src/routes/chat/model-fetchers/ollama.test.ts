@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
-import { fetchOllamaModels } from "./ollama";
+import { fetchOllamaModels, fetchOllamaNativeModels } from "./ollama";
 import { PLACEHOLDER_BEARER_TOKEN } from "./types";
 
 /**
@@ -173,5 +173,69 @@ describe("fetchOllamaModels", () => {
       temperature: 0.7,
       stop: ["<|im_start|>", "<|im_end|>", "128"],
     });
+  });
+});
+
+/**
+ * The native fetcher shares `fetchOllamaModelsImpl` with the OpenAI-compatible
+ * one; what differs is the provider tag and the default base URL, which is the
+ * server ROOT (no `/v1`). Both endpoints still have to be derived correctly
+ * from whichever form the base URL arrives in.
+ */
+describe("fetchOllamaNativeModels", () => {
+  const originalNativeBaseUrl = config.llm["ollama-native"].baseUrl;
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    config.llm["ollama-native"].baseUrl = "https://ollama.example.com";
+    fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : String(input);
+        if (url.endsWith("/api/show")) {
+          return new Response(
+            JSON.stringify({ capabilities: ["completion"] }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ data: [{ id: "llama-3" }] }), {
+          status: 200,
+        });
+      });
+  });
+
+  afterEach(() => {
+    config.llm["ollama-native"].baseUrl = originalNativeBaseUrl;
+    vi.restoreAllMocks();
+  });
+
+  function urls() {
+    return fetchSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+  }
+
+  test("tags models with the native provider", async () => {
+    const [model] = await fetchOllamaNativeModels("k");
+    expect(model.provider).toBe("ollama-native");
+  });
+
+  test("derives /v1/models and /api/show from a root base URL", async () => {
+    await fetchOllamaNativeModels("k");
+    expect(urls()).toContain("https://ollama.example.com/v1/models");
+    expect(urls()).toContain("https://ollama.example.com/api/show");
+  });
+
+  test("normalizes a base URL that still carries /v1", async () => {
+    // Setting the native variable to a /v1 URL is the likeliest
+    // misconfiguration; without normalization the list call would hit
+    // `/v1/v1/models`.
+    await fetchOllamaNativeModels("k", "https://override.example.com/v1");
+    expect(urls()).toContain("https://override.example.com/v1/models");
+    expect(urls()).toContain("https://override.example.com/api/show");
+  });
+
+  test("normalizes trailing slashes on an override", async () => {
+    await fetchOllamaNativeModels("k", "https://override.example.com/v1///");
+    expect(urls()).toContain("https://override.example.com/v1/models");
+    expect(urls()).toContain("https://override.example.com/api/show");
   });
 });

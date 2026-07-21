@@ -46,6 +46,7 @@ import {
   ProviderError,
 } from "@/routes/chat/errors";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
+import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
@@ -414,6 +415,32 @@ export async function executeA2AMessage(
     // message with no text or attachments), the context is used as-is. Callers
     // without context (delegation, scheduled, A2A v1) fall back to a plain
     // `prompt` for text, or a single `messages` turn when attachments survive.
+    // Request the model's real output ceiling (clamped by the operator
+    // ceiling), or a safe fallback when unknown. Without this, providers that
+    // inject a small default max (e.g. Anthropic's ~4096) truncated large
+    // tool-call payloads.
+    const maxOutputTokens = resolveAgentMaxOutputTokens({
+      outputLength: modelRow?.outputLength ?? null,
+      ceiling: config.chat.maxOutputTokensCeiling,
+      provider,
+      contextLength: modelRow
+        ? ModelModel.resolveEffectiveContextLength(modelRow)
+        : null,
+    });
+
+    // Send admin-configured per-model generation parameters (num_ctx,
+    // num_predict, top_k, think, …) on native Ollama turns, mirroring the
+    // interactive chat route. Ollama reads the output cap from
+    // `options.num_predict`; the top-level `maxOutputTokens` above is discarded
+    // by the native endpoint, so the budget has to be folded in here too.
+    const ollamaProviderOptions =
+      provider === "ollama-native"
+        ? buildOllamaNativeProviderOptions({
+            configured: modelRow?.configuredParameters,
+            maxOutputTokens,
+          })
+        : undefined;
+
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -428,18 +455,10 @@ export async function executeA2AMessage(
       onStepFinish: (step: StepResult<ToolSet>) =>
         recordUnavailableToolCallStep(repeatTracker, step),
       abortSignal,
-      // Request the model's real output ceiling (clamped by the operator
-      // ceiling), or a safe fallback when unknown. Without this, providers that
-      // inject a small default max (e.g. Anthropic's ~4096) truncated large
-      // tool-call payloads.
-      maxOutputTokens: resolveAgentMaxOutputTokens({
-        outputLength: modelRow?.outputLength ?? null,
-        ceiling: config.chat.maxOutputTokensCeiling,
-        provider,
-        contextLength: modelRow
-          ? ModelModel.resolveEffectiveContextLength(modelRow)
-          : null,
-      }),
+      maxOutputTokens,
+      ...(ollamaProviderOptions
+        ? { providerOptions: ollamaProviderOptions }
+        : {}),
       // Per-step context guard: cap oversized tool results and keep the
       // accumulated step history inside the model's context window, compacting
       // the older prefix into an LLM summary when it overflows. Overrides only

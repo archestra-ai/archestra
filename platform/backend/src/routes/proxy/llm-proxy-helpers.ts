@@ -351,6 +351,8 @@ export function handleError(
   extractInternalCode: (
     error: unknown,
   ) => ArchestraInternalErrorCode | undefined,
+  /** Provider-specific mid-stream error framing; defaults to SSE. */
+  formatStreamErrorFrame?: (event: unknown) => string,
 ): FastifyReply | never {
   logger.error(error);
 
@@ -405,7 +407,9 @@ export function handleError(
 
   // If headers already sent (mid-stream error), write error to stream.
   // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
-  // the status after headers are committed - so SSE error event is our only option.
+  // the status after headers are committed - so an in-stream error event is our
+  // only option. The framing must match the stream the client is already
+  // parsing, hence formatStreamErrorFrame (SSE for everyone but Ollama native).
   // Check reply.raw.headersSent (set after writeHead) rather than reply.sent
   // (which is only set after hijack or full send).
   if (isStreaming && reply.raw.headersSent) {
@@ -420,7 +424,11 @@ export function handleError(
       },
     };
     try {
-      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
+      reply.raw.write(
+        formatStreamErrorFrame
+          ? formatStreamErrorFrame(errorEvent)
+          : `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`,
+      );
       reply.raw.end();
     } catch (writeError) {
       // Connection already closed by the client — nothing more we can do.

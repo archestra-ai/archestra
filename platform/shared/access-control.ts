@@ -69,7 +69,11 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
   llmOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
-  llmModel: ["read", "update"],
+  // "admin" gates the generation parameters Archestra SENDS on every turn
+  // (`configuredParameters`). Model rows are global — no organizationId — so
+  // that subset is a cross-org runtime control plane, unlike the display-only
+  // pricing/modality fields "update" covers. Admins only; see the update route.
+  llmModel: ["read", "update", "admin"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
   llmCost: ["read"],
@@ -490,6 +494,8 @@ export const permissionDescriptions: Record<string, string> = {
     "Manage all LLM OAuth client registrations, bypassing team restrictions",
   "llmModel:read": "View synced LLM models and capabilities",
   "llmModel:update": "Modify LLM model pricing and modality settings",
+  "llmModel:admin":
+    "Set per-model generation parameters sent on every chat turn, across all organizations",
   "llmLimit:read": "View token usage limits",
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",

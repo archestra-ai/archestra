@@ -1356,6 +1356,84 @@ describe("ModelModel", () => {
       ).toBe(8192);
     });
 
+    test("resolveEffectiveContextLength clamps a num_ctx above the architectural window", async () => {
+      const created = await ModelModel.create({
+        externalId: "ollama/clamped",
+        provider: "ollama-native",
+        modelId: "clamped",
+        contextLength: 131072,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 1310720 },
+      });
+
+      // An unclamped value drives the context ring and the step-context guard,
+      // so auto-compaction would fire 10x too late and conversations would die
+      // of context overflow while the ring still showed free space.
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(131072);
+    });
+
+    test("resolveEffectiveContextLength ignores configuredParameters on other providers", async () => {
+      const created = await ModelModel.create({
+        externalId: "anthropic/claude",
+        provider: "anthropic",
+        modelId: "claude-test",
+        contextLength: 200000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 100000000 },
+      });
+
+      // Nothing sends num_ctx to a paid provider, so honouring it here would
+      // only stop compaction and ship unbounded history — with the bill as the
+      // sole feedback signal.
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(200000);
+    });
+
+    test("resolveEffectiveContextLength falls back when contextLength is null", async () => {
+      const created = await makeNativeModel();
+      expect(created.contextLength).toBeNull();
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBeNull();
+
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 8192 },
+      });
+      // With no architectural value to clamp against, the configured window is
+      // the only thing known about the model.
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(8192);
+    });
+
+    test("findByIdForAudit includes configuredParameters", async () => {
+      const created = await makeNativeModel();
+      await ModelModel.update(created.id, {
+        configuredParameters: { num_predict: 1 },
+      });
+
+      // Omitting it made a parameters-only save produce an empty before/after
+      // diff: the only other field it moves is `updatedAt`, which the audit
+      // hook strips.
+      const snapshot = await ModelModel.findByIdForAudit(created.id, "org-1");
+      expect(snapshot?.configuredParameters).toEqual({ num_predict: 1 });
+    });
+
     test("leaves configured parameters untouched when the field is omitted", async () => {
       const created = await makeNativeModel();
       await ModelModel.update(created.id, {

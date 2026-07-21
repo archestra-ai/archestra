@@ -1101,6 +1101,7 @@ export async function handleLLMProxy<
       provider.extractErrorMessage,
       requestAdapter.isStreaming(),
       provider.extractInternalCode.bind(provider),
+      provider.formatStreamErrorFrame,
     );
   }
 }
@@ -1538,6 +1539,7 @@ async function handleStreaming<
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
+      provider.formatStreamErrorFrame,
     );
   } finally {
     // Always record interaction (whether stream completed or was aborted)

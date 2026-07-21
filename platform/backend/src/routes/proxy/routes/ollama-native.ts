@@ -11,6 +11,7 @@
  * provider (`./ollama.ts`), which stays the default for existing clients.
  */
 import { RouteId } from "@archestra/shared";
+import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
@@ -19,6 +20,7 @@ import { constructResponseSchema, OllamaNative, UuidIdSchema } from "@/types";
 import { ollamaNativeAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { createProxyPreHandler } from "./proxy-prehandler";
 
 const NOT_CONFIGURED_ERROR = {
   error: {
@@ -33,6 +35,35 @@ const ollamaNativeProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const CHAT_SUFFIX = "/api/chat";
 
   logger.info("[UnifiedProxy] Registering Ollama Native routes");
+
+  // Pass every non-chat native endpoint (`/api/tags`, `/api/show`, `/api/embed`,
+  // `/api/ps`, …) straight through. Without this only `/api/chat` existed, so
+  // the Ollama CLI, n8n's Ollama node and anything else that does discovery
+  // 404'd against the provider they most want to use. `/api/chat` itself stays
+  // on the instrumented handler below (policies, logging, usage).
+  if (config.llm["ollama-native"].enabled) {
+    const upstream = config.llm["ollama-native"].baseUrl as string;
+    await fastify.register(fastifyHttpProxy, {
+      upstream,
+      prefix: API_PREFIX,
+      rewritePrefix: "",
+      // No `/v1` rewriting here, unlike the OpenAI-compatible sibling: the
+      // native API is served from the server root, so stripping the agent UUID
+      // is the whole job.
+      preHandler: createProxyPreHandler({
+        apiPrefix: API_PREFIX,
+        endpointSuffix: CHAT_SUFFIX,
+        upstream,
+        providerName: "Ollama native",
+        skipErrorResponse: {
+          error: {
+            message: "Chat requests should use the dedicated endpoint",
+            type: "invalid_request_error",
+          },
+        },
+      }),
+    });
+  }
 
   fastify.post(
     `${API_PREFIX}${CHAT_SUFFIX}`,

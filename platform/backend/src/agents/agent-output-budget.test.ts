@@ -102,5 +102,21 @@ describe("resolveAgentMaxOutputTokens", () => {
         }),
       ).toBe(UNKNOWN_MODEL_OUTPUT_TOKENS);
     });
+
+    test("an invalid context window falls back rather than propagating", () => {
+      // A 0, negative or fractional window would otherwise become the output
+      // budget — and, once folded into `options.num_predict`, cap every
+      // generation at a nonsense length.
+      for (const contextLength of [0, -1, 8192.5, Number.NaN]) {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: null,
+            ceiling,
+            provider: "ollama-native",
+            contextLength,
+          }),
+        ).toBe(UNKNOWN_MODEL_OUTPUT_TOKENS);
+      }
+    });
   });
 });

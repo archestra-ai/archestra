@@ -1,6 +1,6 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { z } from "zod";
-import config from "@/config";
+import config, { stripOllamaV1Suffix } from "@/config";
 import logger from "@/logging";
 import type { ModelDefaultParameters } from "@/types/model";
 import { joinBaseUrl } from "@/utils/base-url";
@@ -85,7 +85,7 @@ async function fetchOllamaModelsImpl(params: {
   // The base URL may or may not carry the `/v1` suffix (the `ollama-native`
   // provider's root has none). Normalize to the Ollama root, then derive both
   // endpoints: `/v1/models` for listing, `/api/show` for enrichment.
-  const root = rawBaseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const root = stripOllamaV1Suffix(rawBaseUrl);
   const v1BaseUrl = `${root}/v1`;
 
   const { data } = await fetchModelsWithBearerAuth({

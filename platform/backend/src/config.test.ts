@@ -13,6 +13,7 @@ import {
 } from "@/test";
 import config, {
   betaFeatureEnabled,
+  deriveOllamaNativeBaseUrl,
   getAnalyticsConfig,
   getAppAssetBaseOrigin,
   getCorsOrigins,
@@ -2296,5 +2297,71 @@ describe("parseAnthropicWifConfig", () => {
     expect(
       parseAnthropicWifConfig({ ...completeEnv, federationRuleId: "  " }),
     ).toBeNull();
+  });
+});
+
+describe("deriveOllamaNativeBaseUrl", () => {
+  test("strips a /v1 suffix from the OpenAI-compatible URL", () => {
+    // The native API is served from the server root, so a deployment can set
+    // ARCHESTRA_OLLAMA_BASE_URL alone and get both providers.
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: undefined,
+        ollamaBaseUrl: "http://ollama.internal:11434/v1",
+      }),
+    ).toBe("http://ollama.internal:11434");
+  });
+
+  test("prefers an explicit native URL", () => {
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://native.internal:11434",
+        ollamaBaseUrl: "http://other.internal:11434/v1",
+      }),
+    ).toBe("http://native.internal:11434");
+  });
+
+  test("strips a /v1 suffix from an explicit native URL too", () => {
+    // Setting the native variable to a /v1 URL is the likeliest misconfiguration,
+    // and it points at the OpenAI-compatible API rather than the native one.
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://native.internal:11434/v1",
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://native.internal:11434");
+  });
+
+  test("strips trailing slashes", () => {
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://native.internal:11434/v1///",
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://native.internal:11434");
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://native.internal:11434/",
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://native.internal:11434");
+  });
+
+  test("falls back to localhost when neither is set", () => {
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: undefined,
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://localhost:11434");
+  });
+
+  test("leaves a path that merely contains v1 alone", () => {
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://proxy.internal/v1/ollama",
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://proxy.internal/v1/ollama");
   });
 });

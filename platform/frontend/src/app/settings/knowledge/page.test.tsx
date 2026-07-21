@@ -591,11 +591,16 @@ describe("KnowledgeSettingsPage", () => {
       });
       fireEvent.click(providerTrigger);
 
+      // Anchored, because an unanchored substring is now ambiguous:
+      // "Ollama (OpenAI-compatible)" contains "OpenAI", and both Ollama
+      // providers contain "Ollama". The accessible name repeats the label (the
+      // option renders an icon whose alt text is the provider name), so an
+      // exact string will not match either.
       expect(
-        screen.getByRole("option", { name: /OpenAI/i }),
+        screen.getByRole("option", { name: /^OpenAI\b/ }),
       ).not.toHaveAttribute("data-disabled");
       expect(
-        screen.getByRole("option", { name: /Ollama/i }),
+        screen.getByRole("option", { name: /^Ollama \(OpenAI-compatible\)/ }),
       ).not.toHaveAttribute("data-disabled");
       expect(
         screen.getByRole("option", { name: /Anthropic/i }),

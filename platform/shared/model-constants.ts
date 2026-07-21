@@ -169,6 +169,46 @@ export function isSelfHostedProvider(provider: SupportedProvider): boolean {
   return PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider);
 }
 
+/**
+ * Providers reachable through the OpenAI-compatible Model Router — either
+ * because they already speak the OpenAI wire, or because the router translates
+ * for them. Single source of truth: the router builds its own lookup from this
+ * list, and the connection UI hides the router option for anything absent, so a
+ * provider cannot appear to support the router while 404ing on it.
+ *
+ * `ollama-native` is deliberately absent: it speaks Ollama's `/api/chat` wire,
+ * which the router has no translation for.
+ */
+export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
+  // OpenAI-wire
+  "openai",
+  "azure",
+  "cerebras",
+  "deepseek",
+  "groq",
+  "minimax",
+  "mistral",
+  "ollama",
+  "openrouter",
+  "perplexity",
+  "vllm",
+  "xai",
+  "zhipuai",
+  // Translated by the router
+  "anthropic",
+  "bedrock",
+  "cohere",
+  "gemini",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+export function isModelRouterSupportedProvider(
+  provider: SupportedProvider,
+): boolean {
+  return (MODEL_ROUTER_SUPPORTED_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
   anthropicWifEnabled?: boolean;

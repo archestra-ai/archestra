@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -86,11 +87,16 @@ import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatContextLength } from "@/lib/utils";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
+  buildConfiguredParameters,
+  type ConfiguredParametersFormValues,
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
+  getConfiguredParameterDefaults,
   type ModelsPageModelTypeFilter,
   OBSERVED_MODEL_SOURCE_DESCRIPTION,
   OBSERVED_MODEL_SOURCE_LABEL,
+  type OLLAMA_NATIVE_PARAM_RULES,
+  validateConfiguredParameter,
 } from "./models-page-utils";
 
 export default function ModelsPage() {
@@ -552,19 +558,6 @@ type EditModelEmbeddingDimensionsValue =
   | ""
   | keyof typeof EMBEDDING_DIMENSION_MAP;
 
-/** String-typed form fields for the native Ollama configured parameters. */
-interface ConfiguredParametersFormValues {
-  num_ctx: string;
-  num_predict: string;
-  top_k: string;
-  top_p: string;
-  repeat_penalty: string;
-  temperature: string;
-  seed: string;
-  stop: string;
-  reasoning_effort: "" | "none" | "low" | "medium" | "high";
-}
-
 interface EditModelFormValues {
   customPricePerMillionInput: string;
   customPricePerMillionOutput: string;
@@ -576,18 +569,6 @@ interface EditModelFormValues {
   outputModalities: string[];
   configuredParameters: ConfiguredParametersFormValues;
 }
-
-const EMPTY_CONFIGURED_PARAMETERS: ConfiguredParametersFormValues = {
-  num_ctx: "",
-  num_predict: "",
-  top_k: "",
-  top_p: "",
-  repeat_penalty: "",
-  temperature: "",
-  seed: "",
-  stop: "",
-  reasoning_effort: "",
-};
 
 function EditModelDialog({
   model,
@@ -1075,25 +1056,58 @@ function EditModelDialog({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {OLLAMA_NATIVE_PARAM_FIELDS.map((param) => (
-                    <FormItem key={param.name}>
-                      <FormLabel className="font-mono text-xs">
-                        {param.name}
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          inputMode={param.numeric ? "decimal" : "text"}
-                          placeholder={ollamaDefaultPlaceholder(
-                            model,
-                            param.name,
-                          )}
-                          {...form.register(
-                            `configuredParameters.${param.name}`,
-                          )}
-                        />
-                      </FormControl>
-                    </FormItem>
+                    <FormField
+                      key={param.name}
+                      control={form.control}
+                      name={`configuredParameters.${param.name}`}
+                      rules={{
+                        validate: (value: string) =>
+                          validateConfiguredParameter({
+                            name: param.name,
+                            value,
+                            contextLength: model.contextLength,
+                          }),
+                      }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-mono text-xs">
+                            {param.name}
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              inputMode="decimal"
+                              placeholder={ollamaDefaultPlaceholder(
+                                model,
+                                param.name,
+                              )}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   ))}
                 </div>
+                <FormField
+                  control={form.control}
+                  name="configuredParameters.stop"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-mono text-xs">stop</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          rows={3}
+                          placeholder={ollamaDefaultPlaceholder(model, "stop")}
+                          {...field}
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        One stop sequence per line.
+                      </p>
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="configuredParameters.reasoning_effort"
@@ -1122,8 +1136,9 @@ function EditModelDialog({
                       <p className="text-xs text-muted-foreground">
                         Only applies to thinking-capable models. Effort levels
                         currently map to on/off for the underlying Ollama
-                        provider.
+                        provider, and "Inherit" leaves thinking off.
                       </p>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -1137,21 +1152,20 @@ function EditModelDialog({
 }
 
 /**
- * The native Ollama configured-parameter fields rendered in the model dialog.
- * `reasoning_effort` is handled separately (a select).
+ * The numeric native-Ollama parameters rendered as a grid in the model dialog.
+ * `stop` (a newline-delimited textarea) and `reasoning_effort` (a select) are
+ * rendered separately.
  */
 const OLLAMA_NATIVE_PARAM_FIELDS: Array<{
-  name: keyof Omit<ConfiguredParametersFormValues, "reasoning_effort">;
-  numeric: boolean;
+  name: keyof typeof OLLAMA_NATIVE_PARAM_RULES;
 }> = [
-  { name: "num_ctx", numeric: true },
-  { name: "num_predict", numeric: true },
-  { name: "temperature", numeric: true },
-  { name: "top_p", numeric: true },
-  { name: "top_k", numeric: true },
-  { name: "repeat_penalty", numeric: true },
-  { name: "seed", numeric: true },
-  { name: "stop", numeric: false },
+  { name: "num_ctx" },
+  { name: "num_predict" },
+  { name: "temperature" },
+  { name: "top_p" },
+  { name: "top_k" },
+  { name: "repeat_penalty" },
+  { name: "seed" },
 ];
 
 function ollamaDefaultPlaceholder(
@@ -1300,67 +1314,6 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     outputModalities: model.outputModalities ?? [],
     configuredParameters: getConfiguredParameterDefaults(model),
   };
-}
-
-function getConfiguredParameterDefaults(
-  model: ModelWithApiKeys,
-): ConfiguredParametersFormValues {
-  const cp = model.configuredParameters;
-  if (!cp) return { ...EMPTY_CONFIGURED_PARAMETERS };
-  const numToStr = (v: number | null | undefined) =>
-    v === null || v === undefined ? "" : String(v);
-  return {
-    num_ctx: numToStr(cp.num_ctx),
-    num_predict: numToStr(cp.num_predict),
-    top_k: numToStr(cp.top_k),
-    top_p: numToStr(cp.top_p),
-    repeat_penalty: numToStr(cp.repeat_penalty),
-    temperature: numToStr(cp.temperature),
-    seed: numToStr(cp.seed),
-    stop: cp.stop?.join(", ") ?? "",
-    reasoning_effort: cp.reasoning_effort ?? "",
-  };
-}
-
-/**
- * Parse the string-typed form fields into a ConfiguredParameters payload.
- * Empty fields are omitted so they inherit Ollama's own default; an entirely
- * empty form clears the override (null).
- */
-function buildConfiguredParameters(
-  values: ConfiguredParametersFormValues,
-): UpdateModelBody["configuredParameters"] {
-  const result: NonNullable<UpdateModelBody["configuredParameters"]> = {};
-  const num = (s: string): number | undefined => {
-    const trimmed = s.trim();
-    if (!trimmed) return undefined;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  };
-
-  const numCtx = num(values.num_ctx);
-  if (numCtx !== undefined) result.num_ctx = numCtx;
-  const numPredict = num(values.num_predict);
-  if (numPredict !== undefined) result.num_predict = numPredict;
-  const topK = num(values.top_k);
-  if (topK !== undefined) result.top_k = topK;
-  const topP = num(values.top_p);
-  if (topP !== undefined) result.top_p = topP;
-  const repeatPenalty = num(values.repeat_penalty);
-  if (repeatPenalty !== undefined) result.repeat_penalty = repeatPenalty;
-  const temperature = num(values.temperature);
-  if (temperature !== undefined) result.temperature = temperature;
-  const seed = num(values.seed);
-  if (seed !== undefined) result.seed = seed;
-  const stop = values.stop
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (stop.length > 0) result.stop = stop;
-  if (values.reasoning_effort)
-    result.reasoning_effort = values.reasoning_effort;
-
-  return Object.keys(result).length > 0 ? result : null;
 }
 
 function getEmbeddingDimensionsString(

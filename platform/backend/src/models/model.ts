@@ -822,12 +822,25 @@ class ModelModel {
    * — which would otherwise overstate the window and produce the "context ring
    * shows 262K while Ollama truncates at 8K" symptom. Falls back to the stored
    * architectural value when no valid `num_ctx` is configured.
+   *
+   * Gated on `ollama-native` and clamped to the architectural window. Both are
+   * defence in depth for the update route, which already rejects those cases:
+   * this value drives the context ring, the A2A step-context guard, and the
+   * output-token budget, so a `num_ctx` that is either larger than the real
+   * window or attached to a provider that never receives it would push
+   * auto-compaction far past the point where the conversation still fits.
    */
   static resolveEffectiveContextLength(model: Model): number | null {
-    return (
-      sanitizeOutputLimit(model.configuredParameters?.num_ctx) ??
-      model.contextLength
-    );
+    if (model.provider !== "ollama-native") {
+      return model.contextLength;
+    }
+    const configured = sanitizeOutputLimit(model.configuredParameters?.num_ctx);
+    if (configured === null) {
+      return model.contextLength;
+    }
+    return model.contextLength === null
+      ? configured
+      : Math.min(configured, model.contextLength);
   }
 
   static toCapabilities(model: Model | null): ModelCapabilities {
@@ -921,6 +934,12 @@ class ModelModel {
       inputModalities: row.inputModalities ?? null,
       outputModalities: row.outputModalities ?? null,
       discoveredViaLlmProxy: row.discoveredViaLlmProxy,
+      // The generation parameters Archestra SENDS on every turn. Without them
+      // a parameters-only save produces an empty before/after diff — the only
+      // other field it moves is `updatedAt`, which the audit hook strips — so
+      // "who set num_predict: 1 on a globally shared model row, and when" would
+      // be unanswerable. `contextLength` below only reflects `num_ctx`.
+      configuredParameters: row.configuredParameters ?? null,
       contextLength: caps.contextLength,
       pricePerMillionInput: caps.pricePerMillionInput,
       pricePerMillionOutput: caps.pricePerMillionOutput,

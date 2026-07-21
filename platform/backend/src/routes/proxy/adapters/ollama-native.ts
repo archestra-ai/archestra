@@ -54,11 +54,39 @@ type NativeHeaders = OllamaNative.Types.ChatHeaders;
 type NativeStreamChunk = OllamaNative.Types.ChatStreamChunk;
 
 const PROVIDER: SupportedProvider = "ollama-native";
+
+/**
+ * Prefix for the positional id synthesized when a tool result carries no
+ * `tool_call_id` — the normal case on Ollama's native wire. Namespaced so it
+ * can never collide with a caller-supplied id.
+ */
+const SYNTHETIC_TOOL_RESULT_ID_PREFIX = "ollama-native-tool-result-";
+
 const NDJSON_HEADERS: Record<string, string> = {
   "Content-Type": "application/x-ndjson",
   "Cache-Control": "no-cache",
   Connection: "keep-alive",
 };
+
+/**
+ * Token counts for fetch-based observability.
+ *
+ * Unlike every OpenAI-wire provider, Ollama's native `/api/chat` has no `usage`
+ * object — the counts are top-level `prompt_eval_count` / `eval_count` fields,
+ * and they are `omitempty` on the wire so they are absent (not zero) on
+ * non-final chunks. Ollama reports no cache tokens at all.
+ */
+export function getUsageTokens(response: {
+  prompt_eval_count?: number;
+  eval_count?: number;
+}) {
+  return {
+    input: response.prompt_eval_count ?? 0,
+    output: response.eval_count ?? 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  };
+}
 
 /** The upstream base URL is the Ollama root; strip any `/v1` suffix. */
 function ollamaRoot(baseUrl: string | undefined): string {
@@ -106,7 +134,10 @@ class OllamaNativeRequestAdapter
   }
 
   isStreaming(): boolean {
-    return this.request.stream === true;
+    // `/api/chat` streams by DEFAULT — Ollama's `stream` is a `*bool` and a nil
+    // pointer means true, which is why its own curl examples omit the field and
+    // still get NDJSON. Only an explicit `false` turns streaming off.
+    return this.request.stream !== false;
   }
 
   getMessages(): CommonMessage[] {
@@ -115,19 +146,17 @@ class OllamaNativeRequestAdapter
 
   getToolResults(): CommonToolResult[] {
     const results: CommonToolResult[] = [];
-    for (const message of this.request.messages) {
-      if (message.role !== "tool") continue;
-      const toolName = this.findToolNameInMessages(
-        this.request.messages,
-        message.tool_call_id,
-      );
+    this.request.messages.forEach((message, index) => {
+      if (message.role !== "tool") return;
       results.push({
-        id: message.tool_call_id ?? "",
-        name: toolName ?? "unknown",
+        id: this.toolResultId(message, index),
+        name:
+          this.findToolNameInMessages(this.request.messages, message) ??
+          "unknown",
         content: parseMaybeJson(nativeContentToText(message.content)),
         isError: false,
       });
-    }
+    });
     return results;
   }
 
@@ -183,63 +212,79 @@ class OllamaNativeRequestAdapter
   toProviderRequest(): NativeRequest {
     let messages = this.request.messages;
     if (Object.keys(this.toolResultUpdates).length > 0) {
-      messages = messages.map((message) =>
-        message.role === "tool" &&
-        message.tool_call_id &&
-        this.toolResultUpdates[message.tool_call_id] !== undefined
-          ? {
-              ...message,
-              content: this.toolResultUpdates[message.tool_call_id],
-            }
-          : message,
-      );
+      messages = messages.map((message, index) => {
+        if (message.role !== "tool") return message;
+        // Must use the same identity `toCommonFormat` handed to the guardrails,
+        // or a sanitized result silently reverts to the untrusted original.
+        const updated =
+          this.toolResultUpdates[this.toolResultId(message, index)];
+        return updated !== undefined
+          ? { ...message, content: updated }
+          : message;
+      });
     }
     return { ...this.request, model: this.getModel(), messages };
   }
 
+  /**
+   * Stable identity for a tool-result message.
+   *
+   * Ollama's native wire has no id on either side — `tool_calls` carry no `id`
+   * and tool results are correlated by `tool_name` — so `tool_call_id` is
+   * present only when the caller is ollama-ai-provider-v2. Fall back to the
+   * message's position, which is stable for the lifetime of one request:
+   * `toCommonFormat`, `getToolResults` and `toProviderRequest` all index the
+   * same array, and TOON compression rewrites content 1:1 without reordering.
+   */
+  private toolResultId(message: NativeMessage, index: number): string {
+    return message.tool_call_id ?? `${SYNTHETIC_TOOL_RESULT_ID_PREFIX}${index}`;
+  }
+
   private findToolNameInMessages(
     messages: NativeMessages,
-    toolCallId: string | undefined,
+    toolMessage: NativeMessage,
   ): string | null {
-    if (!toolCallId) return null;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (message.role === "assistant" && message.tool_calls) {
-        for (const toolCall of message.tool_calls) {
-          if (toolCall.id === toolCallId) {
-            return toolCall.function.name;
+    const toolCallId = toolMessage.tool_call_id;
+    if (toolCallId) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message.role === "assistant" && message.tool_calls) {
+          for (const toolCall of message.tool_calls) {
+            if (toolCall.id === toolCallId) {
+              return toolCall.function.name;
+            }
           }
         }
       }
     }
-    return null;
+    // The native shape: results name the tool directly instead of referencing
+    // a call id. Ollama's own clients send only this.
+    return toolMessage.tool_name ?? null;
   }
 
   private toCommonFormat(messages: NativeMessages): CommonMessage[] {
     const out: CommonMessage[] = [];
-    for (const message of messages) {
+    messages.forEach((message, index) => {
       const common: CommonMessage = {
         role: message.role as CommonMessage["role"],
         content: nativeContentToText(message.content),
       };
+      // Every tool result must surface as a tool call, even when the name is
+      // unresolvable. `evaluateIfContextIsTrusted` decides a context is trusted
+      // purely from an empty tool-call list, so dropping one here disables
+      // trusted-data policies and dual-LLM sanitization with no other signal.
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
-          messages,
-          message.tool_call_id,
-        );
-        if (toolName) {
-          common.toolCalls = [
-            {
-              id: message.tool_call_id ?? "",
-              name: toolName,
-              content: parseMaybeJson(nativeContentToText(message.content)),
-              isError: false,
-            },
-          ];
-        }
+        common.toolCalls = [
+          {
+            id: this.toolResultId(message, index),
+            name: this.findToolNameInMessages(messages, message) ?? "unknown",
+            content: parseMaybeJson(nativeContentToText(message.content)),
+            isError: false,
+          },
+        ];
       }
       out.push(common);
-    }
+    });
     return out;
   }
 }
@@ -323,7 +368,15 @@ class OllamaNativeStreamAdapter
 {
   readonly provider = PROVIDER;
   readonly state: StreamAccumulatorState;
-  private createdAt: string | undefined;
+  /**
+   * Seeded now, then overwritten by each upstream chunk. `created_at` is
+   * REQUIRED by ollama-ai-provider-v2's stream schema, and the dual-LLM
+   * progress callbacks emit lines through `formatTextDeltaSSE` before
+   * `executeStream` has produced a chunk — leaving this undefined makes
+   * `JSON.stringify` drop the key and the client fails the whole stream with
+   * `finishReason: "error"` on the very first progress line.
+   */
+  private createdAt: string = new Date().toISOString();
   private thinking = "";
   // Raw native tool-call lines, buffered until policy approval then replayed.
   private rawToolCallLines: string[] = [];
@@ -358,6 +411,21 @@ class OllamaNativeStreamAdapter
     const message = chunk.message;
     const toolCalls = message?.tool_calls ?? [];
 
+    // Capture usage + stop reason before any early return below. Current Ollama
+    // sends tool calls and `done: true` on separate chunks, but nothing in the
+    // wire format forbids one chunk carrying both — and if the tool-call branch
+    // returned first, the interaction would persist with zero tokens and zero
+    // cost, surfacing later as unexplained free requests.
+    if (chunk.done) {
+      this.state.stopReason = chunk.done_reason ?? "stop";
+      this.state.usage = {
+        inputTokens: chunk.prompt_eval_count ?? 0,
+        outputTokens: chunk.eval_count ?? 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
+    }
+
     // Tool calls arrive whole (not incremental). Buffer them for policy eval.
     if (toolCalls.length > 0) {
       for (const toolCall of toolCalls) {
@@ -369,22 +437,13 @@ class OllamaNativeStreamAdapter
           ),
         });
       }
-      const line = ndjsonLine(chunk);
-      this.rawToolCallLines.push(line);
-      this.state.rawToolCallEvents.push(chunk);
+      this.rawToolCallLines.push(ndjsonLine(chunk));
       return { sseData: null, isToolCallChunk: true, isFinal: false };
     }
 
-    // Final chunk: capture usage + stop reason, but don't stream it — the
-    // synthesized `done: true` line is emitted by formatEndSSE.
+    // Final chunk: don't stream it — the synthesized `done: true` line is
+    // emitted by formatEndSSE.
     if (chunk.done) {
-      this.state.stopReason = chunk.done_reason ?? "stop";
-      this.state.usage = {
-        inputTokens: chunk.prompt_eval_count ?? 0,
-        outputTokens: chunk.eval_count ?? 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      };
       return { sseData: null, isToolCallChunk: false, isFinal: true };
     }
 
@@ -566,6 +625,12 @@ export const ollamaNativeAdapterFactory: LLMProvider<
   interactionType: "ollama-native:chat",
   spanName: "chat",
 
+  // This is the only NDJSON provider, so it is the only one that must override
+  // the shared SSE error framing. An `event: error\ndata: …` frame appended to
+  // an NDJSON stream is not a parseable line, so the client would surface a
+  // parse failure instead of the upstream error that actually happened.
+  formatStreamErrorFrame: (event) => ndjsonLine(event),
+
   createRequestAdapter(request) {
     return new OllamaNativeRequestAdapter(request);
   },
@@ -605,7 +670,7 @@ export const ollamaNativeAdapterFactory: LLMProvider<
 
   async execute(client, request): Promise<NativeResponse> {
     const c = client as OllamaNativeClient;
-    const response = await c.fetch(`${c.baseUrl}/api/chat`, {
+    const response = await c.fetch(chatUrl(c.baseUrl), {
       method: "POST",
       headers: buildUpstreamHeaders(c),
       body: JSON.stringify({ ...request, stream: false }),
@@ -622,7 +687,7 @@ export const ollamaNativeAdapterFactory: LLMProvider<
     request,
   ): Promise<AsyncIterable<NativeStreamChunk>> {
     const c = client as OllamaNativeClient;
-    const response = await c.fetch(`${c.baseUrl}/api/chat`, {
+    const response = await c.fetch(chatUrl(c.baseUrl), {
       method: "POST",
       headers: buildUpstreamHeaders(c),
       body: JSON.stringify({ ...request, stream: true }),
@@ -668,6 +733,27 @@ function buildUpstreamHeaders(
   return headers;
 }
 
+/** Upstream `/api/chat` URL. `new URL` so a base URL carrying a trailing `?`
+ * or `#` cannot silently relocate the request path. */
+function chatUrl(baseUrl: string): string {
+  return new URL("/api/chat", `${baseUrl}/`).toString();
+}
+
+/**
+ * Longest raw upstream body echoed back in an error message. A base URL
+ * misconfigured to point at some other internal service would otherwise have
+ * its entire response relayed to the caller.
+ */
+const MAX_UPSTREAM_ERROR_BODY_LENGTH = 500;
+
+/**
+ * Convert a non-OK upstream response into an error the shared proxy plumbing
+ * understands. `status` is what `handleError` reads to pick the HTTP status —
+ * without it every upstream failure collapses to a generic 500, so a caller
+ * cannot tell Ollama's "model not found, try pulling it first" (404) from a
+ * retryable 503, and Archestra's transient-error classification never engages.
+ * `error.message` feeds `extractErrorMessage`.
+ */
 async function toUpstreamError(response: Response): Promise<Error> {
   let message = `Ollama upstream returned HTTP ${response.status}`;
   try {
@@ -678,18 +764,25 @@ async function toUpstreamError(response: Response): Promise<Error> {
         if (typeof parsed?.error === "string") message = parsed.error;
         else if (typeof parsed?.error?.message === "string")
           message = parsed.error.message;
-        else message = body;
+        else message = truncateForError(body);
       } catch {
-        message = body;
+        message = truncateForError(body);
       }
     }
   } catch {
     // keep the default message
   }
   logger.debug({ status: response.status }, "[OllamaNative] upstream error");
-  const error = new Error(message) as Error & { error: string };
-  error.error = message;
-  return error;
+  return Object.assign(new Error(message), {
+    status: response.status,
+    error: { message },
+  });
+}
+
+function truncateForError(body: string): string {
+  return body.length > MAX_UPSTREAM_ERROR_BODY_LENGTH
+    ? `${body.slice(0, MAX_UPSTREAM_ERROR_BODY_LENGTH)}…`
+    : body;
 }
 
 async function* iterateNdjson(

@@ -12,6 +12,7 @@ import type { InteractionSource } from "@archestra/shared";
 import {
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
+  isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
   providerRequiresPerUserCredential,
   requiresOpenAiResponsesApi,
@@ -272,13 +273,16 @@ export async function createLLMModelForAgent(params: {
   // Check if Bedrock with IAM auth (doesn't require API key)
   const isBedrockWithIamAuth =
     provider === "bedrock" && isBedrockIamAuthEnabled();
-  // vLLM and Ollama typically don't require API keys
-  const isVllm = provider === "vllm";
-  const isOllama = provider === "ollama";
-  const isAzureWithEntra =
-    provider === "azure" && isAzureOpenAiEntraIdEnabled();
-  const isAnthropicWithWif =
-    provider === "anthropic" && anthropicWorkloadIdentity.isEnabled();
+  // Self-hosted providers (vLLM, both Ollama transports) never require a key,
+  // and Azure/Anthropic are keyless under Entra ID / workload identity. This is
+  // the same predicate `resolveProviderApiKey` uses to decide it may return an
+  // undefined key, so the two must agree — a hardcoded provider list here drifts
+  // and rejects keyless setups the resolver deliberately allowed.
+  const isApiKeyOptional = isProviderApiKeyOptional({
+    provider,
+    azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+  });
 
   logger.info(
     {
@@ -286,10 +290,7 @@ export async function createLLMModelForAgent(params: {
       provider,
       isGeminiWithVertexAi,
       isBedrockWithIamAuth,
-      isVllm,
-      isOllama,
-      isAzureWithEntra,
-      isAnthropicWithWif,
+      isApiKeyOptional,
     },
     "Using LLM provider API key",
   );
@@ -298,10 +299,7 @@ export async function createLLMModelForAgent(params: {
     !apiKey &&
     !isGeminiWithVertexAi &&
     !isBedrockWithIamAuth &&
-    !isVllm &&
-    !isOllama &&
-    !isAzureWithEntra &&
-    !isAnthropicWithWif
+    !isApiKeyOptional
   ) {
     // Per-user credentials need the acting user's own linked account; surface
     // a typed error so callers can prompt them to connect rather than showing

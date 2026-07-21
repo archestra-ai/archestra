@@ -44,11 +44,24 @@ export const ReasoningEffortSchema = z.enum(["none", "low", "medium", "high"]);
 export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
 
 /**
+ * Absolute ceiling for a configured `num_ctx`, sitting comfortably above the
+ * largest advertised context window in circulation. This is only a guard against
+ * a runaway typo; the meaningful limit is the model's own `contextLength`, which
+ * the update route enforces per row.
+ */
+export const MAX_CONFIGURABLE_NUM_CTX = 10_000_000;
+
+/**
  * Admin-configured, per-model generation parameters that Archestra SENDS on
  * every native Ollama (`ollama-native`) chat turn (unlike `defaultParameters`,
  * which is display-only). Each field is optional — an omitted field inherits
  * Ollama's own Modelfile/server default. Precedence at request time is:
  * request body > these configured values > omitted.
+ *
+ * Only `ollama-native` models accept these — the update route rejects them for
+ * every other provider, since nothing else ever sends them and a stray value
+ * would still redefine the displayed context window (see
+ * `ModelModel.resolveEffectiveContextLength`).
  */
 export const ConfiguredParametersSchema = z.object({
   temperature: z.number().min(0).optional(),
@@ -57,8 +70,15 @@ export const ConfiguredParametersSchema = z.object({
   repeat_penalty: z.number().min(0).optional(),
   seed: z.number().int().optional(),
   stop: z.array(z.string()).optional(),
-  num_ctx: z.number().int().min(1).optional(),
-  num_predict: z.number().int().optional(),
+  /**
+   * Upper bound is a sanity backstop only — the update route additionally
+   * rejects anything above the model's own architectural `contextLength`. An
+   * unbounded value here would make Ollama allocate (or refuse) an absurd KV
+   * cache while Archestra kept displaying the inflated window.
+   */
+  num_ctx: z.number().int().min(1).max(MAX_CONFIGURABLE_NUM_CTX).optional(),
+  /** `-1` = generate until the context fills, `-2` = fill the context. */
+  num_predict: z.number().int().min(-2).optional(),
   reasoning_effort: ReasoningEffortSchema.optional(),
 });
 export type ConfiguredParameters = z.infer<typeof ConfiguredParametersSchema>;

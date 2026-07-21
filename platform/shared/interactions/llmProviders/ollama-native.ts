@@ -14,6 +14,41 @@ type NativeRequest = archestraApiTypes.OllamaNativeChatRequest;
 type NativeResponse = archestraApiTypes.OllamaNativeChatResponse;
 type NativeMessage = NativeRequest["messages"][number];
 
+/**
+ * Pair one assistant tool call with its result message.
+ *
+ * Ollama's native wire correlates by name, not id: `tool_calls` carry no `id`
+ * and results carry `tool_name`. Comparing `tool_call_id === toolCall.id` is
+ * therefore `undefined === undefined` for every native pair, which matched the
+ * first result to every call — so a multi-tool turn rendered each call against
+ * the wrong output. Prefer ids when present, then names, then arrival order,
+ * and never hand the same result to two calls.
+ *
+ * Returns -1 when nothing is left to pair with.
+ */
+function matchToolResultIndex(
+  results: NativeMessage[],
+  toolCall: NonNullable<NativeMessage["tool_calls"]>[number],
+  callIndex: number,
+  claimed: Set<number>,
+): number {
+  const unclaimed = (index: number) => !claimed.has(index);
+
+  if (toolCall.id) {
+    const byId = results.findIndex(
+      (m, index) => unclaimed(index) && m.tool_call_id === toolCall.id,
+    );
+    if (byId !== -1) return byId;
+  }
+
+  const byName = results.findIndex(
+    (m, index) => unclaimed(index) && m.tool_name === toolCall.function.name,
+  );
+  if (byName !== -1) return byName;
+
+  return callIndex < results.length && unclaimed(callIndex) ? callIndex : -1;
+}
+
 function toText(content: NativeMessage["content"]): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -133,15 +168,30 @@ class OllamaNativeChatInteraction implements InteractionUtils {
 
       if (message.role === "assistant" && message.tool_calls) {
         const parts: PartialUIMessage["parts"] = [...uiMessage.parts];
-        for (const toolCall of message.tool_calls) {
-          const toolResult = messages
-            .slice(i + 1)
-            .find((m) => m.role === "tool" && m.tool_call_id === toolCall.id);
+        // Results that could belong to this assistant turn, in arrival order.
+        const followingResults = messages
+          .slice(i + 1)
+          .filter((m) => m.role === "tool");
+        const claimed = new Set<number>();
+
+        message.tool_calls.forEach((toolCall, callIndex) => {
+          const resultIndex = matchToolResultIndex(
+            followingResults,
+            toolCall,
+            callIndex,
+            claimed,
+          );
+          const toolResult =
+            resultIndex === -1 ? undefined : followingResults[resultIndex];
           if (toolResult && toolResult.role === "tool") {
+            claimed.add(resultIndex);
             parts.push(...this.mapMessageToUi(toolResult).parts);
-            const dualLlm = dualLlmAnalyses?.find(
-              (r) => r.toolCallId === toolCall.id,
-            );
+            // Only correlate by id when there is one — on the native wire both
+            // sides are undefined and `undefined === undefined` would attach
+            // the first analysis to every call.
+            const dualLlm = toolCall.id
+              ? dualLlmAnalyses?.find((r) => r.toolCallId === toolCall.id)
+              : undefined;
             if (dualLlm) {
               parts.push({
                 type: "dual-llm-analysis",
@@ -156,7 +206,7 @@ class OllamaNativeChatInteraction implements InteractionUtils {
               });
             }
           }
-        }
+        });
         uiMessages.push({ ...uiMessage, parts });
       } else {
         uiMessages.push(uiMessage);
@@ -170,12 +220,13 @@ class OllamaNativeChatInteraction implements InteractionUtils {
     content?: NativeMessage["content"];
     tool_calls?: NativeMessage["tool_calls"];
     tool_call_id?: string;
+    tool_name?: string;
   }): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const text = toText(message.content);
 
     if (message.role === "tool") {
-      const resolvedToolName = this.resolveToolName(message.tool_call_id);
+      const resolvedToolName = this.resolveToolName(message);
       let output: unknown = text;
       try {
         output = JSON.parse(text);
@@ -215,15 +266,26 @@ class OllamaNativeChatInteraction implements InteractionUtils {
     return { role, parts };
   }
 
-  private resolveToolName(toolCallId: string | undefined): string {
-    if (!toolCallId) return "tool-result";
-    for (const message of this.request.messages) {
-      if (message.role === "assistant" && message.tool_calls) {
-        const match = message.tool_calls.find((t) => t.id === toolCallId);
-        if (match) return match.function.name;
+  /**
+   * Name a tool result. Ollama's native wire names the tool on the result
+   * itself (`tool_name`) and omits ids entirely, so the id lookup only ever
+   * succeeds for ollama-ai-provider-v2 traffic — without the `tool_name`
+   * fallback every native result in the LLM log renders as "tool-result".
+   */
+  private resolveToolName(message: {
+    tool_call_id?: string;
+    tool_name?: string;
+  }): string {
+    const toolCallId = message.tool_call_id;
+    if (toolCallId) {
+      for (const request of this.request.messages) {
+        if (request.role === "assistant" && request.tool_calls) {
+          const match = request.tool_calls.find((t) => t.id === toolCallId);
+          if (match) return match.function.name;
+        }
       }
     }
-    return "tool-result";
+    return message.tool_name ?? "tool-result";
   }
 }
 

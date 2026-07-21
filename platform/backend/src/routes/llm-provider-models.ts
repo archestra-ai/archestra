@@ -50,6 +50,10 @@ const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
 > = {
   openrouter: TimeInMs.Hour,
   ollama: 5 * TimeInMs.Minute,
+  // Same server as `ollama`, so it needs the same TTL: on the default one-day
+  // fallback a freshly `ollama pull`-ed model appeared in one provider within
+  // five minutes and the other a day later, which reads as a failed pull.
+  "ollama-native": 5 * TimeInMs.Minute,
   vllm: 5 * TimeInMs.Minute,
 };
 
@@ -355,10 +359,50 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectModelSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       const existing = await ModelModel.findById(id);
       if (!existing) {
         throw new ApiError(404, "Model not found");
+      }
+
+      // `configuredParameters` is the only field here that Archestra SENDS to
+      // the provider rather than merely displaying, and model rows are global
+      // (no organizationId), so one write reaches every organization. The route
+      // gate is the coarse `llmModel:update`; this narrows the runtime-control
+      // subset to admins. The body schema cannot express any of these checks —
+      // it carries no provider, no context length, and no caller.
+      if (body.configuredParameters !== undefined) {
+        const isLlmModelAdmin = await userHasPermission(
+          user.id,
+          organizationId,
+          "llmModel",
+          "admin",
+        );
+        if (!isLlmModelAdmin) {
+          throw new ApiError(
+            403,
+            "Setting per-model generation parameters is admin only",
+          );
+        }
+
+        if (existing.provider !== "ollama-native") {
+          throw new ApiError(
+            400,
+            `Generation parameters are only supported for Ollama (Native) models, not "${existing.provider}"`,
+          );
+        }
+
+        const numCtx = body.configuredParameters?.num_ctx;
+        if (
+          numCtx !== undefined &&
+          existing.contextLength !== null &&
+          numCtx > existing.contextLength
+        ) {
+          throw new ApiError(
+            400,
+            `num_ctx (${numCtx}) exceeds the model's context length of ${existing.contextLength}`,
+          );
+        }
       }
 
       const updated = await ModelModel.update(id, body);

@@ -1,6 +1,9 @@
 import { TimeInMs } from "@archestra/shared";
 import { vi } from "vitest";
+import { userHasPermission } from "@/auth";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AuditLogModel from "@/models/audit-log";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -17,6 +20,8 @@ import {
   syncModelsForVisibleApiKeys,
   triggerLazyModelSyncForStaleApiKeys,
 } from "./llm-provider-models";
+
+vi.mock("@/auth");
 
 vi.mock("@/clients/gemini-client", () => ({
   isVertexAiEnabled: vi.fn(() => false),
@@ -56,6 +61,7 @@ const mockGetSecretValueForLlmProviderApiKey = vi.mocked(
   getSecretValueForLlmProviderApiKey,
 );
 const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
+const mockUserHasPermission = vi.mocked(userHasPermission);
 const mockSyncSystemKeys = vi.mocked(systemKeyManager.syncSystemKeys);
 
 describe("chat model routes", () => {
@@ -66,6 +72,7 @@ describe("chat model routes", () => {
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     mockIsVertexAiEnabled.mockReturnValue(false);
+    mockUserHasPermission.mockResolvedValue(true);
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -82,6 +89,8 @@ describe("chat model routes", () => {
       ).organizationId = organizationId;
       (request as typeof request & { user: User }).user = user;
     });
+
+    registerAuditLogHook(app);
 
     const { default: llmModelsRoutes } = await import("./llm-provider-models");
     await app.register(llmModelsRoutes);
@@ -675,5 +684,161 @@ describe("chat model routes", () => {
 
     resolveSync?.(1);
     await Promise.all(firstSyncs);
+  });
+
+  describe("PATCH /api/llm-models/:id — configuredParameters", () => {
+    async function makeNativeModel(contextLength: number | null = 131072) {
+      return ModelModel.create({
+        externalId: "ollama/llama3.2",
+        provider: "ollama-native",
+        modelId: "llama3.2",
+        contextLength,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+    }
+
+    async function settleAuditWrites() {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    test("saves generation parameters and records a non-empty audit diff", async () => {
+      const model = await makeNativeModel();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: {
+          configuredParameters: { num_predict: 1024, temperature: 0.4 },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().configuredParameters).toEqual({
+        num_predict: 1024,
+        temperature: 0.4,
+      });
+
+      await settleAuditWrites();
+      const { data: rows } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "llmModel",
+        sortDirection: "asc",
+        limit: 50,
+        offset: 0,
+      });
+
+      // Without configuredParameters in the audit snapshot this diff is empty —
+      // the only other field the save moves is `updatedAt`, which the hook
+      // strips — so "who set num_predict on a globally shared row" is
+      // unanswerable. platform/CLAUDE.md requires asserting on it here.
+      expect(rows).toHaveLength(1);
+      expect(rows[0].action).toBe("llmModel.updated");
+      expect(rows[0].before).toMatchObject({ configuredParameters: null });
+      expect(rows[0].after).toMatchObject({
+        configuredParameters: { num_predict: 1024, temperature: 0.4 },
+      });
+    });
+
+    test("rejects generation parameters for a non-native provider", async () => {
+      const anthropic = await ModelModel.create({
+        externalId: "anthropic/claude-test",
+        provider: "anthropic",
+        modelId: "claude-test",
+        contextLength: 200000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      // Schema-valid on its own — the rejection under test is the provider
+      // gate, not the bounds check. Nothing sends these to a paid provider, but
+      // an accepted num_ctx would still redefine the window the step-context
+      // guard compacts against.
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${anthropic.id}`,
+        payload: { configuredParameters: { num_ctx: 8192 } },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("Ollama (Native)");
+      expect(
+        (await ModelModel.findById(anthropic.id))?.configuredParameters,
+      ).toBeNull();
+    });
+
+    test("rejects a num_ctx above the model's context length", async () => {
+      const model = await makeNativeModel(131072);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { configuredParameters: { num_ctx: 1310720 } },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("131072");
+    });
+
+    test("accepts a num_ctx at the model's context length", async () => {
+      const model = await makeNativeModel(131072);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { configuredParameters: { num_ctx: 131072 } },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    test("requires admin to set generation parameters", async () => {
+      const model = await makeNativeModel();
+      mockUserHasPermission.mockResolvedValue(false);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { configuredParameters: { num_predict: 1 } },
+      });
+
+      // Model rows are global — no organizationId — so one write reaches every
+      // organization. Editors keep the display-only pricing/modality fields.
+      expect(response.statusCode).toBe(403);
+    });
+
+    test("a pricing-only update still works without admin", async () => {
+      const model = await makeNativeModel();
+      mockUserHasPermission.mockResolvedValue(false);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${model.id}`,
+        payload: { ignored: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockUserHasPermission).not.toHaveBeenCalled();
+    });
+
+    test("rejects an out-of-range parameter at the schema boundary", async () => {
+      const model = await makeNativeModel();
+
+      for (const payload of [
+        { top_p: 2 },
+        { num_ctx: 0 },
+        { num_ctx: 8192.5 },
+        { seed: 1.5 },
+        { num_predict: -3 },
+      ]) {
+        const response = await app.inject({
+          method: "PATCH",
+          url: `/api/llm-models/${model.id}`,
+          payload: { configuredParameters: payload },
+        });
+        expect(response.statusCode).toBe(400);
+      }
+    });
   });
 });

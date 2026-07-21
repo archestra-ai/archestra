@@ -1280,24 +1280,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
-                // Send admin-configured per-model generation parameters
-                // (num_ctx, num_predict, top_k, think, …) on native Ollama turns.
-                // These are the values `/v1` cannot carry; the native adapter
-                // forwards them into the `/api/chat` `options` bag.
-                if (provider === "ollama-native") {
-                  const ollamaProviderOptions =
-                    buildOllamaNativeProviderOptions({
-                      configured: modelRow?.configuredParameters,
-                      requestTemperature: temperature,
-                    });
-                  if (ollamaProviderOptions) {
-                    streamTextConfig.providerOptions = {
-                      ...streamTextConfig.providerOptions,
-                      ...ollamaProviderOptions,
-                    };
-                  }
-                }
-
                 // Request the model's real output ceiling (clamped by the
                 // operator ceiling), or a safe fallback when it is unknown.
                 // Without this, providers that inject a small default max
@@ -1311,6 +1293,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     ? ModelModel.resolveEffectiveContextLength(modelRow)
                     : null,
                 });
+
+                // Send admin-configured per-model generation parameters
+                // (num_ctx, num_predict, top_k, think, …) on native Ollama turns.
+                // These are the values `/v1` cannot carry; the native adapter
+                // forwards them into the `/api/chat` `options` bag. Must run
+                // AFTER the budget above: Ollama reads the output cap from
+                // `options.num_predict`, and the top-level `maxOutputTokens` the
+                // AI SDK emits is discarded by the native endpoint.
+                if (provider === "ollama-native") {
+                  const ollamaProviderOptions =
+                    buildOllamaNativeProviderOptions({
+                      configured: modelRow?.configuredParameters,
+                      requestTemperature: temperature,
+                      maxOutputTokens: streamTextConfig.maxOutputTokens,
+                    });
+                  if (ollamaProviderOptions) {
+                    streamTextConfig.providerOptions = {
+                      ...streamTextConfig.providerOptions,
+                      ...ollamaProviderOptions,
+                    };
+                  }
+                }
 
                 const { result, getAbortiveFinishReason } =
                   await runAgentStream({

@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-04-29
+lastUpdated: 2026-07-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -305,6 +305,10 @@ Existing provider implementations for reference:
 - Azure AI Foundry: `backend/src/routes/proxy/routes/azure.ts`, `backend/src/routes/proxy/adapters/azure.ts` (reference for providers requiring custom request mutation — injects `api-version` query param via a custom `fetch` wrapper in `llm-client.ts` for the built-in chat feature, since the Vercel AI SDK's `createOpenAI()` has no `defaultQuery` option)
 - vLLM: `backend/src/routes/proxy/routes/vllm.ts`, `backend/src/routes/proxy/adapters/vllm.ts`
 - Ollama: `backend/src/routes/proxy/routes/ollama.ts`, `backend/src/routes/proxy/adapters/ollama.ts`
+
+**Native (non-OpenAI-wire) self-hosted implementations:**
+
+- Ollama (Native): `backend/src/routes/proxy/routes/ollama-native.ts`, `backend/src/routes/proxy/adapters/ollama-native.ts` — the reference for a provider whose own wire format is used on **both** sides, with no translation. Worth reading if your provider is not OpenAI-compatible: it covers NDJSON streaming instead of SSE (including provider-specific mid-stream error framing via `formatStreamErrorFrame`), correlating tool results by name rather than by call id, an allowlisted options passthrough, and propagating the upstream HTTP status so failures don't collapse into a generic 500.
 - ZhipuAI: `backend/src/routes/proxy/routes/zhipuai.ts`, `backend/src/routes/proxy/adapters/zhipuai.ts`
 
 > **Tip:** If adding support for an OpenAI-compatible provider (e.g., Together AI), use the Groq implementation as a starting point — it re-exports OpenAI's type definitions, message schemas, and tool schemas with minimal boilerplate. For providers that require custom query parameters on every request, see the Azure AI Foundry implementation for the `fetchWithVersion` pattern.

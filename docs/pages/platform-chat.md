@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-07-18
+lastUpdated: 2026-07-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -63,6 +63,10 @@ Expand any category to see the largest individual contributors (top tools by sch
 **Estimates, not exact counts.** The breakdown is computed before the request is sent, using the same character-per-token and bytes-per-token heuristics that drive auto-compaction. The provider's exact prompt size arrives afterward via per-step token usage and supersedes the estimate for the ring. The visualizer never mutates or truncates the request.
 
 When auto-compaction frees tokens, a note appears in the panel showing how many tokens were recovered. See [Context Compaction](#context-compaction) for how compaction works.
+
+**Ollama models use a different window.** For **Ollama (Native)** models with a configured `num_ctx`, that value — not the model's architectural context length — is the window the ring shows and the platform gates on, because it is what Archestra sends to Ollama on every turn. Setting it lower than the model's maximum makes the ring reflect what Ollama will actually accept. See [Model Parameters](/docs/platform-supported-llm-providers#model-parameters).
+
+Relatedly, for **both** Ollama providers the per-turn output-token budget falls back to the model's context window when the real output ceiling is unknown, rather than to the conservative 8192-token default used elsewhere. Ollama does not publish an output cap and its models are rarely in the public model catalog, so the old default silently truncated long generations. This applies to the OpenAI-compatible **Ollama** provider too, not only the native one.
 
 ### File Attachments
 

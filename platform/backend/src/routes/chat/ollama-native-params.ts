@@ -7,6 +7,12 @@
  * Precedence: request body > per-model configured > omitted (Ollama then applies
  * its own Modelfile/server default). Only fields that resolve to a value are
  * sent, so an unset parameter inherits Ollama's default rather than forcing one.
+ *
+ * Note on thinking: ollama-ai-provider-v2 emits `think: ollamaOptions?.think ??
+ * false`, so omitting the field does NOT inherit Ollama's default — it disables
+ * thinking. An unset `reasoning_effort` and an explicit "none" are therefore
+ * identical on the wire. Sending Ollama's native effort levels needs the string
+ * form the package does not yet accept.
  */
 import type { ConfiguredParameters } from "@/types/model";
 
@@ -19,8 +25,13 @@ export function buildOllamaNativeProviderOptions(params: {
   configured: ConfiguredParameters | null | undefined;
   /** A request-body temperature override wins over the configured value. */
   requestTemperature?: number;
+  /**
+   * Resolved output-token budget for this turn (see `resolveAgentMaxOutputTokens`).
+   * Folded into `options.num_predict` — see {@link resolveNumPredict}.
+   */
+  maxOutputTokens?: number;
 }): { ollama: OllamaProviderOptions } | undefined {
-  const { configured, requestTemperature } = params;
+  const { configured, requestTemperature, maxOutputTokens } = params;
 
   const options: Record<string, number | number[] | string[]> = {};
   const setNumber = (key: string, value: number | undefined) => {
@@ -28,7 +39,10 @@ export function buildOllamaNativeProviderOptions(params: {
   };
 
   setNumber("num_ctx", configured?.num_ctx);
-  setNumber("num_predict", configured?.num_predict);
+  setNumber(
+    "num_predict",
+    resolveNumPredict(configured?.num_predict, maxOutputTokens),
+  );
   setNumber("top_k", configured?.top_k);
   setNumber("top_p", configured?.top_p);
   setNumber("repeat_penalty", configured?.repeat_penalty);
@@ -57,4 +71,29 @@ export function buildOllamaNativeProviderOptions(params: {
     return undefined;
   }
   return { ollama };
+}
+
+// =============================================================================
+// INTERNAL HELPERS
+// =============================================================================
+
+/**
+ * Ollama caps output length via `options.num_predict`. The AI SDK's
+ * `maxOutputTokens` is emitted by ollama-ai-provider-v2 as a top-level
+ * `max_output_tokens`, which is not an `/api/chat` field — Ollama's decoder
+ * discards it, so the operator ceiling never reaches the model. Fold the
+ * resolved budget in here instead, taking whichever cap is tighter.
+ *
+ * `num_predict` carries two negative sentinels — `-1` (generate until the
+ * context fills) and `-2` (fill the context) — so a plain `Math.min` would
+ * select the sentinel and remove the cap entirely. Treat a negative configured
+ * value as "no explicit cap" and let the budget win.
+ */
+function resolveNumPredict(
+  configured: number | undefined,
+  budget: number | undefined,
+): number | undefined {
+  if (budget === undefined) return configured;
+  if (configured === undefined || configured < 0) return budget;
+  return Math.min(configured, budget);
 }

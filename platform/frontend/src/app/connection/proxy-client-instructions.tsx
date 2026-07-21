@@ -2,6 +2,7 @@
 
 import {
   EXTERNAL_AGENT_ID_HEADER,
+  isModelRouterSupportedProvider,
   isSupportedProvider,
   providerDisplayNames,
   type SupportedProvider,
@@ -297,7 +298,12 @@ function GenericProxyInstructions({
   providerLabel: string;
   originalUrl: string;
 }) {
-  const [useRouter, setUseRouter] = useState(false);
+  const [routerRequested, setRouterRequested] = useState(false);
+  // Not every provider is reachable through the router — `ollama-native` speaks
+  // Ollama's own `/api/chat` wire, which the router cannot translate. Offering
+  // the toggle there produces setup instructions that cannot be made to work.
+  const supportsRouter = isModelRouterSupportedProvider(selectedProvider);
+  const useRouter = routerRequested && supportsRouter;
   const [authMethod, setAuthMethod] =
     useState<GenericAuthMethod>("provider-key");
   const { data: canCreateVirtualKey } = useHasPermissions({
@@ -379,30 +385,34 @@ function GenericProxyInstructions({
   return (
     <div className="space-y-3">
       <div className="space-y-4 rounded-lg border bg-card p-4">
-        <label
-          className="flex cursor-pointer items-start gap-2.5"
-          htmlFor="generic-use-router"
-        >
-          <Checkbox
-            id="generic-use-router"
-            checked={useRouter}
-            onCheckedChange={(checked) => setUseRouter(checked === true)}
-            className="mt-0.5"
-          />
-          <span className="space-y-0.5">
-            <span className="block text-sm font-medium text-foreground">
-              Use the OpenAI-Compatible Model Router
+        {supportsRouter && (
+          <label
+            className="flex cursor-pointer items-start gap-2.5"
+            htmlFor="generic-use-router"
+          >
+            <Checkbox
+              id="generic-use-router"
+              checked={useRouter}
+              onCheckedChange={(checked) =>
+                setRouterRequested(checked === true)
+              }
+              className="mt-0.5"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm font-medium text-foreground">
+                Use the OpenAI-Compatible Model Router
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Reach every configured provider through one OpenAI-style
+                endpoint. Send provider-qualified model IDs like{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                  openai:gpt-5.4
+                </code>{" "}
+                instead of switching base URLs per provider.
+              </span>
             </span>
-            <span className="block text-xs text-muted-foreground">
-              Reach every configured provider through one OpenAI-style endpoint.
-              Send provider-qualified model IDs like{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
-                openai:gpt-5.4
-              </code>{" "}
-              instead of switching base URLs per provider.
-            </span>
-          </span>
-        </label>
+          </label>
+        )}
 
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">

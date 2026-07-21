@@ -389,4 +389,297 @@ describe("execute / executeStream — upstream transport", () => {
     expect(factory.extractErrorMessage({ error: "boom" })).toBe("boom");
     expect(factory.extractErrorMessage(new Error("net"))).toBe("net");
   });
+
+  test("an upstream error carries the upstream status, not a bare 500", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ error: "model not found" }), {
+        status: 404,
+      })) as unknown as typeof fetch;
+
+    // `handleError` reads `.status` to pick the HTTP status; without it every
+    // upstream failure collapses to 500 and callers cannot tell a permanent
+    // 404 from a retryable 503.
+    const error = await factory
+      .execute(client(fetchImpl), request())
+      .then(() => null)
+      .catch((e) => e as Error & { status?: number; error?: unknown });
+
+    expect(error?.status).toBe(404);
+    expect(factory.extractErrorMessage(error)).toBe("model not found");
+  });
+
+  test("executeStream surfaces the upstream status too", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ error: "overloaded" }), {
+        status: 503,
+      })) as unknown as typeof fetch;
+
+    const error = await factory
+      .executeStream(client(fetchImpl), request({ stream: true }))
+      .then(() => null)
+      .catch((e) => e as Error & { status?: number });
+
+    expect(error?.status).toBe(503);
+  });
+
+  test("a non-JSON upstream body is truncated before it reaches the caller", async () => {
+    const leaked = `INTERNAL SERVICE DUMP ${"x".repeat(5000)}`;
+    const fetchImpl = (async () =>
+      new Response(leaked, { status: 500 })) as unknown as typeof fetch;
+
+    const error = await factory
+      .execute(client(fetchImpl), request())
+      .then(() => null)
+      .catch((e) => e as Error);
+
+    expect(error?.message.length).toBeLessThan(leaked.length);
+    expect(error?.message.endsWith("…")).toBe(true);
+  });
+
+  test("a base URL with a trailing query cannot relocate the request path", async () => {
+    let capturedUrl = "";
+    const fetchImpl = (async (url: string) => {
+      capturedUrl = String(url);
+      return new Response(JSON.stringify(response()), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    await factory.execute(
+      client(fetchImpl, "http://ollama.test/base?token=abc"),
+      request(),
+    );
+    expect(capturedUrl).toBe("http://ollama.test/api/chat");
+  });
+
+  test("iterateNdjson reassembles a JSON object split across reads", async () => {
+    const line = JSON.stringify(
+      chunk({ message: { role: "assistant", content: "split" } }),
+    );
+    const half = Math.floor(line.length / 2);
+    const encoder = new TextEncoder();
+    // The single-string fixtures elsewhere never exercise the buffer/indexOf
+    // loop, so a chunk boundary mid-object would go unnoticed.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(line.slice(0, half)));
+        controller.enqueue(encoder.encode(`${line.slice(half)}\n`));
+        controller.close();
+      },
+    });
+    const fetchImpl = (async () =>
+      new Response(body, { status: 200 })) as unknown as typeof fetch;
+
+    const stream = await factory.executeStream(
+      client(fetchImpl),
+      request({ stream: true }),
+    );
+    const chunks = [];
+    for await (const c of stream) chunks.push(c);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].message.content).toBe("split");
+  });
+});
+
+describe("trusted-data correlation on the native wire (no ids)", () => {
+  // Ollama's own clients send `tool_name` and no ids at all. Every fixture in
+  // the suites above supplies explicit ids, which is exactly how this shape
+  // went untested.
+  const nativeToolTurn = () =>
+    request({
+      messages: [
+        { role: "user", content: "fetch it" },
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            { function: { name: "fetch_url", arguments: { url: "u" } } },
+          ],
+        },
+        {
+          role: "tool",
+          tool_name: "fetch_url",
+          content: "<attacker-controlled page>",
+        },
+      ],
+    } as Partial<NativeRequest>);
+
+  test("getMessages surfaces a tool call for an id-less tool result", () => {
+    const adapter = factory.createRequestAdapter(nativeToolTurn());
+    const toolMessage = adapter.getMessages().find((m) => m.role === "tool");
+
+    // A missing tool call here reads as "no tool calls in this context", which
+    // evaluateIfContextIsTrusted treats as trusted — disabling trusted-data
+    // policies and dual-LLM sanitization with no other signal.
+    expect(toolMessage?.toolCalls).toHaveLength(1);
+    expect(toolMessage?.toolCalls?.[0].name).toBe("fetch_url");
+    expect(toolMessage?.toolCalls?.[0].content).toBe(
+      "<attacker-controlled page>",
+    );
+  });
+
+  test("a tool result with neither an id nor a name still surfaces a tool call", () => {
+    const adapter = factory.createRequestAdapter(
+      request({
+        messages: [
+          { role: "user", content: "hi" },
+          { role: "tool", content: "untrusted" },
+        ],
+      } as Partial<NativeRequest>),
+    );
+    const toolMessage = adapter.getMessages().find((m) => m.role === "tool");
+
+    expect(toolMessage?.toolCalls).toHaveLength(1);
+    expect(toolMessage?.toolCalls?.[0].name).toBe("unknown");
+  });
+
+  test("getToolResults names an id-less result from tool_name", () => {
+    const adapter = factory.createRequestAdapter(nativeToolTurn());
+    const results = adapter.getToolResults();
+
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe("fetch_url");
+  });
+
+  test("sanitized content round-trips back onto the id-less message", () => {
+    const adapter = factory.createRequestAdapter(nativeToolTurn());
+    const toolCallId = adapter.getMessages().find((m) => m.role === "tool")
+      ?.toolCalls?.[0].id as string;
+
+    // The guardrails key updates by the id `getMessages` handed out, so the
+    // synthesized id has to survive the round trip — otherwise the sanitized
+    // result is silently replaced by the untrusted original on the wire.
+    adapter.applyToolResultUpdates({ [toolCallId]: "[sanitized]" });
+
+    const forwarded = adapter.toProviderRequest();
+    expect(forwarded.messages[2].content).toBe("[sanitized]");
+  });
+
+  test("each tool result keeps a distinct id when several share a name", () => {
+    const adapter = factory.createRequestAdapter(
+      request({
+        messages: [
+          { role: "user", content: "twice" },
+          { role: "tool", tool_name: "search", content: "first" },
+          { role: "tool", tool_name: "search", content: "second" },
+        ],
+      } as Partial<NativeRequest>),
+    );
+    const ids = adapter.getToolResults().map((r) => r.id);
+
+    expect(new Set(ids).size).toBe(2);
+
+    adapter.applyToolResultUpdates({ [ids[1]]: "[sanitized second]" });
+    const forwarded = adapter.toProviderRequest();
+    expect(forwarded.messages[1].content).toBe("first");
+    expect(forwarded.messages[2].content).toBe("[sanitized second]");
+  });
+});
+
+describe("streaming details", () => {
+  test("formatTextDeltaSSE emits created_at before any upstream chunk", () => {
+    const adapter = factory.createStreamAdapter();
+
+    // The dual-LLM progress callbacks run before executeStream. `created_at` is
+    // required by the client's stream schema, and JSON.stringify drops
+    // undefined keys — so an unset value fails the parse and ends the whole
+    // stream with finishReason: "error" on the first progress line.
+    const line = JSON.parse(String(adapter.formatTextDeltaSSE("Analyzing…")));
+    expect(typeof line.created_at).toBe("string");
+    expect(line.message.content).toBe("Analyzing…");
+    expect(line.done).toBe(false);
+  });
+
+  test("formatEndSSE emits created_at even when no chunk parsed", () => {
+    const adapter = factory.createStreamAdapter();
+    const line = JSON.parse(String(adapter.formatEndSSE()));
+    expect(typeof line.created_at).toBe("string");
+    expect(line.done).toBe(true);
+  });
+
+  test("a chunk carrying both tool_calls and done keeps usage and stop reason", () => {
+    const adapter = factory.createStreamAdapter();
+    const result = adapter.processChunk(
+      chunk({
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [{ function: { name: "search", arguments: {} } }],
+        },
+        done: true,
+        done_reason: "stop",
+        prompt_eval_count: 11,
+        eval_count: 3,
+      }),
+    );
+
+    // Nothing in the wire format forbids this pairing; if the tool-call branch
+    // returned first the interaction would persist with zero tokens and zero
+    // cost, surfacing later as unexplained free requests.
+    expect(result.isToolCallChunk).toBe(true);
+    expect(adapter.state.usage).toEqual({
+      inputTokens: 11,
+      outputTokens: 3,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+    expect(adapter.state.stopReason).toBe("stop");
+  });
+
+  test("accumulates the thinking field without streaming it as content", () => {
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk(
+      chunk({ message: { role: "assistant", thinking: "reasoning…" } }),
+    );
+    adapter.processChunk(
+      chunk({ message: { role: "assistant", content: "answer" } }),
+    );
+
+    expect(adapter.state.text).toBe("answer");
+    expect(adapter.toProviderResponse().message.thinking).toBe("reasoning…");
+  });
+
+  test("buffers multiple tool calls arriving in one chunk", () => {
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk(
+      chunk({
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            { function: { name: "a", arguments: {} } },
+            { function: { name: "b", arguments: {} } },
+          ],
+        },
+      }),
+    );
+
+    expect(adapter.state.toolCalls.map((c) => c.name)).toEqual(["a", "b"]);
+  });
+
+  test("streams by default when the request omits `stream`", () => {
+    // Ollama's `stream` is a *bool: nil means true, which is why its own curl
+    // examples omit the field and still get NDJSON.
+    expect(factory.createRequestAdapter(request()).isStreaming()).toBe(true);
+    expect(
+      factory.createRequestAdapter(request({ stream: false })).isStreaming(),
+    ).toBe(false);
+    expect(
+      factory.createRequestAdapter(request({ stream: true })).isStreaming(),
+    ).toBe(true);
+  });
+
+  test("mid-stream errors are framed as NDJSON, not SSE", () => {
+    const frame = factory.formatStreamErrorFrame?.({
+      type: "error",
+      error: { message: "upstream died" },
+    });
+
+    // An `event: error\ndata: …` frame is not a parseable NDJSON line, so the
+    // client would report a parse failure instead of the real cause.
+    expect(frame?.startsWith("event:")).toBe(false);
+    expect(frame?.endsWith("\n")).toBe(true);
+    expect(JSON.parse(String(frame))).toMatchObject({
+      type: "error",
+      error: { message: "upstream died" },
+    });
+  });
 });

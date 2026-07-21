@@ -599,4 +599,32 @@ describe("createLLMModel", () => {
       }),
     );
   });
+
+  for (const provider of ["ollama", "ollama-native", "vllm"] as const) {
+    test(`${provider} resolves a chat model with no API key configured anywhere`, async ({
+      makeOrganization,
+      makeUser,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const agent = await makeAgent({ name: `${provider} agent`, teams: [] });
+
+      // The whole point of the self-hosted providers: no key exists, and
+      // `resolveProviderApiKey` deliberately returns `apiKey: undefined` for
+      // them. A hardcoded provider list in the guard drifts from that set —
+      // which is how keyless `ollama-native` 400'd on every turn, the exact
+      // setup the docs tell users to create.
+      const result = await createLLMModelForAgent({
+        organizationId: org.id,
+        userId: user.id,
+        agentId: agent.id,
+        model: "llama3.2",
+        provider,
+        source: "chat",
+      });
+
+      expect(result.model).toBeDefined();
+    });
+  }
 });

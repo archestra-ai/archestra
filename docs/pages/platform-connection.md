@@ -74,7 +74,7 @@ The `claude` CLI must be on your `PATH`.
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it sets the Bedrock variables instead and prints an `AWS_BEARER_TOKEN_BEDROCK` line to add to your shell profile.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`.
-- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch (macOS and Linux). See [Startup Guard](#startup-guard) below.
+- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard) below.
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
 - **Revert** — open the Disconnect panel on the Connection page for the exact reverse steps. Or restore the backup, delete the Archestra env keys, run `claude mcp remove <name>`, and drop the exported Bedrock token from your profile.
 
@@ -84,7 +84,7 @@ The guard runs each time you start `claude`. It checks that the configured Arche
 
 When a remote is unreachable, the guard retries it for 15 seconds and shows a status line. Press `s` to skip the remote for this session, or `d` to disconnect it from Claude Code — the same reverse-of-connect steps as the Disconnect panel. Skipping and disconnecting both end with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
 
-The guard lives at `~/.archestra/claude-startup-guard.sh`, hooked in by a marked `claude()` block in your shell profile. Set `ARCHESTRA_CLAUDE_GUARD=0` to disable it without uninstalling. The Disconnect panel has a one-liner that removes both pieces.
+On macOS and Linux the guard lives at `~/.archestra/claude-startup-guard.sh`, hooked in by a marked `claude()` block in your shell profile. On Windows it is `~/.archestra/claude-startup-guard.ps1`, hooked in by the same marked block in each PowerShell edition's `profile.ps1`. Set `ARCHESTRA_CLAUDE_GUARD=0` to disable it without uninstalling. The Disconnect panel has per-OS one-liners that remove both pieces.
 
 ### Codex
 

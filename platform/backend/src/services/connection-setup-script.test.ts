@@ -436,17 +436,30 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
       expect(renderSetupScript(fullContext(clientId))).not.toContain(
         "claude-startup-guard",
       );
+      expect(renderSetupScript(fullContext(clientId, "windows"))).not.toContain(
+        "claude-startup-guard",
+      );
     }
-    // Windows renders no guard yet (bash only).
-    expect(
-      renderSetupScript(fullContext("claude-code", "windows")),
-    ).not.toContain("claude-startup-guard");
   });
 
   test("claude-code (windows): next steps carry the same OAuth guidance", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
     expect(script).toContain("claude /mcp");
     expect(script).toContain(`select "${MCP.serverName}"`);
+  });
+
+  test("claude-code (windows): installs the PowerShell startup guard and profile wrapper", () => {
+    const script = renderSetupScript(fullContext("claude-code", "windows"));
+    expect(script).toContain("claude-startup-guard.ps1");
+    expect(script).toContain("# >>> archestra claude guard >>>");
+    expect(script).toContain("# <<< archestra claude guard <<<");
+    expect(script).toContain("function claude {");
+    // Same probe set and retry contract as the bash guard.
+    expect(script).toContain("LLM proxy (Anthropic)");
+    expect(script).toContain(`MCP gateway (${MCP.serverName})`);
+    expect(script).toContain(`Skills marketplace (${SKILLS.marketplaceName})`);
+    expect(script).toContain("$RetryTotalSeconds = 15");
+    expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
   });
 
   test("claude-code bedrock: keeps the bearer token out of settings.json", () => {
@@ -852,8 +865,10 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("-split ':',2");
     expect(script).toContain("$arch_hname");
     expect(script).toContain("ANTHROPIC_BASE_URL");
-    // Subscription passes through — no auth token injected.
-    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+    // Subscription passes through — no auth token injected into the settings
+    // merge. (The key name itself still appears in the startup guard's
+    // disconnect strip list.)
+    expect(script).not.toContain("-NotePropertyName 'ANTHROPIC_AUTH_TOKEN'");
   });
 
   test("claude-code bedrock passthrough: appends the attribution headers (PowerShell)", () => {

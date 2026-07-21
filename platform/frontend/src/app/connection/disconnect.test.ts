@@ -1,5 +1,6 @@
 import {
   CLAUDE_CODE_GUARD_MARKER_START,
+  CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
   CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
@@ -17,18 +18,25 @@ describe("getDisconnectSteps", () => {
     ).toBe(true);
   });
 
-  it("gives Claude Code a one-liner that removes the startup guard and its profile hook", () => {
+  it("gives Claude Code per-OS one-liners that remove the startup guard and its profile hook", () => {
     const steps = getDisconnectSteps("claude-code", {
       serverName: "my_gateway",
       appName: "Archestra",
     });
-    const guardStep = steps.find((step) =>
-      step.title.includes("startup guard"),
+    const bashStep = steps.find((step) =>
+      step.title.includes("startup guard (macOS/Linux)"),
     );
-    expect(guardStep?.command).toContain(CLAUDE_CODE_GUARD_MARKER_START);
-    expect(guardStep?.command).toContain(
+    expect(bashStep?.command).toContain(CLAUDE_CODE_GUARD_MARKER_START);
+    expect(bashStep?.command).toContain(
       `rm -f ~/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}`,
     );
+    const psStep = steps.find((step) =>
+      step.title.includes("startup guard (Windows)"),
+    );
+    expect(psStep?.command).toContain(CLAUDE_CODE_GUARD_MARKER_START);
+    expect(psStep?.command).toContain(CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH);
+    // both PowerShell editions' profiles are swept
+    expect(psStep?.command).toContain("'WindowsPowerShell','PowerShell'");
   });
 
   it("gives every CLI client an mcp-remove command scoped to the server name", () => {

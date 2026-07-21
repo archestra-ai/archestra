@@ -156,6 +156,9 @@ export const CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY = "ANTHROPIC_CUSTOM_HEADERS";
  */
 export const CLAUDE_CODE_GUARD_SCRIPT_RELPATH =
   ".archestra/claude-startup-guard.sh";
+/** Windows (PowerShell) guard; forward slashes — PowerShell accepts them. */
+export const CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH =
+  ".archestra/claude-startup-guard.ps1";
 export const CLAUDE_CODE_GUARD_MARKER_START =
   "# >>> archestra claude guard >>>";
 export const CLAUDE_CODE_GUARD_MARKER_END = "# <<< archestra claude guard <<<";

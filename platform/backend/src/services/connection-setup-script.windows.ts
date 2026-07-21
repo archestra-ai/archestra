@@ -7,6 +7,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
+import { buildWindowsClaudeCodeStartupGuardInstallSection } from "./claude-code-startup-guard.windows";
 import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
@@ -223,6 +224,11 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
           "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
         );
       }
+      if (ctx.mcp || ctx.proxy || ctx.skills) {
+        steps.push(
+          "Open a new PowerShell session so the startup guard wrapper takes effect — it checks these remotes before every `claude` launch.",
+        );
+      }
       break;
     case "codex":
       if (ctx.mcp) {
@@ -364,6 +370,24 @@ claude plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — continuing.' }
 claude plugin install ${psq(pluginRef)}
 if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)} }`);
+  }
+
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(
+      buildWindowsClaudeCodeStartupGuardInstallSection({
+        appName: ctx.appName,
+        mcp: ctx.mcp,
+        proxy: ctx.proxy
+          ? {
+              provider:
+                ctx.proxy.provider === "bedrock" ? "bedrock" : "anthropic",
+              providerLabel: ctx.proxy.providerLabel,
+              url: ctx.proxy.url,
+            }
+          : null,
+        skills: ctx.skills,
+      }),
+    );
   }
 
   return sections;

@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_GUARD_MARKER_END,
   CLAUDE_CODE_GUARD_MARKER_START,
+  CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
   CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
 } from "@archestra/shared";
@@ -39,9 +40,14 @@ export function getDisconnectSteps(
           body: `Delete the ${CLAUDE_CODE_PROXY_ENV_KEYS.anthropic.join(" and ")} lines from the env block in ~/.claude/settings.json — plus ${CLAUDE_CODE_PROXY_ENV_KEYS.bedrock.join(", ")} if you set up Bedrock, and the ${appName} lines in ${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}. Restart Claude Code.`,
         },
         {
-          title: "Remove the startup guard",
+          title: "Remove the startup guard (macOS/Linux)",
           body: `Deletes the pre-loader script and the claude() wrapper the connect script added to your shell profile. Open a new terminal afterward.`,
           command: `for f in ~/.zshrc ~/.bashrc; do [ -f "$f" ] && sed -i.bak '/^${CLAUDE_CODE_GUARD_MARKER_START}$/,/^${CLAUDE_CODE_GUARD_MARKER_END}$/d' "$f"; done; rm -f ~/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}`,
+        },
+        {
+          title: "Remove the startup guard (Windows)",
+          body: `Deletes the pre-loader script and the claude wrapper the connect script added to your PowerShell profiles. Open a new PowerShell session afterward.`,
+          command: `$s='${CLAUDE_CODE_GUARD_MARKER_START}';$e='${CLAUDE_CODE_GUARD_MARKER_END}';foreach($d in @('WindowsPowerShell','PowerShell')){$f=Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) $d) 'profile.ps1';if(Test-Path $f){$k=$true;Set-Content $f @(Get-Content $f|Where-Object{if($_-eq$s){$k=$false};$r=$k;if($_-eq$e){$k=$true;$r=$false};$r})}};Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE '${CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH}')`,
         },
       ];
     case "cursor":

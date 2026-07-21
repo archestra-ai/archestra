@@ -189,7 +189,7 @@ export function AppGalleryShareButton(props: {
         <TooltipContent sideOffset={8} className="max-w-[260px] text-xs">
           {props.disabled && props.disabledReason
             ? props.disabledReason
-            : "Submit to Archestra for review! Authorize Archestra to create a pull request to the Apps Hackathon repository on GitHub for you — your final cut with all your edits applied."}
+            : "Submit to Archestra for review!"}
         </TooltipContent>
       </Tooltip>
 

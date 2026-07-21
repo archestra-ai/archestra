@@ -52,6 +52,7 @@ export const ConversationScrollButton = ({
   return (
     !isAtBottom && (
       <Button
+        aria-label={label ?? "Scroll to bottom"}
         className={cn(
           "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full",
           label && "h-9 gap-1.5 px-4",

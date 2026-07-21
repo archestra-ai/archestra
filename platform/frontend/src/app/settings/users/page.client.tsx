@@ -341,6 +341,7 @@ function MembersTab({
         if ("provider" in member) {
           return (
             <TableRowActions
+              itemName={member.email}
               actions={[
                 {
                   icon: <Copy className="h-4 w-4" />,
@@ -375,6 +376,7 @@ function MembersTab({
 
         return (
           <TableRowActions
+            itemName={member.email}
             actions={[
               {
                 icon: <UserCog className="h-4 w-4" />,
@@ -692,6 +694,7 @@ function InvitationsTab({
       enableHiding: false,
       cell: ({ row }) => (
         <TableRowActions
+          itemName={row.original.email}
           actions={[
             {
               icon: <Trash2 className="h-4 w-4" />,

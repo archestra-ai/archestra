@@ -37,8 +37,9 @@ export function ExternalDocsLink({
       )}
     >
       {children}
+      <span className="sr-only">(opens in new tab)</span>
       {showIcon ? (
-        <ExternalLink className={cn("h-3 w-3", iconClassName)} />
+        <ExternalLink aria-hidden className={cn("h-3 w-3", iconClassName)} />
       ) : null}
     </Link>
   );

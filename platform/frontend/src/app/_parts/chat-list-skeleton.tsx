@@ -29,7 +29,9 @@ export function ChatListSkeleton({ subClass }: { subClass: string }) {
 
   return (
     <SidebarGroup className="pt-0">
-      <SidebarGroupLabel>Recents</SidebarGroupLabel>
+      <SidebarGroupLabel role="heading" aria-level={2}>
+        Recents
+      </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           <SidebarMenuItem>

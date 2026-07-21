@@ -334,6 +334,7 @@ export default function ModelsPage() {
         header: "Actions",
         cell: ({ row }) => (
           <TableRowActions
+            itemName={row.original.modelId}
             actions={[
               {
                 icon: row.original.ignored ? (

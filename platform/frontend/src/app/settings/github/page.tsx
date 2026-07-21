@@ -213,6 +213,7 @@ export default function GithubSettingsPage() {
         header: "Actions",
         cell: ({ row }) => (
           <TableRowActions
+            itemName={row.original.name}
             actions={[
               ...(canUpdate
                 ? [

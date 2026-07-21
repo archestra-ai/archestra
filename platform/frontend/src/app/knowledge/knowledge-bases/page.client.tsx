@@ -222,7 +222,7 @@ function KnowledgeBasesList() {
             onClick: () => setDeletingId(kb.id),
           },
         ];
-        return <TableRowActions actions={actions} />;
+        return <TableRowActions actions={actions} itemName={kb.name} />;
       },
     },
   ];
@@ -435,6 +435,7 @@ function ExpandedConnectors({
       header: "Actions",
       cell: ({ row }) => (
         <TableRowActions
+          itemName={row.original.name}
           actions={[
             {
               icon: <Pencil className="h-4 w-4" />,

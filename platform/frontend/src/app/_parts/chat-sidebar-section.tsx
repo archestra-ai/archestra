@@ -470,97 +470,108 @@ export function ChatSidebarSection({
                   <span className="truncate">{conv.projectName}</span>
                 </span>
               )}
-              {(canUpdateConversation ||
-                canDeleteConversation ||
-                showCreateProject) && (
-                <DropdownMenu
-                  open={isMenuOpen}
-                  onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
-                >
-                  <DropdownMenuTrigger asChild>
-                    <MoreHorizontal
-                      className={cn(
-                        "h-4 w-4 p-0 shrink-0 transition-opacity",
-                        isMenuOpen
-                          ? "opacity-100"
-                          : "opacity-0 group-hover/menu-sub-item:opacity-100",
-                      )}
-                    />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" side="right">
-                    {canUpdateConversation && (
-                      <>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleTogglePin(conv.id, isPinned);
-                          }}
-                        >
-                          {isPinned ? (
-                            <>
-                              <PinOff className="h-4 w-4 mr-2" />
-                              Unpin
-                            </>
-                          ) : (
-                            <>
-                              <Pin className="h-4 w-4 mr-2" />
-                              Pin
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEdit(conv.id, displayTitle);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRegenerateTitle(conv.id);
-                          }}
-                          disabled={generateTitleMutation.isPending}
-                        >
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Regenerate title
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    {showCreateProject && (
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenMenuId(null);
-                          setCreateProjectConv({
-                            id: conv.id,
-                            title: displayTitle,
-                          });
-                        }}
-                      >
-                        <FolderPlus className="h-4 w-4 mr-2" />
-                        Create project
-                      </DropdownMenuItem>
-                    )}
-                    {canDeleteConversation && (
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirmId(conv.id);
-                        }}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
             </SidebarMenuButton>
           )}
+          {/* Sibling of the row button (not nested inside it): interactive
+              controls must not be nested, and the trigger must be a real
+              button rather than a bare svg. */}
+          {editingId !== conv.id &&
+            (canUpdateConversation ||
+              canDeleteConversation ||
+              showCreateProject) && (
+              <DropdownMenu
+                open={isMenuOpen}
+                onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
+              >
+                <DropdownMenuTrigger asChild>
+                  {/* A real button: ARIA menu attributes are not valid on a
+                    bare <svg>, and an svg is not keyboard-operable. */}
+                  <button
+                    type="button"
+                    aria-label="Chat actions"
+                    className={cn(
+                      "shrink-0 transition-opacity",
+                      isMenuOpen
+                        ? "opacity-100"
+                        : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal className="h-4 w-4 p-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="right">
+                  {canUpdateConversation && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePin(conv.id, isPinned);
+                        }}
+                      >
+                        {isPinned ? (
+                          <>
+                            <PinOff className="h-4 w-4 mr-2" />
+                            Unpin
+                          </>
+                        ) : (
+                          <>
+                            <Pin className="h-4 w-4 mr-2" />
+                            Pin
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(conv.id, displayTitle);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRegenerateTitle(conv.id);
+                        }}
+                        disabled={generateTitleMutation.isPending}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Regenerate title
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {showCreateProject && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(null);
+                        setCreateProjectConv({
+                          id: conv.id,
+                          title: displayTitle,
+                        });
+                      }}
+                    >
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      Create project
+                    </DropdownMenuItem>
+                  )}
+                  {canDeleteConversation && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirmId(conv.id);
+                      }}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
         </div>
       </SidebarMenuSubItem>
     );
@@ -596,33 +607,39 @@ export function ChatSidebarSection({
                 showTooltip={false}
               />
             </span>
-            <DropdownMenu
-              open={isMenuOpen}
-              onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
-            >
-              <DropdownMenuTrigger asChild>
-                <MoreHorizontal
-                  className={cn(
-                    "h-4 w-4 p-0 shrink-0 transition-opacity",
-                    isMenuOpen
-                      ? "opacity-100"
-                      : "opacity-0 group-hover/menu-sub-item:opacity-100",
-                  )}
-                />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleUnpinProject(project.id);
-                  }}
-                >
-                  <PinOff className="h-4 w-4 mr-2" />
-                  Unpin
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </SidebarMenuButton>
+          {/* Sibling of the row button: interactive controls must not nest, and
+              the menu trigger must be a real button rather than a bare svg. */}
+          <DropdownMenu
+            open={isMenuOpen}
+            onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Project actions"
+                className={cn(
+                  "shrink-0 transition-opacity",
+                  isMenuOpen
+                    ? "opacity-100"
+                    : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4 p-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="right">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUnpinProject(project.id);
+                }}
+              >
+                <PinOff className="h-4 w-4 mr-2" />
+                Unpin
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </SidebarMenuSubItem>
     );
@@ -660,33 +677,39 @@ export function ChatSidebarSection({
                 showTooltip={false}
               />
             </span>
-            <DropdownMenu
-              open={isMenuOpen}
-              onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
-            >
-              <DropdownMenuTrigger asChild>
-                <MoreHorizontal
-                  className={cn(
-                    "h-4 w-4 p-0 shrink-0 transition-opacity",
-                    isMenuOpen
-                      ? "opacity-100"
-                      : "opacity-0 group-hover/menu-sub-item:opacity-100",
-                  )}
-                />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleUnpinApp(appItem);
-                  }}
-                >
-                  <PinOff className="h-4 w-4 mr-2" />
-                  Unpin
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </SidebarMenuButton>
+          {/* Sibling of the row button: interactive controls must not nest, and
+              the menu trigger must be a real button rather than a bare svg. */}
+          <DropdownMenu
+            open={isMenuOpen}
+            onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="App actions"
+                className={cn(
+                  "shrink-0 transition-opacity",
+                  isMenuOpen
+                    ? "opacity-100"
+                    : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4 p-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="right">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUnpinApp(appItem);
+                }}
+              >
+                <PinOff className="h-4 w-4 mr-2" />
+                Unpin
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </SidebarMenuSubItem>
     );
@@ -719,7 +742,9 @@ export function ChatSidebarSection({
         <ChatListFadeIn fadeIn={fadeIn}>
           {pinnedItems.length > 0 && (
             <SidebarGroup className="pt-0">
-              <SidebarGroupLabel>Pinned</SidebarGroupLabel>
+              <SidebarGroupLabel role="heading" aria-level={2}>
+                Pinned
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
@@ -740,7 +765,9 @@ export function ChatSidebarSection({
 
           {recentChatGroups.map((group, groupIndex) => (
             <SidebarGroup key={group.label} className="pt-0">
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupLabel role="heading" aria-level={2}>
+                {group.label}
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>

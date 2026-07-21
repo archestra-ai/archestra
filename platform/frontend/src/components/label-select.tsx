@@ -92,6 +92,11 @@ export function LabelSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-label={
+            totalSelected > 0
+              ? `Filter by labels, ${totalSelected} selected`
+              : "Filter by labels"
+          }
           className={cn(
             "w-[180px] justify-between font-normal",
             !totalSelected && "text-muted-foreground",

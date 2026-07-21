@@ -224,6 +224,7 @@ function ConnectorsList() {
       header: "Actions",
       cell: ({ row }) => (
         <TableRowActions
+          itemName={row.original.name}
           actions={[
             {
               icon: <Pencil className="h-4 w-4" />,

@@ -176,7 +176,7 @@ export function AgentScopeFilter({
   return (
     <div className="flex items-center gap-2">
       <Select value={scope ?? "all"} onValueChange={handleScopeChange}>
-        <SelectTrigger className="w-[180px]">
+        <SelectTrigger aria-label="Filter by type" className="w-[180px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
@@ -196,7 +196,7 @@ export function AgentScopeFilter({
       </Select>
       {showOwnerSelect && (
         <Select value={ownerFilter} onValueChange={handleOwnerChange}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger aria-label="Filter by owner" className="w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" side="bottom" align="start">
@@ -272,7 +272,7 @@ export function AgentDeletedStatusFilter({
 
   return (
     <Select value={status} onValueChange={handleStatusChange}>
-      <SelectTrigger className="w-[150px]">
+      <SelectTrigger aria-label="Filter by status" className="w-[150px]">
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper" side="bottom" align="start">

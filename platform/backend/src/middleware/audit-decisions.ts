@@ -424,6 +424,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of skill; parent (skill) audited",
   },
+  skillUsageEventsTable: {
+    audited: false,
+    reason:
+      "append-only usage metric written by the system on every activation; not a user-driven state change",
+  },
   connectionSetupsTable: {
     audited: false,
     reason:

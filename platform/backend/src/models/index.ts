@@ -100,6 +100,7 @@ export { default as SkillSandboxReplayEventModel } from "./skill-sandbox-replay-
 export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";
 export { default as SkillTeamModel } from "./skill-team";
+export { default as SkillUsageEventModel } from "./skill-usage-event";
 export { default as SkillVersionModel } from "./skill-version";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";

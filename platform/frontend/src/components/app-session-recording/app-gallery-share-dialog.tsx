@@ -37,7 +37,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 
 /**
- * The player's "Share to the App Gallery" action: one click runs GitHub
+ * The player's "Submit to Archestra for review" action: one click runs GitHub
  * sign-in (device flow, first share only), files the pull request from the
  * participant's own account, and opens it in a new tab. Renders nothing on
  * deployments that don't offer the gallery.
@@ -45,6 +45,8 @@ import { useFeature } from "@/lib/config/config.query";
 export function AppGalleryShareButton(props: {
   conversationId: string;
   disabled: boolean;
+  /** Why the button is disabled — shown as the tooltip instead of the pitch. */
+  disabledReason?: string;
 }) {
   const galleryRepo = useFeature("hackathonGalleryRepo");
   const [open, setOpen] = useState(false);
@@ -173,7 +175,7 @@ export function AppGalleryShareButton(props: {
               variant="ghost"
               size="icon"
               className="size-7 text-muted-foreground hover:text-foreground"
-              aria-label="Share this session to the App Gallery"
+              aria-label="Submit this session to Archestra for review"
               disabled={props.disabled}
               onClick={() => setDialogOpen(true)}
             >
@@ -184,9 +186,10 @@ export function AppGalleryShareButton(props: {
             </Button>
           </span>
         </TooltipTrigger>
-        <TooltipContent sideOffset={8}>
-          Share to the App Gallery — opens a pull request from your GitHub
-          account.
+        <TooltipContent sideOffset={8} className="max-w-[260px] text-xs">
+          {props.disabled && props.disabledReason
+            ? props.disabledReason
+            : "Submit to Archestra for review! Authorize Archestra to create a pull request to the Apps Hackathon repository on GitHub for you — your final cut with all your edits applied."}
         </TooltipContent>
       </Tooltip>
 
@@ -194,8 +197,8 @@ export function AppGalleryShareButton(props: {
         open={open}
         onOpenChange={setDialogOpen}
         size="small"
-        title="Share to the App Gallery"
-        description="Your recording is submitted as a pull request from your own GitHub account. Nothing is published before it is reviewed."
+        title="Submit to Archestra for review!"
+        description="Archestra creates a pull request to the Apps Hackathon repository on GitHub for you — your final cut with all your edits applied. Nothing is published before it is reviewed."
       >
         <ShareDialogBody
           state={state}
@@ -227,9 +230,9 @@ type ShareState =
 
 const STAGE_LABELS: Record<ShareProgressStage | "signing-in", string> = {
   "signing-in": "Connecting to GitHub…",
-  forking: "Forking the gallery repository…",
+  forking: "Forking the Apps Hackathon repository…",
   branching: "Creating the submission branch…",
-  uploading: "Uploading the recording…",
+  uploading: "Uploading your final cut…",
   "opening-pr": "Opening the pull request…",
 };
 
@@ -329,7 +332,7 @@ function ConnectStep(props: { userCode: string; verificationUri: string }) {
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">
         Click below to copy the code and open GitHub, then paste it and approve.
-        Sharing continues automatically once you authorize.
+        Your submission continues automatically once you authorize.
       </p>
       <Button
         type="button"
@@ -414,7 +417,7 @@ function ManualStep(props: {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Fork the gallery repository
+            Fork the Apps Hackathon repository
             <ExternalLink className="ml-1 inline h-3 w-3" aria-hidden="true" />
           </a>{" "}
           — skip this if you already have a fork.

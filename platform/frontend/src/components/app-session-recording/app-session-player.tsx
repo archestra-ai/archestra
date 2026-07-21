@@ -682,12 +682,17 @@ export function AppSessionPlayer({
                   </Tooltip>
 
                   {/* Renders nothing unless the deployment offers the gallery.
-                      Blocked mid-edit like the download, but not by the video
-                      length cap — the shared bundle is the recording itself,
-                      not a render. */}
+                      Blocked exactly like the download — mid-edit AND over the
+                      export length cap: the gallery renders the submitted cut
+                      to video downstream, so the same 30-second bound applies. */}
                   <AppGalleryShareButton
                     conversationId={conversationId}
-                    disabled={descriptionEditing || surfaceEditing}
+                    disabled={exportBlocked}
+                    disabledReason={
+                      tooLongToExport
+                        ? `This cut runs ${formatMs(finalCutMs)}. Trim it to ${MAX_EXPORT_SECONDS} seconds or less to submit.`
+                        : "Finish editing to submit."
+                    }
                   />
 
                   <Tooltip>
@@ -5333,8 +5338,9 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
   // share button renders nothing there.
   {
     key: "share",
-    title: "Share to the App Gallery",
-    text: "Submit this session to the public App Gallery — a pull request from your own GitHub account.",
+    title: "Submit to Archestra for review!",
+    text: "Authorize Archestra to Create a Pull Request to Apps Hackathon repository on GitHub for you. Final cut with all your edits applied.",
+    note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
   },
   {
     key: "tour",

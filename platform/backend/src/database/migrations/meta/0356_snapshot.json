@@ -1,5 +1,5 @@
 {
-  "id": "1641978a-5e51-4bb3-a345-6115e18aec15",
+  "id": "73828029-99b5-4d0b-a915-ad54ddd456ab",
   "prevId": "fceeaee9-78c4-4c24-8d67-59e8c8f5c5b1",
   "version": "7",
   "dialect": "postgresql",
@@ -10504,12 +10504,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "configured_parameters": {
-          "name": "configured_parameters",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "discovered_via_llm_proxy": {
           "name": "discovered_via_llm_proxy",
           "type": "boolean",
@@ -14373,6 +14367,81 @@
           ]
         }
       },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.skill_usage_events": {
+      "name": "skill_usage_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "skill_id": {
+          "name": "skill_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "skill_usage_events_skill_created_idx": {
+          "name": "skill_usage_events_skill_created_idx",
+          "columns": [
+            {
+              "expression": "skill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "skill_usage_events_skill_id_skills_id_fk": {
+          "name": "skill_usage_events_skill_id_skills_id_fk",
+          "tableFrom": "skill_usage_events",
+          "tableTo": "skills",
+          "columnsFrom": [
+            "skill_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

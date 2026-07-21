@@ -24,6 +24,7 @@ import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   buildAbortiveTurnError,
+  buildReasoningOnlyTurnError,
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -2204,6 +2205,14 @@ describe("buildAbortiveTurnError", () => {
       expect(result.code).toBe(ChatErrorCode.IncompleteToolCall);
       expect(result.isRetryable).toBe(true);
     }
+  });
+});
+
+describe("buildReasoningOnlyTurnError", () => {
+  it("is a retryable EmptyResponse", () => {
+    const result = buildReasoningOnlyTurnError("ollama");
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
   });
 });
 

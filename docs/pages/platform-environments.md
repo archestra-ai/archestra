@@ -29,7 +29,7 @@ Viewing environments requires the `environment:read` permission — every predef
 
 ## The Default environment
 
-Every organization has an implicit **Default** environment. Any resource whose environment is unset belongs to Default. Default is a real peer environment, not a wildcard: a resource in Default is not visible to a resource assigned to a named environment, and vice versa. Because everything starts in Default, isolation only changes behavior once you explicitly assign a non-default environment.
+Every organization has an implicit **Default** environment. Any resource whose environment is unset belongs to Default. Default is a real peer environment, not a wildcard: a resource in Default is not visible to a resource assigned to a named environment, and vice versa. Because everything starts in Default, isolation only changes behavior once you explicitly assign a non-default environment. Default can define a Kubernetes namespace and network egress policy like any other environment.
 
 ## Restricted environments
 

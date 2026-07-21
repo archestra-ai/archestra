@@ -113,7 +113,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete", "admin"],
+  project: ["read", "create", "update", "delete", "admin", "read-all"],
   file: ["manage"],
   log: ["read"],
 
@@ -515,12 +515,14 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:create": "Start new chat conversations",
   "chat:update": "Edit chat messages and conversation settings",
   "chat:delete": "Delete chat conversations",
-  "project:read": "View projects and the chats inside them",
+  "project:read": "View projects and your own chats inside them",
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
+  "project:read-all":
+    "View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own.",
   "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read": "View LLM proxy and MCP tool call logs",
 

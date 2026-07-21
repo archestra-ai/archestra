@@ -1707,6 +1707,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         userId: user.id,
         organizationId,
+        canReadOthersViaProject: () =>
+          userHasPermission(user.id, organizationId, "project", "read-all"),
       });
 
       if (!conversation) {
@@ -3903,6 +3905,13 @@ async function findReadableConversationById(params: {
       id: params.conversationId,
       userId: params.userId,
       organizationId: params.organizationId,
+      canReadOthersViaProject: () =>
+        userHasPermission(
+          params.userId,
+          params.organizationId,
+          "project",
+          "read-all",
+        ),
     })) ??
     (await findScheduleRunConversationForAdmin({
       conversationId: params.conversationId,

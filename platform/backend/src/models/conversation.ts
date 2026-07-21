@@ -438,6 +438,15 @@ class ConversationModel {
     id: string;
     userId: string;
     organizationId: string;
+    /**
+     * Resolves whether the caller may read chats they did not author that are
+     * reachable only through project membership (i.e. holds `project:read-all`).
+     * Injected by the route layer so this model needs no `@/auth` dependency,
+     * and invoked lazily — only when access would otherwise be granted via the
+     * project-membership branch below. Owned chats and explicit conversation
+     * shares are intentional grants and bypass it.
+     */
+    canReadOthersViaProject: () => Promise<boolean>;
   }): Promise<Conversation | null> {
     const ownedConversation = await ConversationModel.findById(params);
 
@@ -461,9 +470,11 @@ class ConversationModel {
       });
     }
 
-    // Project membership grants the same read-only view: any chat in a
-    // project the caller can read is viewable (writing stays author-only —
-    // every mutating route resolves the conversation by owner).
+    // Project membership grants a read-only view of chats in the project
+    // (writing stays author-only — every mutating route resolves the
+    // conversation by owner). Reading a chat the caller did NOT author is
+    // additionally gated by `project:read-all`, uniformly — including when the
+    // caller owns the project.
     const [bare] = await db
       .select({
         projectId: schema.conversationsTable.projectId,
@@ -485,7 +496,8 @@ class ConversationModel {
         project,
         userId: params.userId,
         organizationId: params.organizationId,
-      }))
+      })) ||
+      !(await params.canReadOthersViaProject())
     ) {
       return null;
     }

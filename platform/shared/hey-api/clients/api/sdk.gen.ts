@@ -5984,7 +5984,7 @@ export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean 
  *
  * Authorization:
  *
- * `project:read`: View projects and the chats inside them
+ * `project:read`: View projects and your own chats inside them
  */
 export const getProjects = <ThrowOnError extends boolean = false>(options?: Options<GetProjectsData, ThrowOnError>) => (options?.client ?? client).get<GetProjectsResponses, GetProjectsErrors, ThrowOnError>({ url: '/api/projects', ...options });
 
@@ -6050,7 +6050,7 @@ export const deleteProject = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `project:read`: View projects and the chats inside them
+ * `project:read`: View projects and your own chats inside them
  */
 export const getProject = <ThrowOnError extends boolean = false>(options: Options<GetProjectData, ThrowOnError>) => (options.client ?? client).get<GetProjectResponses, GetProjectErrors, ThrowOnError>({ url: '/api/projects/{id}', ...options });
 
@@ -6104,7 +6104,7 @@ export const setProjectShare = <ThrowOnError extends boolean = false>(options: O
  * Authorization:
  *
  * `file:manage`: List, read, write, and delete files in chats and projects
- * `project:read`: View projects and the chats inside them
+ * `project:read`: View projects and your own chats inside them
  */
 export const getProjectFiles = <ThrowOnError extends boolean = false>(options: Options<GetProjectFilesData, ThrowOnError>) => (options.client ?? client).get<GetProjectFilesResponses, GetProjectFilesErrors, ThrowOnError>({ url: '/api/projects/{id}/files', ...options });
 
@@ -6118,7 +6118,7 @@ export const getProjectFiles = <ThrowOnError extends boolean = false>(options: O
  * Authorization:
  *
  * `file:manage`: List, read, write, and delete files in chats and projects
- * `project:read`: View projects and the chats inside them
+ * `project:read`: View projects and your own chats inside them
  */
 export const uploadProjectFiles = <ThrowOnError extends boolean = false>(options: Options<UploadProjectFilesData, ThrowOnError>) => (options.client ?? client).post<UploadProjectFilesResponses, UploadProjectFilesErrors, ThrowOnError>({
     url: '/api/projects/{id}/files',
@@ -6138,7 +6138,7 @@ export const uploadProjectFiles = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `project:read`: View projects and the chats inside them
+ * `project:read`: View projects and your own chats inside them
  */
 export const getProjectInstructions = <ThrowOnError extends boolean = false>(options: Options<GetProjectInstructionsData, ThrowOnError>) => (options.client ?? client).get<GetProjectInstructionsResponses, GetProjectInstructionsErrors, ThrowOnError>({ url: '/api/projects/{id}/instructions', ...options });
 
@@ -6163,7 +6163,7 @@ export const setProjectInstructions = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * All chats in a project the caller can read. `readOnly` marks chats authored by someone else (viewable, never writable).
+ * All chats in a project the caller can read. Chats authored by others require `project:read-all`; without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).
  *
  * Authentication:
  *
@@ -6171,7 +6171,7 @@ export const setProjectInstructions = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `project:read`: View projects and the chats inside them
+ * `project:read`: View projects and your own chats inside them
  */
 export const getProjectConversations = <ThrowOnError extends boolean = false>(options: Options<GetProjectConversationsData, ThrowOnError>) => (options.client ?? client).get<GetProjectConversationsResponses, GetProjectConversationsErrors, ThrowOnError>({ url: '/api/projects/{id}/conversations', ...options });
 
@@ -6184,7 +6184,7 @@ export const getProjectConversations = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `project:read`: View projects and the chats inside them
+ * `project:read`: View projects and your own chats inside them
  */
 export const unpinProject = <ThrowOnError extends boolean = false>(options: Options<UnpinProjectData, ThrowOnError>) => (options.client ?? client).delete<UnpinProjectResponses, UnpinProjectErrors, ThrowOnError>({ url: '/api/projects/{id}/pin', ...options });
 
@@ -6197,7 +6197,7 @@ export const unpinProject = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `project:read`: View projects and the chats inside them
+ * `project:read`: View projects and your own chats inside them
  */
 export const pinProject = <ThrowOnError extends boolean = false>(options: Options<PinProjectData, ThrowOnError>) => (options.client ?? client).put<PinProjectResponses, PinProjectErrors, ThrowOnError>({ url: '/api/projects/{id}/pin', ...options });
 

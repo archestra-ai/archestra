@@ -146,6 +146,7 @@ import {
 } from "./context-window-breakdown";
 import {
   buildAbortiveTurnError,
+  buildReasoningOnlyTurnError,
   formatUnavailableToolErrorDetails,
   getActiveTraceContext,
   getUnavailableToolErrorDetails,
@@ -168,6 +169,7 @@ import {
 } from "./normalization/normalize-chat-messages";
 import { buildModelMessages } from "./prepare-model-messages";
 import { readOpenedAppRef } from "./read-opened-app-ref";
+import { createReasoningOnlyTurnTracker } from "./reasoning-only-turn";
 import {
   detectSandboxCommand,
   runSandboxCommandTurn,
@@ -1470,6 +1472,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             provider,
                             getAbortiveFinishReason() ?? lastFinishReason,
                           );
+                          activeRunError = mappedError.message;
+                          return {
+                            type: "error",
+                            errorText: buildStreamErrorPayload({
+                              error: new Error(mappedError.message),
+                              mappedError,
+                              conversationId,
+                              slimChatErrorUi,
+                              stage: "via stream",
+                            }),
+                          };
+                        },
+                      }),
+                    )
+                    .pipeThrough(
+                      createReasoningOnlyTurnTracker({
+                        onReasoningOnlyTurn: () => {
+                          if (
+                            chatAbortController.signal.aborted ||
+                            activeRunError ||
+                            !conversationId
+                          ) {
+                            return null;
+                          }
+                          const mappedError =
+                            buildReasoningOnlyTurnError(provider);
                           activeRunError = mappedError.message;
                           return {
                             type: "error",

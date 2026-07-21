@@ -280,6 +280,11 @@ type StreamProbeOutcome =
 // reaches `tool-call` is an abortive (truncated) tool call we want to retry, so
 // the probe holds commit until the completed `tool-call` arrives. The cost is a
 // slightly later tool indicator (after args finish streaming) for healthy turns.
+// `reasoning-*` IS present (commits the turn): a long-thinking model must start
+// streaming its reasoning immediately, or a turn that reasons for a while before
+// any text/tool-call would send no bytes and risk a proxy/client idle timeout. A
+// turn that reasons and then produces no answer is caught after the stream ends
+// by createReasoningOnlyTurnTracker, not by withholding commit here.
 const RENDERABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
   "text-start",
   "text-delta",

@@ -1048,6 +1048,8 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(2);
 
       const sharedToolResult = result.find((t) => t.name === "shared_tool");
+      // Non-Archestra tool names carry no domain group.
+      expect(sharedToolResult?.group).toBeNull();
       expect(sharedToolResult?.assignedAgentCount).toBe(2);
       expect(sharedToolResult?.assignedAgents.map((a) => a.id)).toContain(
         agent1.id,
@@ -1073,6 +1075,40 @@ describe("ToolModel", () => {
 
       const result = await ToolModel.findByCatalogId(catalogItem.id);
       expect(result).toHaveLength(0);
+    });
+
+    test("resolves the domain group of built-in Archestra tools", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalogItem = await makeInternalMcpCatalog({
+        name: "grouped-catalog",
+        serverUrl: "https://api.grouped.com/mcp/",
+      });
+
+      await makeTool({
+        name: getArchestraToolFullName("list_skills"),
+        description: "List skills",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+      await makeTool({
+        name: getArchestraToolFullName("scaffold_app"),
+        description: "Scaffold an app",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+
+      const result = await ToolModel.findByCatalogId(catalogItem.id);
+
+      expect(
+        result.find((t) => t.name === getArchestraToolFullName("list_skills"))
+          ?.group,
+      ).toBe("skills");
+      expect(
+        result.find((t) => t.name === getArchestraToolFullName("scaffold_app"))
+          ?.group,
+      ).toBe("apps");
     });
   });
 

@@ -163431,6 +163431,10 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "group": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "assignedAgentCount": {
                         "type": "number"
                       },
@@ -163460,6 +163464,7 @@
                       "description",
                       "parameters",
                       "createdAt",
+                      "group",
                       "assignedAgentCount",
                       "assignedAgents"
                     ],
@@ -202563,6 +202568,10 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "group": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "assignedAgentCount": {
                         "type": "number"
                       },
@@ -202592,6 +202601,7 @@
                       "description",
                       "parameters",
                       "createdAt",
+                      "group",
                       "assignedAgentCount",
                       "assignedAgents"
                     ],

@@ -7,7 +7,7 @@ import { defineConfig } from "vitest/config";
 const isCI = process.env.CI === "true";
 
 /**
- * Partition test files by whether they use Vitest module mocking.
+ * Partition test files by whether they mutate worker-shared runtime state.
  *
  * `vi.mock`/`vi.doMock` registrations live in the worker's shared module/mock
  * registry, which Vitest does NOT reset between files when `isolate: false`
@@ -16,13 +16,22 @@ const isCI = process.env.CI === "true";
  * while everything else can share each worker's module cache and skip
  * re-importing the whole backend graph per file (~6s/file saved).
  *
+ * The same applies to files touching the module registry or global/env state
+ * directly: `vi.resetModules()` + dynamic re-import in a shared worker can
+ * hand back another file's cached module instance instead of a fresh one
+ * (seen as an order-dependent "runtime is not enabled" flake in
+ * skill-sandbox-runtime-service.test.ts), and `vi.stubEnv`/`vi.stubGlobal`
+ * values read at module-import time are captured by modules that later files
+ * in the same worker then reuse.
+ *
  * Routing is computed from file CONTENT at config-load time, so a new test
  * that adds `vi.mock` is automatically placed in the isolated project — no
  * manual list to maintain.
  */
 function partitionTestFiles(): { mocked: string[]; clean: string[] } {
   const root = path.resolve(__dirname, "./src");
-  const usesModuleMocks = /\bvi\.(mock|doMock|unmock|doUnmock|hoisted)\(/;
+  const needsIsolation =
+    /\bvi\.(mock|doMock|unmock|doUnmock|hoisted|resetModules|stubEnv|stubGlobal)\(/;
   const mocked: string[] = [];
   const clean: string[] = [];
 
@@ -33,7 +42,7 @@ function partitionTestFiles(): { mocked: string[]; clean: string[] } {
     if (!entry.isFile() || !entry.name.endsWith(".test.ts")) continue;
     const absolute = path.join(entry.parentPath, entry.name);
     const relative = `./${path.relative(__dirname, absolute)}`;
-    if (usesModuleMocks.test(readFileSync(absolute, "utf-8"))) {
+    if (needsIsolation.test(readFileSync(absolute, "utf-8"))) {
       mocked.push(relative);
     } else {
       clean.push(relative);
@@ -133,6 +142,14 @@ export default defineConfig({
       // Shuffle test files to balance load across workers
       shuffle: true,
     },
+
+    // CI-only in-job retry: one intermittent test failure otherwise fails the
+    // whole shard, which fails the merge-queue entry and restarts every entry
+    // stacked behind it. Retried-then-passed tests stay visible — Vitest
+    // auto-enables its github-actions reporter in CI, which lists them as
+    // flaky ("passed on retry N out of M") in the job's step summary. Local
+    // runs keep retry: 0 so flakes fail loudly during development.
+    retry: isCI ? 2 : 0,
 
     // Increase test timeout for database operations
     testTimeout: 30000,

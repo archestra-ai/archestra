@@ -27,7 +27,7 @@ jobs:
     name: Release Freeze Check
     # Always run so it can be a required status check - passes immediately for
     # non-release-please PRs and merge queue runs.
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read # Required to inspect the repository context for release-please PRs.
       pull-requests: write # Required to request changes on frozen release PRs.
@@ -90,7 +90,7 @@ jobs:
 
   license-compliance-check:
     name: License Compliance Check
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -131,7 +131,7 @@ jobs:
 
   supply-chain-policy:
     name: Supply Chain Policy
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -148,7 +148,7 @@ jobs:
 
   docs-image-policy:
     name: Docs Image Policy
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -163,7 +163,7 @@ jobs:
 
   docs-links:
     name: Docs Link Check
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -178,7 +178,7 @@ jobs:
 
   migration-kit-checks:
     name: Migration Kit Checks
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -199,7 +199,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     if: ${{ github.event_name == 'pull_request' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read # Required for dependency-review-action to read the PR dependency graph via the API.
       pull-requests: write # Required for dependency-review-action PR comments.
@@ -226,7 +226,7 @@ jobs:
   dependency-review-merge-group:
     name: Dependency Review
     if: ${{ github.event_name == 'merge_group' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions: {}
     steps:
       - name: Skip dependency review for merge queue
@@ -269,7 +269,7 @@ jobs:
     # bot guard (see the EXCEPTION note above): contributor bot only —
     # release-please PRs need this job's codegen auto-commit.
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # Backstop: every check here finishes in well under 10m, but leaked
     # test-runner processes (vitest fork workers / esbuild) occasionally orphan
     # and hold the step's log pipe open, leaving a *finished* job hanging until
@@ -435,7 +435,7 @@ jobs:
     name: Platform Rust Checks
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -478,7 +478,7 @@ jobs:
     name: AI Labs Rust Checks
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -518,7 +518,7 @@ jobs:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup. 15 minutes means something is hung.
     timeout-minutes: 15
@@ -577,7 +577,7 @@ jobs:
   # can require a single check ("Backend Unit Tests") regardless of shard count.
   backend-unit-tests-gate:
     name: Backend Unit Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # always() so the gate still runs (and turns red) when a shard fails,
     # ANDed with the merge-queue-only guard (see comment above
     # platform-lint-and-unit-tests): when the shards skip on an unlabeled PR
@@ -601,7 +601,7 @@ jobs:
     name: Frontend Integration Tests (MSW)
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -667,7 +667,7 @@ jobs:
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read # Required to checkout the repository and lint/package the Helm chart.
     defaults:

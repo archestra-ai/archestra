@@ -29,7 +29,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read # checkout
       id-token: write # Workload Identity Federation + GKE credentials
@@ -42,7 +42,7 @@ jobs:
 
       # docker-container driver — the default docker driver cannot export the registry build cache.
       - name: Set up Docker builder
-        uses: ./.github/actions/setup-blacksmith-builder
+        uses: ./.github/actions/setup-docker-builder
 
       - name: Authenticate to Google Artifact Registry
         uses: ./.github/actions/auth-to-gar

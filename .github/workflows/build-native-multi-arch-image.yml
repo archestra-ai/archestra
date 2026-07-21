@@ -83,7 +83,7 @@ jobs:
   build-image:
     name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})
     # Pick the runner matching the arch.
-    runs-on: ${{ matrix.os_and_arch == 'linux/arm64' && 'blacksmith-16vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
+    runs-on: ${{ matrix.os_and_arch == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
       # Build both arches, or amd64 only when amd64_only is set.
@@ -150,7 +150,7 @@ jobs:
   merge-manifests:
     name: Create multi-arch manifest
     if: ${{ inputs.push_image }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     needs:
       - build-image
     permissions:
@@ -170,8 +170,8 @@ jobs:
           pattern: ${{ inputs.image_name }}-digests-*
           merge-multiple: true
 
-      - name: Setup Blacksmith Builder
-        uses: ./.github/actions/setup-blacksmith-builder
+      - name: Setup Docker Builder
+        uses: ./.github/actions/setup-docker-builder
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}

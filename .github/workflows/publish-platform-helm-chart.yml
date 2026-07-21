@@ -33,7 +33,7 @@ jobs:
   # https://medium.com/google-cloud/ci-gitops-with-helm-github-actions-google-artifact-registry-and-config-sync-b48604191fda
   publish-platform-helm-chart:
     name: Publish platform Helm chart
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: write # Required to package the chart from the checked-out repository.
       id-token: write # Required for Workload Identity Federation.

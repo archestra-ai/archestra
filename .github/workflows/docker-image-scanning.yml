@@ -46,14 +46,14 @@ jobs:
       matrix:
         include:
           - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: ubuntu-24.04
             context: ./platform
             dockerfile: ./platform/Dockerfile
             local-tag-prefix: archestra-platform
             use-build-action: true
             scan-exit-code: "true"
           - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
+            runner: ubuntu-24.04
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             local-tag-prefix: mcp-server-base
@@ -83,13 +83,13 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Setup Blacksmith Builder
+      - name: Setup Docker Builder
         if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-blacksmith-builder
+        uses: ./.github/actions/setup-docker-builder
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/docker-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}

@@ -23,7 +23,7 @@ jobs:
     if: |
       !contains(github.event.pull_request.title, '[WIP]') &&
       !github.event.pull_request.draft
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions: {}
     outputs:
       pr_author: ${{ github.event.pull_request.user.login }}

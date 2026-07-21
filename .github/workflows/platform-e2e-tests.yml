@@ -88,7 +88,7 @@ jobs:
       matrix:
         include:
           - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: ubuntu-24.04
             context: ./platform
             dockerfile: ""
             artifact-name: platform-docker-image
@@ -96,7 +96,7 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
+            runner: ubuntu-24.04
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             artifact-name: mcp-server-base-docker-image
@@ -219,11 +219,11 @@ jobs:
       # Slim variant for the K8s e2e job: the same image minus the ~352MB
       # Dagger engine tar that only the quickstart job uses. Every layer is already in
       # the builder cache from the full build above, so this push takes
-      # seconds. (blacksmith-build-push directly: the builder is already set
+      # seconds. (docker-build-push directly: the builder is already set
       # up from the full build.)
       - name: Build slim Platform image (K8s job, no Dagger engine tar) and push
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/docker-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.context }}/Dockerfile
@@ -278,13 +278,13 @@ jobs:
 
       # The builder is only needed for an actual build; the reuse check above
       # talks straight to the registry. Fork PRs always build.
-      - name: Setup Blacksmith Builder
+      - name: Setup Docker Builder
         if: ${{ !matrix.use-build-action && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) || steps.mcp-base-reuse.outputs.reuse != 'true') }}
-        uses: ./.github/actions/setup-blacksmith-builder
+        uses: ./.github/actions/setup-docker-builder
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/docker-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -325,7 +325,7 @@ jobs:
   # build, and then polls the registry for the pushed image up to
   # image-pull-timeout-seconds (900s). That overlap is a win when the build
   # succeeds, but when it FAILS the K8s job would otherwise burn the full ~15-min
-  # poll deadline on an 8vcpu runner for an image that will never arrive. The
+  # poll deadline on a runner for an image that will never arrive. The
   # merge is already blocked by the failed required "Build ... Image" check, so
   # cancelling the run here only reclaims that wasted runner time — it changes no
   # merge outcome. (The lite and quickstart jobs already fast-fail: they `needs`
@@ -334,7 +334,7 @@ jobs:
     name: Cancel E2E on build failure
     needs: [platform-e2e-build]
     if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       actions: write # Required to cancel this workflow run.
@@ -353,14 +353,12 @@ jobs:
   # servers, and the Vault K8s-auth boot. Everything else runs in the lite
   # job below against the container harness.
   #
-  # One 8vcpu environment, no sharding: every extra shard pays the full
-  # ~4min environment setup again to split a few minutes of tests, and bigger
+  # One environment, no sharding: every extra shard pays the full ~4min
+  # environment setup again to split a few minutes of tests, and bigger
   # runners don't speed the tests up either (the serial spec groups set the
-  # floor). 8vcpu is enough because the job is wait-bound, not compute-bound:
-  # setup blocks on image pulls and pod readiness probes, and the tests are
-  # API-bound Playwright specs. 16vcpu was sized for the old full-suite
-  # sharded runs, and measurements showed 16 vs 32 vcpu made no difference
-  # to test time. The required check is "Merge E2E Test Reports", not this job.
+  # floor) — the job is wait-bound, not compute-bound: setup blocks on image
+  # pulls and pod readiness probes, and the tests are API-bound Playwright
+  # specs. The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
     name: Platform E2E Tests (K8s)
     # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
@@ -373,7 +371,7 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
     # hung run instead of letting it burn a runner for the GitHub default.
     timeout-minutes: 30
@@ -546,7 +544,7 @@ jobs:
     name: Platform E2E Tests (Lite)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -649,7 +647,7 @@ jobs:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -904,7 +902,7 @@ jobs:
     # gate; the event guard keeps it running on merge_group / on-demand runs but
     # reporting skipped (and thus satisfying the ruleset) on ordinary PR pushes.
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     # No permissions needed: this job only inspects `needs.*.result`.
     permissions: {}
@@ -947,7 +945,7 @@ jobs:
         platform-quickstart-e2e-tests,
       ]
     if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read # Required to checkout the repository and merge Playwright reports.

@@ -47,7 +47,7 @@ jobs:
 
   deploy-to-staging:
     name: Deploy to staging
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     needs: [deploy-dev-platform-images]
     # cancel-in-progress MUST stay false here: cancelling `helm upgrade`
     # mid-flight has previously left the release wedged in pending-upgrade.

@@ -1,21 +1,24 @@
 name: Warm E2E Build Cache
 
-# The platform image build swings ~85s (warm) to ~226s (cold) purely on how hot
-# the BuildKit layer cache is. Merge-queue entries run on ephemeral
-# gh-readonly-queue/* refs and land on whichever Blacksmith runner is free, so
-# they routinely hit a cold/evicted layer cache and pay the full ~226s on the
-# merge-queue critical path (the build gates every e2e shard).
+# The platform image build cost swings heavily on how hot the BuildKit layer
+# cache is. GitHub-hosted runners are ephemeral — every job starts with an
+# empty local layer cache — so builds only reuse layers through the GitHub
+# Actions cache backend (cache-from: type=gha, the docker-build-push default).
 #
-# This job rebuilds the platform image from main on a schedule so the EXPENSIVE,
+# This job rebuilds the platform image from main on a schedule and is the
+# DESIGNATED WRITER of that cache (cache-to: type=gha,mode=max): the EXPENSIVE,
 # rarely-changing base layers — the go-builder toolchain, `pnpm install`
-# node_modules, the dagger-engine assets — stay hot in the Blacksmith layer
-# cache and the Turborepo remote cache. Even when a queue entry changes app
-# source, only the cheap top layers rebuild; the heavy base is reused. That is
-# the difference between the ~85s and ~226s paths.
+# node_modules, the dagger-engine assets — stay warm in the GHA cache and the
+# Turborepo remote cache. GHA cache branch scoping lets PR and merge-queue
+# builds (gh-readonly-queue/* refs) read main's entries, so even when a queue
+# entry changes app source, only the cheap top layers rebuild.
 #
-# It deliberately does NOT push (push: false, load: false): the only product is a
-# warm cache, not an image. It runs on the same runner class as the real build
-# (blacksmith-16vcpu-ubuntu-2404) so it shares that pool's sticky-disk cache.
+# Ordinary builds deliberately do not export cache (cache-to stays empty):
+# one mode=max export per warming run keeps churn in the ~10 GB per-repo GHA
+# cache budget bounded, instead of every build re-uploading its layers.
+#
+# It deliberately does NOT push (push: false, load: false): the only product is
+# a warm cache, not an image.
 #
 # Mirrors the trigger shape of warm-e2e-image-caches.yml: daily before European
 # hours, plus an immediate re-warm on push to main when a base-layer input
@@ -37,8 +40,8 @@ on:
       - "platform/Dockerfile"
       - "platform/pnpm-lock.yaml"
       - ".github/actions/build-docker-image/action.yml"
-      - ".github/actions/blacksmith-build-push/action.yml"
-      - ".github/actions/setup-blacksmith-builder/action.yml"
+      - ".github/actions/docker-build-push/action.yml"
+      - ".github/actions/setup-docker-builder/action.yml"
       - ".github/workflows/warm-e2e-build-cache.yml"
 
 permissions: {}
@@ -50,9 +53,7 @@ concurrency:
 jobs:
   warm-build-cache:
     name: Warm E2E Build Cache
-    # Same runner class as platform-e2e-tests.yml's Build Platform Image leg so
-    # this warms the layer cache on the pool the merge queue actually builds on.
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read # Checkout only. No id-token: this build never pushes.
@@ -67,7 +68,9 @@ jobs:
       # build (platform-e2e-tests.yml), but push: false / load: false — the run
       # exists solely to populate the BuildKit layer cache and Turborepo remote
       # cache. provenance: false matches the e2e build so the cached layers line
-      # up byte-for-byte with what the queue produces.
+      # up byte-for-byte with what the queue produces. cache-to mode=max exports
+      # ALL stages (not just the final image), which is what keeps the heavy
+      # intermediate build stages warm for everyone else.
       - name: Warm platform image build cache
         uses: ./.github/actions/build-docker-image
         with:
@@ -75,5 +78,6 @@ jobs:
           push: "false"
           load: "false"
           provenance: "false"
+          cache-to: type=gha,mode=max
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}

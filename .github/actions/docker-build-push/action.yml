@@ -1,5 +1,5 @@
-name: Blacksmith Build Push
-description: Wrapper around useblacksmith/build-push-action pinned to a vetted version.
+name: Docker Build Push
+description: Wrapper around docker/build-push-action pinned to a vetted version.
 inputs:
   context:
     description: Build context.
@@ -48,6 +48,20 @@ inputs:
     description: Build secrets.
     required: false
     default: ""
+  cache-from:
+    description: >-
+      BuildKit cache sources. Defaults to the GitHub Actions cache backend so
+      builds reuse layers exported by warm-e2e-build-cache.yml (GHA cache
+      branch scoping lets PR/merge-queue builds read main's entries).
+    required: false
+    default: "type=gha"
+  cache-to:
+    description: >-
+      BuildKit cache export. Empty by default so ordinary builds only read the
+      cache; warm-e2e-build-cache.yml is the designated writer, which keeps
+      GHA cache churn bounded instead of every build re-uploading its layers.
+    required: false
+    default: ""
 outputs:
   digest:
     description: Built image digest.
@@ -57,7 +71,7 @@ runs:
   steps:
     - name: Build image
       id: build
-      uses: useblacksmith/build-push-action@cbd1f60d194a98cb3be5523b15134501eaf0fbf3 # v2.1.0
+      uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
       with:
         context: ${{ inputs.context }}
         file: ${{ inputs.file }}
@@ -71,3 +85,5 @@ runs:
         network: ${{ inputs.network }}
         build-args: ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}

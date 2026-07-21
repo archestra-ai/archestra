@@ -12,7 +12,7 @@ concurrency:
 jobs:
   clear-cache:
     name: Clear GitHub Actions Cache
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       actions: write # Required to list and delete Actions caches.
       contents: read # Required to checkout the repository for local workflow context.

@@ -13,7 +13,7 @@ concurrency:
 jobs:
   welcome-new-contributor:
     name: Welcome New Contributor
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     if: github.event.label.name == 'good first issue'
     permissions:
       issues: write # Required to post the welcome comment on the labeled issue.

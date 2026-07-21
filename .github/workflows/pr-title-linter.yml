@@ -20,7 +20,7 @@ concurrency:
 jobs:
   lint-pr-title:
     name: PR Title Linter
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: read # Required to checkout the repository and read commitlint config.
       pull-requests: read # Required by lint-pr-title to read PR metadata.

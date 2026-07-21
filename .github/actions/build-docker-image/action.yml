@@ -1,5 +1,5 @@
 name: Build Docker Image
-description: Build a Docker image using the Blacksmith builder
+description: Build a Docker image using Docker Buildx
 
 inputs:
   context:
@@ -56,6 +56,10 @@ inputs:
     default: ""
   sentry-auth-token:
     description: "Sentry auth token for source map uploads (optional)"
+    required: false
+    default: ""
+  cache-to:
+    description: "BuildKit cache export (e.g. type=gha,mode=max). Empty means read-only cache usage; only designated warming builds should export."
     required: false
     default: ""
 
@@ -122,12 +126,12 @@ runs:
         INPUT_TURBO_TEAM: ${{ inputs.turbo-team }}
         INPUT_TURBO_TOKEN: ${{ inputs.turbo-token }}
 
-    - name: Setup Blacksmith Builder
-      uses: ./.github/actions/setup-blacksmith-builder
+    - name: Setup Docker Builder
+      uses: ./.github/actions/setup-docker-builder
 
     - name: Build Docker image
       id: build
-      uses: ./.github/actions/blacksmith-build-push
+      uses: ./.github/actions/docker-build-push
       with:
         context: ${{ inputs.context }}
         file: ${{ inputs.dockerfile != '' && inputs.dockerfile || format('{0}/Dockerfile', inputs.context) }}
@@ -141,3 +145,4 @@ runs:
         network: host
         build-args: ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
         secrets: ${{ steps.prepare-secrets.outputs.value }}
+        cache-to: ${{ inputs.cache-to }}

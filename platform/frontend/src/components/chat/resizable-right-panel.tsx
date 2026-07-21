@@ -63,8 +63,9 @@ export function ResizableRightPanel({
    * The lock never outranks the layout's own bounds: on a window too narrow
    * to grant the full ratio the content column's minimum wins and the panel
    * takes what is left (the replay contain-fits whatever shape was actually
-   * captured). The user's saved width is never overwritten and comes back the
-   * moment the lock clears.
+   * captured). The locked width persists exactly like a user resize, so when
+   * the lock clears the panel stays put — no jump — and simply becomes
+   * resizable again.
    */
   aspectLock?: { ratio: number; hint: string };
 }) {
@@ -76,9 +77,6 @@ export function ResizableRightPanel({
     return DEFAULT_RIGHT_PANEL_WIDTH;
   });
   const [isResizing, setIsResizing] = useState(false);
-  // The width the aspect lock dictates, tracked separately from the user's
-  // width so unlocking restores exactly what the user had.
-  const [lockedWidth, setLockedWidth] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const lockRatio = aspectLock?.ratio;
   const locked = lockRatio !== undefined;
@@ -182,27 +180,26 @@ export function ResizableRightPanel({
   }, [getMaxWidth]);
 
   // While locked, the panel's width follows its own height at the locked
-  // ratio (the panel is full-height, so this tracks window resizes too). The
-  // width state and localStorage are deliberately untouched: the lock is a
-  // mode, not a resize.
+  // ratio (the panel is full-height, so this tracks window resizes too),
+  // written through the ordinary width state + localStorage — a lock update
+  // IS a resize, just machine-driven. That way the lock clearing moves
+  // nothing: the panel stays at the shape the recording set and simply
+  // becomes hand-resizable again.
   useEffect(() => {
-    if (lockRatio === undefined) {
-      setLockedWidth(null);
-      return;
-    }
+    if (lockRatio === undefined) return;
     // A lock engaging mid-drag wins: the drag ends where it was.
     setIsResizing(false);
     const el = panelRef.current;
     if (!el) return;
     const update = () => {
-      setLockedWidth(
-        aspectLockedPanelWidth({
-          height: el.clientHeight,
-          ratio: lockRatio,
-          minWidth: MIN_PANEL_WIDTH,
-          maxWidth: getMaxWidth(),
-        }),
-      );
+      const next = aspectLockedPanelWidth({
+        height: el.clientHeight,
+        ratio: lockRatio,
+        minWidth: MIN_PANEL_WIDTH,
+        maxWidth: getMaxWidth(),
+      });
+      setWidth(next);
+      localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, next.toString());
     };
     update();
     // The observer tracks the panel's own box (its height drives the width),
@@ -232,7 +229,7 @@ export function ResizableRightPanel({
       aria-orientation="vertical"
       aria-label="Resize panel. Use arrow keys to resize, hold shift for larger steps."
       aria-disabled={locked || undefined}
-      aria-valuenow={lockedWidth ?? width}
+      aria-valuenow={width}
       aria-valuemin={MIN_PANEL_WIDTH}
       aria-valuemax={getMaxWidth()}
       tabIndex={locked ? -1 : 0}
@@ -246,7 +243,7 @@ export function ResizableRightPanel({
   return (
     <div
       ref={panelRef}
-      style={{ width: `${locked ? (lockedWidth ?? width) : width}px` }}
+      style={{ width: `${width}px` }}
       className={cn("h-full border-l bg-background flex flex-col relative")}
     >
       {/* Resize handle; while aspect-locked it only explains the lock. */}

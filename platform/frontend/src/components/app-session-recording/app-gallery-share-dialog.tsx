@@ -4,17 +4,17 @@ import {
   pruneTrailingTrimEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
-import { Check, Copy, ExternalLink, Share2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader } from "@/components/ai-elements/loader";
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Check,
+  Copy,
+  ExternalLink,
+  Github,
+  Loader2,
+  Share2,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { StandardDialog } from "@/components/standard-dialog";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -150,18 +150,15 @@ export function AppGalleryShareButton(props: {
         </TooltipContent>
       </Tooltip>
 
-      <Dialog open={open} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Share to the App Gallery</DialogTitle>
-            <DialogDescription>
-              Your recording is submitted as a pull request from your own GitHub
-              account. Nothing is published before it is reviewed.
-            </DialogDescription>
-          </DialogHeader>
-          <ShareDialogBody state={state} onRetry={run} />
-        </DialogContent>
-      </Dialog>
+      <StandardDialog
+        open={open}
+        onOpenChange={setDialogOpen}
+        size="small"
+        title="Share to the App Gallery"
+        description="Your recording is submitted as a pull request from your own GitHub account. Nothing is published before it is reviewed."
+      >
+        <ShareDialogBody state={state} onRetry={run} />
+      </StandardDialog>
     </>
   );
 }
@@ -193,23 +190,23 @@ function ShareDialogBody(props: { state: ShareState; onRetry: () => void }) {
   }
   if (state.step === "working") {
     return (
-      <div className="flex items-center gap-3 py-2 text-sm text-muted-foreground">
-        <Loader size={16} />
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
         {STAGE_LABELS[state.stage]}
       </div>
     );
   }
   if (state.step === "done") {
     return (
-      <div className="flex flex-col gap-3 py-2">
+      <div className="flex flex-col gap-3">
         <p className="flex items-center gap-2 text-sm">
-          <Check className="size-4 text-green-600" aria-hidden="true" />
+          <Check className="h-4 w-4 text-green-500" aria-hidden="true" />
           Your pull request is open — it opened in a new tab.
         </p>
         <Button asChild>
           <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
             Open the pull request
-            <ExternalLink className="ml-2 size-4" aria-hidden="true" />
+            <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
           </a>
         </Button>
       </div>
@@ -217,7 +214,7 @@ function ShareDialogBody(props: { state: ShareState; onRetry: () => void }) {
   }
   if (state.step === "error") {
     return (
-      <div className="flex flex-col gap-3 py-2">
+      <div className="flex flex-col gap-3">
         <p className="text-sm text-destructive">{state.message}</p>
         <Button variant="outline" onClick={props.onRetry}>
           Retry
@@ -229,62 +226,72 @@ function ShareDialogBody(props: { state: ShareState; onRetry: () => void }) {
 }
 
 /**
- * The one manual step GitHub's device flow requires: enter this code on
- * github.com. The flow continues on its own the moment GitHub reports the
- * authorization — no button here to confirm it.
+ * The one manual step GitHub's device flow requires: enter the one-time code
+ * on github.com. Same interaction as the GitHub Copilot provider sign-in
+ * (`github-copilot-sign-in.tsx`): ONE primary button copies the code and then
+ * opens GitHub — copy must happen first, while the document still has focus,
+ * or the Clipboard API refuses the write; GitHub can't pre-fill the field (it
+ * omits RFC 8628's verification_uri_complete). The visible code doubles as a
+ * click-to-copy fallback. The flow continues on its own the moment GitHub
+ * reports the authorization.
  */
 function ConnectStep(props: { userCode: string; verificationUri: string }) {
-  const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const copyResetTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(copyResetTimeout.current), []);
+
+  const markCopied = () => {
+    setCodeCopied(true);
+    clearTimeout(copyResetTimeout.current);
+    copyResetTimeout.current = setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  const copyCode = async () => {
+    try {
+      await copyToClipboard(props.userCode);
+      markCopied();
+    } catch {
+      // clipboard blocked (permissions/focus) — the visible code stays as the
+      // manual fallback
+    }
+  };
 
   return (
-    <div className="flex flex-col gap-4 py-2">
+    <div className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">
-        Enter this code on GitHub to sign in — sharing continues automatically
-        once you approve.
+        Click below to copy the code and open GitHub, then paste it and approve.
+        Sharing continues automatically once you authorize.
       </p>
-      <div className="flex items-center justify-center gap-2">
-        <span className="select-all font-mono text-2xl font-semibold tracking-widest">
-          {props.userCode}
-        </span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              aria-label="Copy code"
-              onClick={() => {
-                void copyToClipboard(props.userCode).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                });
-              }}
-            >
-              {copied ? (
-                <Check className="size-4 text-green-600" />
-              ) : (
-                <Copy className="size-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy code</TooltipContent>
-        </Tooltip>
-      </div>
-      <Button asChild variant="outline">
-        <a
-          href={props.verificationUri}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Open github.com and enter the code
-          <ExternalLink className="ml-2 size-4" aria-hidden="true" />
-        </a>
+      <Button
+        type="button"
+        onClick={async () => {
+          await copyCode();
+          window.open(props.verificationUri, "_blank", "noopener,noreferrer");
+        }}
+      >
+        <Github className="mr-2 h-4 w-4" />
+        Copy code &amp; open GitHub
       </Button>
-      <p className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Loader size={12} />
-        Waiting for you to authorize on GitHub…
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest hover:bg-muted/70"
+          aria-label="Copy code"
+          onClick={copyCode}
+        >
+          {props.userCode}
+          {codeCopied ? (
+            <Check className="h-4 w-4 text-green-500" />
+          ) : (
+            <Copy className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Waiting for authorization…
+        </span>
+      </div>
     </div>
   );
 }

@@ -29,6 +29,7 @@ import {
   tools as appLlmTools,
 } from "./app-llm";
 import { toolEntries as appToolEntries, tools as appTools } from "./apps";
+import { captureToolAuditBefore, recordToolAudit } from "./audit";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
@@ -273,6 +274,17 @@ export async function executeArchestraTool(
     return parsedArgs.error;
   }
 
+  // Mutating built-ins get an org-audit row, same event vocabulary as their
+  // /api/* twins (the MCP surface bypasses the HTTP audit hook entirely).
+  // Target id + before-state resolve ahead of the invoke; the row itself is
+  // written fire-and-forget after it.
+  const auditCapture = await captureToolAuditBefore({
+    toolName: resolvedToolName ?? toolName,
+    args: parsedArgs.value as Record<string, unknown>,
+    organizationId: context.organizationId,
+    userId: context.userId,
+  });
+
   try {
     const result = await toolEntry.invoke({
       args: parsedArgs.value,
@@ -280,6 +292,7 @@ export async function executeArchestraTool(
       toolName,
     });
 
+    let finalResult = result;
     if (toolEntry.outputSchema) {
       const validatedResult = validateToolResult(
         toolEntry.outputSchema,
@@ -287,12 +300,22 @@ export async function executeArchestraTool(
         toolName,
       );
       if ("error" in validatedResult) {
-        return validatedResult.error;
+        finalResult = validatedResult.error;
+      } else {
+        finalResult = validatedResult.value;
       }
-      return validatedResult.value;
     }
 
-    return result;
+    if (auditCapture) {
+      void recordToolAudit({
+        capture: auditCapture,
+        toolName: resolvedToolName ?? toolName,
+        args: parsedArgs.value as Record<string, unknown>,
+        result: finalResult,
+      });
+    }
+
+    return finalResult;
   } catch (error) {
     if (error instanceof ZodError) {
       return zodValidationErrorResult({ toolName, error });

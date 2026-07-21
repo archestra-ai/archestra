@@ -8,6 +8,7 @@
 import {
   ApiError,
   ArchestraInternalErrorCode,
+  type BillingMode,
   type InteractionSource,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
@@ -218,6 +219,7 @@ export function buildInteractionRecord(params: {
   agent: Agent;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
+  billingMode: BillingMode;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -252,6 +254,7 @@ export function buildInteractionRecord(params: {
     profileId: params.agent.id,
     externalAgentId: params.externalAgentId,
     authMethod: params.authMethod,
+    billingMode: params.billingMode,
     authenticatedAppId: params.authenticatedApp?.id,
     authenticatedAppName: params.authenticatedApp?.name,
     executionId: params.executionId,

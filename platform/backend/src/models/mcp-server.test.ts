@@ -132,6 +132,47 @@ describe("McpServerModel", () => {
       );
     });
 
+    test("decorates servers with the org's auto-mode agents only when an organizationId is passed", async ({
+      makeOrganization,
+      makeAgent,
+      makeMcpServer,
+    }) => {
+      const org = await makeOrganization();
+      const autoAgent = await makeAgent({
+        organizationId: org.id,
+        name: "Auto Agent",
+        accessAllTools: true,
+      });
+      // A custom-tools agent (explicit assignments) is NOT an auto-mode agent.
+      await makeAgent({
+        organizationId: org.id,
+        name: "Custom Agent",
+        accessAllTools: false,
+      });
+      const server = await makeMcpServer();
+
+      // findAll with the viewing org → the auto-mode agent is surfaced.
+      const withOrg = await McpServerModel.findAll(undefined, true, org.id);
+      const found = mustExist(withOrg.find((s) => s.id === server.id));
+      expect(found.autoModeAgents).toEqual([
+        { id: autoAgent.id, name: "Auto Agent" },
+      ]);
+
+      // findById with the viewing org → same decoration.
+      const single = mustExist(
+        await McpServerModel.findById(server.id, undefined, true, org.id),
+      );
+      expect(single.autoModeAgents).toEqual([
+        { id: autoAgent.id, name: "Auto Agent" },
+      ]);
+
+      // Opt-in: without an org the decoration is skipped (stays empty), so
+      // existing callers are unaffected.
+      const withoutOrg = await McpServerModel.findAll(undefined, true);
+      const foundNoOrg = mustExist(withoutOrg.find((s) => s.id === server.id));
+      expect(foundNoOrg.autoModeAgents).toEqual([]);
+    });
+
     test("returns servers with no users correctly", async ({
       makeMcpServer,
     }) => {

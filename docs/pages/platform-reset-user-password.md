@@ -3,7 +3,7 @@ title: "Password Reset"
 category: Administration
 description: "Reset any user's password from the shell when there is no email-based recovery"
 order: 5
-lastUpdated: 2026-07-16
+lastUpdated: 2026-07-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,7 +37,7 @@ docker exec -it <container> sh -c 'cd /app/backend && \
   node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
 ```
 
-Omit `--password` and the tool generates a strong random password and prints it once. It is not stored anywhere else, so copy it before closing the shell. The user should sign in and change it under Settings → Your Account.
+Omit `--password` and the tool generates a strong random password and prints it once. It is not stored anywhere else, so copy it before closing the shell. The user should sign in and change it on Your Account — click your name in the sidebar.
 
 ## Options
 
@@ -77,6 +77,6 @@ To avoid this, verify at least one SSO provider works before you disable basic a
 
 Acme runs Archestra for its data team.
 
-A member, Jordan, forgets their password. Jordan asks an administrator to reset it. The administrator opens a shell on the backend container and runs the tool with `--email jordan@acme.example`, leaving off `--password`. The tool prints a random password, which the administrator shares with Jordan over a secure channel. Jordan signs in, changes the password under Settings → Your Account, and the earlier sign-in attempts are already dead because every session was revoked.
+A member, Jordan, forgets their password. Jordan asks an administrator to reset it. The administrator opens a shell on the backend container and runs the tool with `--email jordan@acme.example`, leaving off `--password`. The tool prints a random password, which the administrator shares with Jordan over a secure channel. Jordan signs in, changes the password on Your Account, and the earlier sign-in attempts are already dead because every session was revoked.
 
 Months later Acme enables SSO and sets `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`. The identity provider's certificate expires over a weekend, and no administrator can sign in. An operator with cluster access runs the tool against their own account, unsets `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`, signs in with the printed password, and renews the SSO certificate. Once SSO works again, they re-disable basic auth.

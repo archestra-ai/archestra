@@ -1,0 +1,127 @@
+{{/*
+Dedicated app-recording video render service.
+
+A render drives a whole browser and holds its job in this process's memory, so
+running it in the multi-replica web tier scatters a render's follow-up poll and
+download across pods that never held the job. This is the single replica that
+owns every render — the web tier proxies to it over the ClusterIP Service below
+(ARCHESTRA_APP_RECORDING_RENDERER_URL). It runs the ordinary image in
+ARCHESTRA_PROCESS_TYPE=renderer mode: no database, no worker, no session.
+
+Enable it only where the Apps Hackathon recorder is on AND the web tier runs
+more than one replica; a single-process deployment renders in-process and needs
+neither this Deployment nor the URL.
+*/}}
+{{- if and .Values.archestra.renderer.enabled (ne (include "archestra-platform.maintenanceModeEnabled" .) "true") }}
+{{- $rendererPodAnnotations := mergeOverwrite (dict) (.Values.archestra.podAnnotations | default dict) (.Values.archestra.renderer.podAnnotations | default dict) }}
+{{- if hasKey $rendererPodAnnotations "prometheus.io/scrape" }}
+{{- $rendererPodAnnotations = mergeOverwrite $rendererPodAnnotations (dict "prometheus.io/port" "9000" "prometheus.io/path" "/metrics") }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-renderer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.rendererLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      targetPort: backend
+      protocol: TCP
+      name: backend
+  selector:
+    {{- include "archestra-platform.rendererSelectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-renderer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.rendererLabels" . | nindent 4 }}
+spec:
+  # One replica on purpose: every render's job lives in this process's memory,
+  # so a second replica would answer polls for renders it never ran. Scale the
+  # web tier, not this.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "archestra-platform.rendererSelectorLabels" . | nindent 6 }}
+  {{- with .Values.archestra.renderer.deploymentStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "archestra-platform.rendererLabels" . | nindent 8 }}
+        {{- with .Values.archestra.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if $rendererPodAnnotations }}
+      annotations:
+        {{- toYaml $rendererPodAnnotations | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      # No init containers: the renderer never opens the database, so it waits
+      # for neither Postgres nor migrations, and it reads no secret-backed
+      # config, so it needs no Vault injection. Chromium is fetched by the app at
+      # startup (warmRenderRuntime), not an init step.
+      containers:
+        - name: {{ .Chart.Name }}-renderer
+          image: {{ include "archestra-platform.image" . }}
+          imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          workingDir: /app/backend
+          command: ["./scripts/start-production.sh"]
+          ports:
+            - name: backend
+              containerPort: 9000
+              protocol: TCP
+          env:
+            {{- include "archestra-platform.env" . | nindent 12 }}
+            - name: ARCHESTRA_PROCESS_TYPE
+              value: "renderer"
+          {{- with .Values.archestra.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with (.Values.archestra.renderer.resources | default .Values.archestra.resources) }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: backend
+            initialDelaySeconds: {{ .Values.archestra.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.archestra.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.startup.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: backend
+            periodSeconds: {{ .Values.archestra.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: backend
+            periodSeconds: {{ .Values.archestra.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.archestra.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.archestra.probes.readiness.failureThreshold }}
+          {{- include "archestra-platform.volumeMounts" . | nindent 10 }}
+      {{- with (.Values.archestra.renderer.nodeSelector | default .Values.archestra.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.archestra.renderer.tolerations | default .Values.archestra.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "archestra-platform.volumes" . | nindent 6 }}
+{{- end }}

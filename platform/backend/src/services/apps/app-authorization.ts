@@ -126,12 +126,18 @@ export async function assertCallerMayModifyApp(params: {
 export async function assertCallerMayAuthorApp(params: {
   userId: string;
   organizationId: string;
-  app: { id: string; scope: AppScope; authorId: string | null };
+  app: {
+    id: string;
+    scope: AppScope;
+    authorId: string | null;
+    enabled: boolean;
+  };
   resourceTeamIds: string[];
 }): Promise<void> {
   // "Reachable without the admin bypass" is exactly "not oversight-only": the
   // author of a personal app, a member of a team app, and everyone for an org
-  // app all pass; an app-admin seeing someone else's personal app does not.
+  // app all pass; an app-admin seeing someone else's personal app does not. A
+  // disabled app is author-only, so only its author clears this gate.
   const reachableWithoutAdmin = await AppAccessModel.userHasAppAccess({
     organizationId: params.organizationId,
     userId: params.userId,
@@ -140,6 +146,7 @@ export async function assertCallerMayAuthorApp(params: {
       organizationId: params.organizationId,
       scope: params.app.scope,
       authorId: params.app.authorId,
+      enabled: params.app.enabled,
     },
     isAppAdmin: false,
   });

@@ -43,8 +43,8 @@ Load these project skills when the task matches their domain:
 - **Backend**: <http://localhost:9000/> (Fastify API server)
 - **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools, conversations in main sidebar)
 - **Tools**: <http://localhost:3000/tools> (Unified tools management with server-side pagination)
-- **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
-- **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
+- **Settings**: <http://localhost:3000/settings> (lands on the first permitted tab; tabs: Organization, Service Accounts, Chat, LLM, MCP, Security, Knowledge, Environments, Users, Teams, Roles, GitHub, Identity Providers, Secrets)
+- **Your Account**: <http://localhost:3000/account> (personal profile, API keys, gateway token, sessions; opened by clicking your name in the sidebar)
 - **MCP Registry**: <http://localhost:3000/mcp/registry> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp/registry/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/llm/logs> (View LLM proxy request logs)
@@ -380,6 +380,12 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Enabled via `convert_tool_results_to_toon` boolean field on agents
 - Automatically converts JSON tool results to TOON format before sending to LLM
 - Particularly useful for agents dealing with structured data from database or API tools
+
+**LLM Cost Billing Mode**:
+
+- Every interaction records a `billing_mode` (`metered` | `subscription`, default `metered`) alongside `cost`. `cost` stays the list-price estimate; **billed spend** = `cost` for metered rows, `0` for subscription rows. Never re-interpret `cost` as billed spend — derive billed spend with a `billing_mode = 'metered'` filter (statistics/session aggregations already do this).
+- Resolved at proxy write time by `resolveInteractionBillingMode` (`routes/proxy/utils/billing-mode.ts`): a DB provider key's admin-set `chat_api_keys.billing_mode` wins; else raw passthrough is `subscription` only when the request is a Claude client (robust `detectClaudeClientId` body signal) AND forwards an OAuth Bearer (`provider.isForwardedSubscriptionCredential`), gated by `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT` (default true). This excludes metered Bearer flows (e.g. Workload Identity) so real spend is never silently zeroed.
+- Read sites split billed vs subscription: `statistics.getCostSavingsStatistics` (`totalSubscriptionCost` + per-bucket `subscriptionCost`), `interaction.getSessions` (`totalBilledCost`/`totalSubscriptionCost`). Frontend uses the `<BilledCost>` component. Metric `llm_cost_total` carries a `billing_mode` label. **Not yet billing-aware (documented follow-up): cost-based usage limits in `models/limit.ts`.**
 
 **Chat Feature**:
 

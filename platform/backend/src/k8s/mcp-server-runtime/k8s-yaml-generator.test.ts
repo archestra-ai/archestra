@@ -1,9 +1,13 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: Test file checks for placeholder strings in YAML output
 
-import type { EnvironmentVariableSchema } from "@archestra/shared";
+import {
+  type EnvironmentVariableSchema,
+  SERVER_NAME_PLACEHOLDER,
+} from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import type { z } from "zod";
 import {
+  customYamlToDeployment,
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
   validateDeploymentYaml,
@@ -532,6 +536,82 @@ spec:
 
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
+    });
+  });
+
+  // The rename flow's placeholder detection (backend PUT route + frontend
+  // cascade decision) string-matches SERVER_NAME_PLACEHOLDER against
+  // deploymentSpecYaml. Pin the shared constant to the exact placeholder
+  // syntax this generator emits, so the two can never drift apart.
+  test("SERVER_NAME_PLACEHOLDER matches the generator's server_name placeholder", () => {
+    const yaml = generateDeploymentYamlTemplate({
+      serverId: "test-id",
+      serverName: "test-server",
+      namespace: "default",
+      dockerImage: "test-image:latest",
+      environment: [],
+    });
+
+    expect(SERVER_NAME_PLACEHOLDER).toBe("${archestra.server_name}");
+    expect(yaml).toContain(SERVER_NAME_PLACEHOLDER);
+  });
+
+  describe("customYamlToDeployment", () => {
+    const systemValues = {
+      deploymentName: "mcp-frozen-name",
+      serverId: "server-1",
+      serverName: "Display Name",
+      labels: {
+        app: "mcp-server",
+        "mcp-server-id": "server-1",
+        "mcp-server-name": "display-name",
+      },
+      selectorLabels: {
+        app: "mcp-server",
+        "mcp-server-id": "server-1",
+      },
+    };
+
+    test("forces the immutable selector to the id-only labels while metadata/template keep the full set", () => {
+      const userYaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-name-overridden
+  labels:
+    custom-label: kept
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      user-selector: dropped
+  template:
+    metadata:
+      labels:
+        custom-pod-label: kept
+    spec:
+      containers:
+        - name: mcp-server
+          image: some-image
+`;
+
+      const deployment = customYamlToDeployment(userYaml, systemValues);
+
+      expect(deployment).not.toBeNull();
+      expect(deployment?.metadata?.name).toBe("mcp-frozen-name");
+      // Selector: system-managed, id-only — the mutable mcp-server-name
+      // label must never be part of the immutable selector.
+      expect(deployment?.spec?.selector.matchLabels).toEqual(
+        systemValues.selectorLabels,
+      );
+      // Metadata + pod template: full label set merged over user labels.
+      expect(deployment?.metadata?.labels).toEqual({
+        "custom-label": "kept",
+        ...systemValues.labels,
+      });
+      expect(deployment?.spec?.template.metadata?.labels).toEqual({
+        "custom-pod-label": "kept",
+        ...systemValues.labels,
+      });
     });
   });
 });

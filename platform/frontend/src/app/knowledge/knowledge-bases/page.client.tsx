@@ -33,14 +33,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useConnectors as useAllConnectors,
   useAssignConnectorToKnowledgeBases,
+  useConnector,
   useConnectors,
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import {
   useDeleteKnowledgeBase,
+  useKnowledgeBase,
   useKnowledgeBasesPaginated,
 } from "@/lib/knowledge/knowledge-base.query";
 import { cn, formatDate } from "@/lib/utils";
@@ -93,9 +96,35 @@ function KnowledgeBasesList() {
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<KnowledgeBaseItem | null>(
-    null,
+  const editId = searchParams.get("edit");
+  const { data: editingItemFromUrl } = useKnowledgeBase(editId ?? undefined);
+  const {
+    entity: editingItem,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<
+    KnowledgeBaseItem | archestraApiTypes.GetKnowledgeBaseResponses["200"]
+  >({
+    paramName: "edit",
+    entityFromUrl: editingItemFromUrl ?? null,
+  });
+  // The connector edit dialog is owned here (one hook instance for the
+  // page-level "connector" param); expanded rows only report which connector
+  // to open it for.
+  const connectorId = searchParams.get("connector");
+  const { data: editingConnectorFromUrl } = useConnector(
+    connectorId ?? undefined,
   );
+  const {
+    entity: editingConnector,
+    open: openEditConnector,
+    close: closeEditConnector,
+  } = useDialogUrlParam<
+    ConnectorItem | archestraApiTypes.GetConnectorResponses["200"]
+  >({
+    paramName: "connector",
+    entityFromUrl: editingConnectorFromUrl ?? null,
+  });
   const [addConnectorKbId, setAddConnectorKbId] = useState<string | null>(null);
   const { startChat, isCreating: isChatCreating } = useChatWithKnowledgeBase();
 
@@ -184,7 +213,7 @@ function KnowledgeBasesList() {
           {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
-            onClick: () => setEditingItem(kb),
+            onClick: () => openEditDialog(kb),
           },
           {
             icon: <Trash2 className="h-4 w-4" />,
@@ -234,7 +263,10 @@ function KnowledgeBasesList() {
           columns={columns}
           data={items}
           renderSubComponent={({ row }) => (
-            <ExpandedConnectors knowledgeBaseId={row.original.id} />
+            <ExpandedConnectors
+              knowledgeBaseId={row.original.id}
+              onEditConnector={openEditConnector}
+            />
           )}
           emptyMessage="No knowledge bases found"
           hasActiveFilters={!!search}
@@ -265,7 +297,15 @@ function KnowledgeBasesList() {
           <EditKnowledgeBaseDialog
             knowledgeBase={editingItem}
             open={!!editingItem}
-            onOpenChange={(open) => !open && setEditingItem(null)}
+            onOpenChange={(open) => !open && closeEditDialog()}
+          />
+        )}
+
+        {editingConnector && (
+          <EditConnectorDialog
+            connector={editingConnector}
+            open={!!editingConnector}
+            onOpenChange={(open) => !open && closeEditConnector()}
           />
         )}
 
@@ -303,11 +343,15 @@ function KnowledgeBasesList() {
 type ConnectorItem =
   archestraApiTypes.GetConnectorsResponses["200"]["data"][number];
 
-function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
+function ExpandedConnectors({
+  knowledgeBaseId,
+  onEditConnector,
+}: {
+  knowledgeBaseId: string;
+  onEditConnector: (connector: ConnectorItem) => void;
+}) {
   const router = useRouter();
   const { data: connectors, isPending } = useConnectors(knowledgeBaseId);
-  const [editingConnector, setEditingConnector] =
-    useState<ConnectorItem | null>(null);
   const [removingConnectorId, setRemovingConnectorId] = useState<string | null>(
     null,
   );
@@ -395,7 +439,7 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
             {
               icon: <Pencil className="h-4 w-4" />,
               label: "Edit connector",
-              onClick: () => setEditingConnector(row.original),
+              onClick: () => onEditConnector(row.original),
             },
             {
               icon: <Trash2 className="h-4 w-4" />,
@@ -425,14 +469,6 @@ function ExpandedConnectors({ knowledgeBaseId }: { knowledgeBaseId: string }) {
           manualPagination
         />
       </div>
-
-      {editingConnector && (
-        <EditConnectorDialog
-          connector={editingConnector}
-          open={!!editingConnector}
-          onOpenChange={(open) => !open && setEditingConnector(null)}
-        />
-      )}
 
       {removingConnectorId && (
         <RemoveConnectorDialog

@@ -68,6 +68,12 @@ export type LlmProviderApiKeyFormValues = {
   vaultSecretKey: string | null;
   isPrimary: boolean;
   /**
+   * Whether traffic fulfilled by this key is billed per token (`metered`) or
+   * covered by a flat-rate subscription (`subscription`, e.g. a shared Claude
+   * Code Max/Pro token). Subscription usage is reported as $0 billed spend.
+   */
+  billingMode: NonNullable<CreateLlmProviderApiKeyBody["billingMode"]>;
+  /**
    * Bedrock auth method selector:
    * - "api-key": Bearer API key (bedrock-api-key-... / ABSK...)
    * - "sigv4": static AWS access keys (Access Key ID + Secret + optional Session Token)
@@ -1083,6 +1089,35 @@ export function LlmProviderApiKeyForm({
                 }
                 disabled={isPending || Boolean(existingPrimaryKey)}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="llm-provider-api-key-billing-mode">Billing</Label>
+              <p className="text-xs text-muted-foreground">
+                Set to Subscription when this key's secret is a flat-rate
+                subscription token (e.g. a shared Claude Code Max/Pro token).
+                Subscription usage is reported as $0 billed spend while keeping
+                its list-price estimate.
+              </p>
+              <Select
+                value={form.watch("billingMode")}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "billingMode",
+                    value as LlmProviderApiKeyFormValues["billingMode"],
+                    { shouldDirty: true },
+                  )
+                }
+                disabled={isPending}
+              >
+                <SelectTrigger id="llm-provider-api-key-billing-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="metered">Metered (per-token)</SelectItem>
+                  <SelectItem value="subscription">Subscription</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </>
         )}

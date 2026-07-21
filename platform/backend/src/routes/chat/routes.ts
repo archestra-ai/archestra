@@ -106,6 +106,7 @@ import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { fileStore } from "@/skills-sandbox/file-store";
+import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
 import { renderSystemPrompt } from "@/templating";
 import {
   ApiError,
@@ -650,6 +651,44 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             })
           : Promise.resolve(undefined);
 
+        // A project chat also lists the project's shared files in the system
+        // prompt: they are attached to the project rather than to any message,
+        // so nothing else ever tells the model they exist, and it answers "you
+        // haven't attached any files" to a user who is looking at them in the
+        // Files panel. Same posture as the project instructions above:
+        // concurrent, best-effort (a failure injects nothing), and gated by the
+        // same fail-closed project-access check the file tools use.
+        const projectFileNamesPromise: Promise<string[] | undefined> =
+          conversation.projectId
+            ? resolveProjectFileScope({
+                conversationId,
+                userId: user.id,
+                organizationId,
+              })
+                .then((scope) =>
+                  scope
+                    ? fileStore
+                        .search({
+                          organizationId,
+                          userId: user.id,
+                          scope: { kind: "project", ...scope },
+                        })
+                        .then((files) => files.map((file) => file.filename))
+                    : undefined,
+                )
+                .catch((error) => {
+                  logger.warn(
+                    {
+                      error,
+                      conversationId,
+                      projectId: conversation.projectId,
+                    },
+                    "Failed to list project files, proceeding without them",
+                  );
+                  return undefined;
+                })
+            : Promise.resolve(undefined);
+
         // Tools + system prompt, alongside the org settings the stream needs.
         const [
           {
@@ -662,22 +701,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          Promise.all([projectInstructionsPromise, openedAppPromise]).then(
-            ([projectInstructions, openedApp]) =>
-              buildChatContext({
-                conversationId,
-                agentId,
-                agent,
-                user: { id: user.id, email: user.email, name: user.name },
-                organizationId,
-                hookSessionContext,
-                projectInstructions,
-                openedApp,
-                hookRunCollector,
-                elicitation: chatMcpElicitation,
-                subagentToolStream,
-                abortSignal: chatAbortController.signal,
-              }),
+          Promise.all([
+            projectInstructionsPromise,
+            openedAppPromise,
+            projectFileNamesPromise,
+          ]).then(([projectInstructions, openedApp, projectFileNames]) =>
+            buildChatContext({
+              conversationId,
+              agentId,
+              agent,
+              user: { id: user.id, email: user.email, name: user.name },
+              organizationId,
+              hookSessionContext,
+              projectInstructions,
+              openedApp,
+              projectFileNames,
+              hookRunCollector,
+              elicitation: chatMcpElicitation,
+              subagentToolStream,
+              abortSignal: chatAbortController.signal,
+            }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),

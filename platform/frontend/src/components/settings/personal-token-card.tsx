@@ -2,6 +2,7 @@
 
 import { archestraApiSdk } from "@archestra/shared";
 import { Key } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
@@ -29,7 +30,17 @@ export function PersonalTokenCard() {
     <>
       <PlatformTokenCard
         title="MCP Gateway/A2A Gateway Token"
-        description="Your personal token to authenticate with Agents / MCP Gateways."
+        description={
+          <>
+            Your personal token for calling Agents through MCP Gateways and A2A
+            — used by the{" "}
+            <Link href="/connection" className="underline underline-offset-4">
+              Connect
+            </Link>{" "}
+            page setup snippets and by chat when it executes tools as you. It
+            does not grant access to the platform API.
+          </>
+        }
         isLoading={isLoading}
         error={error}
         tokenExists={!!token}
@@ -51,7 +62,7 @@ export function PersonalTokenCard() {
           token={token}
           open={tokenDialogOpen}
           onOpenChange={setTokenDialogOpen}
-          description="Personal token for Agents / MCP Gateways you can access."
+          description="Your personal token for calling Agents you can access through MCP Gateways and A2A."
           fetchTokenValue={async () => {
             const response = await archestraApiSdk.getUserTokenValue();
             return (

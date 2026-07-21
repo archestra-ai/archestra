@@ -1,6 +1,7 @@
 "use client";
 
 import { Boxes, Edit, Globe, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
@@ -194,7 +195,20 @@ export function DefaultUserLimitsSection() {
   return (
     <SettingsBlock
       title="Default user limits"
-      description="Set a token-cost limit applied to every member. The 'All environments' default applies everywhere; add a per-environment row to override it for that environment (e.g. a smaller cap in production). A custom per-user limit overrides these defaults."
+      description={
+        <>
+          Set a token-cost limit applied to every member. Custom limits for
+          specific users, teams, or other scopes override these defaults —
+          manage those in{" "}
+          <Link
+            href="/llm/limits"
+            className="font-medium underline underline-offset-4"
+          >
+            Costs &amp; Limits
+          </Link>
+          .
+        </>
+      }
       control={
         <PermissionButton
           permissions={{ llmLimit: ["create"] }}

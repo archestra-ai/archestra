@@ -108,6 +108,7 @@ export function CreateLlmProviderApiKeyDialog({
         teamId:
           values.scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
+        billingMode: values.billingMode,
         vaultSecretPath:
           !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
             ? values.vaultSecretPath
@@ -190,6 +191,7 @@ function getDefaultFormValues(params: {
     vaultSecretPath: null,
     vaultSecretKey: null,
     isPrimary: false,
+    billingMode: "metered",
     bedrockAuthMethod: "api-key",
     awsAccessKeyId: null,
     awsSecretAccessKey: null,

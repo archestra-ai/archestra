@@ -1,4 +1,9 @@
-import { expect, test } from "../fixtures";
+import { mergeTests } from "@playwright/test";
+import { UI_BASE_URL } from "../consts";
+import { expect, test as uiTest } from "../fixtures";
+import { test as apiTest } from "./api-fixtures";
+
+const test = mergeTests(uiTest, apiTest);
 
 const AUDIT_LOGS_PATH = "/audit/logs";
 
@@ -102,6 +107,57 @@ test.describe("Audit log UI", {
     // Detail dialog contract: identifies the actor and the action.
     await expect(adminPage.getByRole("dialog")).toContainText(/When/i);
     await expect(adminPage.getByRole("dialog")).toContainText(/Actor/i);
+  });
+
+  test("deep link with ?event=<id> opens the event detail dialog", async ({
+    adminPage,
+    goToAdminPage,
+    makeRandomString,
+    createTeam,
+    deleteTeam,
+  }) => {
+    // Team creation is audited (team.created), so it gives the test a
+    // deterministic event tied to a unique resource id.
+    const createResponse = await createTeam(
+      adminPage.request,
+      makeRandomString(10, "audit-deep-link"),
+    );
+    const team = (await createResponse.json()) as { id: string };
+
+    try {
+      // The audit hook records the event after the response is sent, so poll
+      // until the team.created event is queryable.
+      let eventId: string | undefined;
+      await expect
+        .poll(
+          async () => {
+            const response = await adminPage.request.get(
+              `${UI_BASE_URL}/api/audit-logs?resourceType=team&limit=50`,
+            );
+            if (!response.ok()) return undefined;
+            const body = (await response.json()) as {
+              data: Array<{ id: string; resourceId: string | null }>;
+            };
+            eventId = body.data.find(
+              (event) => event.resourceId === team.id,
+            )?.id;
+            return eventId;
+          },
+          { timeout: 15_000 },
+        )
+        .toBeDefined();
+
+      await goToAdminPage(`${AUDIT_LOGS_PATH}?event=${eventId}`);
+
+      const dialog = adminPage.getByRole("dialog");
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+      await expect(dialog).toContainText("Event details");
+      // The dialog shows the deep-linked event: the created team's id
+      // appears as the resource id.
+      await expect(dialog).toContainText(team.id);
+    } finally {
+      await deleteTeam(adminPage.request, team.id);
+    }
   });
 
   test("member does not see the Audit tab and is blocked from direct nav", async ({

@@ -25,6 +25,8 @@ export const TaskTypeSchema = z.enum([
   "check_due_schedule_triggers",
   "schedule_trigger_run_execute",
   "audit_log_cleanup",
+  "check_due_skill_github_syncs",
+  "skill_github_sync",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -38,6 +40,9 @@ export type BatchEmbeddingPayload = {
 };
 export type PermissionSyncPayload = {
   connectorId: string;
+};
+export type SkillGithubSyncPayload = {
+  skillId: string;
 };
 
 // ===== Queue lanes (runtime isolation) =====
@@ -58,6 +63,8 @@ export const TASK_LANES = {
     "check_due_schedule_triggers",
     "schedule_trigger_run_execute",
     "audit_log_cleanup",
+    "check_due_skill_github_syncs",
+    "skill_github_sync",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

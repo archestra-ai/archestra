@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  APP_RECORDING_LIMITS,
   archestraApiSdk,
   parseFullToolName,
   sanitizeRecordingBundle,
@@ -27,8 +28,8 @@ import {
   recordingStore,
 } from "@/lib/app-session-recording/app-recording-store";
 import { snapshotConversationTranscript } from "@/lib/app-session-recording/app-recording-transcript";
+import { useAppsHackathonAvailable } from "@/lib/app-session-recording/apps-hackathon";
 import { useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 
 /**
  * The runtime-facing side of the session recorder: {@link McpAppRuntime}
@@ -78,9 +79,16 @@ export interface AppSessionRecorder {
   runtimeHooks: AppSessionRecorderRuntimeHooks;
 }
 
-/** Recording hard limits, mirroring the backend's create-route caps. */
-const MAX_EVENTS = 45_000;
-const MAX_SEGMENTS = 20;
+/**
+ * Recording hard limits. The event and segment caps are derived from the shared
+ * contract's ceilings (APP_RECORDING_LIMITS, which AppRecordingBundleSchema
+ * enforces) so they can never drift above them: we stop capturing a margin
+ * early so the SDK's final on-stop flush can't push the stored bundle past
+ * validation. Duration has no shared counterpart — it is purely a client-side
+ * "don't run forever" guard.
+ */
+const MAX_EVENTS = APP_RECORDING_LIMITS.maxEvents - 5_000;
+const MAX_SEGMENTS = APP_RECORDING_LIMITS.maxSegments - 5;
 const MAX_DURATION_MS = 10 * 60_000;
 /** The SDK flushes its buffer on stop; give that final batch time to arrive. */
 const STOP_FLUSH_GRACE_MS = 400;
@@ -356,6 +364,12 @@ class AppRecorderCore {
   }
 
   private postControl(action: "start" | "stop") {
+    // Wildcard target origin: the app runs in a scripts-only sandboxed iframe,
+    // whose opaque origin is the string "null" and cannot be named as a
+    // targetOrigin, and its render mode (inline srcdoc vs. a separate sandbox
+    // origin) varies — so there is no fixed origin to pin. Safe here because
+    // the payload is a bare start/stop control with nothing secret in it; we
+    // are not handing the frame data that another origin must not read.
     this.activeIframe?.contentWindow?.postMessage(
       { type: RECORDING_CONTROL_TYPE, action },
       "*",
@@ -415,7 +429,10 @@ export function useOwnAppSessionRecorder(params: {
   appId: string | null;
 }): AppSessionRecorderHandle {
   const { conversationId, appId } = params;
-  const enabled = useFeature("hackathonRecorderEnabled") ?? false;
+  // Deployment, hackathon date, the organization's own toggle, and the device:
+  // an admin switching it off has to take the recorder with it, not just hide a
+  // button, and a phone-sized screen never gets it at all.
+  const enabled = useAppsHackathonAvailable();
   const coreRef = useRef<AppRecorderCore | null>(null);
   if (enabled && !coreRef.current) coreRef.current = new AppRecorderCore();
   const core = enabled ? coreRef.current : null;

@@ -399,6 +399,18 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Extract API key from headers */
   extractApiKey(headers: THeaders): string | undefined;
 
+  /**
+   * Whether the resolved upstream credential (as returned by `extractApiKey`) is
+   * a forwarded consumer OAuth / subscription token rather than a metered API
+   * key. Used only for raw client-passthrough billing-mode classification (see
+   * resolveInteractionBillingMode). Implement ONLY for providers where a
+   * forwarded Bearer unambiguously means OAuth: Anthropic (API keys use
+   * `x-api-key`, only OAuth uses `Authorization: Bearer`). Providers where Bearer
+   * is also a valid API-key transport (OpenAI etc.) must leave this unset so
+   * their traffic stays metered.
+   */
+  isForwardedSubscriptionCredential?(apiKey: string | undefined): boolean;
+
   /** Get base URL for the provider (from config), undefined means use SDK default */
   getBaseUrl(): string | undefined;
 

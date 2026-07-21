@@ -447,6 +447,9 @@ async function makeApp(
   const created = await AppModel.create({
     app: {
       name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
+      // Default to a live (enabled) app so existing tests exercise normal
+      // visibility/consumption; disabled-specific tests pass `enabled: false`.
+      enabled: true,
       ...appOverrides,
       authorId,
       organizationId,
@@ -643,6 +646,7 @@ async function makeMcpServer(
       | "scope"
       | "localInstallationStatus"
       | "oauthRefreshError"
+      | "deploymentName"
     >
   > = {},
 ) {
@@ -700,6 +704,8 @@ async function makeInternalMcpCatalog(
       | "teams"
       | "clonedFrom"
       | "environmentId"
+      | "multitenant"
+      | "deploymentSpecYaml"
     >
   > & {
     organizationId?: string;
@@ -875,6 +881,9 @@ async function makeInteraction(
       | "baselineCost"
       | "toonCostSavings"
       | "cacheSavings"
+      | "billingMode"
+      | "sessionId"
+      | "cacheReadTokens"
     >
   > = {},
 ) {

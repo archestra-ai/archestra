@@ -75,7 +75,7 @@ describe("TwoFactorCard", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(mockRouterPush).toHaveBeenCalledWith(
-      `/auth/two-factor?totpURI=${encodeURIComponent("otpauth://totp/Test?secret=ABC")}&redirectTo=${encodeURIComponent("/settings/account")}`,
+      `/auth/two-factor?totpURI=${encodeURIComponent("otpauth://totp/Test?secret=ABC")}&redirectTo=${encodeURIComponent("/account")}`,
     );
   });
 

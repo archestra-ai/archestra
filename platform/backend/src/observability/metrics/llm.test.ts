@@ -709,12 +709,13 @@ describe("reportLLMCost", () => {
     initializeMetrics([]);
   });
 
-  test("records cost with model", () => {
-    reportLLMCost("openai", testAgent, "gpt-4", 0.05, "api");
+  test("records cost with model and metered billing mode", () => {
+    reportLLMCost("openai", testAgent, "gpt-4", 0.05, "api", "metered");
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {
         provider: "openai",
+        billing_mode: "metered",
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,
@@ -726,12 +727,20 @@ describe("reportLLMCost", () => {
     });
   });
 
-  test("records cost without model", () => {
-    reportLLMCost("anthropic", testAgent, "unknown", 0.02, "api");
+  test("records cost without model, labeling subscription billing mode", () => {
+    reportLLMCost(
+      "anthropic",
+      testAgent,
+      "unknown",
+      0.02,
+      "api",
+      "subscription",
+    );
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {
         provider: "anthropic",
+        billing_mode: "subscription",
         agent_id: testAgent.id,
         agent_name: testAgent.name,
         agent_type: testAgent.agentType,

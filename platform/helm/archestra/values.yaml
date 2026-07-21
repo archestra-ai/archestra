@@ -358,8 +358,12 @@ archestra:
     # disable. Ignored when you provide your own PGOPTIONS via migrationJob.env.
     lockTimeout: 5s
     # Resource requests/limits for the migration container.
-    # If not set, inherits from archestra.resources.
-    resources: {}
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        memory: "2Gi"
     # Extra environment variables rendered before the shared platform env. Use
     # this only when ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR)
     # references, such as $(PGPASSWORD), that the hook must expand.
@@ -582,6 +586,46 @@ archestra:
 
     # Tolerations for worker pods
     # If not set, inherits from archestra.tolerations
+    tolerations: []
+
+  # Dedicated app-recording video render service (ARCHESTRA_PROCESS_TYPE=renderer).
+  renderer:
+    # Enable the dedicated render Deployment. Turn it on where the Apps Hackathon
+    # recorder is enabled AND the web tier runs more than one replica: render
+    # jobs live in one process's memory, so a single-process deployment renders
+    # in-process and needs neither this Deployment nor
+    # ARCHESTRA_APP_RECORDING_RENDERER_URL. Always a single replica when on.
+    enabled: false
+
+    # Resource requests and limits for the render pod. Rendering drives a
+    # headless Chromium (memory) and encodes H.264 (CPU). The memory limit is
+    # sized for the largest accepted bundle: the pod buffers the whole posted
+    # body, parses it, and hands it to the browser (see RENDER_BUNDLE_BODY_LIMIT_BYTES).
+    # If not set, inherits from archestra.resources.
+    resources:
+      requests:
+        cpu: "1"
+        memory: "2Gi"
+      limits:
+        memory: "8Gi"
+
+    # Recreate, not RollingUpdate: two render pods would answer polls for renders
+    # the other ran, so the old pod is torn down before the new one starts. A
+    # render in flight across a deploy is lost either way (in-memory), which the
+    # client surfaces as "start the download again".
+    deploymentStrategy:
+      type: Recreate
+
+    # Pod annotations for the render pod. If not set, inherits from
+    # archestra.podAnnotations.
+    podAnnotations: {}
+
+    # Node selector for the render pod. If not set, inherits from
+    # archestra.nodeSelector.
+    nodeSelector: {}
+
+    # Tolerations for the render pod. If not set, inherits from
+    # archestra.tolerations.
     tolerations: []
 
   # Optional dedicated listener that aliases the publicly-exposable endpoints

@@ -235,6 +235,7 @@ describe("ProjectsPageClient", () => {
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
+      replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,

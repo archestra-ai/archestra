@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
-import { EnvironmentModel, SkillTeamModel } from "@/models";
+import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import skillRoutes from "./skill.routes";
 import {
@@ -219,5 +219,81 @@ describe("PUT /api/skills/:id", () => {
     expect(response.statusCode).toBe(400);
     // the existing assignment is left intact
     expect(await SkillTeamModel.getTeamsForSkill(skill.id)).toEqual([team.id]);
+  });
+});
+
+describe("PUT /api/skills/:id on a GitHub-synced skill", () => {
+  const ctx = useRouteTestApp(skillRoutes);
+
+  async function seedSynced() {
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: ctx.organizationId,
+        authorId: ctx.user.id,
+        name: "synced-locked",
+        description: "synced-locked description",
+        content: "# body",
+        metadata: {},
+        sourceType: "github",
+        sourceRef: "acme/skills@main:synced-locked",
+        sourceCommit: "abc",
+        scope: "personal",
+        githubSyncInterval: "1d",
+      },
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+    return skill;
+  }
+
+  const echoManifest = [
+    "---",
+    "name: synced-locked",
+    "description: synced-locked description",
+    "---",
+    "",
+    "# body",
+  ].join("\n");
+
+  test("rejects a content change with 409", async () => {
+    const skill = await seedSynced();
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: { content: `${echoManifest}\nedited` },
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.message).toContain("synced from GitHub");
+  });
+
+  test("rejects a files change with 409", async () => {
+    const skill = await seedSynced();
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: {
+        content: echoManifest,
+        files: [{ path: "references/x.md", content: "# X" }],
+      },
+    });
+    expect(response.statusCode).toBe(409);
+  });
+
+  test("allows a settings-only save that echoes the manifest", async () => {
+    const skill = await seedSynced();
+    const env = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Sync Staging",
+    });
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: { content: echoManifest, environmentId: env.id },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(env.id);
+    // still synced, still at version 1 — nothing content-wise changed
+    expect(response.json().githubSyncInterval).toBe("1d");
+    expect(response.json().latestVersion).toBe(1);
   });
 });

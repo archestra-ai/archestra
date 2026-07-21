@@ -6,6 +6,7 @@
  */
 
 import {
+  type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
@@ -128,6 +129,8 @@ export interface LLMProxyContext<TRequest> {
   unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
+  /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
+  billingMode: BillingMode;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -225,13 +228,20 @@ export async function handleLLMProxy<
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
   // CLI stamps on every request).
+  // `detectedClaudeClientId` is the auto-discovery result from the request BODY
+  // (the Anthropic billing-header / Claude metadata signal). It is kept separate
+  // from `externalAgentId` because billing-mode detection must key on this
+  // non-spoofable body signal, not the caller-supplied header.
+  const detectedClaudeClientId =
+    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction);
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
-    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
+    detectedClaudeClientId ??
     utils.headers.clientApp.detectCodexClientId(
       headersForExtraction,
       bodyForExtraction,
     );
+  const isClaudeClientRequest = detectedClaudeClientId !== undefined;
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (
@@ -918,9 +928,12 @@ export async function handleLLMProxy<
     // calls have no chat_api_key row, so no extra headers.
     let perKeyExtraHeaders: Record<string, string> | null = null;
     if (perKeyChatApiKeyId) {
-      const row =
-        perKeyProviderApiKeyRow ??
-        (await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId));
+      // Populate perKeyProviderApiKeyRow (if not already loaded) so both the
+      // extra-headers lookup and the billing-mode resolution below reuse a
+      // single fetch rather than each querying the row.
+      perKeyProviderApiKeyRow ??=
+        await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
+      const row = perKeyProviderApiKeyRow;
       perKeyExtraHeaders = row?.extraHeaders ?? null;
       if (!row) {
         logger.warn(
@@ -992,6 +1005,19 @@ export async function handleLLMProxy<
       }
     }
 
+    // Billing mode: whether this call actually incurs a per-token charge. A
+    // DB-managed key's admin-configured mode wins; otherwise a Claude client
+    // forwarding an OAuth Bearer (Max/Pro subscription) is classified
+    // `subscription`. Stored on the interaction so analytics can report billed
+    // spend (metered `cost`, $0 for subscription) alongside the list-price cost.
+    const billingMode = utils.resolveInteractionBillingMode({
+      providerApiKeyRow: perKeyProviderApiKeyRow,
+      isForwardedSubscriptionCredential:
+        provider.isForwardedSubscriptionCredential?.(apiKey) ?? false,
+      isClaudeClientRequest,
+      autodetectEnabled: config.llmCost.subscriptionAutodetect,
+    });
+
     const ctx: LLMProxyContext<TRequest> = {
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -1005,6 +1031,7 @@ export async function handleLLMProxy<
       unsafeContextBoundary,
       externalAgentId,
       authMethod,
+      billingMode,
       authenticatedApp,
       userId,
       resolvedUser,
@@ -1121,6 +1148,7 @@ async function handleStreaming<
     unsafeContextBoundary,
     externalAgentId,
     authMethod,
+    billingMode,
     authenticatedApp,
     userId,
     virtualKeyId,
@@ -1573,6 +1601,7 @@ async function handleStreaming<
           actualModel,
           costs.actualCost,
           source,
+          billingMode,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1592,6 +1621,7 @@ async function handleStreaming<
             agent,
             externalAgentId,
             authMethod,
+            billingMode,
             authenticatedApp,
             executionId,
             userId,
@@ -1654,6 +1684,7 @@ async function handleNonStreaming<
     unsafeContextBoundary,
     externalAgentId,
     authMethod,
+    billingMode,
     authenticatedApp,
     userId,
     virtualKeyId,
@@ -1877,6 +1908,7 @@ async function handleNonStreaming<
           actualModel,
           costs.actualCost,
           source,
+          billingMode,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1895,6 +1927,7 @@ async function handleNonStreaming<
           agent,
           externalAgentId,
           authMethod,
+          billingMode,
           authenticatedApp,
           executionId,
           userId,
@@ -1951,6 +1984,7 @@ async function handleNonStreaming<
       actualModel,
       costs.actualCost,
       source,
+      billingMode,
     );
     metrics.llm.reportLLMCacheCost(
       providerName,
@@ -1967,6 +2001,7 @@ async function handleNonStreaming<
         agent,
         externalAgentId,
         authMethod,
+        billingMode,
         authenticatedApp,
         executionId,
         userId,

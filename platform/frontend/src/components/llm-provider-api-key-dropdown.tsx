@@ -113,7 +113,9 @@ export function LlmProviderApiKeyDropdown({
   const fallbackTriggerLabel =
     emptyTriggerLabel ??
     (allOptionSelected && allOptionLabel ? allOptionLabel : undefined) ??
-    (allowOrganizationDefault ? "Organization default" : "Select API key...");
+    (allowOrganizationDefault
+      ? "Organization default"
+      : "Select provider key...");
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>

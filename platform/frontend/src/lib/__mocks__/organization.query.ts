@@ -26,6 +26,7 @@ export const useUpdateAppearanceSettings = vi.fn();
 export const useUpdateSecuritySettings = vi.fn();
 export const useUpdateLlmSettings = vi.fn();
 export const useUpdateMcpSettings = vi.fn();
+export const useUpdateSkillsSettings = vi.fn();
 export const useUpdateAgentSettings = vi.fn();
 export const useUpdateConnectionSettings = vi.fn();
 export const useUpdateDefaultEnvironment = vi.fn();

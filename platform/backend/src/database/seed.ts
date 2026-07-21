@@ -45,6 +45,7 @@ import {
   UserModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import { DEFAULT_APPS, loadDefaultAppHtml } from "@/services/apps/default-apps";
 import { modelSyncService } from "@/services/model-sync";
@@ -989,6 +990,10 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
 
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
+  // Abort startup on an auth-secret / encryption-key mismatch BEFORE
+  // migrateSecretsToEncrypted encrypts any plaintext rows with the (possibly
+  // wrong) current key.
+  await verifySecretsEncryptionKey();
   await migrateSecretsToEncrypted();
   await seedDefaultUserAndOrg();
   // Create default agents before seeding internal agents

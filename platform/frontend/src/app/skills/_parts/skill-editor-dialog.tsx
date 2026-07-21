@@ -1,15 +1,22 @@
 "use client";
 
-import { DocsPage, type ResourceVisibilityScope } from "@archestra/shared";
 import {
+  type archestraApiTypes,
+  DocsPage,
+  type ResourceVisibilityScope,
+} from "@archestra/shared";
+import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   FileText,
   Folder,
   FolderOpen,
   Github,
+  Lock,
   MessageSquare,
   Plus,
+  RefreshCw,
   RotateCcw,
   Trash2,
   X,
@@ -17,6 +24,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -24,6 +32,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -31,14 +46,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useGithubAppConfigs } from "@/lib/github-app-config.query";
+import { useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useCreateSkill,
   useSkill,
   useUpdateSkill,
+  useUpdateSkillGithubSync,
 } from "@/lib/skills/skill.query";
 import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { cn } from "@/lib/utils";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { composeManifest, parseManifestFields } from "./manifest-compose";
 import { SkillScopeSelector } from "./skill-scope-selector";
 
@@ -117,13 +136,16 @@ export function SkillEditorDialog({
   const updateSkill = useUpdateSkill();
   const appName = useAppName();
 
-  // GitHub-imported skills are a one-time snapshot, not a live link: editing
-  // here never touches the repo, and the repo is never re-pulled. Surface that
-  // in edit mode so the disconnect isn't a surprise.
+  // A GitHub skill is either synced (recurring pull, content read-only here)
+  // or a one-time snapshot (editable; the repo is never re-pulled).
   const isGithubSkill = isEdit && skill?.sourceType === "github";
+  const isSyncedSkill = isGithubSkill && skill?.githubSyncInterval != null;
   const githubSourceRepo = isGithubSkill
     ? (skill?.sourceRef?.split("@")[0] ?? null)
     : null;
+  // synced skills lock the manifest and files; scope/teams/environment below
+  // stay editable.
+  const contentReadOnly = isPreview || isSyncedSkill;
 
   const [manifest, setManifest] = useState("");
   const [files, setFiles] = useState<ResourceFile[]>([]);
@@ -214,7 +236,9 @@ export function SkillEditorDialog({
   const handleSave = async () => {
     const body = {
       content: manifest,
-      files,
+      // a synced skill's files are repo-owned; omitting them tells the
+      // backend this save changes only Archestra-side settings.
+      ...(isSyncedSkill ? {} : { files }),
       scope,
       teamIds: scope === "team" ? teamIds : [],
       environmentId,
@@ -402,22 +426,26 @@ export function SkillEditorDialog({
         </div>
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-4">
-          {isGithubSkill && (
-            <div className="flex gap-2.5 rounded-md border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-              <Github className="mt-0.5 size-4 shrink-0" />
-              <p>
-                Imported from{" "}
-                {githubSourceRepo ? (
-                  <code className="font-mono text-foreground">
-                    {githubSourceRepo}
-                  </code>
-                ) : (
-                  "GitHub"
-                )}{" "}
-                as a one-time copy. Saving changes here won’t update the repo,
-                and {appName} won’t pull later changes from it.
-              </p>
-            </div>
+          {isSyncedSkill && skill ? (
+            <GithubSyncPanel skill={skill} sourceRepo={githubSourceRepo} />
+          ) : (
+            isGithubSkill && (
+              <div className="flex gap-2.5 rounded-md border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+                <Github className="mt-0.5 size-4 shrink-0" />
+                <p>
+                  Imported from{" "}
+                  {githubSourceRepo ? (
+                    <code className="font-mono text-foreground">
+                      {githubSourceRepo}
+                    </code>
+                  ) : (
+                    "GitHub"
+                  )}{" "}
+                  as a one-time copy. Saving changes here won’t update the repo,
+                  and {appName} won’t pull later changes from it.
+                </p>
+              </div>
+            )
           )}
           <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3">
             <div className="flex min-h-0 flex-col rounded-md border">
@@ -437,7 +465,7 @@ export function SkillEditorDialog({
                           folder={folder}
                           fileCount={entries.length}
                           isCollapsed={isCollapsed}
-                          readOnly={isPreview}
+                          readOnly={contentReadOnly}
                           onToggle={() => toggleFolder(folder)}
                           onAddFile={() => beginAddingInFolder(folder)}
                           onRemoveFolder={() => removeFolder(folder)}
@@ -449,7 +477,7 @@ export function SkillEditorDialog({
                                 key={file.path}
                                 label={file.path.slice(folder.length + 1)}
                                 isOpen={openFileIndex === index}
-                                readOnly={isPreview}
+                                readOnly={contentReadOnly}
                                 onOpen={() => setOpenFileIndex(index)}
                                 onRemove={() => removeFile(index)}
                               />
@@ -474,7 +502,7 @@ export function SkillEditorDialog({
                       key={file.path}
                       label={file.path}
                       isOpen={openFileIndex === index}
-                      readOnly={isPreview}
+                      readOnly={contentReadOnly}
                       onOpen={() => setOpenFileIndex(index)}
                       onRemove={() => removeFile(index)}
                     />
@@ -492,7 +520,7 @@ export function SkillEditorDialog({
                 </ul>
               </div>
 
-              {!isPreview && trash.length > 0 && (
+              {!contentReadOnly && trash.length > 0 && (
                 <div className="border-t">
                   <button
                     type="button"
@@ -522,7 +550,7 @@ export function SkillEditorDialog({
                 </div>
               )}
 
-              {!isPreview && addingNewFolder && (
+              {!contentReadOnly && addingNewFolder && (
                 <div className="border-t p-2">
                   <NewFolderRow
                     value={newFolderName}
@@ -533,7 +561,7 @@ export function SkillEditorDialog({
                 </div>
               )}
 
-              {!isPreview && addingIn === null && !addingNewFolder && (
+              {!contentReadOnly && addingIn === null && !addingNewFolder && (
                 <div className="flex items-center gap-3 border-t p-2">
                   <button
                     type="button"
@@ -563,10 +591,18 @@ export function SkillEditorDialog({
 
             <div className="flex min-h-0 flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <Label className="font-mono text-xs">
-                  {openFile ? openFile.path : "SKILL.md"}
-                </Label>
-                {!openFile && !isPreview && (
+                <div className="flex items-center gap-2">
+                  <Label className="font-mono text-xs">
+                    {openFile ? openFile.path : "SKILL.md"}
+                  </Label>
+                  {contentReadOnly && !isPreview && (
+                    <span className="inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                      <Lock className="size-3" />
+                      Read-only
+                    </span>
+                  )}
+                </div>
+                {!openFile && !contentReadOnly && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="cursor-help text-xs text-muted-foreground">
@@ -606,9 +642,13 @@ export function SkillEditorDialog({
                   placeholder={
                     openFile ? "File contents..." : MANIFEST_PLACEHOLDER
                   }
-                  className="min-h-0 flex-1 resize-none font-mono text-xs"
+                  className={cn(
+                    "min-h-0 flex-1 resize-none font-mono text-xs",
+                    contentReadOnly &&
+                      "cursor-default bg-muted/40 text-muted-foreground focus-visible:ring-0",
+                  )}
                   spellCheck={false}
-                  readOnly={isPreview}
+                  readOnly={contentReadOnly}
                 />
               )}
               {!openFile && parsed.templated && <TemplatedManifestHint />}
@@ -920,6 +960,173 @@ function NewFolderRow({
       >
         <X className="h-3.5 w-3.5" />
       </Button>
+    </div>
+  );
+}
+
+type SkillDetail = archestraApiTypes.GetSkillResponses["200"];
+
+// lowercase: these render mid-sentence ("Synced from <repo> every hour …")
+const SYNC_INTERVAL_LABELS: Record<string, string> = {
+  "15m": "every 15 minutes",
+  "1h": "every hour",
+  "1d": "once a day",
+};
+
+/**
+ * Controls for a GitHub-synced skill: source + tracked ref, pull frequency,
+ * last-sync status, an immediate pull, and disconnecting from the source
+ * (which makes the skill editable and stops updates).
+ */
+function GithubSyncPanel({
+  skill,
+  sourceRepo,
+}: {
+  skill: SkillDetail;
+  sourceRepo: string | null;
+}) {
+  const updateGithubSync = useUpdateSkillGithubSync();
+  const appName = useAppName();
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+
+  // resolve the credential the scheduled pulls authenticate with; the lists
+  // are permission-gated, so a viewer without githubAppConfig:read falls back
+  // to the generic label.
+  const { data: githubPats = [] } = useGithubPats();
+  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
+  const patName = skill.githubPatId
+    ? githubPats.find((pat) => pat.id === skill.githubPatId)?.name
+    : undefined;
+  const appConfigName = skill.githubAppConfigId
+    ? githubAppConfigs.find((config) => config.id === skill.githubAppConfigId)
+        ?.name
+    : undefined;
+  const authLabel = skill.githubPatId ? (
+    <Link
+      href="/settings/github"
+      className="max-w-44 min-w-0 truncate underline-offset-4 hover:underline"
+      title="Manage saved tokens in Settings → GitHub"
+    >
+      {patName ? `saved token “${patName}”` : "a saved token"}
+    </Link>
+  ) : skill.githubAppConfigId ? (
+    appConfigName ? (
+      `GitHub App “${appConfigName}”`
+    ) : (
+      "a GitHub App"
+    )
+  ) : (
+    "no authentication (public repo)"
+  );
+
+  return (
+    <div className="rounded-md border bg-muted/40 px-3 pt-2 pb-3">
+      {/* the sentence: synced from <repo>, <cadence>, using <credential> */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 text-sm">
+        <Github className="size-4 shrink-0 text-muted-foreground" />
+        <span className="text-muted-foreground">Synced from</span>
+        {sourceRepo ? (
+          <a
+            href={`https://github.com/${sourceRepo}${skill.githubSyncRef ? `/tree/${skill.githubSyncRef}` : ""}`}
+            target="_blank"
+            rel="noreferrer"
+            className="min-w-0 truncate font-mono underline-offset-4 hover:underline"
+            title="Open on GitHub"
+          >
+            {sourceRepo}
+            <span className="text-muted-foreground">
+              {skill.githubSyncRef ? ` @ ${skill.githubSyncRef}` : ""}
+            </span>
+          </a>
+        ) : (
+          <span className="min-w-0 truncate font-mono">GitHub</span>
+        )}
+        <Select
+          value={skill.githubSyncInterval ?? "1d"}
+          onValueChange={(value) =>
+            updateGithubSync.mutate({
+              id: skill.id,
+              body: { interval: value as "15m" | "1h" | "1d" },
+            })
+          }
+          disabled={updateGithubSync.isPending}
+        >
+          <SelectTrigger
+            size="sm"
+            className="h-7 gap-1 px-2"
+            aria-label="Sync frequency"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(SYNC_INTERVAL_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-muted-foreground">using</span>
+        {authLabel}
+        <div className="ml-auto shrink-0">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              updateGithubSync.mutate({ id: skill.id, body: { syncNow: true } })
+            }
+            disabled={updateGithubSync.isPending}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Sync now
+          </Button>
+        </div>
+      </div>
+      {/* the consequence: read-only here until the sync is stopped */}
+      <p className="mt-1.5 truncate pl-6 text-xs text-muted-foreground">
+        {skill.lastSyncError ? (
+          <span className="text-destructive">
+            <AlertTriangle className="mr-1 inline size-3 align-[-2px]" />
+            Last sync failed{" "}
+            {formatRelativeTimeFromNow(skill.lastSyncedAt).toLowerCase()}:{" "}
+            {skill.lastSyncError}
+          </span>
+        ) : (
+          <>
+            Last synced{" "}
+            {formatRelativeTimeFromNow(skill.lastSyncedAt, {
+              neverLabel: "never",
+            }).toLowerCase()}
+          </>
+        )}
+        {" · "}Content is read-only here —{" "}
+        <button
+          type="button"
+          className="cursor-pointer font-medium text-foreground underline-offset-4 hover:underline"
+          onClick={() => setConfirmingDisconnect(true)}
+          disabled={updateGithubSync.isPending}
+        >
+          stop syncing
+        </button>{" "}
+        to edit it in {appName}.
+      </p>
+      <DeleteConfirmDialog
+        open={confirmingDisconnect}
+        onOpenChange={setConfirmingDisconnect}
+        title="Stop syncing from GitHub"
+        description={`Stop syncing "${skill.name}" from ${sourceRepo ?? "its GitHub source"}? It keeps its current content, becomes editable in ${appName}, and no longer receives updates from the repository.`}
+        isPending={updateGithubSync.isPending}
+        onConfirm={async () => {
+          const result = await updateGithubSync.mutateAsync({
+            id: skill.id,
+            body: { disconnect: true },
+          });
+          if (result) setConfirmingDisconnect(false);
+        }}
+        confirmLabel="Stop syncing"
+        pendingLabel="Stopping..."
+      />
     </div>
   );
 }

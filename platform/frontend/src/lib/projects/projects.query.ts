@@ -13,7 +13,11 @@ import {
   type UploadOutcome,
   validateUploadFile,
 } from "@/lib/files/file-upload";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import {
+  getApiErrorMessage,
+  handleApiError,
+  throwOnApiError,
+} from "@/lib/utils";
 
 const {
   createProject,
@@ -390,9 +394,16 @@ export function useUploadProjectFiles(projectId: string) {
             name: file.name,
             ok: error == null,
             reason: error == null ? undefined : "server",
+            serverMessage:
+              error == null ? undefined : getApiErrorMessage(error),
           });
-        } catch {
-          results.push({ name: file.name, ok: false, reason: "server" });
+        } catch (error) {
+          results.push({
+            name: file.name,
+            ok: false,
+            reason: "server",
+            serverMessage: getApiErrorMessage(error),
+          });
         }
       }
       return results;

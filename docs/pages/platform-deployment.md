@@ -246,6 +246,7 @@ Environment network policies require the chart's default MCP manager RBAC so Arc
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
 - `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
 - `archestra.migrationJob.enabled` - Run database migrations in a pre-upgrade Job before rolling web and worker pods (default: true)
+- `archestra.migrationJob.resources` - CPU and memory requests/limits for the migration container (default: 500m CPU request, 512Mi memory request, 2Gi memory limit)
 - `archestra.migrationJob.lockTimeout` - PostgreSQL `lock_timeout` for the migration session (default: `5s`). Migrations fail fast instead of blocking live traffic behind a table lock. Set to `null` to disable.
 - `archestra.migrationJob.envFromSecrets` - Optional hook-only secret values, usually only needed when `ARCHESTRA_DATABASE_URL` uses Kubernetes `$(VAR)` expansion
 
@@ -553,7 +554,7 @@ MCP server pods are protected from SSRF automatically: each pod's egress is conf
 
 ## Infrastructure as Code
 
-Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one under Settings → API Keys (see [API Reference](/docs/platform-api-reference#authentication)).
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section on Your Account (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
 
 ### Terraform
 
@@ -847,6 +848,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
   - Example: `something-really-really-secret-12345`
   - **Warning:** Do not change this value after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
+  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch. See `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY` to accept a deliberate rotation.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
   - Default: `admin@example.com`
@@ -904,6 +906,11 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Options: `DB`, `VAULT`, or `READONLY_VAULT`
   - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
 
+- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate `ARCHESTRA_AUTH_SECRET` change.
+  - Default: `false`
+  - Startup aborts when the current auth secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
+  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
+
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
   - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`
   - Example: `http://localhost:8200`
@@ -937,7 +944,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
 
 ### LLM Provider Configuration
 
-These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Settings > LLM API Keys** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
+These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Model Providers** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
 
 - **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
   - Default: `https://api.openai.com/v1`
@@ -1073,6 +1080,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: unset, i.e. undici's defaults (5 minutes for both headers and body timeout)
   - Opt-in: set a larger value (e.g. `600000` for 10 minutes) when an upstream's time-to-first-token can exceed 5 minutes — typically a slow CPU-only Ollama or vLLM model — which otherwise fails with `Headers Timeout Error`
   - Keep it finite so genuinely-dead upstreams still surface as errors
+
+- **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify Claude-client subscription passthrough as subscription usage.
+  - Default: `true`
+  - When on, traffic attributed to a Claude client (Claude Code or Claude Desktop) that forwards an OAuth Bearer token — a Max/Pro subscription — is recorded as `subscription` billing mode and reported as $0 billed spend, keeping its list-price estimate for comparison
+  - Set to `false` to treat all raw-passthrough traffic as metered and rely only on the per-provider-key billing mode
+  - See: [Costs and Limits](/docs/platform-costs-and-limits#subscription-vs-metered-cost)
 
 - **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
   - Default: `false`

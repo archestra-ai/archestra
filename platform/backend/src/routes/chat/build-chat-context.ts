@@ -33,6 +33,8 @@ export async function buildChatContext(params: {
   projectInstructions: string | undefined;
   /** The app this chat was opened with, when it was opened from one. */
   openedApp: OpenedApp | undefined;
+  /** Filenames of the project's shared files, when this chat belongs to a project. */
+  projectFileNames: string[] | undefined;
   hookRunCollector: CollectedHookRun[];
   elicitation: ChatMcpElicitationBridge;
   subagentToolStream: SubagentToolStreamBridge;
@@ -55,6 +57,7 @@ export async function buildChatContext(params: {
     hookSessionContext,
     projectInstructions,
     openedApp,
+    projectFileNames,
     hookRunCollector,
     elicitation,
     subagentToolStream,
@@ -104,6 +107,7 @@ export async function buildChatContext(params: {
     hookSessionContext,
     projectInstructions,
     openedApp,
+    projectFileNames,
   });
 
   return {

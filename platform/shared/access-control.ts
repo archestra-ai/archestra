@@ -69,6 +69,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
@@ -137,6 +138,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   agentSettings: [],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read"],
   invitation: ["read"],
@@ -211,6 +213,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   agentSettings: [],
   llmSettings: [],
   mcpSettings: [],
+  skillsSettings: [],
   knowledgeSettings: [],
   member: [],
   invitation: [],
@@ -382,10 +385,12 @@ export const permissionDescriptions: Record<string, string> = {
   "llmSettings:update": "Modify LLM settings",
   "mcpSettings:read": "View MCP settings (online catalog availability)",
   "mcpSettings:update": "Modify MCP settings",
+  "skillsSettings:read": "View Skills settings (online catalog availability)",
+  "skillsSettings:update": "Modify Skills settings",
   "agentSettings:read":
-    "View agent settings (default model, default agent, default tool guardrails, file uploads)",
+    "View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
   "agentSettings:update":
-    "Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
+    "Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other
@@ -1009,6 +1014,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAllVirtualApiKeys]: {
     llmVirtualKey: ["read"],
   },
+  [RouteId.GetVirtualApiKey]: {
+    llmVirtualKey: ["read"],
+  },
   [RouteId.CreateVirtualApiKey]: {
     llmVirtualKey: ["create"],
   },
@@ -1113,6 +1121,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateMcpSettings]: {
     mcpSettings: ["update"],
   },
+  [RouteId.UpdateSkillsSettings]: {
+    skillsSettings: ["update"],
+  },
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
   },
@@ -1152,6 +1163,20 @@ export const requiredEndpointPermissionsMap: Partial<
     githubAppConfig: ["update"],
   },
   [RouteId.DeleteGithubAppConfig]: {
+    githubAppConfig: ["delete"],
+  },
+  // stored PATs share the githubAppConfig resource: both are org GitHub
+  // credentials managed on the same settings page by the same audience
+  [RouteId.ListGithubPats]: {
+    githubAppConfig: ["read"],
+  },
+  [RouteId.CreateGithubPat]: {
+    githubAppConfig: ["create"],
+  },
+  [RouteId.UpdateGithubPat]: {
+    githubAppConfig: ["update"],
+  },
+  [RouteId.DeleteGithubPat]: {
     githubAppConfig: ["delete"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
@@ -1417,6 +1442,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
+  [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
@@ -1462,6 +1488,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAuditLogs]: {
     auditLog: ["read"],
   },
+  [RouteId.GetAuditLog]: {
+    auditLog: ["read"],
+  },
 
   // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
   // The public marketplace git endpoint stays outside this map; it is allowlisted in
@@ -1477,6 +1506,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: { app: ["read"] },
   [RouteId.UpdateApp]: { app: ["update"] },
+  // Enable/disable is a lifecycle transition, not a metadata edit; gated like
+  // an update (the handler further requires scope-modify at the app's scope).
+  [RouteId.EnableApp]: { app: ["update"] },
+  [RouteId.DisableApp]: { app: ["update"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },
@@ -1546,6 +1579,34 @@ export const requiredEndpointPermissionsMap: Partial<
 };
 
 /**
+ * Build the user-facing message for a 403 response: what was blocked (derived
+ * from the route id) and why (the missing `resource:action` permissions, with
+ * their human-readable descriptions). Used by the backend auth middleware and
+ * by permission helpers that deny a specific resource/action, so every
+ * Forbidden error reads the same way.
+ */
+export function buildForbiddenErrorMessage(params: {
+  routeId?: string;
+  missingPermissions?: Permissions;
+}): string {
+  const activity = params.routeId ? humanizeRouteId(params.routeId) : undefined;
+  let message = activity
+    ? `You don't have permission to ${activity}.`
+    : "You don't have permission to perform this action.";
+
+  const permissionKeys = flattenPermissionKeys(params.missingPermissions);
+  if (permissionKeys.length > 0) {
+    const details = permissionKeys.map((key) => {
+      const description = permissionDescriptions[key];
+      return description ? `${key} (${description})` : key;
+    });
+    message += ` Missing permission${permissionKeys.length > 1 ? "s" : ""}: ${details.join("; ")}.`;
+  }
+
+  return message;
+}
+
+/**
  * Maps frontend routes to their required permissions.
  * Used to control page-level access and UI element visibility.
  */
@@ -1608,12 +1669,12 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/knowledge/connectors": { knowledgeSource: ["read"] },
 
   // Settings
-  "/settings/account": {},
-  "/settings/api-keys": { apiKey: ["read"] },
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/mcp": { mcpSettings: ["read"] },
+  "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
+  "/settings/security": { agentSettings: ["read"] },
   "/settings/environments": { environment: ["admin"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },
@@ -1624,3 +1685,50 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/github": { githubAppConfig: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };
+
+// === Internal helpers
+
+/**
+ * Words in a camelCase route id that must keep their canonical casing when the
+ * id is turned into a human-readable phrase (e.g. "getMcpServerLogs" →
+ * "get MCP server logs").
+ */
+const ROUTE_WORD_CASING_OVERRIDES: Record<string, string> = {
+  a2a: "A2A",
+  acme: "ACME",
+  ai: "AI",
+  api: "API",
+  id: "ID",
+  idp: "IdP",
+  k8s: "K8s",
+  llm: "LLM",
+  llms: "LLMs",
+  mcp: "MCP",
+  oauth: "OAuth",
+  sso: "SSO",
+  url: "URL",
+};
+
+/** Turn a camelCase route id like "uploadProjectFiles" into "upload project files". */
+function humanizeRouteId(routeId: string): string {
+  return routeId
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[\s_-]+/)
+    .filter((word) => word.length > 0)
+    .map((word) => {
+      const lower = word.toLowerCase();
+      return ROUTE_WORD_CASING_OVERRIDES[lower] ?? lower;
+    })
+    .join(" ");
+}
+
+/** Flatten a Permissions object into "resource:action" keys, sorted for stable output. */
+function flattenPermissionKeys(permissions: Permissions | undefined): string[] {
+  if (!permissions) return [];
+  return Object.entries(permissions)
+    .flatMap(([resource, actions]) =>
+      (actions ?? []).map((action) => `${resource}:${action}`),
+    )
+    .sort();
+}

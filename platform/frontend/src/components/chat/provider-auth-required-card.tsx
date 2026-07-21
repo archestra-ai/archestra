@@ -117,7 +117,7 @@ export function ProviderAuthRequiredCard({
             />
           ) : (
             <Button asChild type="button" variant="outline" size="sm">
-              <a href="/settings">Connect in Settings</a>
+              <a href="/llm/model-providers">Connect in Model Providers</a>
             </Button>
           )}
         </div>

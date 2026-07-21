@@ -6,7 +6,9 @@ import {
   APP_RECORDING_RENDER_REGION_ATTR,
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolShortName,
+  normalizeCuts,
   parseFullToolName,
+  TRIM_EDGE_EPS_MS,
   validateRecordingBundle,
 } from "@archestra/shared";
 import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
@@ -91,7 +93,6 @@ type PlaybackRecording = AppRecordingBundle["recording"] & {
   edits?: AppRecordingBundle["edits"];
   enhancement?: AppRecordingBundle["enhancement"];
 };
-type RecordingCut = NonNullable<AppRecordingBundle["edits"]>["cuts"][number];
 type RecordingChatEdits = NonNullable<
   NonNullable<AppRecordingBundle["edits"]>["chat"]
 >;
@@ -577,40 +578,51 @@ export function AppSessionPlayer({
                   />
 
                   <Tooltip>
+                    {/* The wrapper is what makes the blocked case explain
+                        itself: a disabled button fires no pointer events, so
+                        the tooltip below — the only thing that says WHY the
+                        export is unavailable — never opened on the one button
+                        that needed it. Same span the play and replay buttons
+                        use. */}
                     <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="group size-7 text-muted-foreground hover:text-foreground"
-                        aria-label={
-                          rendering
-                            ? "Cancel preparing the video"
-                            : "Download a video of this session"
-                        }
-                        data-tour="download"
-                        // Live while rendering — this is the way back out of a
-                        // render started by mistake, and the spinner is where
-                        // the author looks for it.
-                        disabled={!rendering && exportBlocked}
-                        onClick={() => {
-                          if (rendering) {
-                            cancelAppRecordingVideoRender();
-                            return;
+                      <span className="inline-flex">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="group size-7 text-muted-foreground hover:text-foreground"
+                          aria-label={
+                            rendering
+                              ? "Cancel preparing the video"
+                              : "Download a video of this session"
                           }
-                          if (!recording) return;
-                          renderVideo.mutate({ conversationId, title });
-                        }}
-                      >
-                        {rendering ? (
-                          <>
-                            <Loader size={14} className="group-hover:hidden" />
-                            <X className="hidden size-4 group-hover:block" />
-                          </>
-                        ) : (
-                          <DownloadIcon className="size-4" />
-                        )}
-                      </Button>
+                          data-tour="download"
+                          // Live while rendering — this is the way back out of
+                          // a render started by mistake, and the spinner is
+                          // where the author looks for it.
+                          disabled={!rendering && exportBlocked}
+                          onClick={() => {
+                            if (rendering) {
+                              cancelAppRecordingVideoRender();
+                              return;
+                            }
+                            if (!recording) return;
+                            renderVideo.mutate({ conversationId, title });
+                          }}
+                        >
+                          {rendering ? (
+                            <>
+                              <Loader
+                                size={14}
+                                className="group-hover:hidden"
+                              />
+                              <X className="hidden size-4 group-hover:block" />
+                            </>
+                          ) : (
+                            <DownloadIcon className="size-4" />
+                          )}
+                        </Button>
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[260px] text-xs">
                       {rendering
@@ -1549,11 +1561,40 @@ function PlayerSurface({
     };
   }, []);
 
+  // Resolved BEFORE the bridge below, which keys on it: the sandbox origin is
+  // not known on first paint. `mcpSandboxDomain` arrives with the public
+  // config, so on a cold load this URL changes from same-origin to the
+  // dedicated sandbox subdomain once that request lands, and the app frame is
+  // pointed somewhere new.
+  const mcpSandboxDomain = useFeature("mcpSandboxDomain");
+  const sandboxResult = useMemo(
+    () =>
+      getMcpSandboxBaseUrl(
+        mcpSandboxDomain,
+        `archestra-app-replay-${conversationId}`,
+      ),
+    [mcpSandboxDomain, conversationId],
+  );
+  const sandboxUrl = useMemo(
+    () =>
+      new URL(
+        `${sandboxResult.baseUrl}/_sandbox/mcp-sandbox-proxy.html`,
+        window.location.origin,
+      ),
+    [sandboxResult.baseUrl],
+  );
+
   // Replay bridge: same protocol surface as the live runtime's bridge, but
   // every MCP answer comes from the recording — the "mocked MCP responses".
   // Rebuilt per app-frame instance (segment switch / restart / seek) because a
-  // bridge instance can only connect once.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: rebuilt per frame instance via segmentIndex/runNonce
+  // bridge instance can only connect once — and a changed `sandboxUrl` is a new
+  // frame just as much as a segment switch is. Without that dependency a late
+  // public config reloads the iframe against an already-connected bridge, whose
+  // second connect throws, and the app pane never becomes ready: the replay
+  // then reports that the recorded app never loaded. Only a cold load on a
+  // deployment with a sandbox domain loses that race, which is why it stayed
+  // invisible everywhere except the offline video render.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rebuilt per frame instance via segmentIndex/runNonce/sandboxUrl
   const bridge = useMemo(() => {
     const replayBridge = new AppBridge(
       null,
@@ -1588,25 +1629,7 @@ function PlayerSurface({
     replayBridge.onmessage = async () => ({});
     replayBridge.onloggingmessage = () => {};
     return replayBridge;
-  }, [conversationId, segmentIndex, runNonce]);
-
-  const mcpSandboxDomain = useFeature("mcpSandboxDomain");
-  const sandboxResult = useMemo(
-    () =>
-      getMcpSandboxBaseUrl(
-        mcpSandboxDomain,
-        `archestra-app-replay-${conversationId}`,
-      ),
-    [mcpSandboxDomain, conversationId],
-  );
-  const sandboxUrl = useMemo(
-    () =>
-      new URL(
-        `${sandboxResult.baseUrl}/_sandbox/mcp-sandbox-proxy.html`,
-        window.location.origin,
-      ),
-    [sandboxResult.baseUrl],
-  );
+  }, [conversationId, segmentIndex, runNonce, sandboxUrl.href]);
 
   // A tool call's `t` is its completion time, so its in-flight window is
   // [t - durationMs, t] — the app top bar shows a "running" chip during it.
@@ -2193,8 +2216,6 @@ type TimelineTourGesture = "cut" | "restore" | "resize";
 
 /** Smallest selectable/keepable stretch on the timeline, in timeline ms. */
 const MIN_CUT_TIMELINE_MS = 250;
-/** A cut touching an end of the session (within this slack) is a trim. */
-const TRIM_EDGE_EPS_MS = 25;
 /** Pointer travel at or past this many px is always a drag-selection. */
 const CLICK_DRAG_PX = 5;
 /** A press released within this many ms AND under CLICK_DRAG_PX of travel is
@@ -4447,23 +4468,6 @@ export function presentedTranscript(
  */
 export function partEditId(messageId: string, partIndex: number): string {
   return `${messageId}#${partIndex}`;
-}
-
-/** Drop degenerate cuts, sort, and merge overlaps into disjoint ranges. */
-function normalizeCuts(cuts: RecordingCut[]): RecordingCut[] {
-  const sorted = cuts
-    .filter((cut) => cut.toMs > cut.fromMs)
-    .sort((a, b) => a.fromMs - b.fromMs);
-  const merged: RecordingCut[] = [];
-  for (const cut of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && cut.fromMs <= last.toMs) {
-      last.toMs = Math.max(last.toMs, cut.toMs);
-    } else {
-      merged.push({ ...cut });
-    }
-  }
-  return merged;
 }
 
 /**

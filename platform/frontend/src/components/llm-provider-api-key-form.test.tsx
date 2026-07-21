@@ -28,6 +28,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   vaultSecretPath: null,
   vaultSecretKey: null,
   isPrimary: false,
+  billingMode: "metered",
   bedrockAuthMethod: "api-key",
   openaiAuthMethod: "api-key",
   awsAccessKeyId: null,

@@ -4,6 +4,13 @@ archestra:
   worker:
     replicaCount: 3
 
+  # The Apps Hackathon video renderer runs as its own single-replica Deployment
+  # (render jobs live in one process's memory) so the 4-replica web tier's polls
+  # and downloads always reach the pod that holds the job. The web tier is
+  # pointed at it via ARCHESTRA_APP_RECORDING_RENDERER_URL below.
+  renderer:
+    enabled: true
+
   codeRuntime:
     enabled: true
     dagger:
@@ -37,10 +44,17 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
-    # Apps Hackathon session recording. Explicit because the enterprise
-    # license above defaults it off; undocumented on purpose — the feature is
-    # temporary and announced only to hackathon participants.
-    ARCHESTRA_HACKATHON_RECORDER: "true"
+    # Apps Hackathon session recording. The documented flag deliberately cannot
+    # open this on a licensed deployment (see parseHackathonRecorderEnabled),
+    # and staging activates the enterprise license above — so it takes the
+    # separate override, which exists for exactly this deployment and is
+    # deliberately absent from .env.example and the deployment docs.
+    ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE: "true"
+    # Offload video rendering to the dedicated single-replica renderer Service
+    # (see renderer.enabled above), so a render's status polls and download land
+    # on the one pod that holds its in-memory job instead of scattering across
+    # the 4 web replicas.
+    ARCHESTRA_APP_RECORDING_RENDERER_URL: "http://archestra-platform-renderer:9000"
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
     # Dedicated origin for MCP App sandboxes so browser device permissions
     # (camera/mic/geolocation/clipboard) can be delegated to app iframes. Each

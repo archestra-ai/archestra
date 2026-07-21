@@ -55,6 +55,14 @@ const internalMcpCatalogTable = pgTable(
      */
     multitenant: boolean("multitenant").notNull().default(false),
     /**
+     * Frozen K8s deployment name for the shared multitenant deployment
+     * (one per catalog). Written once at creation with the legacy shape
+     * (`mcp-mt-<catalogId8>-<slug>`); the startup adopt pass backfills
+     * pre-existing rows from their live deployment's actual name. Never
+     * updated on rename. NULL for non-multitenant catalogs.
+     */
+    deploymentName: text("deployment_name"),
+    /**
      * Default-credential policy for call-time ("dynamic") credential
      * resolution — surfaced in the UI as the server's "Default credential"
      * setting. It governs Auto-mode calls and Custom-mode assignments left on

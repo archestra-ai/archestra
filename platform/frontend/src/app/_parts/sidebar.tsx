@@ -28,6 +28,7 @@ import {
   Network,
   PencilRuler,
   Route,
+  Settings,
   ShieldCheck,
   Slack,
   Sparkles,
@@ -56,7 +57,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
@@ -352,6 +352,31 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/logs") ||
           pathname.startsWith("/mcp/logs") ||
           pathname.startsWith("/audit/logs"),
+      },
+      {
+        title: "Settings",
+        url: "/settings",
+        icon: Settings,
+        customIsActive: (pathname: string) => pathname.startsWith("/settings"),
+        // /settings is a landing page that forwards to the first permitted
+        // tab; show the item when the user can see any settings page.
+        permissionUrls: [
+          "/settings/organization",
+          "/settings/service-accounts",
+          "/settings/agents",
+          "/settings/security",
+          "/settings/llm",
+          "/settings/mcp",
+          "/settings/skills",
+          "/settings/knowledge",
+          "/settings/environments",
+          "/settings/users",
+          "/settings/teams",
+          "/settings/roles",
+          "/settings/github",
+          "/settings/identity-providers",
+          "/settings/secrets",
+        ],
       },
     ],
   },
@@ -666,11 +691,10 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
-        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:hidden">
+        <div className="group-data-[collapsible=icon]:hidden">
           <SidebarPrefetchLink href="/chat" className="block min-w-0">
             <AppLogo />
           </SidebarPrefetchLink>
-          <SidebarTrigger className="shrink-0 text-muted-foreground hover:text-foreground" />
         </div>
         <SidebarPrefetchLink
           href="/chat"
@@ -678,7 +702,6 @@ export function AppSidebar() {
         >
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </SidebarPrefetchLink>
-        <SidebarTrigger className="hidden text-muted-foreground hover:text-foreground group-data-[collapsible=icon]:flex" />
         {isAuthenticated && permissionMap && (
           <SidebarModeToggle
             mode={sidebarMode}

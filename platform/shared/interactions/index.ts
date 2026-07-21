@@ -1,3 +1,4 @@
+export * from "./billing-mode";
 export * from "./client";
 export type {
   CostSavingsInput,

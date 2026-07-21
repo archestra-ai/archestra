@@ -1,11 +1,41 @@
 import { describe, expect, it } from "vitest";
 import {
   APP_RECORDING_REDACTED,
+  APPS_HACKATHON_CLOSES_AT_MS,
+  APPS_HACKATHON_OPENS_AT_MS,
   type AppRecordingBundle,
+  isAppsHackathonOpen,
+  normalizeCuts,
+  pruneTrailingTrimEvents,
   redactSensitiveText,
   sanitizeRecordingBundle,
   validateRecordingBundle,
 } from "./app-recording";
+
+describe("isAppsHackathonOpen", () => {
+  it("is closed before the window opens", () => {
+    expect(isAppsHackathonOpen(APPS_HACKATHON_OPENS_AT_MS - 1)).toBe(false);
+  });
+
+  it("is open from the opening instant until the closing instant", () => {
+    expect(isAppsHackathonOpen(APPS_HACKATHON_OPENS_AT_MS)).toBe(true);
+    expect(isAppsHackathonOpen(APPS_HACKATHON_CLOSES_AT_MS - 1)).toBe(true);
+  });
+
+  it("is closed once the window closes", () => {
+    // Half-open: the closing instant itself is already shut.
+    expect(isAppsHackathonOpen(APPS_HACKATHON_CLOSES_AT_MS)).toBe(false);
+  });
+
+  it("spells the window as 22–29 July 2026, 00:00 UK (BST = UTC+1)", () => {
+    expect(new Date(APPS_HACKATHON_OPENS_AT_MS).toISOString()).toBe(
+      "2026-07-21T23:00:00.000Z",
+    );
+    expect(new Date(APPS_HACKATHON_CLOSES_AT_MS).toISOString()).toBe(
+      "2026-07-28T23:00:00.000Z",
+    );
+  });
+});
 
 function bundle(over?: Partial<AppRecordingBundle>): AppRecordingBundle {
   return {
@@ -204,5 +234,152 @@ describe("validateRecordingBundle", () => {
       ok: false,
       reason: "The recording contains no chat activity.",
     });
+  });
+});
+
+describe("normalizeCuts", () => {
+  it("drops degenerate cuts, sorts, and merges overlaps into disjoint ranges", () => {
+    expect(
+      normalizeCuts([
+        { fromMs: 3000, toMs: 4000 },
+        { fromMs: 500, toMs: 500 }, // degenerate — dropped
+        { fromMs: 1000, toMs: 2500 },
+        { fromMs: 2000, toMs: 3500 }, // bridges the 1000–2500 and 3000–4000 runs
+      ]),
+    ).toEqual([{ fromMs: 1000, toMs: 4000 }]);
+  });
+});
+
+describe("pruneTrailingTrimEvents", () => {
+  const seg = { kind: "segment", t: 0, version: 1 } as const;
+
+  function trimBundle(
+    events: AppRecordingBundle["recording"]["events"],
+    cuts?: { fromMs: number; toMs: number }[],
+    durationMs = 5_000,
+  ): AppRecordingBundle {
+    return bundle({
+      recording: {
+        title: "demo",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        durationMs,
+        events,
+        segments: [{ version: 1, html: "<h1>a</h1>", atMs: 0 }],
+        transcript: [
+          {
+            id: "m1",
+            role: "user",
+            atMs: 0,
+            parts: [{ type: "text", text: "hi" }],
+          },
+        ],
+      },
+      ...(cuts ? { edits: { cuts } } : {}),
+    });
+  }
+
+  it("drops only non-viewport events inside a trailing trim, keeps the rest verbatim", () => {
+    const before = {
+      kind: "canvas",
+      t: 1000,
+      sel: "#c",
+      data: "before",
+    } as const;
+    const view = {
+      kind: "viewport",
+      t: 3000,
+      width: 800,
+      height: 600,
+    } as const;
+    const b = trimBundle(
+      [
+        seg,
+        before, // t <= fromMs — still plays
+        view, // viewport — always kept (stage sizing)
+        { kind: "canvas", t: 3500, sel: "#c", data: "inside" }, // dropped
+        { kind: "dom", t: 4000, op: "html", sel: "#a", html: "x" }, // dropped
+      ],
+      [{ fromMs: 2000, toMs: 5000 }],
+    );
+    const out = pruneTrailingTrimEvents(b);
+    expect(out.recording.events).toEqual([seg, before, view]);
+    // Everything else is untouched.
+    expect(out.edits).toEqual(b.edits);
+    expect(out.recording.durationMs).toBe(b.recording.durationMs);
+    expect(out.recording.segments).toEqual(b.recording.segments);
+    expect(out.recording.transcript).toEqual(b.recording.transcript);
+  });
+
+  it("keeps an event past the trim's end — its anchor still shapes the clock", () => {
+    const b = trimBundle(
+      [
+        seg,
+        { kind: "canvas", t: 3500, sel: "#c", data: "inside" }, // dropped
+        { kind: "canvas", t: 4990, sel: "#c", data: "past-end" }, // t > toMs — kept
+      ],
+      [{ fromMs: 2000, toMs: 4980 }],
+    );
+    expect(pruneTrailingTrimEvents(b).recording.events.map((e) => e.t)).toEqual(
+      [0, 4990],
+    );
+  });
+
+  it("no-ops without cuts", () => {
+    const b = trimBundle([
+      seg,
+      { kind: "canvas", t: 1000, sel: "#c", data: "x" },
+    ]);
+    expect(pruneTrailingTrimEvents(b)).toBe(b);
+  });
+
+  it("no-ops for a mid cut that does not reach the data end", () => {
+    const b = trimBundle(
+      [
+        seg,
+        { kind: "canvas", t: 1500, sel: "#c", data: "x" },
+        { kind: "canvas", t: 4000, sel: "#c", data: "y" },
+      ],
+      [{ fromMs: 1000, toMs: 2000 }],
+    );
+    expect(pruneTrailingTrimEvents(b)).toBe(b);
+  });
+
+  it("keeps an mcp that straddles the trim — its start anchor sits in the kept region", () => {
+    // t=5000 is past the trim start (4000), but the call STARTED at t-durationMs
+    // = 1000, before it — so its second compression anchor is in the kept region
+    // and the event must survive even though it never renders.
+    const straddle = {
+      kind: "mcp",
+      t: 5_000,
+      method: "tools/call",
+      durationMs: 4_000,
+    } as const;
+    const b = trimBundle(
+      [
+        seg,
+        straddle,
+        { kind: "canvas", t: 4_500, sel: "#c", data: "inside" }, // dropped
+      ],
+      [{ fromMs: 4_000, toMs: 10_000 }],
+      10_000,
+    );
+    const out = pruneTrailingTrimEvents(b);
+    expect(out.recording.events).toContainEqual(straddle);
+    expect(out.recording.events.map((e) => e.t)).toEqual([0, 5_000]);
+  });
+
+  it("bails out when dropping would pull the data end in before the trim boundary", () => {
+    // A canvas past the recorded duration defines the data end; dropping it would
+    // move the tail-trim boundary, so the prune declines entirely.
+    const b = trimBundle(
+      [
+        seg,
+        { kind: "canvas", t: 1000, sel: "#c", data: "x" },
+        { kind: "canvas", t: 3000, sel: "#c", data: "past-duration" },
+      ],
+      [{ fromMs: 500, toMs: 3000 }],
+      2_000, // durationMs < 3000
+    );
+    expect(pruneTrailingTrimEvents(b)).toBe(b);
   });
 });

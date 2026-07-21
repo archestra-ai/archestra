@@ -1218,6 +1218,17 @@ export const anthropicAdapterFactory: LLMProvider<
     return undefined;
   },
 
+  isForwardedSubscriptionCredential(apiKey: string | undefined): boolean {
+    // `extractApiKey` tags a forwarded `Authorization: Bearer` token with a
+    // `Bearer:` sentinel; `x-api-key` API keys are returned raw. For Anthropic
+    // only OAuth uses Bearer, so a Bearer sentinel means an OAuth/subscription
+    // credential (metered API keys always arrive via `x-api-key`). The caller
+    // additionally requires a Claude-client body signal before treating this as
+    // a subscription, so a forwarded metered Bearer (e.g. Workload Identity) is
+    // not misclassified.
+    return apiKey?.startsWith("Bearer:") ?? false;
+  },
+
   getBaseUrl(): string | undefined {
     return config.llm.anthropic.baseUrl;
   },

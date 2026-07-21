@@ -8,6 +8,7 @@ import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import GithubAppConfigModel from "@/models/github-app-config";
+import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -143,6 +144,17 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/agents/:agentId": {
     resourceType: "agent",
     resourceIdParam: "agentId",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+
+  // Syncing/removing delegation targets mutates the agent's subagent surface.
+  // Registered explicitly so the POST sync isn't dropped as a walk-up (which
+  // falls to unknown.created with a null resourceType) and the single-target
+  // DELETE inherits agent.updated instead of deriving agent.deleted.
+  "/api/agents/:agentId/delegations": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
 
@@ -340,6 +352,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/github-app-configs/:id": {
     resourceType: "githubAppConfig",
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
+  },
+
+  // Stored GitHub personal access tokens
+  "/api/github-pats": {
+    resourceType: "githubPat",
+    fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-pats/:id": {
+    resourceType: "githubPat",
+    fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),
   },
 
   // Limits

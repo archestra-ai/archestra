@@ -284,6 +284,27 @@ describe("knowledge-connector schemas", () => {
       expect(result.githubUrl).toBe("https://api.github.com");
     });
 
+    test("accepts an empty githubAppConfigId as absent (PAT auth toggle artifact)", () => {
+      const result = GithubConfigSchema.parse({
+        type: "github",
+        githubUrl: "api.github.com",
+        owner: "test-org",
+        authMethod: "pat",
+        githubAppConfigId: "",
+      });
+
+      // "" is falsy, so every consumer treats it as no App credential
+      expect(result.githubAppConfigId).toBe("");
+      expect(
+        GithubConfigSchema.safeParse({
+          type: "github",
+          githubUrl: "api.github.com",
+          owner: "test-org",
+          githubAppConfigId: "not-a-uuid",
+        }).success,
+      ).toBe(false);
+    });
+
     test("rejects a non-UUID githubAppConfigId", () => {
       expect(() =>
         GithubConfigSchema.parse({

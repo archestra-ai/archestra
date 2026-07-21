@@ -1668,6 +1668,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppRecordingRenderStatus]: { chat: ["update"] },
   [RouteId.DownloadAppRecordingVideo]: { chat: ["update"] },
   [RouteId.CancelAppRecordingRender]: { chat: ["update"] },
+  // Same chat-scoped permission as the recording routes above: sharing starts
+  // from the player inside a chat session; the handler re-checks the feature
+  // gates.
+  [RouteId.AppGalleryDeviceAuthStart]: { chat: ["update"] },
+  [RouteId.AppGalleryDeviceAuthPoll]: { chat: ["update"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},

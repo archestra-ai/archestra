@@ -50,6 +50,7 @@ export function makeConfig(
       kbAutoSyncPermissionsEnabled: false,
       hackathonRecorderEnabled: true,
       hackathonRecorderOverrideActive: false,
+      hackathonGalleryRepo: null,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

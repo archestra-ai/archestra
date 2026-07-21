@@ -96,6 +96,15 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               hackathonRecorderEnabled: z.boolean(),
               /** Staging override active: recorder bypasses the hackathon date window. */
               hackathonRecorderOverrideActive: z.boolean(),
+              /**
+               * The public App Gallery repository shared recordings are
+               * submitted to, or null when this deployment does not offer
+               * sharing. The frontend files the PR against this repository
+               * directly on api.github.com.
+               */
+              hackathonGalleryRepo: z
+                .object({ owner: z.string(), name: z.string() })
+                .nullable(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -150,6 +159,10 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
           hackathonRecorderOverrideActive:
             config.hackathonRecorder.overrideActive,
+          hackathonGalleryRepo:
+            (config.hackathonRecorder.gallery.githubClientId &&
+              config.hackathonRecorder.gallery.repo) ||
+            null,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

@@ -43,6 +43,7 @@ import {
 import { Loader } from "@/components/ai-elements/loader";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
+import { AppGalleryShareButton } from "@/components/app-session-recording/app-gallery-share-dialog";
 import { McpAppPill } from "@/components/mcp-app/mcp-app-chrome";
 import {
   buildReplayHostContext,
@@ -665,6 +666,15 @@ export function AppSessionPlayer({
                             : "Downloads a video of this session with your edits applied. Takes up to a minute."}
                     </TooltipContent>
                   </Tooltip>
+
+                  {/* Renders nothing unless the deployment offers the gallery.
+                      Blocked mid-edit like the download, but not by the video
+                      length cap — the shared bundle is the recording itself,
+                      not a render. */}
+                  <AppGalleryShareButton
+                    conversationId={conversationId}
+                    disabled={descriptionEditing || surfaceEditing}
+                  />
 
                   <Tooltip>
                     <TooltipTrigger asChild>

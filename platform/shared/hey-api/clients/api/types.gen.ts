@@ -15807,6 +15807,183 @@ export type GetApiKeyResponses = {
 
 export type GetApiKeyResponse = GetApiKeyResponses[keyof GetApiKeyResponses];
 
+export type AppGalleryDeviceAuthStartData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/app-gallery/device/start';
+};
+
+export type AppGalleryDeviceAuthStartErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AppGalleryDeviceAuthStartError = AppGalleryDeviceAuthStartErrors[keyof AppGalleryDeviceAuthStartErrors];
+
+export type AppGalleryDeviceAuthStartResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deviceCode: string;
+        userCode: string;
+        verificationUri: string;
+        interval: number;
+        expiresIn: number;
+    };
+};
+
+export type AppGalleryDeviceAuthStartResponse = AppGalleryDeviceAuthStartResponses[keyof AppGalleryDeviceAuthStartResponses];
+
+export type AppGalleryDeviceAuthPollData = {
+    body: {
+        deviceCode: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/app-gallery/device/poll';
+};
+
+export type AppGalleryDeviceAuthPollErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AppGalleryDeviceAuthPollError = AppGalleryDeviceAuthPollErrors[keyof AppGalleryDeviceAuthPollErrors];
+
+export type AppGalleryDeviceAuthPollResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'pending';
+    } | {
+        status: 'slow_down';
+    } | {
+        status: 'complete';
+        accessToken: string;
+    };
+};
+
+export type AppGalleryDeviceAuthPollResponse = AppGalleryDeviceAuthPollResponses[keyof AppGalleryDeviceAuthPollResponses];
+
 export type EnhanceAppRecordingData = {
     body: {
         conversationId: string;
@@ -28274,6 +28451,10 @@ export type GetConfigResponses = {
             kbAutoSyncPermissionsEnabled: boolean;
             hackathonRecorderEnabled: boolean;
             hackathonRecorderOverrideActive: boolean;
+            hackathonGalleryRepo: {
+                owner: string;
+                name: string;
+            } | null;
         };
         providerBaseUrls: {
             [key: string]: string | null;

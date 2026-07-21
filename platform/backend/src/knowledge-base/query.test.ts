@@ -83,7 +83,7 @@ import { KbChunkModel, KbDocumentModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
 
-import { queryService } from "./query";
+import { findEmbeddingDimensionMismatch, queryService } from "./query";
 
 function makeFakeEmbedding(seed: number): number[] {
   return Array.from({ length: 1536 }, (_, i) => Math.cos(seed + i * 0.01));
@@ -680,5 +680,31 @@ describe("QueryService", () => {
 
     vectorSearchSpy.mockRestore();
     fullTextSearchSpy.mockRestore();
+  });
+});
+
+describe("findEmbeddingDimensionMismatch", () => {
+  test("returns null when no documents are ingested (legitimate empty result)", () => {
+    expect(findEmbeddingDimensionMismatch(new Set(), 1024)).toBeNull();
+  });
+
+  test("returns null when the configured dimension is present (a real no-match)", () => {
+    expect(findEmbeddingDimensionMismatch(new Set([1024]), 1024)).toBeNull();
+    expect(
+      findEmbeddingDimensionMismatch(new Set([1024, 1536]), 1024),
+    ).toBeNull();
+  });
+
+  test("reports a mismatch when documents exist only at other dimensions", () => {
+    expect(findEmbeddingDimensionMismatch(new Set([1536]), 1024)).toEqual([
+      1536,
+    ]);
+  });
+
+  test("reports a mismatch for the mixed-connector case (any differing dimension)", () => {
+    // Configured 768, but connectors were ingested at 1024 and 1536 — none match.
+    expect(
+      findEmbeddingDimensionMismatch(new Set([1024, 1536]), 768)?.sort(),
+    ).toEqual([1024, 1536]);
   });
 });

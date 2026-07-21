@@ -130,7 +130,7 @@ describe("API key route authorization", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({
       error: {
-        message: "Forbidden",
+        message: expect.stringContaining("apiKey:read"),
         type: "api_authorization_error",
       },
     });

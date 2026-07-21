@@ -12,8 +12,10 @@ const {
   getSkills,
   getSkill,
   getSkillSourceRepos,
+  getSkillUsageStatistics,
   createSkill,
   updateSkill,
+  updateSkillGithubSync,
   deleteSkill,
   resetSkill,
   discoverGithubSkills,
@@ -28,7 +30,13 @@ export type SkillCatalogResult =
 type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
   SkillsQuery,
-  "limit" | "offset" | "search" | "sourceRepo"
+  | "limit"
+  | "offset"
+  | "search"
+  | "sourceRepo"
+  | "forAgentId"
+  | "sortBy"
+  | "sortDirection"
 >;
 
 // ===== Query hooks =====
@@ -79,6 +87,21 @@ export function useSearchSkillCatalog(search: string) {
         throw new Error(getApiErrorMessage(error));
       }
       return data;
+    },
+  });
+}
+
+/** Per-user activation counts for one skill over the last 30 days. */
+export function useSkillUsageStatistics(id: string | null) {
+  return useQuery({
+    queryKey: ["skills", id, "usage-statistics"],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await getSkillUsageStatistics({
+        path: { id: id as string },
+      });
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
     },
   });
 }
@@ -178,6 +201,45 @@ export function useResetSkill() {
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       queryClient.invalidateQueries({ queryKey: ["skills", data.id] });
       toast.success("Skill reset to default");
+    },
+  });
+}
+
+/**
+ * Manage a GitHub-synced skill: change its pull frequency, trigger an
+ * immediate pull (`syncNow`), or disconnect it (`interval: null`).
+ */
+export function useUpdateSkillGithubSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: archestraApiTypes.UpdateSkillGithubSyncData["body"];
+    }) => {
+      const { data, error } = await updateSkillGithubSync({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: ["skills", variables.id] });
+      if (variables.body.syncNow) {
+        toast.success("Sync started — the skill updates in the background");
+      } else if (variables.body.disconnect) {
+        toast.success("Sync stopped — the skill is now editable");
+      } else {
+        toast.success("Sync frequency updated");
+      }
     },
   });
 }

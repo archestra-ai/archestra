@@ -28,6 +28,7 @@ import {
   Network,
   PencilRuler,
   Route,
+  Settings,
   ShieldCheck,
   Slack,
   Sparkles,
@@ -351,6 +352,31 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/logs") ||
           pathname.startsWith("/mcp/logs") ||
           pathname.startsWith("/audit/logs"),
+      },
+      {
+        title: "Settings",
+        url: "/settings",
+        icon: Settings,
+        customIsActive: (pathname: string) => pathname.startsWith("/settings"),
+        // /settings is a landing page that forwards to the first permitted
+        // tab; show the item when the user can see any settings page.
+        permissionUrls: [
+          "/settings/organization",
+          "/settings/service-accounts",
+          "/settings/agents",
+          "/settings/security",
+          "/settings/llm",
+          "/settings/mcp",
+          "/settings/skills",
+          "/settings/knowledge",
+          "/settings/environments",
+          "/settings/users",
+          "/settings/teams",
+          "/settings/roles",
+          "/settings/github",
+          "/settings/identity-providers",
+          "/settings/secrets",
+        ],
       },
     ],
   },

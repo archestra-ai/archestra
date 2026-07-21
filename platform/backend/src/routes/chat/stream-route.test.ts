@@ -6,9 +6,19 @@ import {
 } from "@archestra/shared";
 import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
-import { PROJECT_INSTRUCTIONS_PREFIX } from "@/agents/agent-system-prompt";
+import {
+  PROJECT_FILES_PREFIX,
+  PROJECT_INSTRUCTIONS_PREFIX,
+} from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { MessageModel, ModelModel, ProjectModel, SkillModel } from "@/models";
+import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
+import {
+  FileModel,
+  MessageModel,
+  ModelModel,
+  ProjectModel,
+  SkillModel,
+} from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
@@ -668,6 +678,62 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     ]);
   });
 
+  test("stops the run once the model repeatedly calls a tool outside the tool list", async () => {
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const streamConfig = mockStreamText.mock.calls[0]?.[0];
+    const stopWhen = streamConfig.stopWhen as ((arg: unknown) => boolean)[];
+    const noSteps = { steps: [] };
+    const runIsStopped = () => stopWhen.some((cond) => cond(noSteps));
+
+    // A tool the model asks for but which is not in its tool list never reaches
+    // an execute wrapper, so nothing on the normal path counts it. Distinct
+    // arguments each step, since that is what the real loop did.
+    const unavailableStep = (attempt: number) => ({
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      finishReason: "tool-calls",
+      toolCalls: [
+        {
+          type: "tool-call",
+          toolCallId: `call-${attempt}`,
+          toolName: "archestra__edit_app",
+          input: { attempt },
+          dynamic: true,
+          invalid: true,
+          error: new NoSuchToolError({
+            toolName: "archestra__edit_app",
+            availableTools: ["archestra__search_tools", "archestra__run_tool"],
+          }),
+        },
+      ],
+    });
+
+    // Drives the route's own onStepFinish and its own stopWhen, so this fails
+    // if they are ever handed different tracker instances — which would leave
+    // the ceiling silently inert no matter how correct the recorder is.
+    for (let i = 1; i < REPEAT_CALL_TERMINATION_CEILING; i++) {
+      await streamConfig.onStepFinish(unavailableStep(i));
+      expect(runIsStopped()).toBe(false);
+    }
+
+    await streamConfig.onStepFinish(unavailableStep(99));
+    expect(runIsStopped()).toBe(true);
+  });
+
   test("forwards a provided temperature to streamText", async () => {
     mockStreamText.mockClear();
 
@@ -772,6 +838,87 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
     expect(systemPrompt).toContain(PROJECT_INSTRUCTIONS_PREFIX);
     expect(systemPrompt).toContain("STREAM-INSTRUCTIONS-MARKER");
+  });
+
+  test("lists the project's shared files in the system prompt for a project chat", async () => {
+    const project = await ProjectModel.create({
+      organizationId,
+      userId: user.id,
+      name: "Files Project",
+      description: null,
+    });
+    // A project file, attached to the project (not to any message) by another
+    // conversation — exactly the file the model previously never heard about.
+    await FileModel.insertRow({
+      organizationId,
+      userId: user.id,
+      projectId: project.id,
+      conversationId: null,
+      filename: "index.html",
+      mimeType: "text/html",
+      sizeBytes: 6,
+      storageProvider: "db",
+      data: Buffer.from("<html>"),
+      objectKey: null,
+    });
+    const projectConversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId,
+      agentId,
+      projectId: project.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: projectConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(PROJECT_FILES_PREFIX);
+    expect(systemPrompt).toContain("`index.html`");
+  });
+
+  test("lists no project files for a project chat whose project has none", async () => {
+    const project = await ProjectModel.create({
+      organizationId,
+      userId: user.id,
+      name: "No Files Project",
+      description: null,
+    });
+    const projectConversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId,
+      agentId,
+      projectId: project.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: projectConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt ?? "").not.toContain(PROJECT_FILES_PREFIX);
   });
 
   test("injects nothing for a project chat whose instructions are empty", async () => {

@@ -80,6 +80,18 @@ vi.mock("./audit-log-registry", async () => {
             }
           : null,
     },
+    // Child-mutation DELETE registered with an explicit `.updated` action: the
+    // parent resource still exists after the delete, so `after` must be captured
+    // rather than forced to null like a genuine resource deletion.
+    "/api/agents/:agentId/delegations": {
+      resourceType: "agent",
+      resourceIdParam: "agentId",
+      action: "agent.updated" as const,
+      fetchById: async (id: string) =>
+        id === KNOWN_RESOURCE_ID
+          ? { id, name: "Some Agent", delegationTargets: [] }
+          : null,
+    },
     // Rotation route with explicit action — key test for action overrides.
     "/api/user-tokens/me/rotate": {
       resourceType: "userToken",
@@ -259,6 +271,12 @@ describe("registerAuditLogHook", () => {
       ok: true,
     }));
 
+    // Child-mutation DELETE — walks up to /api/agents/:agentId/delegations
+    // (explicit agent.updated action); the agent survives the removal.
+    app.delete("/api/agents/:agentId/delegations/:targetAgentId", async () => ({
+      success: true,
+    }));
+
     // Unregistered child route — walks up to /api/agents/:agentId.
     // POST must be suppressed; PATCH must still write a row.
     app.post("/api/agents/:agentId/assign-tools", async () => ({ ok: true }));
@@ -267,6 +285,15 @@ describe("registerAuditLogHook", () => {
     // GitHub read-only POSTs — exact denylist entries; must produce zero rows.
     app.post("/api/skills/github/discover", async () => ({ ok: true }));
     app.post("/api/skills/github/preview", async () => ({ ok: true }));
+
+    // Route-pattern (":id/suffix") denylist entries — a variable id sits before
+    // a static suffix, so a concrete-URL prefix would over-match the parent.
+    app.delete("/api/apps/:appId/pin", async () => ({ ok: true }));
+    app.post("/api/apps/:appId/diagnostics", async () => ({ ok: true }));
+    // The audited parent under the same prefix must NOT be silenced.
+    app.put("/api/apps/:appId", async () => ({ ok: true }));
+    // Prefix denylist entry for onboarding UI state.
+    app.post("/api/onboarding/seen-nav-items", async () => ({ ok: true }));
 
     // Token rotation route.
     app.post("/api/user-tokens/me/rotate", async () => ({ ok: true }));
@@ -460,6 +487,32 @@ describe("registerAuditLogHook", () => {
         name: "Existing Thing",
       });
       expect(rows[0].after).toBeNull();
+    });
+
+    test("semantic-update DELETE (child removal) captures after-state, not null", async () => {
+      const res = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${KNOWN_RESOURCE_ID}/delegations/00000000-0000-0000-0000-0000000000ff`,
+      });
+      expect(res.statusCode).toBe(200);
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      // Explicit `.updated` action → the resource survives, so the removal must
+      // not render as a full deletion (after=null). before/after are both the
+      // agent snapshot; the diff surfaces the delegation change.
+      expect(rows[0].action).toBe("agent.updated");
+      expect(rows[0].before).toEqual({
+        id: KNOWN_RESOURCE_ID,
+        name: "Some Agent",
+        delegationTargets: [],
+      });
+      expect(rows[0].after).toEqual({
+        id: KNOWN_RESOURCE_ID,
+        name: "Some Agent",
+        delegationTargets: [],
+      });
     });
   });
 
@@ -746,6 +799,42 @@ describe("registerAuditLogHook", () => {
       await app.inject({
         method: "POST",
         url: "/api/organization/knowledge-settings/test-embedding",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("DELETE /api/apps/:appId/pin writes zero rows (route-pattern denylist entry)", async () => {
+      await app.inject({
+        method: "DELETE",
+        url: "/api/apps/00000000-0000-0000-0000-0000000000aa/pin",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("POST /api/apps/:appId/diagnostics writes zero rows (route-pattern denylist entry)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/apps/00000000-0000-0000-0000-0000000000aa/diagnostics",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
+
+    test("PUT /api/apps/:appId still writes a row (route-pattern entry does not over-match the parent)", async () => {
+      await app.inject({
+        method: "PUT",
+        url: "/api/apps/00000000-0000-0000-0000-0000000000aa",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(1);
+    });
+
+    test("POST /api/onboarding/seen-nav-items writes zero rows (prefix denylist entry)", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/onboarding/seen-nav-items",
       });
       await settle();
       expect(await getRows()).toHaveLength(0);

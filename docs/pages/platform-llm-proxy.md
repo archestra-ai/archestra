@@ -3,7 +3,7 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2026-07-01
+lastUpdated: 2026-07-19
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -129,6 +129,8 @@ curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
 ## Environment
 
 An LLM proxy can be assigned a deployment environment. Its inference is then attributed to that environment, so usage counts against that environment's cost limits. Unassigned proxies use the Default environment. See [Environments](/docs/platform-environments).
+
+The environment also scopes skills on the connect page: the setup command only offers [skills](/docs/platform-agent-skills) in the selected proxy's environment.
 
 ## Supported Providers
 

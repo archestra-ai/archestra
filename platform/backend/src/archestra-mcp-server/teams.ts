@@ -1,19 +1,23 @@
 import {
+  TOOL_ADD_TEAM_EXTERNAL_GROUP_SHORT_NAME,
   TOOL_ADD_TEAM_MEMBER_SHORT_NAME,
   TOOL_CREATE_TEAM_SHORT_NAME,
   TOOL_DELETE_TEAM_SHORT_NAME,
   TOOL_EDIT_TEAM_SHORT_NAME,
   TOOL_GET_TEAM_SHORT_NAME,
+  TOOL_LIST_TEAM_EXTERNAL_GROUPS_SHORT_NAME,
   TOOL_LIST_TEAM_MEMBERS_SHORT_NAME,
   TOOL_LIST_TEAMS_SHORT_NAME,
+  TOOL_REMOVE_TEAM_EXTERNAL_GROUP_SHORT_NAME,
   TOOL_REMOVE_TEAM_MEMBER_SHORT_NAME,
   TOOL_UPDATE_TEAM_MEMBER_ROLE_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
-import { MemberModel, TeamModel } from "@/models";
+import { MemberModel, TeamLabelModel, TeamModel } from "@/models";
 import {
   canManageTeamMembers,
   canReadTeam,
@@ -21,10 +25,17 @@ import {
   cleanupCredentialSourcesAfterMemberRemoval,
   getTeamForOrg,
 } from "@/services/team-authorization";
-import type { Team, TeamMember, TeamMemberListItem } from "@/types";
+import type {
+  Team,
+  TeamExternalGroup,
+  TeamMember,
+  TeamMemberListItem,
+} from "@/types";
 import { TeamMemberRoleSchema, UuidIdSchema } from "@/types";
+import { AgentLabelOutputSchema, LabelInputSchema } from "./agent-resources";
 import {
   catchError,
+  deduplicateLabels,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -46,6 +57,9 @@ const TeamOutputItemSchema = z.object({
   memberCount: z
     .number()
     .describe("The number of members currently in the team."),
+  labels: z
+    .array(AgentLabelOutputSchema)
+    .describe("Key-value labels assigned to the team."),
   createdAt: z.string().describe("ISO timestamp when the team was created."),
   updatedAt: z
     .string()
@@ -84,6 +98,12 @@ const CreateTeamToolArgsSchema = z
       .string()
       .optional()
       .describe("Optional human-readable description of the team."),
+    labels: z
+      .array(LabelInputSchema)
+      .optional()
+      .describe(
+        "Optional key-value labels to assign to the team for organization and categorization (e.g. cost-center, environment).",
+      ),
   })
   .strict();
 
@@ -121,6 +141,12 @@ const EditTeamToolArgsSchema = z
       .optional()
       .describe(
         "Optional new team description. Pass null to clear an existing description.",
+      ),
+    labels: z
+      .array(LabelInputSchema)
+      .optional()
+      .describe(
+        "Replace the team's labels with this set. Pass an empty array to remove all labels. Omit to leave labels unchanged.",
       ),
   })
   .strict();
@@ -172,12 +198,69 @@ const RemoveTeamMemberToolArgsSchema = z
   })
   .strict();
 
+const TeamExternalGroupOutputItemSchema = z.object({
+  id: z.string().describe("The external group mapping ID."),
+  teamId: z.string().describe("The team the mapping belongs to."),
+  groupIdentifier: z
+    .string()
+    .describe("The external identity provider group identifier."),
+  createdAt: z.string().describe("ISO timestamp when the mapping was created."),
+});
+
+const ListTeamExternalGroupsToolArgsSchema = z
+  .object({
+    team_id: UuidIdSchema.describe(
+      "The ID of the team whose external group mappings to list.",
+    ),
+  })
+  .strict();
+
+const AddTeamExternalGroupToolArgsSchema = z
+  .object({
+    team_id: UuidIdSchema.describe(
+      "The ID of the team to map the external group to.",
+    ),
+    group_identifier: z
+      .string()
+      .min(1)
+      .describe(
+        "The external identity provider group identifier. Format varies by provider: LDAP Distinguished Name (e.g. cn=admins,ou=groups,dc=example,dc=com), OAuth/OIDC group name from the groups claim, SAML group attribute value, or Azure AD group object ID (GUID). Matched case-insensitively.",
+      ),
+  })
+  .strict();
+
+const RemoveTeamExternalGroupToolArgsSchema = z
+  .object({
+    team_id: UuidIdSchema.describe("The ID of the team."),
+    group_id: UuidIdSchema.optional().describe(
+      "The ID of the external group mapping to remove.",
+    ),
+    group_identifier: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "The external group identifier to remove, as an alternative to group_id. Matched case-insensitively.",
+      ),
+  })
+  .strict()
+  .superRefine((args, ctx) => {
+    if (!args.group_id && !args.group_identifier) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["group_id"],
+        message:
+          "Provide either a group_id or a group_identifier to remove the mapping.",
+      });
+    }
+  });
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_TEAM_SHORT_NAME,
     title: "Create Team",
     description:
-      "Create a new team in the organization. Teams group users and control access to profiles and MCP servers.",
+      "Create a new team in the organization, optionally with key-value labels. Teams group users and control access to profiles and MCP servers.",
     schema: CreateTeamToolArgsSchema,
     outputSchema: z.object({ team: TeamOutputItemSchema }),
     async handler({ args, context }) {
@@ -217,7 +300,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_TEAM_SHORT_NAME,
     title: "Edit Team",
     description:
-      "Update a team's name and/or description. At least one field must be provided.",
+      "Update a team's name, description, and/or labels. At least one field must be provided. Labels, when provided, replace the team's existing labels.",
     schema: EditTeamToolArgsSchema,
     outputSchema: z.object({ team: TeamOutputItemSchema }),
     async handler({ args, context }) {
@@ -284,6 +367,46 @@ const registry = defineArchestraTools([
       return handleRemoveTeamMember({ args, context });
     },
   }),
+  defineArchestraTool({
+    shortName: TOOL_LIST_TEAM_EXTERNAL_GROUPS_SHORT_NAME,
+    title: "List Team External Groups",
+    description:
+      "List the external identity provider groups mapped to a team for SSO team sync. Requires an enterprise license.",
+    schema: ListTeamExternalGroupsToolArgsSchema,
+    outputSchema: z.object({
+      externalGroups: z.array(TeamExternalGroupOutputItemSchema),
+    }),
+    async handler({ args, context }) {
+      return handleListTeamExternalGroups({ args, context });
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_ADD_TEAM_EXTERNAL_GROUP_SHORT_NAME,
+    title: "Add Team External Group",
+    description:
+      "Map an external identity provider group to a team for SSO team sync: users whose SSO group memberships match are automatically added to or removed from the team on login. Requires an enterprise license.",
+    schema: AddTeamExternalGroupToolArgsSchema,
+    outputSchema: z.object({
+      externalGroup: TeamExternalGroupOutputItemSchema,
+    }),
+    async handler({ args, context }) {
+      return handleAddTeamExternalGroup({ args, context });
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_REMOVE_TEAM_EXTERNAL_GROUP_SHORT_NAME,
+    title: "Remove Team External Group",
+    description:
+      "Remove an external group mapping from a team's SSO team sync, by mapping ID or by group identifier. Requires an enterprise license.",
+    schema: RemoveTeamExternalGroupToolArgsSchema,
+    outputSchema: z.object({
+      success: z.literal(true),
+      teamId: z.string(),
+    }),
+    async handler({ args, context }) {
+      return handleRemoveTeamExternalGroup({ args, context });
+    },
+  }),
 ] as const);
 
 export const toolEntries = registry.toolEntries;
@@ -348,14 +471,17 @@ async function assertCanReadTeam(
 }
 
 /**
- * Membership-management access, mapped to an MCP result: allowed → null;
- * denied → a permission error. Authorization itself lives in the shared
- * service (org-level team manager OR admin of that specific team).
+ * Team-management access (memberships, external group sync), mapped to an MCP
+ * result: allowed → null; denied → a permission error naming the attempted
+ * action. Authorization itself lives in the shared service (org-level team
+ * manager OR admin of that specific team).
  */
-async function assertCanManageTeamMembers(
-  context: ArchestraContext,
-  teamId: string,
-): Promise<CallToolResult | null> {
+async function assertCanManageTeam(params: {
+  context: ArchestraContext;
+  teamId: string;
+  action: string;
+}): Promise<CallToolResult | null> {
+  const { context, teamId, action } = params;
   const allowed =
     !!context.userId &&
     (await canManageTeamMembers({
@@ -366,8 +492,30 @@ async function assertCanManageTeamMembers(
   return allowed
     ? null
     : errorResult(
-        "You must be a team admin or have organization-level team management permission to manage this team's members.",
+        `You must be a team admin or have organization-level team management permission to ${action}.`,
       );
+}
+
+/**
+ * SSO team sync is an enterprise feature; mirror the REST routes' gate.
+ * Allowed → null; unlicensed → an error result.
+ */
+function checkTeamSyncLicense(): CallToolResult | null {
+  if (enterpriseTier.isCoreActive()) {
+    return null;
+  }
+  return errorResult(
+    "Team Sync is an enterprise feature. Please contact sales@archestra.ai to enable it.",
+  );
+}
+
+function serializeExternalGroup(group: TeamExternalGroup) {
+  return {
+    id: group.id,
+    teamId: group.teamId,
+    groupIdentifier: group.groupIdentifier,
+    createdAt: group.createdAt.toISOString(),
+  };
 }
 
 function serializeTeam(team: Team, memberCount: number) {
@@ -378,9 +526,27 @@ function serializeTeam(team: Team, memberCount: number) {
     organizationId: team.organizationId,
     createdBy: team.createdBy ?? null,
     memberCount,
+    labels: (team.labels ?? []).map((label) => ({
+      key: label.key,
+      value: label.value,
+    })),
     createdAt: team.createdAt.toISOString(),
     updatedAt: team.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Human-readable `\nLabels: ...` suffix for a serialized team's text summary,
+ * or an empty string when the team has no labels.
+ */
+function formatLabelsLine(labels: Array<{ key: string; value: string }>) {
+  if (labels.length === 0) {
+    return "";
+  }
+  const formatted = labels
+    .map((label) => `${label.key}: ${label.value}`)
+    .join(", ");
+  return `\nLabels: ${formatted}`;
 }
 
 function serializeMember(member: TeamMember | TeamMemberListItem) {
@@ -416,6 +582,7 @@ async function handleCreateTeam(params: {
       description: args.description,
       organizationId: context.organizationId,
       createdBy: context.userId,
+      labels: args.labels ? deduplicateLabels(args.labels) : undefined,
     });
 
     // A freshly created team has no members yet.
@@ -424,7 +591,7 @@ async function handleCreateTeam(params: {
       { team: serialized },
       `Successfully created team.\n\nTeam ID: ${serialized.id}\nName: ${serialized.name}${
         serialized.description ? `\nDescription: ${serialized.description}` : ""
-      }`,
+      }${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
     return catchError(error, "creating team");
@@ -465,14 +632,18 @@ async function handleGetTeam(params: {
       return readDenied;
     }
 
-    // findByName does not hydrate members; count them explicitly.
-    const members = await TeamModel.getTeamMembers(team.id);
-    const serialized = serializeTeam(team, members.length);
+    // findByName/getTeamForOrg do not hydrate members or labels; fetch both
+    // explicitly.
+    const [members, labels] = await Promise.all([
+      TeamModel.getTeamMembers(team.id),
+      TeamLabelModel.getLabelsForTeam(team.id),
+    ]);
+    const serialized = serializeTeam({ ...team, labels }, members.length);
     return structuredSuccessResult(
       { team: serialized },
       `Team ID: ${serialized.id}\nName: ${serialized.name}${
         serialized.description ? `\nDescription: ${serialized.description}` : ""
-      }\nMembers: ${serialized.memberCount}`,
+      }\nMembers: ${serialized.memberCount}${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
     return catchError(error, "getting team");
@@ -511,8 +682,15 @@ async function handleListTeams(params: {
       ? visible.filter((team) => team.name.toLowerCase().includes(nameFilter))
       : visible;
 
+    // findByOrganization hydrates members but not labels; batch-fetch them.
+    const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
+      filtered.map((team) => team.id),
+    );
     const serialized = filtered.map((team) =>
-      serializeTeam(team, team.members?.length ?? 0),
+      serializeTeam(
+        { ...team, labels: labelsByTeam.get(team.id) ?? [] },
+        team.members?.length ?? 0,
+      ),
     );
 
     if (serialized.length === 0) {
@@ -555,7 +733,11 @@ async function handleEditTeam(params: {
   }
 
   try {
-    if (args.name === undefined && args.description === undefined) {
+    if (
+      args.name === undefined &&
+      args.description === undefined &&
+      args.labels === undefined
+    ) {
       return errorResult("No fields provided to update.");
     }
 
@@ -569,6 +751,9 @@ async function handleEditTeam(params: {
       ...(args.description !== undefined
         ? { description: args.description }
         : {}),
+      ...(args.labels !== undefined
+        ? { labels: deduplicateLabels(args.labels) }
+        : {}),
     });
 
     if (!updated) {
@@ -580,7 +765,7 @@ async function handleEditTeam(params: {
       { team: serialized },
       `Successfully updated team.\n\nTeam ID: ${serialized.id}\nName: ${serialized.name}${
         serialized.description ? `\nDescription: ${serialized.description}` : ""
-      }`,
+      }${formatLabelsLine(serialized.labels)}`,
     );
   } catch (error) {
     return catchError(error, "updating team");
@@ -692,7 +877,11 @@ async function handleAddTeamMember(params: {
       return errorResult(`Team with ID ${args.team_id} not found.`);
     }
 
-    const manageDenied = await assertCanManageTeamMembers(context, team.id);
+    const manageDenied = await assertCanManageTeam({
+      context,
+      teamId: team.id,
+      action: "manage this team's members",
+    });
     if (manageDenied) {
       return manageDenied;
     }
@@ -753,7 +942,11 @@ async function handleUpdateTeamMemberRole(params: {
       return errorResult(`Team with ID ${args.team_id} not found.`);
     }
 
-    const manageDenied = await assertCanManageTeamMembers(context, team.id);
+    const manageDenied = await assertCanManageTeam({
+      context,
+      teamId: team.id,
+      action: "manage this team's members",
+    });
     if (manageDenied) {
       return manageDenied;
     }
@@ -807,7 +1000,11 @@ async function handleRemoveTeamMember(params: {
       return errorResult(`Team with ID ${args.team_id} not found.`);
     }
 
-    const manageDenied = await assertCanManageTeamMembers(context, team.id);
+    const manageDenied = await assertCanManageTeam({
+      context,
+      teamId: team.id,
+      action: "manage this team's members",
+    });
     if (manageDenied) {
       return manageDenied;
     }
@@ -851,6 +1048,179 @@ async function handleRemoveTeamMember(params: {
     );
   } catch (error) {
     return catchError(error, "removing team member");
+  }
+}
+
+async function handleListTeamExternalGroups(params: {
+  args: z.infer<typeof ListTeamExternalGroupsToolArgsSchema>;
+  context: ArchestraContext;
+}): Promise<CallToolResult> {
+  const { args, context } = params;
+  logger.info(
+    { agentId: context.agent.id, listTeamExternalGroupsArgs: args },
+    "list_team_external_groups tool called",
+  );
+
+  if (!context.organizationId) {
+    return errorResult("Organization context not available.");
+  }
+
+  try {
+    const licenseDenied = checkTeamSyncLicense();
+    if (licenseDenied) {
+      return licenseDenied;
+    }
+
+    const team = await findTeamInOrg(args.team_id, context.organizationId);
+    if (!team) {
+      return errorResult(`Team with ID ${args.team_id} not found.`);
+    }
+
+    const readDenied = await assertCanReadTeam(context, team.id);
+    if (readDenied) {
+      return readDenied;
+    }
+
+    const groups = await TeamModel.getExternalGroups(args.team_id);
+    const serialized = groups.map(serializeExternalGroup);
+
+    if (serialized.length === 0) {
+      return structuredSuccessResult(
+        { externalGroups: [] },
+        `Team "${team.name}" has no external group mappings.`,
+      );
+    }
+
+    const formatted = serialized
+      .map((group) => `- ${group.groupIdentifier} (ID: ${group.id})`)
+      .join("\n");
+
+    return structuredSuccessResult(
+      { externalGroups: serialized },
+      `Team "${team.name}" has ${serialized.length} external group mapping(s):\n\n${formatted}`,
+    );
+  } catch (error) {
+    return catchError(error, "listing team external groups");
+  }
+}
+
+async function handleAddTeamExternalGroup(params: {
+  args: z.infer<typeof AddTeamExternalGroupToolArgsSchema>;
+  context: ArchestraContext;
+}): Promise<CallToolResult> {
+  const { args, context } = params;
+  logger.info(
+    { agentId: context.agent.id, addTeamExternalGroupArgs: args },
+    "add_team_external_group tool called",
+  );
+
+  if (!context.organizationId) {
+    return errorResult("Organization context not available.");
+  }
+
+  try {
+    const licenseDenied = checkTeamSyncLicense();
+    if (licenseDenied) {
+      return licenseDenied;
+    }
+
+    const team = await findTeamInOrg(args.team_id, context.organizationId);
+    if (!team) {
+      return errorResult(`Team with ID ${args.team_id} not found.`);
+    }
+
+    const manageDenied = await assertCanManageTeam({
+      context,
+      teamId: team.id,
+      action: "manage this team's external group sync",
+    });
+    if (manageDenied) {
+      return manageDenied;
+    }
+
+    // Normalize the identifier to lowercase for case-insensitive matching,
+    // mirroring the REST route.
+    const normalizedGroupIdentifier = args.group_identifier.toLowerCase();
+
+    const existingGroups = await TeamModel.getExternalGroups(args.team_id);
+    if (
+      existingGroups.some(
+        (group) =>
+          group.groupIdentifier.toLowerCase() === normalizedGroupIdentifier,
+      )
+    ) {
+      return errorResult("This external group is already mapped to this team.");
+    }
+
+    const externalGroup = await TeamModel.addExternalGroup(
+      args.team_id,
+      normalizedGroupIdentifier,
+    );
+
+    const serialized = serializeExternalGroup(externalGroup);
+    return structuredSuccessResult(
+      { externalGroup: serialized },
+      `Successfully mapped external group "${serialized.groupIdentifier}" to team "${team.name}".\n\nMapping ID: ${serialized.id}`,
+    );
+  } catch (error) {
+    return catchError(error, "adding team external group");
+  }
+}
+
+async function handleRemoveTeamExternalGroup(params: {
+  args: z.infer<typeof RemoveTeamExternalGroupToolArgsSchema>;
+  context: ArchestraContext;
+}): Promise<CallToolResult> {
+  const { args, context } = params;
+  logger.info(
+    { agentId: context.agent.id, removeTeamExternalGroupArgs: args },
+    "remove_team_external_group tool called",
+  );
+
+  if (!context.organizationId) {
+    return errorResult("Organization context not available.");
+  }
+
+  try {
+    const licenseDenied = checkTeamSyncLicense();
+    if (licenseDenied) {
+      return licenseDenied;
+    }
+
+    const team = await findTeamInOrg(args.team_id, context.organizationId);
+    if (!team) {
+      return errorResult(`Team with ID ${args.team_id} not found.`);
+    }
+
+    const manageDenied = await assertCanManageTeam({
+      context,
+      teamId: team.id,
+      action: "manage this team's external group sync",
+    });
+    if (manageDenied) {
+      return manageDenied;
+    }
+
+    // Schema validation guarantees one of group_id/group_identifier is set.
+    // Stored identifiers are lowercase-normalized on add; match that.
+    const removed = args.group_id
+      ? await TeamModel.removeExternalGroupById(args.team_id, args.group_id)
+      : args.group_identifier !== undefined &&
+        (await TeamModel.removeExternalGroup(
+          args.team_id,
+          args.group_identifier.toLowerCase(),
+        ));
+
+    if (!removed) {
+      return errorResult("External group mapping not found.");
+    }
+
+    return structuredSuccessResult(
+      { success: true, teamId: args.team_id },
+      `Successfully removed external group mapping from team "${team.name}".`,
+    );
+  } catch (error) {
+    return catchError(error, "removing team external group");
   }
 }
 

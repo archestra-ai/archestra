@@ -5,6 +5,10 @@ import {
   getBedrockRegion,
 } from "@/clients/bedrock-credentials";
 import config from "@/config";
+import {
+  BEDROCK_EMBEDDING_MODELS,
+  findBedrockEmbeddingModel,
+} from "@/knowledge-base/embedding-clients/bedrock-models";
 import logger from "@/logging";
 import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
@@ -31,7 +35,7 @@ export async function fetchBedrockModels(
       extraHeaders ?? {},
       { region, creds: sigV4 },
     );
-    return mapInferenceProfilesToModels(profiles);
+    return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
   }
 
   const profiles = await fetchAllBedrockInferenceProfiles(controlPlaneUrl, {
@@ -39,7 +43,7 @@ export async function fetchBedrockModels(
     Authorization: `Bearer ${apiKey}`,
   });
 
-  return mapInferenceProfilesToModels(profiles);
+  return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
 }
 
 export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
@@ -59,7 +63,7 @@ export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
     { region, creds },
   );
 
-  return mapInferenceProfilesToModels(profiles);
+  return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
 }
 
 interface BedrockInferenceProfile {
@@ -173,24 +177,46 @@ function mapInferenceProfilesToModels(
         return withoutRegion.startsWith(`${provider}.`);
       });
     })
-    .map((profile) => ({
-      id: profile.inferenceProfileId || "",
-      displayName:
-        profile.inferenceProfileName || profile.inferenceProfileId || "Unknown",
-      provider: "bedrock" as const,
-      // Authoritative underlying model for pricing — more robust than parsing
-      // the inference-profile id (and the only signal for application profiles).
-      ...(foundationModelIdFromArn(profile.models?.[0]?.modelArn)
-        ? {
-            underlyingModelName: foundationModelIdFromArn(
-              profile.models?.[0]?.modelArn,
-            ),
-          }
-        : {}),
-    }))
+    .map((profile) => {
+      const underlyingModelName = foundationModelIdFromArn(
+        profile.models?.[0]?.modelArn,
+      );
+      const base = {
+        id: profile.inferenceProfileId || "",
+        displayName:
+          profile.inferenceProfileName ||
+          profile.inferenceProfileId ||
+          "Unknown",
+        provider: "bedrock" as const,
+        // Authoritative underlying model for pricing — more robust than parsing
+        // the inference-profile id (and the only signal for application profiles).
+        ...(underlyingModelName ? { underlyingModelName } : {}),
+      };
+
+      // Classify supported embedding models instead of dropping them: tag with
+      // their dimension so they flow to the embedding picker (and out of chat via
+      // supportsTextChat). This surfaces profile-backed embedding models (Cohere)
+      // region-accurately from the call we already make.
+      const embedding =
+        findBedrockEmbeddingModel(underlyingModelName ?? base.id) ??
+        findBedrockEmbeddingModel(base.id);
+      if (embedding) {
+        return {
+          ...base,
+          capabilities: { embeddingDimensions: embedding.dimensions },
+        };
+      }
+
+      return base;
+    })
     .filter((model) => model.id)
+    // Keep tagged embedding models; drop other non-chat models (rerankers, image/
+    // video generators, and unsupported embedding models).
     .filter(
-      (model) => !isNonChatBedrockModel(model.id, model.underlyingModelName),
+      (model) =>
+        ("capabilities" in model &&
+          model.capabilities?.embeddingDimensions != null) ||
+        !isNonChatBedrockModel(model.id, model.underlyingModelName),
     );
 
   logger.info(
@@ -252,4 +278,37 @@ function foundationModelIdFromArn(arn: string | undefined): string | null {
   const marker = "foundation-model/";
   const index = arn.indexOf(marker);
   return index === -1 ? null : arn.slice(index + marker.length);
+}
+
+/**
+ * Add the embedding models that have no inference profile (Amazon Titan) to the
+ * discovered list. These are on-demand-only, so `/inference-profiles` never
+ * returns them — they must be injected. Deduped by id so a model that ever does
+ * gain a profile isn't listed twice. Honors the operator's Bedrock provider
+ * allowlist.
+ */
+function mergeStaticEmbeddingModels(discovered: ModelInfo[]): ModelInfo[] {
+  const seen = new Set(discovered.map((model) => model.id));
+  const injected = bedrockStaticEmbeddingModels().filter(
+    (model) => !seen.has(model.id),
+  );
+  return injected.length > 0 ? [...discovered, ...injected] : discovered;
+}
+
+function bedrockStaticEmbeddingModels(): ModelInfo[] {
+  const allowedProviders = config.llm.bedrock.allowedProviders;
+  return BEDROCK_EMBEDDING_MODELS.filter((model) => model.staticInject)
+    .filter((model) => {
+      if (allowedProviders.length === 0) return true;
+      // Model ids are "<vendor>.<name>" (e.g. "amazon.titan-embed-text-v2:0").
+      return allowedProviders.some((provider) =>
+        model.modelId.startsWith(`${provider}.`),
+      );
+    })
+    .map((model) => ({
+      id: model.modelId,
+      displayName: model.displayName,
+      provider: "bedrock" as const,
+      capabilities: { embeddingDimensions: model.dimensions },
+    }));
 }

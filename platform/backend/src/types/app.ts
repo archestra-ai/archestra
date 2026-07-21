@@ -101,6 +101,9 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   // "Owned by <name>" oversight badge and the admin's read-but-don't-chat gate.
   viewerRole: AppViewerRoleSchema,
   latestVersion: z.number().int(),
+  // Whether the app is live. Disabled (false) is author-only and appears in
+  // the listing only for its author, who sees a "Disabled" badge on the card.
+  enabled: z.boolean(),
   // Teams the app is shared with (via its backing catalog), for the card's
   // visibility pill. Empty unless the app is team-scoped.
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
@@ -140,7 +143,6 @@ export const AppListItemSchema = z.discriminatedUnion("source", [
   ExternalAppListItemSchema,
 ]);
 export type AppListItem = z.infer<typeof AppListItemSchema>;
-export type ExternalAppListItem = z.infer<typeof ExternalAppListItemSchema>;
 
 /** One of the caller's accessible installs of an external app's catalog. */
 export const ExternalAppInstallSchema = z.object({
@@ -151,7 +153,6 @@ export const ExternalAppInstallSchema = z.object({
   name: z.string(),
   localInstallationStatus: z.string().nullable(),
 });
-export type ExternalAppInstall = z.infer<typeof ExternalAppInstallSchema>;
 
 /** One UI-providing resource of an external app's catalog (a server may have several). */
 export const ExternalAppResourceSchema = z.object({
@@ -163,7 +164,6 @@ export const ExternalAppResourceSchema = z.object({
   // open-in-chat handoff instead of rendering the resource with no input.
   requiresInput: z.boolean(),
 });
-export type ExternalAppResource = z.infer<typeof ExternalAppResourceSchema>;
 
 /**
  * Run-page resolution for an external app: the catalog's UI resources plus the
@@ -215,29 +215,12 @@ export const SelectAppVersionSchema = createSelectSchema(
     spec: AppSpecSchema.nullable(),
   },
 );
-export const InsertAppVersionSchema = createInsertSchema(
-  schema.appVersionsTable,
-  {
-    uiPermissions: AppUiPermissionsSchema.nullable().optional(),
-    spec: AppSpecSchema.nullable().optional(),
-  },
-).omit({ id: true, createdAt: true });
-
 export const SelectAppToolSchema = createSelectSchema(schema.appToolsTable, {
   credentialResolutionMode: CredentialResolutionModeSchema,
 });
 export const InsertAppToolSchema = createInsertSchema(schema.appToolsTable, {
   credentialResolutionMode: CredentialResolutionModeSchema.optional(),
 }).omit({ id: true, createdAt: true, updatedAt: true });
-
-export const SelectAppDataSchema = createSelectSchema(schema.appDataTable);
-export const InsertAppDataSchema = createInsertSchema(schema.appDataTable).omit(
-  {
-    id: true,
-    createdAt: true,
-    updatedAt: true,
-  },
-);
 
 export const SelectAppRenderDiagnosticsSchema = createSelectSchema(
   schema.appRenderDiagnosticsTable,
@@ -350,11 +333,8 @@ export { AppSpecSchema } from "./app-spec";
 export type App = z.infer<typeof SelectAppSchema>;
 export type InsertApp = z.infer<typeof InsertAppSchema>;
 export type AppVersion = z.infer<typeof SelectAppVersionSchema>;
-export type InsertAppVersion = z.infer<typeof InsertAppVersionSchema>;
 export type AppTool = z.infer<typeof SelectAppToolSchema>;
 export type InsertAppTool = z.infer<typeof InsertAppToolSchema>;
-export type AppData = z.infer<typeof SelectAppDataSchema>;
-export type InsertAppData = z.infer<typeof InsertAppDataSchema>;
 export type CreateApp = z.infer<typeof CreateAppSchema>;
 export type UpdateApp = z.infer<typeof UpdateAppSchema>;
 export type AppTemplate = z.infer<typeof AppTemplateSchema>;

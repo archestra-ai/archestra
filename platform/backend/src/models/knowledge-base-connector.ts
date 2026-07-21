@@ -647,6 +647,8 @@ class KnowledgeBaseConnectorModel {
         : null,
       knowledgeBases,
       configKeys,
+      permissionSyncIntervalSeconds: row.permissionSyncIntervalSeconds ?? null,
+      environmentId: row.environmentId ?? null,
       createdAt: row.createdAt.toISOString(),
     };
   }

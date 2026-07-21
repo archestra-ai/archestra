@@ -21,7 +21,22 @@ async function rerank(params: {
     return [];
   }
 
-  const rerankerConfig = await resolveRerankerConfig(organizationId);
+  let rerankerConfig: Awaited<ReturnType<typeof resolveRerankerConfig>>;
+  try {
+    rerankerConfig = await resolveRerankerConfig(organizationId);
+  } catch (error) {
+    // Reranking is optional and best-effort: an unresolvable reranker config
+    // must not fail the whole query. Return the original order; the fault is
+    // surfaced at save time (and blocks saving an invalid reranker).
+    logger.warn(
+      {
+        organizationId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "[Reranker] Reranker config unresolvable, returning original order",
+    );
+    return chunks;
+  }
   if (!rerankerConfig) {
     logger.warn(
       { organizationId },

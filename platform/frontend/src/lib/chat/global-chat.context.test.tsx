@@ -90,7 +90,8 @@ vi.mock("@/lib/config/config", () => ({
 
 // Bespoke factory (not the canonical __mocks__ one): this file partially
 // mocks @/lib/config/config above, which the canonical mock's importActual
-// chain would break on. Beta off means message-queue draining stays inert.
+// chain would break on. (Message-queue draining stays inert here because no
+// messages are ever enqueued for the test conversations.)
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
 }));
@@ -457,6 +458,154 @@ describe("ChatProvider retries", () => {
         initialProgressSequence + 1,
       );
     });
+  });
+
+  it("counts heartbeats as response progress while a tool call awaits output", async () => {
+    // While a tool executes server-side the stream is intentionally silent
+    // apart from heartbeats. Those heartbeats must keep the response-progress
+    // window fresh, or the "upstream provider may have stalled" warning fires
+    // for any tool run longer than the idle threshold.
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    const messages: UIMessage[] = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "run the tool" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "archestra__run_command",
+            toolCallId: "tool-call-1",
+            state: "input-available",
+            input: {},
+          } as unknown as UIMessage["parts"][number],
+        ],
+      },
+    ];
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "streaming",
+        stop: mocks.stop,
+      };
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+    const initialProgressSequence =
+      latestSessionRef.current?.responseProgressSequence ?? 0;
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-heartbeat",
+        data: { timestamp: Date.now() },
+      });
+    });
+
+    await waitFor(() => {
+      expect(latestSessionRef.current?.responseProgressSequence).toBe(
+        initialProgressSequence + 1,
+      );
+    });
+  });
+
+  it("keeps heartbeats transport-only once the pending tool call has output", async () => {
+    // Output arrived and the provider is generating again: silence is now a
+    // potential upstream stall, so heartbeats must not refresh the
+    // response-progress window.
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    const messages: UIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "archestra__run_command",
+            toolCallId: "tool-call-1",
+            state: "output-available",
+            input: {},
+            output: { ok: true },
+          } as unknown as UIMessage["parts"][number],
+        ],
+      },
+    ];
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "streaming",
+        stop: mocks.stop,
+      };
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+    const initialTransportSequence =
+      latestSessionRef.current?.transportActivitySequence ?? 0;
+    const initialProgressSequence =
+      latestSessionRef.current?.responseProgressSequence ?? 0;
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-heartbeat",
+        data: { timestamp: Date.now() },
+      });
+    });
+
+    await waitFor(() => {
+      expect(latestSessionRef.current?.transportActivitySequence).toBe(
+        initialTransportSequence + 1,
+      );
+    });
+    expect(latestSessionRef.current?.responseProgressSequence).toBe(
+      initialProgressSequence,
+    );
   });
 
   it("updates live context token estimate from usage and compaction data", async () => {
@@ -1058,10 +1207,9 @@ describe("ChatProvider auto title generation", () => {
     vi.useRealTimers();
   });
 
-  // An agent swap inserts a tool-only assistant message and an auto-poke user
-  // message into the first exchange, so the first exchange spans two user and
-  // two assistant messages, none of which carry assistant text.
-  const swapMessages: UIMessage[] = [
+  // A tool-only first exchange spans two user and two assistant messages,
+  // none of which carry assistant text.
+  const toolOnlyMessages: UIMessage[] = [
     {
       id: "u1",
       role: "user",
@@ -1072,7 +1220,7 @@ describe("ChatProvider auto title generation", () => {
       role: "assistant",
       parts: [
         {
-          type: "tool-swap_agent",
+          type: "tool-search",
           toolCallId: "t1",
           state: "output-available",
           input: {},
@@ -1083,7 +1231,7 @@ describe("ChatProvider auto title generation", () => {
     {
       id: "u2",
       role: "user",
-      parts: [{ type: "text", text: "(poke)" }],
+      parts: [{ type: "text", text: "continue" }],
     },
     {
       id: "a2",
@@ -1100,7 +1248,7 @@ describe("ChatProvider auto title generation", () => {
     } as unknown as UIMessage,
   ];
 
-  it("titles an untitled chat after a tool-only agent-swap exchange", async () => {
+  it("titles an untitled chat after a tool-only exchange", async () => {
     let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
 
     mocks.useChat.mockImplementation((options) => {
@@ -1109,7 +1257,7 @@ describe("ChatProvider auto title generation", () => {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: swapMessages,
+        messages: toolOnlyMessages,
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
@@ -1134,7 +1282,7 @@ describe("ChatProvider auto title generation", () => {
     // Trigger onFinish to simulate the AI stream completing
     act(() => {
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
     });
@@ -1156,7 +1304,7 @@ describe("ChatProvider auto title generation", () => {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: swapMessages,
+        messages: toolOnlyMessages,
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
@@ -1176,7 +1324,7 @@ describe("ChatProvider auto title generation", () => {
 
     act(() => {
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
     });
@@ -1198,7 +1346,7 @@ describe("ChatProvider auto title generation", () => {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: swapMessages,
+        messages: toolOnlyMessages,
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
@@ -1217,7 +1365,7 @@ describe("ChatProvider auto title generation", () => {
     await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
     act(() => {
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
     });
@@ -1234,7 +1382,7 @@ describe("ChatProvider auto title generation", () => {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
         error: undefined,
-        messages: swapMessages,
+        messages: toolOnlyMessages,
         regenerate: mocks.regenerate,
         sendMessage: mocks.sendMessage,
         setMessages: mocks.setMessages,
@@ -1254,11 +1402,11 @@ describe("ChatProvider auto title generation", () => {
 
     act(() => {
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
       chatOptions?.onFinish?.({
-        message: swapMessages[swapMessages.length - 1],
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
         isAbort: false,
       });
     });

@@ -3,7 +3,7 @@ title: Sharing Skills
 category: Agents
 order: 4
 description: Share Archestra skills into Claude Code, Codex CLI, Copilot CLI, and Cursor through native plugin marketplaces
-lastUpdated: 2026-07-13
+lastUpdated: 2026-07-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,15 @@ Archestra skills can be installed into your local Claude Code, Codex CLI, Copilo
 
 Every shared skill is bundled into a single plugin so the user installs one thing instead of one-per-skill. The plugin name is the marketplace name (e.g. `archestra-acme-corp-skills`), and each skill lives under `skills/<slug>/` inside that plugin. The slug is also written as the SKILL.md frontmatter `name`, per the Agent Skills spec, so the skill's slash command is well-formed (a skill named "Build App" installs as `/build-app`). Anthropic's official marketplaces follow the same one-plugin-per-toolkit convention.
 
-The marketplace lives at `/connection` alongside the MCP Gateway and LLM Proxy connection flows. For Claude Code, Codex, Copilot CLI, and Cursor the skills install is part of the one-command setup by default: the generated `curl | bash` command registers the marketplace automatically (a fresh share link is created when the script is fetched); the review step lists the skills and lets you deselect individual ones. Picking "Any client" keeps the manual "Install shared skills" step that snapshots every current skill into one link.
+The marketplace lives on the **Connect** page, alongside the MCP Gateway and LLM Proxy connection flows. For Claude Code, Codex, Copilot CLI, and Cursor the skills install is part of the one-command setup by default: the generated `curl | bash` command registers the marketplace automatically, and a fresh share link is created when the script is fetched.
+
+![The Connect page with Claude Code selected, the review step listing the two shared skills to install](/docs/automated_screenshots/platform-agent-skills-sharing_connection-setup.webp)
+
+The review step lists the skills going into the link. Deselect any you do not want to share — the link is built from what stays checked.
+
+Picking "Any client" replaces the script with a manual step that snapshots every current skill into one clone URL.
+
+![The Install shared skills step for a generic client, showing the git clone command for the marketplace repository](/docs/automated_screenshots/platform-agent-skills-sharing_marketplace-link.webp)
 
 ## Marketplace name
 

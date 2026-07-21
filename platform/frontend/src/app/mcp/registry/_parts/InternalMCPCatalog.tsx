@@ -36,6 +36,7 @@ import {
 } from "@/lib/auth/oauth-session";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useInternalMcpCatalog,
   useMcpCatalogLabelKeys,
@@ -163,11 +164,20 @@ export function InternalMCPCatalog({
     | "local-install"
     | "oauth"
     | "reinstall"
-    | "manage"
   >();
 
   // Deep-link manage connections dialog state
-  const [manageCatalogId, setManageCatalogId] = useState<string | null>(null);
+  const manageUsersIdFromUrl = searchParams.get("manageUsers");
+  const manageCatalogItemFromUrl = useMemo(
+    () =>
+      catalogItems?.find((item) => item.id === manageUsersIdFromUrl) ?? null,
+    [catalogItems, manageUsersIdFromUrl],
+  );
+  const { entity: manageCatalogItem, close: closeManageDialog } =
+    useDialogUrlParam({
+      paramName: "manageUsers",
+      entityFromUrl: manageCatalogItemFromUrl,
+    });
 
   // Update URL when search query changes (debounced via DebouncedInput)
   const handleSearchChange = useCallback(
@@ -222,12 +232,15 @@ export function InternalMCPCatalog({
     install.installFromSearchParams();
   }, [searchParams, catalogItems]);
 
-  // Deep-link: handle ?reauth={catalogId} with optional ?server={serverId}
-  // When server param is present, go straight to re-authentication (preserves tool assignments).
-  // When only reauth param is present, open the manage connections dialog.
-  // Uses window.history.replaceState instead of router.replace to avoid triggering
-  // a searchParams change that would re-fire the effect and race with state updates.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only trigger on searchParams changes, other deps are stable callbacks
+  // Deep-link: handle ?reauth={catalogId} with optional ?server={serverId}.
+  // With a server, go straight to re-authentication (preserves tool
+  // assignments). Without one, hand off to the manage-connections dialog by
+  // writing ?manageUsers={catalogId}; its URL-param hook auto-opens once the
+  // catalog loads. router.replace propagates the rewrite to useSearchParams
+  // (Next integrates history updates with the router), so the hook sees the
+  // param; deleting the reauth param first makes the re-fired effect
+  // early-return instead of looping.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run only on searchParams changes; router/pathname are stable and handleDeepLinkReauth is a stable closure
   useEffect(() => {
     const reauthCatalogIdParam = searchParams.get(
       MCP_CATALOG_REAUTH_QUERY_PARAM,
@@ -237,30 +250,26 @@ export function InternalMCPCatalog({
     // Extract highlight param before clearing URL
     const serverIdParam = searchParams.get(MCP_CATALOG_SERVER_QUERY_PARAM);
 
-    // Clear the manage/highlight params from URL without triggering a React re-render
+    // Drop the reauth/highlight params (and, when unhandled, hand off to the
+    // manage dialog) before writing the URL back.
     const params = new URLSearchParams(searchParams.toString());
     params.delete(MCP_CATALOG_REAUTH_QUERY_PARAM);
     params.delete(MCP_CATALOG_SERVER_QUERY_PARAM);
+    if (!serverIdParam) {
+      // Without a highlighted server, hand off to the manage connections
+      // dialog's URL param so it auto-opens once the catalog loads.
+      params.set("manageUsers", reauthCatalogIdParam);
+    }
     const newUrl = params.toString()
       ? `${pathname}?${params.toString()}`
       : pathname;
-    window.history.replaceState(null, "", newUrl);
+    router.replace(newUrl, { scroll: false });
 
     // When highlight param is present, skip manage dialog and go straight to reauth
     if (serverIdParam) {
       handleDeepLinkReauth(reauthCatalogIdParam, serverIdParam);
-      return;
     }
-
-    // Open the manage connections dialog
-    setManageCatalogId(reauthCatalogIdParam);
-    openDialog("manage");
   }, [searchParams]);
-
-  const handleManageDialogClose = () => {
-    closeDialog("manage");
-    setManageCatalogId(null);
-  };
 
   // Called to re-authenticate a highlighted credential in-place (preserves tool assignments)
   const handleDeepLinkReauth = (catalogId: string, serverId: string) => {
@@ -1148,31 +1157,19 @@ export function InternalMCPCatalog({
         />
       )}
 
-      {manageCatalogId && (
+      {manageCatalogItem && (
         <ManageUsersDialog
-          isOpen={isDialogOpened("manage")}
-          onClose={handleManageDialogClose}
-          catalogId={manageCatalogId}
+          isOpen={!!manageCatalogItem}
+          onClose={closeManageDialog}
+          catalogId={manageCatalogItem.id}
           onAddPersonalConnection={() => {
-            const catalogItem = catalogItems?.find(
-              (item) => item.id === manageCatalogId,
-            );
-            if (!catalogItem) return;
-            install.addPersonalConnection(catalogItem);
+            install.addPersonalConnection(manageCatalogItem);
           }}
           onAddSharedConnection={(teamId) => {
-            const catalogItem = catalogItems?.find(
-              (item) => item.id === manageCatalogId,
-            );
-            if (!catalogItem) return;
-            install.addSharedConnection(catalogItem, teamId);
+            install.addSharedConnection(manageCatalogItem, teamId);
           }}
           onAddOrgConnection={() => {
-            const catalogItem = catalogItems?.find(
-              (item) => item.id === manageCatalogId,
-            );
-            if (!catalogItem) return;
-            install.addOrgConnection(catalogItem);
+            install.addOrgConnection(manageCatalogItem);
           }}
         />
       )}

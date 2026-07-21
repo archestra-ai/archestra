@@ -1,5 +1,7 @@
 import { vi } from "vitest";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { TeamModel } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -44,6 +46,8 @@ describe("team routes", () => {
         }
       ).organizationId = organizationId;
     });
+
+    registerAuditLogHook(app);
 
     const { default: teamRoutes } = await import("./team");
     await app.register(teamRoutes);
@@ -476,6 +480,68 @@ describe("team routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().userId).toBe(newMember.id);
+    });
+
+    test("adding a member writes a team.updated audit row with a members diff", async ({
+      makeTeam,
+      makeUser,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      const newMember = await makeUser({ email: "audit-add@test.com" });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/teams/${team.id}/members`,
+        payload: { userId: newMember.id, role: "member" },
+      });
+      expect(response.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "team",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find((r) => r.resourceId === team.id);
+      // Adding a member is an update to the team resource.
+      expect(row?.action).toBe("team.updated");
+      expect(row?.outcome).toBe("success");
+      expect(row?.before).not.toBeNull();
+      expect(row?.after).not.toBeNull();
+      expect(row?.before?.members).not.toEqual(row?.after?.members);
+    });
+
+    test("removing a member writes team.updated (not team.deleted) with after populated", async ({
+      makeTeam,
+      makeUser,
+      makeTeamMember,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      const member = await makeUser({ email: "audit-del@test.com" });
+      await makeTeamMember(team.id, member.id);
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/teams/${team.id}/members/${member.id}`,
+      });
+      expect(response.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "team",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find(
+        (r) => r.resourceId === team.id && r.httpMethod === "DELETE",
+      );
+      // The child DELETE must read as an update (team survives), with after
+      // captured — not team.deleted / after=null.
+      expect(row?.action).toBe("team.updated");
+      expect(row?.before).not.toBeNull();
+      expect(row?.after).not.toBeNull();
     });
 
     test("rejects duplicate team membership", async ({

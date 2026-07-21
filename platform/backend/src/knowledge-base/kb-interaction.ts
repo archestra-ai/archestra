@@ -147,11 +147,23 @@ export function buildEmbeddingInteraction(params: {
     },
     response: {
       object: response.object,
-      data: response.data.map((d) => ({
-        object: d.object,
-        embedding: [] as number[],
-        index: d.index,
-      })),
+      // Store a short, self-describing preview of each vector (the first few
+      // values) rather than an empty array, so a successful embed and a
+      // degenerate one no longer look identical in the logs. `truncatedFrom`
+      // records the full length so it clearly reads as a sample. Only the logged
+      // copy is truncated — storage and search use the full vector — and an empty
+      // vector stays empty (no marker).
+      data: response.data.map((d) => {
+        const preview = d.embedding.slice(0, EMBEDDING_LOG_PREVIEW_LENGTH);
+        return {
+          object: d.object,
+          embedding: preview,
+          index: d.index,
+          ...(d.embedding.length > preview.length
+            ? { truncatedFrom: d.embedding.length }
+            : {}),
+        };
+      }),
       model: response.model,
       usage: response.usage,
     },
@@ -192,6 +204,9 @@ async function calculateKbCost(params: {
 }
 
 // ===== Internal constants =====
+
+/** How many leading vector values to keep in the logged embedding preview. */
+const EMBEDDING_LOG_PREVIEW_LENGTH = 8;
 
 const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   SupportedProvider,

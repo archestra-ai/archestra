@@ -8,7 +8,11 @@
  * rate(llm_request_duration_seconds_count{provider="openai"}[10s])
  */
 
-import type { InteractionSource, SupportedProvider } from "@archestra/shared";
+import type {
+  BillingMode,
+  InteractionSource,
+  SupportedProvider,
+} from "@archestra/shared";
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
@@ -19,7 +23,7 @@ import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini
 import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minimax";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
-import type { Agent } from "@/types";
+import type { GatewayAgent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 type UsageExtractor =
@@ -198,8 +202,11 @@ export function initializeMetrics(labelKeys: string[]): void {
 
   llmCostTotal = new client.Counter({
     name: "llm_cost_total",
-    help: "Total estimated cost in USD",
-    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    // List-price estimate. `billing_mode` distinguishes metered spend (a real
+    // per-token charge) from subscription-covered traffic (flat-rate, not
+    // billed), so billed spend is sum(llm_cost_total{billing_mode="metered"}).
+    help: "Total estimated (list-price) cost in USD",
+    labelNames: [...baseLabelNames, "billing_mode", ...nextLabelKeys],
     enableExemplars: true,
   });
 
@@ -265,7 +272,7 @@ export function initializeMetrics(labelKeys: string[]): void {
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  */
 function buildMetricLabels(
-  profile: Agent,
+  profile: GatewayAgent,
   additionalLabels: Record<string, string>,
   model: string | undefined,
   source: InteractionSource,
@@ -302,7 +309,7 @@ function buildMetricLabels(
  */
 export function reportLLMTokens(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   usage: {
     input?: number;
     output?: number;
@@ -374,7 +381,7 @@ export function reportLLMTokens(
  */
 export function reportBlockedTools(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   count: number,
   model: string,
   source: InteractionSource,
@@ -402,10 +409,11 @@ export function reportBlockedTools(
  */
 export function reportLLMCost(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   cost: number | null | undefined,
   source: InteractionSource,
+  billingMode: BillingMode,
 ): void {
   if (!llmCostTotal) {
     logger.warn("LLM metrics not initialized, skipping cost reporting");
@@ -415,7 +423,12 @@ export function reportLLMCost(
     return;
   }
   llmCostTotal.inc({
-    labels: buildMetricLabels(profile, { provider }, model, source),
+    labels: buildMetricLabels(
+      profile,
+      { provider, billing_mode: billingMode },
+      model,
+      source,
+    ),
     value: cost,
     exemplarLabels: getExemplarLabels(),
   });
@@ -434,7 +447,7 @@ export function reportLLMCost(
  */
 export function reportLLMCacheCost(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   cache: { cacheCost?: number | null; cacheReadSavings?: number | null },
   source: InteractionSource,
@@ -471,7 +484,7 @@ export function reportLLMCacheCost(
  */
 export function reportTimeToFirstToken(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   ttftSeconds: number,
   source: InteractionSource,
@@ -504,7 +517,7 @@ export function reportTimeToFirstToken(
  */
 export function reportTokensPerSecond(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   outputTokens: number,
   durationSeconds: number,
@@ -546,7 +559,7 @@ export function reportTokensPerSecond(
  */
 export function reportRequestDuration(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   durationSeconds: number,
   statusCode: string,
@@ -576,7 +589,7 @@ export function reportRequestDuration(
  */
 export function getObservableFetch(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   source: InteractionSource,
 ): Fetch {
   return async function observableFetch(
@@ -718,7 +731,7 @@ export function getObservableFetch(
  */
 export function getObservableGenAI(
   genAI: GoogleGenAI,
-  profile: Agent,
+  profile: GatewayAgent,
   source: InteractionSource,
 ) {
   const originalGenerateContent = genAI.models.generateContent;
@@ -836,6 +849,10 @@ export function reportKbLlmCall(params: {
   for (const key of currentLabelKeys) {
     labels[key] = "";
   }
+  // Knowledge-base calls use a real (metered) provider key. `billing_mode` is a
+  // required label on llm_cost_total; the token/duration metrics ignore extra
+  // labels, so setting it here is safe for all of them.
+  const costLabels = { ...labels, billing_mode: "metered" };
 
   const exemplarLabels = getExemplarLabels();
 
@@ -877,7 +894,7 @@ export function reportKbLlmCall(params: {
 
   if (llmCostTotal && params.cost) {
     llmCostTotal.inc({
-      labels,
+      labels: costLabels,
       value: params.cost,
       exemplarLabels,
     });
@@ -919,7 +936,7 @@ function extractGeminiModel(arg: unknown): string | undefined {
 function observeGeminiError(
   error: unknown,
   startTime: number,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string | undefined,
   source: InteractionSource,
 ): void {

@@ -15,6 +15,7 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { DEFAULT_APP_TEMPLATE_ID, resolveCreateAppHtml } from "@/app-templates";
+import { userHasPermission } from "@/auth/utils";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import {
@@ -25,7 +26,6 @@ import {
   AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
-  McpToolCallModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -58,19 +58,17 @@ import {
   appRunUrl,
   escapeAppNameForModelText,
 } from "@/services/apps/app-run-link";
-import {
-  gateAppToolCall,
-  getAssignedAppBuiltin,
-  isAppAssignableArchestraTool,
-  redactAppBuiltinAuditResult,
-} from "@/services/apps/app-tool-runtime-gate";
+import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
   htmlHasDocumentRoot,
   validateAppHtmlStatic,
 } from "@/services/apps/app-ui-policy";
+import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
 import {
+  APP_HTML_MAX_BYTES,
   type App,
   type AppRenderDiagnostics,
   AppScopeSchema,
@@ -79,7 +77,6 @@ import {
   RefineAppToolSchema,
   ScaffoldAppSchema,
 } from "@/types/app";
-import { deriveAuthMethod } from "@/utils/auth-method";
 import { isUniqueConstraintError } from "@/utils/db";
 import {
   ARCHESTRA_APP_SDK_SUMMARY,
@@ -88,6 +85,7 @@ import {
 } from "./app-authoring-guidance";
 import { archestraMcpBranding } from "./branding";
 import {
+  decodeUtf8Text,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -176,14 +174,27 @@ const EditAppSchema = z.strictObject({
     .min(1)
     .optional()
     .describe(
-      "str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass either edits or replacementHtml, never both.",
+      "str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass exactly one of edits, replacementHtml, or replacementHtmlSource.",
     ),
   replacementHtml: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "The complete new document, replacing the current HTML outright with no old_str matching — use this for a full rewrite instead of reproducing the whole document as an edit. Pass either edits or replacementHtml, never both.",
+      "The complete new document, replacing the current HTML outright with no old_str matching — use this for a full rewrite instead of reproducing the whole document as an edit. Pass exactly one of edits, replacementHtml, or replacementHtmlSource.",
+    ),
+  replacementHtmlSource: z
+    .strictObject({
+      fileId: z
+        .string()
+        .uuid()
+        .describe(
+          "Id of a saved file whose bytes become the document, as returned by download_file, save_file, or search_files.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Like replacementHtml, but the document is read server-side from a file you already saved instead of being written out here — use this when the HTML already exists as a file (assembled in the sandbox, or attached to the chat) so its bytes never have to be reproduced as tool arguments. The file must be UTF-8 text and is subject to the same size limit as any other document. Reads whatever the file holds at call time. Pass exactly one of edits, replacementHtml, or replacementHtmlSource.",
     ),
 });
 
@@ -793,28 +804,40 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules); baseVersion is optional and defaults to the current head. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to swap in the bytes of a file you already saved without reproducing them here — exactly one of the three. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules); baseVersion is optional and defaults to the current head. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
       const auth = requireAuthed(context);
       if ("error" in auth) return auth.error;
       // Exactly one edit mode, checked before any loading so a malformed call
-      // fails fast with the fix spelled out.
-      if (args.edits !== undefined && args.replacementHtml !== undefined) {
+      // fails fast with the fix spelled out. Counted rather than compared
+      // pairwise: with three modes, a precedence order would silently drop the
+      // ones that lost instead of naming the conflict.
+      const requestedModes = [
+        args.edits !== undefined && "edits",
+        args.replacementHtml !== undefined && "replacementHtml",
+        args.replacementHtmlSource !== undefined && "replacementHtmlSource",
+      ].filter((name): name is string => name !== false);
+      if (requestedModes.length > 1) {
         return errorResult(
-          "Pass either edits or replacementHtml, not both: edits applies str_replace changes to the current HTML; replacementHtml swaps in the complete new document.",
+          `Pass exactly one of edits, replacementHtml, or replacementHtmlSource; got ${requestedModes.join(" and ")}. edits applies str_replace changes to the current HTML; replacementHtml swaps in the complete new document; replacementHtmlSource swaps in the bytes of a file you already saved.`,
         );
       }
       const mode =
         args.replacementHtml !== undefined
           ? ({ kind: "replacement", html: args.replacementHtml } as const)
-          : args.edits !== undefined
-            ? ({ kind: "edits", edits: args.edits } as const)
-            : null;
+          : args.replacementHtmlSource !== undefined
+            ? ({
+                kind: "replacementSource",
+                fileId: args.replacementHtmlSource.fileId,
+              } as const)
+            : args.edits !== undefined
+              ? ({ kind: "edits", edits: args.edits } as const)
+              : null;
       if (!mode) {
         return errorResult(
-          "Pass either edits (str_replace changes to the current HTML) or replacementHtml (the complete new document); neither was provided.",
+          "Pass exactly one of edits (str_replace changes to the current HTML), replacementHtml (the complete new document), or replacementHtmlSource (the id of a file holding it); none was provided.",
         );
       }
       const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
@@ -839,16 +862,52 @@ const registry = defineArchestraTools([
         );
       }
 
+      // Reading a file's bytes turns a source-backed replacement into an
+      // ordinary one, so everything below this point sees the same two modes it
+      // always did. Only the result text distinguishes them, via sourceFilename.
+      let sourceFilename: string | null = null;
+      let resolvedMode:
+        | { kind: "replacement"; html: string }
+        | { kind: "edits"; edits: NonNullable<typeof args.edits> };
+      if (mode.kind === "replacementSource") {
+        // Authorization is not inherited: this tool's own gate is app:update
+        // (rbac.ts TOOL_PERMISSIONS), which says nothing about reading files.
+        // Reading one is file:manage, so check it here rather than let an
+        // app-authoring permission double as a file-read permission. The single
+        // permission per tool in the central map cannot express a mode-dependent
+        // second one, and per-file authorization lives in the handlers by design.
+        const canReadFiles = await userHasPermission(
+          auth.userId,
+          auth.organizationId,
+          "file",
+          "manage",
+        );
+        if (!canReadFiles) {
+          return errorResult(
+            "You do not have permission to perform this action (requires file:manage to read replacementHtmlSource). Pass the document as replacementHtml instead.",
+          );
+        }
+        const resolved = await resolveHtmlSource({
+          ...auth,
+          fileId: mode.fileId,
+        });
+        if ("error" in resolved) return resolved.error;
+        sourceFilename = resolved.filename;
+        resolvedMode = { kind: "replacement", html: resolved.html };
+      } else {
+        resolvedMode = mode;
+      }
+
       let version: VersionPayload;
       let warnings: string[];
       let editedHtml: string;
       let editSpans: AppliedEditSpan[] = [];
       let skippedEdits: SkippedEdit[] = [];
       try {
-        if (mode.kind === "replacement") {
-          editedHtml = mode.html;
+        if (resolvedMode.kind === "replacement") {
+          editedHtml = resolvedMode.html;
         } else {
-          const applied = applyStrReplaceEdits(base.html, mode.edits, {
+          const applied = applyStrReplaceEdits(base.html, resolvedMode.edits, {
             sourceNoun: "HTML",
             rereadHint: "Call read_app for the current source.",
           });
@@ -860,12 +919,13 @@ const registry = defineArchestraTools([
         // (e.g. deletes part of the doc) would otherwise save with only a soft
         // warning and leave the model building on broken HTML — reject it
         // atomically. A deliberate whole-document replacement (replacementHtml,
-        // or the legacy one-edit-replacing-the-whole-document form) is allowed
-        // to produce whatever the author intends, and an app that was already
-        // a fragment (no root in the base) is unaffected.
+        // replacementHtmlSource, or the legacy one-edit-replacing-the-whole-
+        // document form) is allowed to produce whatever the author intends, and
+        // an app that was already a fragment (no root in the base) is unaffected.
         const isWholeDocumentRewrite =
-          mode.kind === "replacement" ||
-          (mode.edits.length === 1 && mode.edits[0].old_str === base.html);
+          resolvedMode.kind === "replacement" ||
+          (resolvedMode.edits.length === 1 &&
+            resolvedMode.edits[0].old_str === base.html);
         if (
           !isWholeDocumentRewrite &&
           htmlHasDocumentRoot(base.html) &&
@@ -907,11 +967,15 @@ const registry = defineArchestraTools([
       // Skipped no-op sub-edits don't count as applied; an all-skipped batch
       // must not claim it applied anything.
       const appliedEditCount =
-        mode.kind === "edits" ? mode.edits.length - skippedEdits.length : 0;
+        resolvedMode.kind === "edits"
+          ? resolvedMode.edits.length - skippedEdits.length
+          : 0;
       const editLabel =
-        mode.kind === "replacement"
-          ? "a full-document replacement"
-          : `${appliedEditCount} edit${appliedEditCount === 1 ? "" : "s"}`;
+        resolvedMode.kind !== "replacement"
+          ? `${appliedEditCount} edit${appliedEditCount === 1 ? "" : "s"}`
+          : sourceFilename
+            ? `a full-document replacement from ${escapeAppNameForModelText(sourceFilename)}`
+            : "a full-document replacement";
       // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
       // equal); when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
@@ -919,7 +983,7 @@ const registry = defineArchestraTools([
       const displayName = escapeAppNameForModelText(updated.name);
       const summary = forked
         ? `Applied ${editLabel} to app "${displayName}" (now at version ${updated.latestVersion}).`
-        : mode.kind === "edits" && appliedEditCount === 0
+        : resolvedMode.kind === "edits" && appliedEditCount === 0
           ? `No edits were applied to app "${displayName}" — every edit was skipped; it stays at version ${updated.latestVersion} and no new version was created.`
           : `Applied ${editLabel} to app "${displayName}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
       const warningsNote = formatWarningsNote(warnings);
@@ -930,13 +994,18 @@ const registry = defineArchestraTools([
       // buildAppliedEditExcerpts fences the echoed source (an "html" hint here)
       // so edited markup can't render as markdown where this text is echoed.
       const excerptsNote =
-        mode.kind === "edits" && forked
+        resolvedMode.kind === "edits" && forked
           ? `\n${buildAppliedEditExcerpts(editedHtml, editSpans, "html")}`
           : "";
+      // A source-backed replacement deliberately does NOT claim the document
+      // matches what was sent: only a file id was sent, so the model has not
+      // seen these bytes and read_app is its only way to know what landed.
       const replacementNote =
-        mode.kind === "replacement" && forked
-          ? "\nThe saved document is exactly the HTML just sent — no need to call read_app to verify it."
-          : "";
+        !forked || resolvedMode.kind !== "replacement"
+          ? ""
+          : sourceFilename
+            ? `\nThe saved document is exactly the bytes ${escapeAppNameForModelText(sourceFilename)} held at save time; call read_app if you need to see them.`
+            : "\nThe saved document is exactly the HTML just sent — no need to call read_app to verify it.";
       return structuredSuccessResult(
         {
           id: updated.id,
@@ -1102,7 +1171,12 @@ const registry = defineArchestraTools([
         await assertCallerMayAuthorApp({
           userId,
           organizationId,
-          app: { id: app.id, scope: app.scope, authorId: app.authorId },
+          app: {
+            id: app.id,
+            scope: app.scope,
+            authorId: app.authorId,
+            enabled: app.enabled,
+          },
           resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
         });
         await assertCallerMayModifyApp({
@@ -1129,6 +1203,12 @@ const registry = defineArchestraTools([
       // exactly as the REST re-scope path does — otherwise the registry/gateway
       // would expose the app under its old scope.
       await syncAppBacking(updated);
+
+      // publish_app is the agent-facing "make this available" verb, so it flips
+      // the app enabled as well as promoting scope. Without this a scaffolded
+      // disabled app would stay author-only — invisible to the very audience
+      // just granted, and with its launch tool still withheld from the gateway.
+      await AppModel.setEnabled(args.appId, true);
 
       const runUrl = appRunUrl(updated.id);
       const audience =
@@ -1172,18 +1252,12 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      // Preview runs the app's assigned MCP tools — upstream ones, plus the
-      // app-assignable built-ins (the read-only file tools) once granted. The
-      // reserved built-ins (App Data Store, LLM completion) stay
-      // un-previewable: the SDK reaches them through their own namespaces and
-      // their output shape is fixed.
+      // Preview is for the app's assigned upstream MCP tools — the data store
+      // and other built-ins are not run through here.
       if (archestraMcpBranding.isToolName(args.toolName)) {
-        const shortName = archestraMcpBranding.getToolShortName(args.toolName);
-        if (!shortName || !isAppAssignableArchestraTool(shortName)) {
-          return errorResult(
-            "preview_app_tool runs the app's assigned MCP tools; the App Data Store and other built-ins are not previewable.",
-          );
-        }
+        return errorResult(
+          "preview_app_tool runs the app's assigned MCP tools; the App Data Store and other built-ins are not previewable.",
+        );
       }
 
       // The exact runtime gate the rendered app hits (allowlist + visibility +
@@ -1221,61 +1295,6 @@ const registry = defineArchestraTools([
         userId,
         organizationId,
       };
-
-      // An assigned built-in (the read-only file tools) runs in-process, the
-      // way the app runtime dispatches it — same fail-closed assignment
-      // re-check, same audit redaction — with the authoring chat's real
-      // conversation, so the preview shows the data the rendered app will see
-      // in this chat. The context deliberately carries no `agentId`: the grant
-      // was authorized against the app, and the chat agent's own assignments
-      // must not gate it.
-      if (decision.kind === "app-builtin") {
-        const assigned = await getAssignedAppBuiltin(args.toolName, app.id);
-        if (!assigned) {
-          return errorResult(
-            `Tool "${args.toolName}" is not assigned to this app.`,
-          );
-        }
-        // Dynamic import avoids the circular import between this file and
-        // ./index (index.ts imports every tool group, including this one).
-        const { executeArchestraTool } = await import("./index");
-        const response = await executeArchestraTool(assigned, args.args ?? {}, {
-          agent: { id: app.id, name: app.name },
-          appId: app.id,
-          conversationId: context.conversationId,
-          userId: context.userId,
-          organizationId: context.organizationId,
-          tokenAuth,
-        });
-        try {
-          await McpToolCallModel.create({
-            ownerType: "app",
-            appId: app.id,
-            agentId: null,
-            mcpServerName: archestraMcpBranding.serverName,
-            method: "tools/call",
-            toolCall: {
-              id: `preview-${context.userId}-${app.id}-${Date.now()}`,
-              name: assigned,
-              arguments: args.args ?? {},
-            },
-            toolResult: redactAppBuiltinAuditResult(assigned, response),
-            userId: context.userId,
-            authMethod: deriveAuthMethod(tokenAuth) ?? null,
-          });
-        } catch (dbError) {
-          logger.warn(
-            { err: dbError, appId: app.id, toolName: assigned },
-            "Failed to persist previewed app builtin tool call",
-          );
-        }
-        return formatPreviewResult(assigned, {
-          content: Array.isArray(response.content) ? response.content : [],
-          structuredContent: response.structuredContent,
-          isError: response.isError,
-        } as CommonToolResult);
-      }
-
       const result = await mcpClient.executeToolCallForOwner(
         {
           id: `preview-${userId}-${app.id}-${Date.now()}`,
@@ -1427,6 +1446,85 @@ function requireAuthed(
 }
 
 /**
+ * Read a saved file's bytes as the document for `replacementHtmlSource`.
+ *
+ * The caller's ids are what authorize the read: `fileStore.get` resolves the
+ * file only if they authored it or reach it through a project they belong to,
+ * and reports "not yours" and "not there" identically so this never becomes an
+ * existence oracle for other people's files. The caller's capability to read
+ * files at all is checked separately, before this runs.
+ *
+ * Nothing is reported about a file before that resolution — not even its size.
+ * Answering "too large" ahead of the ACL would confirm the file exists, and
+ * name it, to a caller with no right to know either.
+ */
+async function resolveHtmlSource(params: {
+  userId: string;
+  organizationId: string;
+  fileId: string;
+}): Promise<{ html: string; filename: string } | { error: CallToolResult }> {
+  const notFound = () => ({
+    error: errorResult(
+      `No file ${params.fileId} that you can read. Check the id from download_file, save_file, or search_files.`,
+    ),
+  });
+
+  let resolved: Awaited<ReturnType<typeof fileStore.get>>;
+  try {
+    resolved = await fileStore.get({
+      ref: params.fileId,
+      organizationId: params.organizationId,
+      userId: params.userId,
+    });
+  } catch (error) {
+    if (error instanceof FileBytesMissingError) {
+      return {
+        error: errorResult(
+          `The stored data for file ${params.fileId} is no longer available. Re-create the file and try again.`,
+        ),
+      };
+    }
+    throw error;
+  }
+  if (!resolved) return notFound();
+  // Both are attacker-controlled: any project member can save a file under a
+  // chosen name and MIME, and these errors are read by another member's model
+  // as trusted tool output. Escape whatever is echoed back, not just the name.
+  const displayName = escapeAppNameForModelText(resolved.filename);
+  const displayMime = escapeAppNameForModelText(resolved.mimeType);
+
+  // buildValidatedVersionPayload enforces this cap again on the assembled
+  // document, which is what actually guards the write; checking here only buys
+  // a message that names the file and its real size.
+  if (resolved.data.byteLength > APP_HTML_MAX_BYTES) {
+    return {
+      error: errorResult(
+        `"${displayName}" is ${resolved.data.byteLength} bytes, over the ${APP_HTML_MAX_BYTES}-byte limit for an app document. Nothing was saved.`,
+      ),
+    };
+  }
+
+  const html = decodeUtf8Text(resolved.data);
+  if (html === null) {
+    return {
+      error: errorResult(
+        `"${displayName}" (${displayMime}) is not UTF-8 text, so it cannot be an app document. Nothing was saved.`,
+      ),
+    };
+  }
+  // replacementHtml is schema-bound to a non-empty string; a source-backed
+  // replacement must not become the one way to empty an app by accident.
+  if (html.length === 0) {
+    return {
+      error: errorResult(
+        `"${displayName}" is empty, so there is no document to save. Nothing was saved.`,
+      ),
+    };
+  }
+  return { html, filename: resolved.filename };
+}
+
+/**
  * Load an app the caller may see (resolving app-admin standing for visibility)
  * and, when `modify` is set, authorize them to change it — mirroring the REST
  * modify gate (scope + author + the app's teams). Returns the app, or the ready
@@ -1456,7 +1554,12 @@ async function loadApp(params: {
       await assertCallerMayAuthorApp({
         userId: params.userId,
         organizationId: params.organizationId,
-        app: { id: app.id, scope: app.scope, authorId: app.authorId },
+        app: {
+          id: app.id,
+          scope: app.scope,
+          authorId: app.authorId,
+          enabled: app.enabled,
+        },
         resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
     } catch (error) {

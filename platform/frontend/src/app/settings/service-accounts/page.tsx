@@ -126,7 +126,7 @@ export default function ServiceAccountsSettingsPage() {
       },
       {
         accessorKey: "tokenCount",
-        header: "Tokens",
+        header: "API keys",
         cell: ({ row }) => row.original.tokenCount,
       },
       {
@@ -309,7 +309,7 @@ export default function ServiceAccountsSettingsPage() {
           if (!open) setAccountToDelete(null);
         }}
         title="Delete service account"
-        description="Deleting a service account immediately invalidates all of its tokens."
+        description="Deleting a service account immediately invalidates all of its API keys."
         isPending={deleteMutation.isPending}
         onConfirm={handleDelete}
       />

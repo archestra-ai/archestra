@@ -10,6 +10,7 @@ import {
   useListViewMode,
 } from "@/components/list-view-toggle";
 import { LoadingWrapper } from "@/components/loading";
+import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { useApps } from "@/lib/app.query";
 import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 import { AppsScopeFilter } from "./_parts/apps-scope-filter";
@@ -44,6 +46,7 @@ export default function AppsPage() {
   const scope = searchParams.get("scope") ?? undefined;
   const authorIdsParam = searchParams.get("authorIds");
   const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+  const settingsId = searchParams.get("settings");
 
   const { data, isPending, isLoadingError, refetch } = useApps(
     {
@@ -60,6 +63,20 @@ export default function AppsPage() {
   );
   const [createOpen, setCreateOpen] = useState(false);
   const [viewMode, setViewMode] = useListViewMode("archestra-apps-view");
+
+  // The settings dialog is owned here (one hook instance for the page-level
+  // "settings" param); cards only report which app to open it for, and the
+  // dialog fetches the full app by id itself. So synthesize the entity from the
+  // URL id — the dialog opens instantly and does its own fetching, no
+  // page-level fetch needed.
+  const {
+    entity: settingsApp,
+    open: openSettings,
+    close: closeSettings,
+  } = useDialogUrlParam<{ id: string }>({
+    paramName: "settings",
+    entityFromUrl: settingsId ? { id: settingsId } : null,
+  });
 
   // Only the "kind" split (owned vs external) is client-side now; scope/owner
   // filtering happens on the server. Pinned-first grouping applies on top,
@@ -146,18 +163,39 @@ export default function AppsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            <AppSection title="Pinned" apps={pinnedApps} viewMode={viewMode} />
-            <AppSection title="Apps" apps={ownedApps} viewMode={viewMode} />
+            <AppSection
+              title="Pinned"
+              apps={pinnedApps}
+              viewMode={viewMode}
+              onOpenSettings={openSettings}
+            />
+            <AppSection
+              title="Apps"
+              apps={ownedApps}
+              viewMode={viewMode}
+              onOpenSettings={openSettings}
+            />
             <AppSection
               title="Apps from installed MCP servers"
               apps={externalApps}
               viewMode={viewMode}
+              onOpenSettings={openSettings}
             />
           </div>
         )}
       </LoadingWrapper>
 
       <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      {settingsApp ? (
+        <AppSettingsDialog
+          appId={settingsApp.id}
+          open={!!settingsApp}
+          onOpenChange={(open) => {
+            if (!open) closeSettings();
+          }}
+        />
+      ) : null}
     </PageLayout>
   );
 }
@@ -169,10 +207,12 @@ function AppSection({
   title,
   apps,
   viewMode,
+  onOpenSettings,
 }: {
   title: string;
   apps: AppListItem[];
   viewMode: ListViewMode;
+  onOpenSettings: (app: { id: string }) => void;
 }) {
   if (apps.length === 0) return null;
 
@@ -182,7 +222,7 @@ function AppSection({
         {title}
       </h2>
       {viewMode === "table" ? (
-        <AppsTable apps={apps} />
+        <AppsTable apps={apps} onOpenSettings={onOpenSettings} />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {apps.map((app) => (
@@ -197,6 +237,7 @@ function AppSection({
                   : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
               }
               app={app}
+              onOpenSettings={onOpenSettings}
             />
           ))}
         </div>

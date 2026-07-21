@@ -1,9 +1,21 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { Action, Permissions, Resource } from "@archestra/shared";
+import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { auth as betterAuth } from "@/auth/better-auth";
 import logger from "@/logging";
 import { ServiceAccountModel, UserModel } from "@/models";
 import type { SelectServiceAccount } from "@/types";
+
+/**
+ * Result of a permission check. On failure, `missingPermissions` names the
+ * exact `resource:action` pairs the caller lacks (when the check got far
+ * enough to know), so 403 responses can say why access was denied.
+ */
+type PermissionCheckResult = {
+  success: boolean;
+  error: Error | null;
+  missingPermissions?: Permissions;
+};
 
 export const hasPermission = async (
   permissions: Permissions,
@@ -15,7 +27,7 @@ export const hasPermission = async (
    * from the session.
    */
   userContext?: { userId: string; organizationId: string },
-): Promise<{ success: boolean; error: Error | null }> => {
+): Promise<PermissionCheckResult> => {
   const headers = new Headers(requestHeaders as HeadersInit);
   logger.trace(
     { permissionCount: Object.keys(permissions).length },
@@ -177,20 +189,12 @@ async function checkUserPermissions(params: {
   userId: string;
   organizationId: string;
   permissions: Permissions;
-}): Promise<{ success: boolean; error: Error | null }> {
+}): Promise<PermissionCheckResult> {
   const userPermissions = await UserModel.getUserPermissions(
     params.userId,
     params.organizationId,
   );
-  const hasAllPermissions = hasRequiredPermissions(
-    userPermissions,
-    params.permissions,
-  );
-
-  return {
-    success: hasAllPermissions,
-    error: hasAllPermissions ? null : new Error("Forbidden"),
-  };
+  return buildPermissionCheckResult(userPermissions, params.permissions);
 }
 
 async function checkServiceAccountTokenPermissions(params: {
@@ -213,34 +217,51 @@ async function checkServiceAccountTokenPermissions(params: {
 async function checkServiceAccountPermissions(params: {
   serviceAccount: SelectServiceAccount;
   permissions: Permissions;
-}): Promise<{ success: boolean; error: Error | null }> {
+}): Promise<PermissionCheckResult> {
   const serviceAccountPermissions = await ServiceAccountModel.getPermissions(
     params.serviceAccount,
   );
-  const hasAllPermissions = hasRequiredPermissions(
+  return buildPermissionCheckResult(
     serviceAccountPermissions,
     params.permissions,
   );
+}
 
+function buildPermissionCheckResult(
+  grantedPermissions: Permissions,
+  requiredPermissions: Permissions,
+): PermissionCheckResult {
+  const missingPermissions = getMissingPermissions(
+    grantedPermissions,
+    requiredPermissions,
+  );
+  const success = Object.keys(missingPermissions).length === 0;
   return {
-    success: hasAllPermissions,
-    error: hasAllPermissions ? null : new Error("Forbidden"),
+    success,
+    error: success
+      ? null
+      : new Error(buildForbiddenErrorMessage({ missingPermissions })),
+    ...(success ? {} : { missingPermissions }),
   };
 }
 
-function hasRequiredPermissions(
-  userPermissions: Permissions,
+function getMissingPermissions(
+  grantedPermissions: Permissions,
   requiredPermissions: Permissions,
-): boolean {
+): Permissions {
+  const missing: Permissions = {};
   for (const [resource, actions] of Object.entries(requiredPermissions)) {
     for (const action of actions) {
-      if (!userPermissions[resource as Resource]?.includes(action as Action)) {
-        return false;
+      if (
+        !grantedPermissions[resource as Resource]?.includes(action as Action)
+      ) {
+        const missingActions = missing[resource as Resource] ?? [];
+        missingActions.push(action as Action);
+        missing[resource as Resource] = missingActions;
       }
     }
   }
-
-  return true;
+  return missing;
 }
 
 async function getServiceAccountFromSyntheticUserId(params: {

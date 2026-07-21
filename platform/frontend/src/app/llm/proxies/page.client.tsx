@@ -37,13 +37,14 @@ import {
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
+  useProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
-import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { LlmProxyActions } from "./llm-proxy-actions";
 
@@ -197,7 +198,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     },
     [router],
   );
-  const editDialog = useAgentDialogUrlParam("edit");
+  const editId = searchParams.get("edit");
+  const { data: editFromUrl } = useProfile(editId ?? undefined);
+  const editDialog = useDialogUrlParam<ProxyData>({
+    paramName: "edit",
+    entityFromUrl: editFromUrl ?? null,
+  });
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
   const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
   const restoreProxy = useRestoreProfile();
@@ -271,7 +277,6 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         return (
           <AgentNameCell
             name={agent.name}
-            scope={agent.scope}
             description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
@@ -298,24 +303,21 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         );
       },
     },
-    ...(isAdmin
-      ? [
-          {
-            id: "team",
-            header: "Accessible to",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: ProxyData } }) => (
-              <ResourceVisibilityBadge
-                scope={row.original.scope}
-                teams={row.original.teams}
-                authorId={row.original.authorId}
-                authorName={row.original.authorName}
-                currentUserId={currentUserId}
-              />
-            ),
-          } satisfies ColumnDef<ProxyData>,
-        ]
-      : []),
+    {
+      id: "team",
+      header: "Accessible to",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",
@@ -487,10 +489,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             />
 
             <AgentDialog
-              open={!!editDialog.agent}
+              open={!!editDialog.entity}
               onOpenChange={(open) => !open && editDialog.close()}
-              agent={editDialog.agent}
-              agentType={editDialog.agent?.agentType || "llm_proxy"}
+              agent={editDialog.entity}
+              agentType={editDialog.entity?.agentType || "llm_proxy"}
               defaultIconType="llm_proxy"
             />
 

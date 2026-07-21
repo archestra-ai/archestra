@@ -93,9 +93,21 @@ export function getCatalogAssignmentGate(params: {
   hasResolvableInstall: boolean;
   isEnvIncompatible: boolean;
   environmentName?: string | null;
+  /** A disabled app backing: listed for its author but not assignable. */
+  isDisabledApp?: boolean;
 }): { disabled: boolean; disabledReason?: string; unavailable: boolean } {
   const { hasDiscoveredTools, hasResolvableInstall, isEnvIncompatible } =
     params;
+
+  // A disabled app cannot be wired into an agent until it is enabled —
+  // surfaced greyed with "Disabled" (only its author ever sees it here).
+  if (params.isDisabledApp) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: "Disabled",
+    };
+  }
 
   if (isEnvIncompatible) {
     return {
@@ -168,6 +180,54 @@ export function computeMcpEnvConflicts(
     conflicts.push({ catalogId, name: catalog.name });
   }
   return conflicts;
+}
+
+export type SharedPersonalPin = {
+  catalogId: string;
+  mcpName: string;
+  ownerEmail: string;
+  isCurrentUser: boolean;
+};
+
+/**
+ * The active tools whose effective credential is a static pin to a still-resolvable
+ * `personal`-scope connection. On a shared (team/org) agent these are exactly the
+ * pins that make every caller authenticate as one owner, so the dialog warns about
+ * them and offers to switch them to resolve-at-call-time.
+ *
+ * `pinnedServerId` is each catalog's effective credential (pending overlaid on
+ * saved), or `null` when it resolves at call time. A pin whose server is absent
+ * from `resolvableServers` is excluded: it has either already reset to dynamic or
+ * cannot resolve for the target group, so it will not be shared.
+ */
+export function computeSharedPersonalPins(
+  catalogs: {
+    catalogId: string;
+    pinnedServerId: string | null;
+    resolvableServers: readonly {
+      id: string;
+      scope: string;
+      ownerEmail?: string | null;
+      ownerId?: string | null;
+      catalogName?: string | null;
+      name: string;
+    }[];
+  }[],
+  currentUserId: string | null | undefined,
+): SharedPersonalPin[] {
+  const pins: SharedPersonalPin[] = [];
+  for (const { catalogId, pinnedServerId, resolvableServers } of catalogs) {
+    if (!pinnedServerId) continue;
+    const server = resolvableServers.find((s) => s.id === pinnedServerId);
+    if (!server || server.scope !== "personal") continue;
+    pins.push({
+      catalogId,
+      mcpName: server.catalogName ?? server.name,
+      ownerEmail: server.ownerEmail || "Deleted user",
+      isCurrentUser: !!currentUserId && server.ownerId === currentUserId,
+    });
+  }
+  return pins;
 }
 
 export function sortCatalogItems<

@@ -1,9 +1,83 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { DataTable } from "./data-table";
 
 type Row = { name: string; files: number };
+
+describe("DataTable page index clamping", () => {
+  const columns: ColumnDef<Row>[] = [
+    { id: "name", accessorKey: "name", header: "Name" },
+  ];
+  const makeRows = (count: number): Row[] =>
+    Array.from({ length: count }, (_, i) => ({ name: `row-${i}`, files: i }));
+
+  it("resets to the last valid page when filtered data shrinks below the current page", async () => {
+    const { rerender } = render(
+      <DataTable columns={columns} data={makeRows(40)} />,
+    );
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Go to last page" })[0],
+    );
+    expect(screen.getAllByText("Page 4 of 4").length).toBeGreaterThan(0);
+
+    // Simulate applying a filter that leaves a single page of results
+    rerender(<DataTable columns={columns} data={makeRows(5)} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Page 1 of 1").length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText("row-0")).toBeInTheDocument();
+  });
+
+  it("notifies the parent when a controlled page index exceeds the shrunken page count", async () => {
+    const onPaginationChange = vi.fn();
+    const { rerender } = render(
+      <DataTable
+        columns={columns}
+        data={makeRows(10)}
+        manualPagination
+        pagination={{ pageIndex: 3, pageSize: 10, total: 35 }}
+        onPaginationChange={onPaginationChange}
+      />,
+    );
+    expect(onPaginationChange).not.toHaveBeenCalled();
+
+    rerender(
+      <DataTable
+        columns={columns}
+        data={makeRows(5)}
+        manualPagination
+        pagination={{ pageIndex: 3, pageSize: 10, total: 5 }}
+        onPaginationChange={onPaginationChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onPaginationChange).toHaveBeenCalledWith({
+        pageIndex: 0,
+        pageSize: 10,
+      });
+    });
+  });
+
+  it("does not clamp while loading", () => {
+    const onPaginationChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        isLoading
+        manualPagination
+        pagination={{ pageIndex: 3, pageSize: 10, total: 0 }}
+        onPaginationChange={onPaginationChange}
+      />,
+    );
+
+    expect(onPaginationChange).not.toHaveBeenCalled();
+  });
+});
 
 // The table renders with table-fixed layout, where absolute pixel column
 // widths force the table wider than its container and hide trailing columns

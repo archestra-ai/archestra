@@ -26,6 +26,7 @@ function makePanel(overrides: Partial<Panel> = {}): Panel {
     scheduledRun: null,
     isArtifactOpen: false,
     isBrowserVisible: false,
+    isAppsVisible: false,
     showBrowserButton: true,
     isPlaywrightSetupVisible: false,
     onClose: vi.fn(),
@@ -141,5 +142,33 @@ describe("ConversationHeader — top-bar tab strip", () => {
   it("renders the Runs tab when the chat is a scheduled run", () => {
     renderHeader({ scheduledRun: { triggerId: "t1", runId: null } });
     expect(screen.getByRole("tab", { name: "Runs" })).toBeInTheDocument();
+  });
+});
+
+describe("ConversationHeader — mobile overflow menu", () => {
+  it("offers Show Apps and opens the apps tab", async () => {
+    const user = userEvent.setup();
+    const panel = renderHeader({ isOpen: false });
+
+    await user.click(screen.getByRole("button", { name: "More options" }));
+    await user.click(screen.getByRole("menuitem", { name: "Show Apps" }));
+
+    expect(panel.onOpenTab).toHaveBeenCalledWith("apps");
+    expect(panel.onClose).not.toHaveBeenCalled();
+  });
+
+  it("offers Hide Apps while the apps tab is showing and closes the panel", async () => {
+    const user = userEvent.setup();
+    const panel = renderHeader({
+      isOpen: true,
+      activeTab: "apps",
+      isAppsVisible: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: "More options" }));
+    await user.click(screen.getByRole("menuitem", { name: "Hide Apps" }));
+
+    expect(panel.onClose).toHaveBeenCalledTimes(1);
+    expect(panel.onOpenTab).not.toHaveBeenCalled();
   });
 });

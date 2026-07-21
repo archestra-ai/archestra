@@ -5,6 +5,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { UserCog } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { SearchInput } from "@/components/search-input";
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import type {
   ConnectorUserGroup,
   ConnectorUserGroupMember,
@@ -44,6 +46,8 @@ import { MembershipTruncationNotice } from "./connector-membership-truncation-no
 
 /** One distinct upstream human account, with every group it appears in. */
 interface ConnectorMember extends ConnectorUserGroupMember {
+  /** The upstream account id — the stable key a deep link identifies a row by. */
+  id: string;
   groups: string[];
 }
 
@@ -74,12 +78,25 @@ export function ConnectorMembersTable({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<MemberFilter>("all");
   const [groupFilter, setGroupFilter] = useState<string>("all");
-  const [editing, setEditing] = useState<ConnectorMember | null>(null);
 
   const members = useMemo(
     () => collectDistinctMembers(userGroups?.groups ?? []),
     [userGroups?.groups],
   );
+
+  const memberIdFromUrl = useSearchParams().get("member");
+  const memberFromUrl = useMemo(() => {
+    const found = members.find((member) => member.id === memberIdFromUrl);
+    // Email-matched members can't be reassigned — the row action is disabled
+    // for them, so a deep link must not open the editor for one either.
+    if (!found || (found.user && found.resolvedVia !== "override")) return null;
+    return found;
+  }, [members, memberIdFromUrl]);
+  const {
+    entity: editing,
+    open: openAssignDialog,
+    close: closeAssignDialog,
+  } = useDialogUrlParam({ paramName: "member", entityFromUrl: memberFromUrl });
 
   const orgEmailById = useMemo(
     () => new Map((orgMembers ?? []).map((user) => [user.id, user.email])),
@@ -254,7 +271,7 @@ export function ConnectorMembersTable({
                   disabled: isEmailMatch,
                   disabledTooltip:
                     "Assigned automatically by email. Can't reassign",
-                  onClick: () => setEditing(member),
+                  onClick: () => openAssignDialog(member),
                 },
               ]}
             />
@@ -262,7 +279,7 @@ export function ConnectorMembersTable({
         },
       },
     ],
-    [appName, orgEmailById],
+    [appName, orgEmailById, openAssignDialog],
   );
 
   return (
@@ -332,7 +349,7 @@ export function ConnectorMembersTable({
         <EditMemberAssignmentDialog
           connectorId={connectorId}
           member={editing}
-          onClose={() => setEditing(null)}
+          onClose={closeAssignDialog}
         />
       )}
     </div>
@@ -356,7 +373,11 @@ function collectDistinctMembers(
       if (existing) {
         existing.groups.push(group.groupId);
       } else {
-        byAccount.set(member.accountId, { ...member, groups: [group.groupId] });
+        byAccount.set(member.accountId, {
+          ...member,
+          id: member.accountId,
+          groups: [group.groupId],
+        });
       }
     }
   }

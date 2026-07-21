@@ -1,4 +1,5 @@
 import type {
+  BillingMode,
   InteractionSource,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
@@ -114,6 +115,18 @@ const interactionsTable = pgTable(
      */
     authMethod: varchar("auth_method").$type<InteractionAuthMethod>(),
     /**
+     * Whether this interaction's upstream fulfillment actually incurs a
+     * per-token charge. `metered` (default) = real per-token cost; `subscription`
+     * = flat-rate coverage (e.g. Claude Code on a Max/Pro plan) that incurs no
+     * per-token charge. `cost` is always kept as the list-price estimate; billed
+     * spend is `cost` for metered rows and 0 for subscription rows. Resolved at
+     * request time from the fulfilling credential (see resolveInteractionBillingMode).
+     */
+    billingMode: varchar("billing_mode")
+      .$type<BillingMode>()
+      .notNull()
+      .default("metered"),
+    /**
      * Authenticated application identity resolved from an OAuth client
      * credentials token. This is distinct from externalAgentId, which is a
      * caller-supplied label.
@@ -205,6 +218,16 @@ const interactionsTable = pgTable(
     // they filter on created_at and only read these numeric/model columns, so
     // an index-only scan avoids fetching scattered heap pages of a table whose
     // rows are dominated by large TOASTed JSONB payloads.
+    //
+    // NOTE: `billingMode` is intentionally NOT in this index. The aggregations
+    // split billed vs subscription cost with a conditional (FILTER) SUM on it,
+    // so including it would make the split index-only — but adding a column to
+    // this index means a non-concurrent DROP/CREATE rebuild, which takes a
+    // write-blocking lock on a very large `interactions` table. The rebuild risk
+    // outweighs the index-only win for an analytics query, so the FILTER reads
+    // billing_mode from the heap instead. If that ever becomes a bottleneck, add
+    // the column with a separate `CREATE INDEX CONCURRENTLY` ops step (see the
+    // interactions-table migration skill), never a transactional migration.
     statisticsCoveringIdx: index("interactions_statistics_covering_idx").on(
       table.createdAt,
       table.profileId,
@@ -231,10 +254,14 @@ const interactionsTable = pgTable(
       "interactions_session_thread_created_at_idx",
     ).on(table.sessionId, table.threadId, table.createdAt.desc()),
     parentIdIdx: index("interactions_parent_id_idx").on(table.parentId),
-    // Note: Additional pg_trgm GIN indexes for search are created in migration 0116_pg_trgm_indexes.sql:
-    // - interactions_request_trgm_idx: GIN index on (request::text)
-    // - interactions_response_trgm_idx: GIN index on (response::text)
-    // These can't be defined in Drizzle schema as they require ::text cast and gin_trgm_ops operator class.
+    // Note: interactions deliberately has NO trgm/GIN indexes on the request/
+    // response payload columns. Migration 0116 used to create them for a
+    // free-text log search that no longer exists (the LLM logs UI filters by
+    // dropdowns + exact session id), and GIN over multi-hundred-KB payloads
+    // write-amplified every hot-path insert. If payload search ever returns,
+    // build it on a bounded column — not on (request::text)/(response::text) —
+    // and create the index CONCURRENTLY out of band (see the
+    // archestra-dev-interactions-migrations skill).
   }),
 );
 

@@ -78,10 +78,11 @@ export function useKnowledgeBasesPaginated(
   });
 }
 
-export function useKnowledgeBase(id: string) {
+export function useKnowledgeBase(id: string | undefined) {
   return useQuery({
     queryKey: ["knowledge-bases", id],
     queryFn: async () => {
+      if (!id) return null;
       const { data, error } = await getKnowledgeBase({ path: { id } });
       throwOnApiError(error, { allowNotFound: true });
       return data ?? null;

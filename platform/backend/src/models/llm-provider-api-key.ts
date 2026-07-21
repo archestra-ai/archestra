@@ -9,6 +9,7 @@ import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema, type Transaction } from "@/database";
+import logger from "@/logging";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
@@ -487,6 +488,55 @@ class LlmProviderApiKeyModel {
   }
 
   /**
+   * The acting user's own personal ChatGPT-subscription (Codex) key together
+   * with its decrypted credential (prefer isPrimary, then oldest). Codex
+   * credentials are per-user, so when resolution lands on someone else's
+   * subscription key (e.g. attached to a shared agent) the acting user's own
+   * subscription is substituted — this is that lookup. The marker lives inside
+   * the encrypted secret, so the user's personal `openai` keys are decrypted
+   * here (the value is only handed to the credential-resolution caller).
+   */
+  static async findPersonalCodexKey({
+    organizationId,
+    userId,
+  }: {
+    organizationId: string;
+    userId: string;
+  }): Promise<{ apiKey: LlmProviderApiKey; apiKeyValue: string } | null> {
+    const candidates = await db
+      .select({
+        apiKey: schema.llmProviderApiKeysTable,
+        secret: schema.secretsTable.secret,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .innerJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          eq(schema.llmProviderApiKeysTable.provider, "openai"),
+          eq(schema.llmProviderApiKeysTable.scope, "personal"),
+          eq(schema.llmProviderApiKeysTable.userId, userId),
+        ),
+      )
+      .orderBy(
+        sql`${schema.llmProviderApiKeysTable.isPrimary} DESC`,
+        schema.llmProviderApiKeysTable.createdAt,
+      );
+
+    for (const candidate of candidates) {
+      const apiKeyValue = decryptApiKeyValue(candidate.secret);
+      if (apiKeyValue !== null && isOpenAiCodexCredential(apiKeyValue)) {
+        return { apiKey: candidate.apiKey, apiKeyValue };
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * The acting user's own personal key for a provider (prefer isPrimary, then
    * oldest). Self-contained so the per-user-credential guard can call it before
    * the rest of getCurrentApiKey runs.
@@ -776,13 +826,20 @@ class LlmProviderApiKeyModel {
     if (!row) return null;
 
     // REDACTED: secretId and any resolved key material are never included.
+    // extraHeaders values may carry tokens, so capture header NAMES only.
     return {
       id: row.id,
       name: row.name,
       provider: row.provider,
       organizationId: row.organizationId,
       scope: row.scope,
+      teamId: row.teamId ?? null,
+      isPrimary: row.isPrimary,
       baseUrl: row.baseUrl ?? null,
+      inferenceBaseUrl: row.inferenceBaseUrl ?? null,
+      extraHeaderNames: row.extraHeaders
+        ? Object.keys(row.extraHeaders).sort()
+        : [],
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -850,12 +907,29 @@ function toApiKeyWithScopeInfo<
  * {@link toApiKeyWithScopeInfo} calls this at most once per key and derives
  * metadata from the returned value — the value itself is never included in a
  * response.
+ *
+ * Callers only use the value for optional metadata (vault reference,
+ * ChatGPT-subscription marker), so an undecryptable secret — e.g. one
+ * encrypted under a previous ARCHESTRA_AUTH_SECRET — degrades to null instead
+ * of throwing; otherwise a single stale secret would break key listing for
+ * everyone.
  */
 function decryptApiKeyValue(secret: SecretValue | null): string | null {
   if (!secret || typeof secret !== "object") return null;
-  const decrypted = isEncryptedSecret(secret)
-    ? decryptSecretValue(secret)
-    : secret;
+  let decrypted: SecretValue;
+  if (isEncryptedSecret(secret)) {
+    try {
+      decrypted = decryptSecretValue(secret);
+    } catch (error) {
+      logger.warn(
+        { error },
+        "Failed to decrypt LLM provider API key secret while deriving key metadata; treating the value as unreadable",
+      );
+      return null;
+    }
+  } else {
+    decrypted = secret;
+  }
   const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
   return typeof apiKeyValue === "string" ? apiKeyValue : null;
 }

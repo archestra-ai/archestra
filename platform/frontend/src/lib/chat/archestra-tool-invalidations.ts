@@ -2,7 +2,7 @@ import {
   extractMcpToolError,
   TOOL_PUBLISH_APP_SHORT_NAME,
 } from "@archestra/shared";
-import { getRenderedToolName } from "@/lib/chat/swap-agent.utils";
+import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 
 /** The slice of a UIMessage tool part this module inspects. */
 type ToolResultPart = {
@@ -43,7 +43,7 @@ export function collectArchestraToolInvalidations(params: {
   for (const rawPart of params.parts ?? []) {
     if (typeof rawPart !== "object" || rawPart === null) continue;
     const part = rawPart as ToolResultPart;
-    const toolName = getRenderedToolName(part);
+    const toolName = getToolNameFromPart(part);
     if (!toolName) continue;
     const shortName = params.getToolShortName(toolName);
     if (!shortName) continue;

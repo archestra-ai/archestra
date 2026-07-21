@@ -16,6 +16,7 @@ import type { App, InsertApp } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AppAccessModel from "./app-access";
+import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 
@@ -149,6 +150,41 @@ class AppModel {
     );
   }
 
+  /**
+   * Map backing-catalog ids → the backing app's `enabled` flag, batched. Lets
+   * the capability picker mark a `serverType:"app"` catalog whose app is still
+   * disabled (author-only, shown greyed as "Disabled"). Only catalogs that
+   * back an active app appear in the result.
+   */
+  static async getAppEnabledByCatalogIds(
+    catalogIds: string[],
+  ): Promise<Map<string, boolean>> {
+    if (catalogIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        catalogId: schema.mcpServersTable.catalogId,
+        enabled: schema.appsTable.enabled,
+      })
+      .from(schema.appsTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          notDeleted(schema.appsTable),
+        ),
+      );
+    return new Map(
+      rows
+        .filter(
+          (r): r is { catalogId: string; enabled: boolean } => !!r.catalogId,
+        )
+        .map((r) => [r.catalogId, r.enabled]),
+    );
+  }
+
   /** A single active app by its backing mcp_server id (the catalog→app link). */
   static async findByMcpServerId(mcpServerId: string): Promise<App | null> {
     const [result] = await appWithCatalogQuery().where(
@@ -270,6 +306,22 @@ class AppModel {
   }
 
   /**
+   * Flip an app's enabled/disabled state — the whole enable/disable lifecycle.
+   * A pure boolean on the app row: it never touches assignments or the backing
+   * catalog, so disable→re-enable is non-destructive (a since-hidden launch
+   * tool reappears wherever it was assigned). Returns the updated app, or null if
+   * the app is gone/soft-deleted.
+   */
+  static async setEnabled(id: string, enabled: boolean): Promise<App | null> {
+    const [row] = await db
+      .update(schema.appsTable)
+      .set({ enabled })
+      .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
+      .returning({ id: schema.appsTable.id });
+    return row ? await AppModel.findById(id) : null;
+  }
+
+  /**
    * Update an app atomically. `patch` updates catalog columns; `teamIds`
    * (when supplied) replaces the team set; `version` (when supplied) forks a new
    * immutable version iff its canonical payload differs from the head, bumping
@@ -285,16 +337,7 @@ class AppModel {
   static async update(params: {
     id: string;
     patch?: Partial<
-      Pick<
-        App,
-        | "name"
-        | "description"
-        | "scope"
-        | "templateId"
-        | "spec"
-        | "environmentId"
-        | "mcpServerId"
-      >
+      Pick<App, "name" | "description" | "scope" | "spec" | "environmentId">
     >;
     version?: VersionPayload;
     teamIds?: string[];
@@ -302,20 +345,12 @@ class AppModel {
   }): Promise<App | null> {
     const patch = params.patch ?? {};
     // App-row columns only; scope/environmentId are owned by the backing catalog.
-    const appRowPatch: Partial<
-      Pick<
-        AppRow,
-        "name" | "description" | "templateId" | "spec" | "mcpServerId"
-      >
-    > = {};
+    const appRowPatch: Partial<Pick<AppRow, "name" | "description" | "spec">> =
+      {};
     if (patch.name !== undefined) appRowPatch.name = patch.name;
     if (patch.description !== undefined)
       appRowPatch.description = patch.description;
-    if (patch.templateId !== undefined)
-      appRowPatch.templateId = patch.templateId;
     if (patch.spec !== undefined) appRowPatch.spec = patch.spec;
-    if (patch.mcpServerId !== undefined)
-      appRowPatch.mcpServerId = patch.mcpServerId;
 
     const ok = await withDbTransaction(async (tx) => {
       let app: AppRow | undefined;
@@ -466,9 +501,10 @@ class AppModel {
     id: string,
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select()
-      .from(schema.appsTable)
+    // Use the catalog-joined query so the snapshot includes the app's
+    // visibility (scope) and environmentId, which live on the backing catalog
+    // (FR-30) — a visibility-only edit would otherwise show no diff.
+    const [row] = await appWithCatalogQuery()
       .where(
         and(
           eq(schema.appsTable.id, id),
@@ -476,7 +512,13 @@ class AppModel {
         ),
       )
       .limit(1);
-    return row ?? null;
+    if (!row) return null;
+
+    // Tool assignments live in appToolsTable (audited:false, "parent carries the
+    // signal"), so include them here — otherwise assigning/removing a tool via
+    // /api/apps/:appId/tools/:toolId → app.updated would show no diff.
+    const tools = await AppToolModel.getToolsForApp(id);
+    return { ...row, tools: tools.map((t) => t.name).sort() };
   }
 }
 

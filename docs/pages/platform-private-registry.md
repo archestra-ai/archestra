@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-07-15
+lastUpdated: 2026-07-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -77,7 +77,7 @@ Registry entries can carry labels — key-value pairs set under **Labels** in th
 
 ## Environments
 
-A catalog entry can be assigned to a deployment [environment](/docs/platform-environments). The environment determines the Kubernetes namespace and network egress policy its installed MCP server runs under, and scopes which agents and gateways can use the server's tools (an agent only sees servers in its own environment). Restricted environments gate assignment behind the `environment:deploy-to-restricted` permission.
+A catalog entry can be assigned to a deployment [environment](/docs/platform-environments). The environment determines the Kubernetes namespace and network egress policy its installed MCP server runs under, and scopes which agents and gateways can use the server's tools (an agent only sees servers in its own environment). Restricted environments gate assignment behind the `mcpRegistry:deploy-to-restricted` permission.
 
 See [Environments](/docs/platform-environments) for the full isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) (including the provider support matrix and domain presets).
 
@@ -96,3 +96,9 @@ Archestra stores the tool list discovered at install time. When the upstream ser
 - **Inspector**: open the server's Inspector tab and click **Refresh Tools**.
 - **API**: `POST /api/mcp_server/:id/reload-tools`.
 - **Automatic**: set `ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES` to re-sync every installed server on an interval. See [Deployment](/docs/platform-deployment).
+
+## Renaming a Server
+
+Rename a registry entry from its edit dialog. Tools take the new name prefix (`newname__tool`) immediately — no reinstall, and running servers keep running. Tool assignments and policies are preserved.
+
+Connected MCP clients cache the tool list. After a rename they must reload it, or calls using the old tool names fail. Names are unique within the organization — a rename to a name another entry already uses is rejected. Built-in servers, like the browser preview server, cannot be renamed. App-backed registry entries cannot be renamed here either — change the name in the app's settings.

@@ -47,7 +47,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/lib/config/config", () => ({
+vi.mock("@/lib/config/config", async (importOriginal) => ({
+  // Partial: the auth client reads this module's default export at import
+  // time, and it is reachable from here through the recorder's organization
+  // query — a factory without it takes the whole suite down on load.
+  ...(await importOriginal<typeof import("@/lib/config/config")>()),
   getMcpSandboxBaseUrl: () => ({
     baseUrl: "http://127.0.0.1:9000",
     hasCrossOrigin: true,
@@ -60,11 +64,24 @@ vi.mock("@/lib/config/config.query");
 // the test; the edit pencil is covered by app-frame.test.tsx.
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
+  useSession: () => ({ data: undefined }),
 }));
 
 vi.mock("@/lib/app.query", () => ({
   useApp: vi.fn(() => ({ data: undefined })),
   useDeleteApp: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+}));
+
+// Session-recording hooks pull TanStack Query mutations; this suite renders
+// without a QueryClient, so stub the module (recording flows have their own
+// coverage).
+vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
+  useAppRecording: vi.fn(() => ({ data: null })),
+  useInvalidateAppRecording: vi.fn(() => vi.fn()),
+  useDownloadAppRecordingBundle: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
 }));
 
 // Stub the inline settings form: it pulls the environment/teams/auth query

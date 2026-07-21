@@ -1,10 +1,23 @@
-import { type ChatMessage, ChatMessageMetadataSchema } from "@archestra/shared";
+import {
+  type ChatMessage,
+  ChatMessageMetadataSchema,
+  SKILL_TOOL_PREFIX,
+  slugify,
+} from "@archestra/shared";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
-import { SkillModel, SkillTeamModel, SkillVersionModel } from "@/models";
+import {
+  AgentModel,
+  SkillModel,
+  SkillTeamModel,
+  SkillVersionModel,
+} from "@/models";
+import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
   buildSkillActivationPromptContext,
+  escapeXmlAttr,
   formatSkillActivation,
+  neutralizeFrameTags,
 } from "@/skills/skill-activation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
@@ -14,6 +27,8 @@ import { spliceText } from "./augment-last-user-message";
  * When the last user message was sent via a skill slash command, prepend the
  * skill's activation block to its text so the model receives the skill's
  * instructions directly — no reliance on the model calling `load_skill`.
+ * An agent-designated skill (SKILL.md `agent`) gets a delegation directive
+ * instead: the model is told to run it via its `skill__<slug>` tool.
  *
  * Returns a shallow copy with the block applied; the original `messages` (used
  * for persistence and the visible bubble) are left untouched. If the org flag
@@ -85,6 +100,46 @@ export async function injectSkillActivation({
     return messages;
   }
 
+  // Skills are environment-scoped like tools and connectors: a slash command
+  // must not activate a skill from another environment (strict match, null =
+  // Default; built-in skills exempt).
+  if (agentId !== undefined) {
+    const environmentId = await AgentModel.findEnvironmentId(agentId);
+    if (!skillVisibleInEnvironment(skill, environmentId)) {
+      logger.warn(
+        { organizationId, agentId, skillId: skill.id },
+        "[Skills] Slash-command skill is outside the agent's environment; sending message unchanged",
+      );
+      return messages;
+    }
+  }
+
+  // An agent-designated skill runs in its subagent, not inline: instead of the
+  // instructions, prepend a directive to call the skill's `skill__<slug>`
+  // delegation tool (advertised whenever the designated agent resolves for
+  // this caller). The dispatch path renders the instructions for the subagent.
+  if (skill.agentName !== null) {
+    const toolName = `${SKILL_TOOL_PREFIX}${slugify(skill.name)}`;
+    logger.info(
+      { organizationId, skillName: skill.name, agentName: skill.agentName },
+      "[Skills] Agent-designated skill activated via slash command; injecting delegation directive",
+    );
+    const next = [...messages];
+    next[lastUserIndex] = spliceText(
+      userMessage,
+      `<skill_delegation skill="${escapeXmlAttr(skill.name)}" agent="${escapeXmlAttr(skill.agentName)}">\n` +
+        `This skill runs in the "${neutralizeFrameTags(skill.agentName)}" subagent. Call the \`${toolName}\` ` +
+        "tool now, passing the user's request below as `message` — the " +
+        "subagent receives the skill's instructions automatically and " +
+        "returns the result. Do not attempt the skill's task yourself. If " +
+        `\`${toolName}\` is not in your tools list, tell the user the ` +
+        "skill's designated agent is not available to them.\n" +
+        "</skill_delegation>",
+      "prepend",
+    );
+    return next;
+  }
+
   const canRunSandbox = await isSkillSandboxAvailableForAgent({
     userId,
     organizationId,
@@ -107,6 +162,9 @@ export async function injectSkillActivation({
   const { version, mounted } = activation;
   const files = await SkillVersionModel.findFiles(version.id);
 
+  // an inline slash-command activation counts one use; the agent-designated
+  // branch above doesn't — its use is counted at delegation dispatch.
+  SkillModel.recordUsage({ skillId: skill.id, userId });
   logger.info(
     {
       organizationId,

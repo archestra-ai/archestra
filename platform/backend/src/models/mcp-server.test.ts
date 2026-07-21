@@ -1,6 +1,6 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
+import { describe, expect, mustExist, test } from "@/test";
 import McpServerModel from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
 
@@ -130,6 +130,47 @@ describe("McpServerModel", () => {
       expect(found.userDetails?.map((u) => u.userId).sort()).toEqual(
         [user1.id, user2.id].sort(),
       );
+    });
+
+    test("decorates servers with the org's auto-mode agents only when an organizationId is passed", async ({
+      makeOrganization,
+      makeAgent,
+      makeMcpServer,
+    }) => {
+      const org = await makeOrganization();
+      const autoAgent = await makeAgent({
+        organizationId: org.id,
+        name: "Auto Agent",
+        accessAllTools: true,
+      });
+      // A custom-tools agent (explicit assignments) is NOT an auto-mode agent.
+      await makeAgent({
+        organizationId: org.id,
+        name: "Custom Agent",
+        accessAllTools: false,
+      });
+      const server = await makeMcpServer();
+
+      // findAll with the viewing org → the auto-mode agent is surfaced.
+      const withOrg = await McpServerModel.findAll(undefined, true, org.id);
+      const found = mustExist(withOrg.find((s) => s.id === server.id));
+      expect(found.autoModeAgents).toEqual([
+        { id: autoAgent.id, name: "Auto Agent" },
+      ]);
+
+      // findById with the viewing org → same decoration.
+      const single = mustExist(
+        await McpServerModel.findById(server.id, undefined, true, org.id),
+      );
+      expect(single.autoModeAgents).toEqual([
+        { id: autoAgent.id, name: "Auto Agent" },
+      ]);
+
+      // Opt-in: without an org the decoration is skipped (stays empty), so
+      // existing callers are unaffected.
+      const withoutOrg = await McpServerModel.findAll(undefined, true);
+      const foundNoOrg = mustExist(withoutOrg.find((s) => s.id === server.id));
+      expect(foundNoOrg.autoModeAgents).toEqual([]);
     });
 
     test("returns servers with no users correctly", async ({
@@ -510,7 +551,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       const entry = res.find((r) => r.catalogId === catalog.id);
       expect(entry).toMatchObject({
@@ -546,7 +587,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       expect(res.find((r) => r.catalogId === catalog.id)?.toolName).toBe(
         "create_view",
@@ -583,7 +624,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       // One entry per accessible install, ordered by scope precedence.
       expect(
@@ -615,7 +656,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       const entries = res.filter((r) => r.catalogId === catalog.id);
       expect(entries).toHaveLength(3);
@@ -643,7 +684,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       expect(res.find((r) => r.catalogId === catalog.id)).toBeUndefined();
     });
@@ -670,7 +711,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       expect(res.some((r) => r.catalogId === catalog.id)).toBe(false);
     });
@@ -745,14 +786,14 @@ describe("McpServerModel", () => {
       // The caller (even as an org admin — there is no bypass) does not see it.
       const asOther = await McpServerModel.findUiCapableForCaller({
         userId: caller.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       expect(asOther.some((r) => r.catalogId === catalog.id)).toBe(false);
 
       // The author does — proving the filter isn't hiding everything.
       const asAuthor = await McpServerModel.findUiCapableForCaller({
         userId: owner.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       expect(asAuthor.some((r) => r.catalogId === catalog.id)).toBe(true);
     });
@@ -784,7 +825,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       const entries = res.filter((r) => r.catalogId === catalog.id);
       expect(entries).toHaveLength(2);
@@ -819,7 +860,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       expect(res.find((r) => r.catalogId === catalog.id)?.resourceUri).toBe(
         "ui://legacy/app.html",
@@ -848,14 +889,14 @@ describe("McpServerModel", () => {
 
       const hit = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
         search: "widget",
       });
       expect(hit.some((r) => r.catalogId === catalog.id)).toBe(true);
 
       const miss = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
         search: "no-such-server-xyz",
       });
       expect(miss.some((r) => r.catalogId === catalog.id)).toBe(false);
@@ -883,7 +924,7 @@ describe("McpServerModel", () => {
 
       const hit = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
         search: "special_widget",
       });
       expect(hit.some((r) => r.catalogId === catalog.id)).toBe(true);
@@ -911,7 +952,7 @@ describe("McpServerModel", () => {
 
       const res = await McpServerModel.findUiCapableForCaller({
         userId: user.id,
-        organizationId: catalog.organizationId!,
+        organizationId: mustExist(catalog.organizationId),
       });
       expect(res.some((r) => r.catalogId === catalog.id)).toBe(false);
     });

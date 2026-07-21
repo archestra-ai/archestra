@@ -132,7 +132,11 @@ describe("key management", () => {
     config.auth.secret = "a-completely-different-secret-key-value-here";
 
     try {
-      expect(() => decryptSecretValue(encrypted)).toThrow();
+      // The raw Node crypto error is opaque; the wrapper must point at the
+      // auth-secret mismatch so operators can diagnose it.
+      expect(() => decryptSecretValue(encrypted)).toThrow(
+        "different key than the one derived from the current ARCHESTRA_AUTH_SECRET",
+      );
     } finally {
       config.auth.secret = original;
       _resetCachedKey();

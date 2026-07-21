@@ -51,6 +51,7 @@ import {
 import { asSandboxId, type PersistedFile, type SandboxId } from "@/types";
 import { isUuid } from "@/utils/uuid";
 import {
+  decodeUtf8Text,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -59,7 +60,9 @@ import {
 import type { ArchestraContext } from "./types";
 
 /**
- * Code execution sandbox tools: `run_command`, `upload_file`, `download_file`.
+ * Code execution + file tools for the conversation sandbox: `run_command`,
+ * `upload_file`, `download_file`, `search_files`, `read_file`, `save_file`,
+ * `edit_file`, `delete_file`.
  *
  * Each conversation has an implicit default sandbox, created lazily on first
  * use — there is no create step. Commands, uploads, and activated skills all
@@ -67,10 +70,12 @@ import type { ArchestraContext } from "./types";
  * truth; Dagger materializes it on demand). `target` lets advanced callers run
  * against a fresh isolated sandbox or an explicit one instead of the default.
  *
- * RBAC: every tool is gated by `sandbox:execute` (see `rbac.ts`, enforced in
- * the dispatch path before the handler runs). Skills become runnable here by
- * loading them (`load_skill`), which mounts them into the default
- * sandbox; that path is `skill:read`-gated.
+ * RBAC (see `rbac.ts`, enforced in the dispatch path before the handler runs):
+ * `run_command`, `upload_file`, and `download_file` are gated by
+ * `sandbox:execute`; the file tools (`search_files`, `read_file`, `save_file`,
+ * `edit_file`, `delete_file`) by `file:manage`. Skills become runnable here by
+ * loading them (`load_skill`), which mounts them into the default sandbox; that
+ * path is `skill:read`-gated.
  *
  * Model-facing text in this file follows the skill terminology glossary in
  * `skills/skill-activation.ts` and is pinned by `skill-tool-text.test.ts`.
@@ -428,15 +433,6 @@ const ReadFileOutputSchema = z.object({
     .optional()
     .describe(
       "True when more lines follow the returned window (raise `offset` to continue).",
-    ),
-  content: z
-    .string()
-    .optional()
-    .describe(
-      "The returned window's text, numbered by line (the same rendering as " +
-        "the text output). Present for text reads so structured consumers " +
-        "(e.g. apps via archestra.tools.call) get the content, not just " +
-        "metadata.",
     ),
 });
 
@@ -978,7 +974,6 @@ const registry = defineArchestraTools([
             startLine: 1,
             returnedLines: 0,
             truncated: false,
-            content: "",
           },
           `"${originalName}" is empty.`,
         );
@@ -1040,7 +1035,6 @@ const registry = defineArchestraTools([
           startLine,
           returnedLines: numbered.returnedLines,
           truncated,
-          content: numbered.returnedLines > 0 ? numbered.body : "",
         },
         summary.join("\n"),
       );
@@ -1667,21 +1661,6 @@ interface LoadedUpload {
   data: Buffer;
   mimeType?: string;
   originalName?: string;
-}
-
-/**
- * Decode bytes as text for read_file / edit_file, or null when they are not
- * safe to treat as text. The mime label is never trusted (a binary payload can
- * be saved as e.g. text/plain), so readability is decided by the bytes: a NUL
- * byte or any invalid UTF-8 sequence means "binary".
- */
-function decodeUtf8Text(data: Buffer): string | null {
-  if (data.includes(0)) return null;
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(data);
-  } catch {
-    return null;
-  }
 }
 
 /** Count non-overlapping occurrences of a non-empty needle (literal). */

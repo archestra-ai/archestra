@@ -21,10 +21,12 @@ const {
   pendingSaveChanges,
   useAvailableLlmProviderApiKeysMock,
   useAgentDelegationsMock,
+  useAgentSubagentExclusionsMock,
   useInternalAgentsMock,
   useLlmModelsByProviderMock,
   useProfileMock,
   useSyncAgentDelegationsMock,
+  useUpdateAgentSubagentExclusionsMock,
   useUpdateProfileMock,
 } = vi.hoisted(() => ({
   pendingSaveChanges: vi.fn(
@@ -50,6 +52,16 @@ const {
     }),
   ),
   useSyncAgentDelegationsMock: vi.fn(() => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  })),
+  useAgentSubagentExclusionsMock: vi.fn(
+    (): { data: { excludedSubagentIds: string[] }; isFetched: boolean } => ({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    }),
+  ),
+  useUpdateAgentSubagentExclusionsMock: vi.fn(() => ({
     mutateAsync: vi.fn(),
     isPending: false,
   })),
@@ -80,6 +92,11 @@ vi.mock("@/lib/agent.query", () => ({
 vi.mock("@/lib/agent-tools.query", () => ({
   useAgentDelegations: useAgentDelegationsMock,
   useSyncAgentDelegations: useSyncAgentDelegationsMock,
+}));
+
+vi.mock("@/lib/agent-subagent-exclusions.query", () => ({
+  useAgentSubagentExclusions: useAgentSubagentExclusionsMock,
+  useUpdateAgentSubagentExclusions: useUpdateAgentSubagentExclusionsMock,
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -173,6 +190,10 @@ vi.mock("@/components/permission-requirement-hint", () => ({
 
 vi.mock("@/components/system-prompt-editor", () => ({
   SystemPromptEditor: () => null,
+}));
+
+vi.mock("@/components/share-personal-credentials-dialog", () => ({
+  SharePersonalCredentialsDialog: () => null,
 }));
 
 vi.mock("@/components/visibility-selector", () => ({
@@ -369,6 +390,7 @@ const baseAgent = {
   agentType: "agent" as const,
   toolExposureMode: "full" as const,
   accessAllTools: false,
+  accessAllSubagents: false,
   scope: "personal" as const,
   isDefault: false,
   isPersonalGateway: false,
@@ -407,6 +429,10 @@ const targetAgent = {
 describe("AgentDialog delegation state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks wipes call data but keeps implementations; re-assert the
+    // fast (immediate) tool-editor save so the save flow isn't gated on the
+    // hoisted 50ms default, which makes the save-path assertions flaky.
+    pendingSaveChanges.mockResolvedValue(undefined);
     vi.mocked(useHasPermissions).mockImplementation(
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
@@ -416,6 +442,87 @@ describe("AgentDialog delegation state", () => {
       data: [targetAgent],
       isFetched: true,
     });
+  });
+
+  it("skips the delegation and subagent-exclusion syncs when neither set changed on save", async () => {
+    const user = userEvent.setup();
+    const syncDelegations = vi
+      .fn()
+      .mockResolvedValue({ added: [], removed: [] });
+    const syncExclusions = vi.fn().mockResolvedValue(undefined);
+    const updateAgent = vi.fn().mockResolvedValue(baseAgent);
+    useSyncAgentDelegationsMock.mockReturnValue({
+      mutateAsync: syncDelegations,
+      isPending: false,
+    });
+    useUpdateAgentSubagentExclusionsMock.mockReturnValue({
+      mutateAsync: syncExclusions,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: updateAgent,
+      isPending: false,
+    });
+    const onOpenChange = vi.fn();
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    await screen.findByText("Subagents (1)");
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    // The save must complete (reaches the success close) and persist the agent —
+    // proving the handler ran through the sync block, not that it bailed early.
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(updateAgent).toHaveBeenCalled();
+    // No delegation/exclusion changes → no redundant sync writes (each of which
+    // would produce a spurious no-op agent.updated audit record).
+    expect(syncDelegations).not.toHaveBeenCalled();
+    expect(syncExclusions).not.toHaveBeenCalled();
+  });
+
+  it("syncs delegations when a subagent is removed before save", async () => {
+    const user = userEvent.setup();
+    const syncDelegations = vi
+      .fn()
+      .mockResolvedValue({ added: [], removed: [] });
+    const updateAgent = vi.fn().mockResolvedValue(baseAgent);
+    useSyncAgentDelegationsMock.mockReturnValue({
+      mutateAsync: syncDelegations,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: updateAgent,
+      isPending: false,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    await screen.findByText("Subagents (1)");
+    await user.click(screen.getByRole("button", { name: /remove agent/i }));
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(
+      () =>
+        expect(syncDelegations).toHaveBeenCalledWith({
+          agentId: baseAgent.id,
+          targetAgentIds: [],
+        }),
+      { timeout: 3000 },
+    );
   });
 
   it("keeps selected subagents when fresh agent data refetches", async () => {
@@ -496,6 +603,7 @@ describe.skip("AgentDialog", () => {
           agentType: "agent",
           toolExposureMode: "full",
           accessAllTools: false,
+          accessAllSubagents: false,
           scope: "personal",
           isDefault: false,
           isPersonalGateway: false,

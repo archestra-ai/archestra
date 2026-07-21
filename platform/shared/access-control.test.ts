@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   allAvailableActions,
+  buildForbiddenErrorMessage,
   editorPermissions,
   memberPermissions,
   permissionDescriptions,
@@ -182,5 +183,46 @@ describe("access-control", () => {
         roleSatisfiesRoute(memberPermissions, RouteId.ReauthenticateMcpServer),
       ).toBe(true);
     });
+  });
+});
+
+describe("buildForbiddenErrorMessage", () => {
+  test("names the blocked action and the missing permission with its description", () => {
+    expect(
+      buildForbiddenErrorMessage({
+        routeId: RouteId.UploadProjectFiles,
+        missingPermissions: { file: ["manage"] },
+      }),
+    ).toBe(
+      "You don't have permission to upload project files. Missing permission: file:manage (List, read, write, and delete files in chats and projects).",
+    );
+  });
+
+  test("keeps acronyms readable when humanizing the route id", () => {
+    expect(buildForbiddenErrorMessage({ routeId: "getMcpServerLogs" })).toBe(
+      "You don't have permission to get MCP server logs.",
+    );
+  });
+
+  test("lists multiple missing permissions in stable order", () => {
+    const message = buildForbiddenErrorMessage({
+      missingPermissions: { project: ["read"], file: ["manage"] },
+    });
+    expect(message).toContain("Missing permissions:");
+    expect(message).toContain(
+      "file:manage (List, read, write, and delete files in chats and projects)",
+    );
+    expect(message).toContain(
+      "project:read (View projects and the chats inside them)",
+    );
+    expect(message.indexOf("file:manage")).toBeLessThan(
+      message.indexOf("project:read"),
+    );
+  });
+
+  test("degrades to a generic sentence without route or permissions", () => {
+    expect(buildForbiddenErrorMessage({})).toBe(
+      "You don't have permission to perform this action.",
+    );
   });
 });

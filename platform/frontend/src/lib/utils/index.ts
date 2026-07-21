@@ -1,4 +1,5 @@
 export {
+  getApiErrorInternalCode,
   getApiErrorMessage,
   getApiErrorType,
   handleApiError,

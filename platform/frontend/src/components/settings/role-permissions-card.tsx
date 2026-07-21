@@ -113,7 +113,7 @@ export function RolePermissionsCard() {
           <>
             <Separator />
             <div>
-              <h4 className="text-sm font-semibold mb-2">Permissions</h4>
+              <h4 className="text-sm font-semibold mb-2">Your Permissions</h4>
               <PermissionsGrid permissions={permissions} />
             </div>
           </>

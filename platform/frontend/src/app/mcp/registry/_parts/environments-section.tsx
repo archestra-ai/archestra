@@ -691,11 +691,19 @@ function EnvironmentEditorDialog({
           <div className="space-y-1">
             <Label htmlFor="environment-restricted">Restricted</Label>
             <p className="text-xs text-muted-foreground">
-              Only users who hold the{" "}
+              Deploying to this environment requires the{" "}
               <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                environment:deploy-to-restricted
+                deploy-to-restricted
               </code>{" "}
-              permission are allowed to deploy in this environment.
+              permission on the resource being deployed (e.g.{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                mcpRegistry
+              </code>{" "}
+              for MCP servers,{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                llmProxy
+              </code>{" "}
+              for LLM proxies).
             </p>
           </div>
           <Switch

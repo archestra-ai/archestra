@@ -17,7 +17,7 @@ import organizationsTable from "./organization";
  * "production"). A catalog item may be assigned to exactly one environment via
  * internal_mcp_catalog.environment_id (nullable). Each environment carries a
  * Kubernetes namespace (stored only; runtime use deferred). Assignment to a
- * `restricted` environment is gated by the `environment:admin` permission.
+ * `restricted` environment is gated by per-resource `deploy-to-restricted` permissions.
  */
 const environmentsTable = pgTable(
   "environments",
@@ -55,7 +55,7 @@ const environmentsTable = pgTable(
     ).$type<TrustedImageRegistries>(),
     /**
      * When true, assigning a catalog item to this environment requires the
-     * `environment:admin` permission. Unrestricted environments (and the
+     * resource-specific `deploy-to-restricted` permission. Unrestricted environments (and the
      * org-default/null environment) are open to anyone who can create catalog
      * items. Flipped via PATCH /api/environments/:id.
      */

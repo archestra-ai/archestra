@@ -38,13 +38,14 @@ import {
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
+  useProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
-import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { McpGatewayActions } from "./mcp-gateway-actions";
@@ -216,7 +217,12 @@ function McpGateways({
     },
     [router],
   );
-  const editDialog = useAgentDialogUrlParam("edit");
+  const editId = searchParams.get("edit");
+  const { data: editFromUrl } = useProfile(editId ?? undefined);
+  const editDialog = useDialogUrlParam<GatewayData>({
+    paramName: "edit",
+    entityFromUrl: editFromUrl ?? null,
+  });
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
@@ -294,7 +300,6 @@ function McpGateways({
         return (
           <AgentNameCell
             name={agent.name}
-            scope={agent.scope}
             description={agent.description}
             extraBadges={
               agent.agentType === "profile" ? (
@@ -388,24 +393,21 @@ function McpGateways({
         );
       },
     },
-    ...(isAdmin
-      ? [
-          {
-            id: "team",
-            header: "Accessible to",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: GatewayData } }) => (
-              <ResourceVisibilityBadge
-                scope={row.original.scope}
-                teams={row.original.teams}
-                authorId={row.original.authorId}
-                authorName={row.original.authorName}
-                currentUserId={currentUserId}
-              />
-            ),
-          } satisfies ColumnDef<GatewayData>,
-        ]
-      : []),
+    {
+      id: "team",
+      header: "Accessible to",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
+      ),
+    },
     {
       id: "actions",
       header: "Actions",
@@ -608,10 +610,10 @@ function McpGateways({
             />
 
             <AgentDialog
-              open={!!editDialog.agent}
+              open={!!editDialog.entity}
               onOpenChange={(open) => !open && editDialog.close()}
-              agent={editDialog.agent}
-              agentType={editDialog.agent?.agentType || "mcp_gateway"}
+              agent={editDialog.entity}
+              agentType={editDialog.entity?.agentType || "mcp_gateway"}
               defaultIconType="mcp_gateway"
               openToolsCombobox={
                 openToolsFromUrl &&
@@ -620,7 +622,7 @@ function McpGateways({
                 // pick), so its search combobox would open inside a
                 // display:none subtree and render unanchored in the corner.
                 // Only auto-open the picker for Custom gateways.
-                !editDialog.agent?.accessAllTools
+                !editDialog.entity?.accessAllTools
               }
             />
 

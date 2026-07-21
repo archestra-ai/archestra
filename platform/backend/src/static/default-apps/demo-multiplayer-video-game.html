@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Demo Multiplayer Video Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body {
+    font-family: 'Press Start 2P', monospace; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-font-smoothing: none; image-rendering: pixelated; user-select: none;
+  }
+  #intro { position: fixed; inset: 0; background: #000; z-index: 50; display: flex; align-items: center; justify-content: center; text-align: center; }
+  #intro .line { position: absolute; opacity: 0; color: #fff; font-size: clamp(12px, 2.6vw, 22px); line-height: 1.9; max-width: 80%; letter-spacing: 1px; transition: opacity 0.9s ease; }
+  #intro .line.show { opacity: 1; }
+  #intro #skipBtn { position: fixed; bottom: 28px; right: 28px; font-size: 10px; padding: 10px 16px; z-index: 51; }
+  #intro .cursor { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #title { position: fixed; inset: 0; background: #000; z-index: 40; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 28px; opacity: 0; transition: opacity 0.8s ease; }
+  #title h1 { margin: 0; font-size: clamp(16px, 4.5vw, 42px); color: #7fff5a; text-shadow: 4px 4px 0 #044a04; line-height: 1.4; }
+  #title p { margin: 0; font-size: clamp(9px, 1.8vw, 13px); color: #9fe89f; line-height: 1.8; }
+  .field { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  #nameInput { font-family: inherit; font-size: 12px; text-align: center; color: #fff; background: #111; border: 3px solid #7fff5a; padding: 10px 12px; width: 240px; outline: none; }
+  .pxbtn { font-family: inherit; font-size: 13px; color: #000; background: #7fff5a; border: none; padding: 14px 22px; cursor: pointer; box-shadow: 4px 4px 0 #044a04; transition: transform .05s; }
+  .pxbtn:active { transform: translate(4px,4px); box-shadow: none; }
+  .hint { font-size: 8px; color: #567; line-height: 1.9; }
+  #game { position: fixed; inset: 0; display: none; }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: #0a1a0a; }
+  #hud { position: fixed; top: 10px; left: 10px; z-index: 10; font-size: 10px; line-height: 1.8; text-shadow: 2px 2px 0 #000; pointer-events: none; }
+  #hud .hp-wrap { width: 160px; height: 14px; border: 2px solid #fff; background:#300; margin-top:4px; }
+  #hud .hp-bar { height: 100%; background: #ff4b4b; width: 100%; transition: width .15s; }
+  #net { font-size: 8px; color: #567; margin-top: 4px; }
+  #players { position: fixed; top: 10px; right: 10px; z-index: 10; text-align: right; font-size: 9px; line-height: 2; text-shadow: 2px 2px 0 #000; }
+  #players b { color: #7fff5a; }
+  #respawn { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 20px; background: rgba(0,0,0,.72); text-align:center; }
+  #respawn h2 { color:#ff4b4b; font-size: clamp(16px,4vw,32px); text-shadow: 4px 4px 0 #400; }
+  .scan { position: fixed; inset: 0; z-index: 30; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.18) 2px 4px); mix-blend-mode: multiply; }
+</style>
+</head>
+<body>
+
+<div id="intro"><div class="line" id="introLine"></div><button type="button" class="pxbtn" id="skipBtn">SKIP ⏭</button></div>
+
+<div id="title">
+  <h1>DEMO<br>MULTIPLAYER<br>SHOOTER</h1>
+  <p>An 8-bit arena you can share &amp; play together</p>
+  <div class="field">
+    <input id="nameInput" maxlength="12" placeholder="ENTER NAME" />
+    <button class="pxbtn" id="startBtn">▶ ENTER ARENA</button>
+  </div>
+  <div class="hint">MOVE: WASD / ARROWS &nbsp;•&nbsp; AIM: MOUSE &nbsp;•&nbsp; SHOOT: CLICK / SPACE<br>Open this same app on another machine to join the fight.</div>
+</div>
+
+<div id="game"><canvas id="cv"></canvas></div>
+<div id="hud"></div>
+<div id="players"></div>
+<div id="respawn"><h2>YOU DIED</h2><button class="pxbtn" id="respawnBtn">RESPAWN</button></div>
+<div class="scan"></div>
+
+<script>
+// ============ INTRO LOADER ============
+const introEl = document.getElementById('intro');
+const introLine = document.getElementById('introLine');
+const titleEl = document.getElementById('title');
+const lines = [
+  "Built as a mini app in Archestra",
+  "Using Archestra's data layer for\nreal-time multiplayer & persistent storage",
+  "Share it with your colleagues\nand play together",
+  "Try creating apps yourself"
+];
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function runIntro(){
+  let i = 0;
+  (function next(){
+    if (i >= lines.length){ setTimeout(showTitle, 400); return; }
+    introLine.innerHTML = esc(lines[i]).replace(/\n/g,'<br>') + ' <span class="cursor">_</span>';
+    introLine.classList.add('show');
+    setTimeout(()=> introLine.classList.remove('show'), 2100);
+    setTimeout(()=>{ i++; next(); }, 3200);
+  })();
+}
+function showTitle(){
+  if(introEl.dataset.done) return;   // guard against double-fire (timer + skip)
+  introEl.dataset.done = '1';
+  introEl.style.opacity = '0';
+  setTimeout(()=>{ introEl.style.display='none'; titleEl.style.display='flex'; requestAnimationFrame(()=> titleEl.style.opacity='1'); }, 800);
+}
+document.getElementById('skipBtn').addEventListener('click', showTitle);
+setTimeout(runIntro, 500);
+
+// ============ CONSTANTS ============
+const TILE = 40, COLS = 40, ROWS = 30;
+const WORLD_W = TILE*COLS, WORLD_H = TILE*ROWS;
+const PLAYER_R = 12, BULLET_R = 4, SPEED = 3.4, BULLET_SPEED = 7, MAX_HP = 100;
+const SYNC_MS = 120;          // one get+set of the world table per this interval
+const LIVE_MS = 5000;         // drop a player if WE haven't seen their seq change in this long
+const SHOT_COOLDOWN = 220;
+const SHOT_LIFETIME = 1500;
+const MAX_SHOTS = 40;         // rolling cap on the shared shots list
+
+// ============ STATE ============
+const MY_ID = crypto.randomUUID();   // one identity per open session
+let me = null;                        // my player row (authoritative locally)
+let map = null, seed = 0;
+// The multiplayer TABLE, kept in memory and mirrored to shared storage key 'world'.
+// players: id -> { name, x, y, aim, hp, dead, kills, color, seq }
+let players = {};
+let shots = [];                       // shared rolling shot list [{id,owner,x,y,vx,vy,born}]
+let worldRev = undefined;             // last revision we read/wrote for 'world'
+const lastSeq = {};                   // id -> last seq we observed (remote liveness)
+const lastSeenLocal = {};             // id -> reader-local time seq last changed
+let mySeq = 0;
+let pendingShots = [];                // shots fired since last sync, to append to the shared table
+let pendingHits = [];                 // damage events I dealt this tick: {id,target,by,dmg}
+const appliedHits = new Set();        // hit-event ids I've already applied to my own HP
+const seenShots = new Set();          // shot ids we've already spawned locally for hit-detection
+let dbg = '';                          // last sync debug summary (shown under HUD)
+let syncing = false;                   // guard against overlapping syncs
+
+const keys = {};
+let mouse = { x: 0, y: 0 };
+let stats = { kills: 0, deaths: 0, best: 0 };
+let lastShot = 0;
+let netOk = false;
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+function resize(){ cv.width = window.innerWidth; cv.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+// ============ MAP ============
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function buildMap(s){
+  const rnd = mulberry32(s), m = [];
+  for(let y=0;y<ROWS;y++){ const row=[]; for(let x=0;x<COLS;x++){
+    let wall = (x===0||y===0||x===COLS-1||y===ROWS-1);
+    if(!wall && rnd()<0.10) wall = true;
+    row.push(wall?1:0);
+  } m.push(row); }
+  for(let k=0;k<14;k++){
+    const rx=1+Math.floor(rnd()*(COLS-8)), ry=1+Math.floor(rnd()*(ROWS-8));
+    const rw=3+Math.floor(rnd()*5), rh=3+Math.floor(rnd()*5);
+    for(let y=ry;y<Math.min(ROWS-1,ry+rh);y++) for(let x=rx;x<Math.min(COLS-1,rx+rw);x++) m[y][x]=0;
+  }
+  return m;
+}
+function tileAt(px,py){ const c=Math.floor(px/TILE), r=Math.floor(py/TILE); if(r<0||c<0||r>=ROWS||c>=COLS) return 1; return map[r][c]; }
+function blocked(px,py){ return [[px-PLAYER_R,py-PLAYER_R],[px+PLAYER_R,py-PLAYER_R],[px-PLAYER_R,py+PLAYER_R],[px+PLAYER_R,py+PLAYER_R]].some(p=>tileAt(p[0],p[1])===1); }
+function findSpawn(rnd){
+  for(let i=0;i<500;i++){ const x=(1+Math.floor(rnd()*(COLS-2)))*TILE+TILE/2, y=(1+Math.floor(rnd()*(ROWS-2)))*TILE+TILE/2; if(tileAt(x,y)===0 && !blocked(x,y)) return {x,y}; }
+  return {x:WORLD_W/2,y:WORLD_H/2};
+}
+const COLORS = ['#7fff5a','#5ab8ff','#ff5ad0','#ffd15a','#ff5a5a','#b45aff','#5affd1'];
+function colorFor(id){ let h=0; for(const c of id) h=(h*31+c.charCodeAt(0))>>>0; return COLORS[h%COLORS.length]; }
+
+// ============ PERSISTENT STATS ============
+async function loadStats(){ try { const e = await archestra.storage.user.get('stats'); if(e&&e.value) stats = Object.assign(stats, e.value); } catch(_){} }
+async function saveStats(){ try { await archestra.storage.user.set('stats', stats); } catch(_){} }
+
+// ============ THE SHARED WORLD TABLE ============
+// One key, 'world', holds everything: { seed, players{}, shots[] }. Every client
+// reads it, merges in only its OWN player row + any new shots it fired, and writes
+// it back under optimistic concurrency. On conflict we re-read and retry once, so
+// concurrent writers never clobber each other's rows.
+function myRow(){
+  return { name: me.name, x: Math.round(me.x), y: Math.round(me.y), aim: +me.aim.toFixed(2), hp: me.hp, dead: !!me.dead, kills: me.kills, color: me.color, seq: ++mySeq };
+}
+
+async function syncWorld(){
+  if(!me) return;
+  if(syncing) return;                 // never overlap two syncs (they'd conflict with each other)
+  syncing = true;
+  try {
+    // Retry generously with jittered backoff so two clients writing on the same
+    // cadence desync and both land their row, instead of starving each other.
+    for(let attempt=0; attempt<6; attempt++){
+      let entry;
+      try { entry = await archestra.storage.shared.get('world'); }
+      catch(_){ netOk=false; dbg='get failed'; return; }
+
+      const world = (entry && entry.value) ? entry.value : { seed, players:{}, shots:[] };
+      worldRev = entry ? entry.revision : undefined;
+
+      // adopt the shared seed if one exists and differs from ours
+      if(typeof world.seed === 'number' && world.seed !== seed){
+        seed = world.seed; map = buildMap(seed);
+        const sp = findSpawn(mulberry32(seed ^ (Date.now()&0xffff)));
+        if(!me.placed){ me.x=sp.x; me.y=sp.y; me.placed=true; }
+      } else if(typeof world.seed !== 'number'){ world.seed = seed; }
+
+      // pull EVERYONE else's rows into our in-memory table (optimistic view)
+      const incoming = world.players || {};
+      const now = Date.now();
+      const merged = {};
+      for(const id in incoming){
+        if(id === MY_ID) continue;
+        const r = incoming[id];
+        if(!r) continue;
+        if(lastSeq[id] !== r.seq){ lastSeq[id] = r.seq; lastSeenLocal[id] = now; }
+        if(lastSeenLocal[id] === undefined) lastSeenLocal[id] = now;
+        if(now - lastSeenLocal[id] < LIVE_MS) merged[id] = r;   // still alive by OUR clock
+      }
+      merged[MY_ID] = myRow();     // write our own authoritative row
+      players = merged;            // paint optimistically from this immediately
+
+      // merge shots: keep fresh shared shots + append ones we just fired
+      const freshShared = (world.shots||[]).filter(s => now - (s.born||0) < SHOT_LIFETIME + 800);
+      const mineNew = pendingShots; pendingShots = [];
+      let allShots = freshShared.concat(mineNew);
+      if(allShots.length > MAX_SHOTS) allShots = allShots.slice(-MAX_SHOTS);
+      shots = allShots;
+      for(const s of allShots){ if(!seenShots.has(s.id)){ seenShots.add(s.id); } }
+
+      // merge HIT EVENTS. Apply them AFTER computing myRow so our own HP change
+      // from an incoming hit publishes in the SAME write — otherwise the drop
+      // would only appear on the next sync and others would briefly see stale HP.
+      const incomingHits = (world.hits||[]).filter(h => now - (h.t||0) < 4000);
+      let hpChanged = false;
+      for(const h of incomingHits){
+        if(h.kill){
+          if(h.killer === MY_ID && !appliedHits.has(h.id)){
+            appliedHits.add(h.id);
+            me.kills++; stats.kills++; stats.best=Math.max(stats.best,me.kills); saveStats();
+          }
+          continue;
+        }
+        if(h.target === MY_ID && !appliedHits.has(h.id)){
+          appliedHits.add(h.id);
+          if(!me.dead){ takeDamage(h.dmg||20, h.by); hpChanged = true; }
+        }
+      }
+      // If my HP/kills/dead changed while processing hits, refresh my published row.
+      if(hpChanged || merged[MY_ID].kills !== me.kills || merged[MY_ID].dead !== !!me.dead){
+        merged[MY_ID] = myRow(); players = merged;
+      }
+      const mineHits = pendingHits; pendingHits = [];
+      for(const h of mineHits){ appliedHits.add(h.id); }   // never apply my own events to myself
+      let allHits = incomingHits.concat(mineHits);
+      if(allHits.length > MAX_SHOTS) allHits = allHits.slice(-MAX_SHOTS);
+
+      const out = { seed, players: merged, shots: allShots, hits: allHits };
+      try {
+        const res = await archestra.storage.shared.set('world', out, worldRev!==undefined ? { ifRevision: worldRev } : undefined);
+        worldRev = res.revision; netOk = true;
+        dbg = 'rows:'+Object.keys(merged).length+' rev:'+res.revision;
+        return;
+      } catch(err){
+        if(err && err.code === 'conflict'){
+          // Someone wrote between our get and set. Re-queue our shots+hits and
+          // retry after a short randomized delay so we don't collide again.
+          pendingShots = mineNew.concat(pendingShots);
+          pendingHits = mineHits.concat(pendingHits);
+          await new Promise(r=> setTimeout(r, 15 + Math.random()*40));
+          continue;
+        }
+        netOk = false; dbg = 'set err:'+((err&&err.code)||'?'); return;
+      }
+    }
+    dbg = 'conflict x6';   // gave up this tick; next tick tries again
+  } finally { syncing = false; }
+}
+
+// ============ HUD / LIST ============
+function renderPlayerList(){
+  const list = Object.entries(players).map(([id,r])=> Object.assign({id}, r));
+  list.sort((a,b)=> (b.kills||0)-(a.kills||0));
+  document.getElementById('players').innerHTML =
+    '<b>PLAYERS (' + list.length + ')</b><br>' +
+    list.map(p=>{ const c = p.color||colorFor(p.id); const meMark = p.id===MY_ID ? ' \u25c0' : '';
+      return '<span style="color:'+c+'">'+esc(p.name||'???')+'</span> '+(p.kills||0)+(p.dead?' \u2620':'')+meMark; }).join('<br>');
+}
+function updateHud(){
+  if(!me) return;
+  const pct = Math.max(0, me.hp)/MAX_HP*100;
+  document.getElementById('hud').innerHTML =
+    esc(me.name)+'<br>KILLS '+me.kills+'  DEATHS '+stats.deaths+'  BEST '+stats.best+
+    '<div class="hp-wrap"><div class="hp-bar" style="width:'+pct+'%"></div></div>'+
+    '<div id="net">'+(netOk?'\u25cf online':'\u25cb offline')+'  '+esc(dbg)+'</div>';
+}
+
+// ============ INPUT ============
+window.addEventListener('keydown', e=>{ keys[e.key.toLowerCase()]=true; if(e.key===' '){ e.preventDefault(); shoot(); } });
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+cv.addEventListener('mousemove', e=>{ mouse.x=e.clientX; mouse.y=e.clientY; });
+cv.addEventListener('mousedown', ()=> shoot());
+
+function camera(){
+  let cx = me.x - cv.width/2, cy = me.y - cv.height/2;
+  cx = Math.max(0, Math.min(WORLD_W - cv.width, cx));
+  cy = Math.max(0, Math.min(WORLD_H - cv.height, cy));
+  if(WORLD_W < cv.width) cx = (WORLD_W - cv.width)/2;
+  if(WORLD_H < cv.height) cy = (WORLD_H - cv.height)/2;
+  return {cx, cy};
+}
+
+function shoot(){
+  if(!me || me.dead) return;
+  const now = Date.now();
+  if(now - lastShot < SHOT_COOLDOWN) return;
+  lastShot = now;
+  const b = { id: crypto.randomUUID(), owner: MY_ID, x: me.x, y: me.y, vx: Math.cos(me.aim)*BULLET_SPEED, vy: Math.sin(me.aim)*BULLET_SPEED, born: now };
+  seenShots.add(b.id);
+  shots.push(b);          // paint immediately (optimistic)
+  pendingShots.push(b);   // queue for the next world write
+}
+
+// ============ SIMULATION ============
+function step(){
+  if(!me) return;
+  const {cx, cy} = camera();
+  me.aim = Math.atan2((mouse.y+cy)-me.y, (mouse.x+cx)-me.x);
+
+  if(!me.dead){
+    let dx=0, dy=0;
+    if(keys['w']||keys['arrowup']) dy-=1;
+    if(keys['s']||keys['arrowdown']) dy+=1;
+    if(keys['a']||keys['arrowleft']) dx-=1;
+    if(keys['d']||keys['arrowright']) dx+=1;
+    if(dx||dy){ const l=Math.hypot(dx,dy); dx/=l; dy/=l;
+      const nx=me.x+dx*SPEED, ny=me.y+dy*SPEED;
+      if(!blocked(nx, me.y)) me.x=nx;
+      if(!blocked(me.x, ny)) me.y=ny;
+    }
+  }
+
+  const now = Date.now();
+  // advance all shots by their velocity every frame (position stored is the origin,
+  // we integrate from born time so all clients agree on where a shot is)
+  for(const s of shots){ s._age = now - (s.born||now); }
+  // cull dead shots locally
+  shots = shots.filter(s => (now - (s.born||now)) < SHOT_LIFETIME);
+
+  // collisions: my shots vs other players; others' shots vs me
+  if(!me.dead){
+    for(const s of shots){
+      const age = now - (s.born||now);
+      const bx = s.x + s.vx*(age/16.67), by = s.y + s.vy*(age/16.67);
+      if(tileAt(bx,by)===1){ s.born = 0; continue; } // hit wall -> mark expired
+      if(s.owner === MY_ID){
+        for(const id in players){ if(id===MY_ID) continue; const o=players[id]; if(o.dead) continue;
+          if(Math.hypot(o.x-bx, o.y-by) < PLAYER_R+BULLET_R){ dealHit(id); s.born=0; break; } }
+      } else {
+        if(!s._hitMe && Math.hypot(me.x-bx, me.y-by) < PLAYER_R+BULLET_R+2){ s._hitMe=true; /* damage arrives via shared hit events, not applied locally */ }
+      }
+    }
+  }
+}
+
+let hitCd = {};
+// I hit another player: emit a shared damage event they will apply to their own
+// HP. I don't change their HP directly — each player owns their own hp row.
+// Do NOT call syncWorld() here: it is re-entrancy-guarded and the periodic sync
+// (every SYNC_MS) picks up pendingHits on its own. Calling it re-entrantly was
+// silently dropped and raced the pendingHits swap.
+function dealHit(id){
+  if(hitCd[id] && Date.now()-hitCd[id]<220) return;
+  hitCd[id]=Date.now();
+  const ev = { id: crypto.randomUUID(), target: id, by: MY_ID, dmg: 20, t: Date.now() };
+  pendingHits.push(ev);
+  appliedHits.add(ev.id);            // never apply my own hit to myself
+}
+// Each distinct damage EVENT is applied at most once (deduped by appliedHits in
+// the caller), so no time-based throttle here — that could swallow real hits.
+function takeDamage(d, byId){
+  if(byId) me.lastHitBy = byId;      // always record attacker, even for the fatal blow
+  me.hp -= d;
+  if(me.hp<=0 && !me.dead) die();
+}
+function die(){
+  me.dead=true; me.hp=0; stats.deaths++; saveStats();
+  // Credit the kill to whoever last damaged me, via a shared kill-credit event.
+  // Just queue it; the periodic sync publishes pendingHits. (die() is called
+  // from inside a sync, where a nested syncWorld() would be a no-op anyway.)
+  if(me.lastHitBy){ pendingHits.push({ id: crypto.randomUUID(), kill: true, killer: me.lastHitBy, victim: MY_ID, t: Date.now() }); }
+  document.getElementById('respawn').style.display='flex';
+}
+function doRespawn(){ const sp=findSpawn(mulberry32(seed^Date.now())); me.x=sp.x; me.y=sp.y; me.hp=MAX_HP; me.dead=false; me.lastHitBy=null; document.getElementById('respawn').style.display='none'; syncWorld(); }
+document.getElementById('respawnBtn').addEventListener('click', doRespawn);
+
+// ============ RENDER ============
+function drawTile(x,y,t){
+  if(t===1){ ctx.fillStyle='#3a2f24'; ctx.fillRect(x,y,TILE,TILE);
+    ctx.fillStyle='#5a4a38'; ctx.fillRect(x+3,y+3,TILE-6,TILE-6);
+    ctx.fillStyle='#2a2016'; ctx.fillRect(x+3,y+TILE-8,TILE-6,5);
+  } else { ctx.fillStyle=((x/TILE+y/TILE)%2===0)?'#143014':'#1b3d1b'; ctx.fillRect(x,y,TILE,TILE); }
+}
+function drawPlayer(px,py,color,aim,name,hp,dead){
+  ctx.save(); ctx.translate(px,py);
+  if(dead) ctx.globalAlpha=0.4;
+  ctx.fillStyle=color; ctx.fillRect(-PLAYER_R,-PLAYER_R,PLAYER_R*2,PLAYER_R*2);
+  ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(-PLAYER_R,PLAYER_R-4,PLAYER_R*2,4);
+  ctx.strokeStyle='#fff'; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(aim)*(PLAYER_R+10),Math.sin(aim)*(PLAYER_R+10)); ctx.stroke();
+  ctx.restore();
+  ctx.globalAlpha=1; ctx.font='8px "Press Start 2P", monospace'; ctx.textAlign='center';
+  ctx.fillStyle='#000'; ctx.fillText(name, px+1, py-PLAYER_R-9);
+  ctx.fillStyle='#fff'; ctx.fillText(name, px, py-PLAYER_R-10);
+  const w=PLAYER_R*2; ctx.fillStyle='#300'; ctx.fillRect(px-PLAYER_R,py-PLAYER_R-6,w,3);
+  ctx.fillStyle='#ff4b4b'; ctx.fillRect(px-PLAYER_R,py-PLAYER_R-6,w*Math.max(0,hp)/MAX_HP,3);
+}
+function render(){
+  requestAnimationFrame(render);
+  if(!me || !map) return;
+  const {cx,cy}=camera();
+  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.save(); ctx.translate(-cx,-cy);
+  const c0=Math.max(0,Math.floor(cx/TILE)), c1=Math.min(COLS-1,Math.ceil((cx+cv.width)/TILE));
+  const r0=Math.max(0,Math.floor(cy/TILE)), r1=Math.min(ROWS-1,Math.ceil((cy+cv.height)/TILE));
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++) drawTile(c*TILE,r*TILE,map[r][c]);
+  const now=Date.now();
+  for(const s of shots){ const age=now-(s.born||now); if(age<0||age>SHOT_LIFETIME) continue;
+    const bx=s.x+s.vx*(age/16.67), by=s.y+s.vy*(age/16.67);
+    ctx.fillStyle = s.owner===MY_ID ? '#fff' : '#ffef8a';
+    ctx.fillRect(bx-BULLET_R,by-BULLET_R,BULLET_R*2,BULLET_R*2);
+  }
+  // paint EVERY player from the table (optimistic), including me
+  for(const id in players){ if(id===MY_ID) continue; const o=players[id]; drawPlayer(o.x,o.y,o.color||colorFor(id),o.aim||0,o.name||'???',o.hp||0,o.dead); }
+  drawPlayer(me.x,me.y,me.color,me.aim,me.name,me.hp,me.dead);
+  ctx.restore();
+  updateHud();
+}
+
+// ============ START ============
+let started = false;
+async function startGame(name){
+  if(started) return; started = true;
+  document.getElementById('title').style.display='none';
+  document.getElementById('game').style.display='block';
+  resize();
+
+  seed = seed || (Math.floor(Math.random()*2e9)||12345);
+  map = buildMap(seed);
+  const sp0 = findSpawn(mulberry32(seed ^ (Date.now()&0xffff)));
+  me = { id: MY_ID, name, x: sp0.x, y: sp0.y, aim: 0, hp: MAX_HP, dead: false, kills: 0, color: colorFor(MY_ID), placed: true };
+
+  render();
+  setInterval(step, 16);
+  setInterval(()=>renderPlayerList(), 500);
+
+  try {
+    await archestra.ready;
+    if((!name || name==='PLAYER') && archestra.user && archestra.user.name) me.name = archestra.user.name.slice(0,12).toUpperCase();
+    await loadStats();
+    await syncWorld();                 // first exchange: adopt shared seed, publish our row
+    setInterval(syncWorld, SYNC_MS);   // ONE get+set per tick keeps the whole table in sync
+    window.addEventListener('beforeunload', async ()=>{
+      // remove our row so we drop out of everyone's table promptly
+      try { const e = await archestra.storage.shared.get('world'); if(e&&e.value&&e.value.players){ delete e.value.players[MY_ID]; await archestra.storage.shared.set('world', e.value, {ifRevision:e.revision}); } } catch(_){}
+    });
+  } catch(err){ console.warn('Data layer unavailable, running locally:', err); netOk=false; }
+}
+
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  const val = document.getElementById('nameInput').value.trim();
+  const name = (val || (window.archestra&&archestra.user&&archestra.user.name) || 'PLAYER').slice(0,12).toUpperCase();
+  startGame(name);
+});
+document.getElementById('nameInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('startBtn').click(); });
+(async ()=>{ try{ await archestra.ready; const n=archestra.user&&archestra.user.name; if(n) document.getElementById('nameInput').value = n.slice(0,12); }catch(_){} })();
+</script>
+</body>
+</html>

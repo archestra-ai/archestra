@@ -1218,6 +1218,19 @@ export const anthropicAdapterFactory: LLMProvider<
     return undefined;
   },
 
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // Anthropic credentials are format-distinguishable: OAuth access tokens
+    // (Claude Pro/Max subscriptions — what Claude Code sends as
+    // `Authorization: Bearer`) are `sk-ant-oat…`, while metered API keys are
+    // `sk-ant-api…`. Checking the token itself (not just the Bearer transport)
+    // keeps other Bearer-shaped credentials (e.g. Workload Identity Federation
+    // access tokens) classified as metered. `extractApiKey` tags forwarded
+    // Bearer tokens with a `Bearer:` sentinel; strip it before the check so
+    // both forwarded and stored credentials are classified uniformly.
+    const token = apiKey?.startsWith("Bearer:") ? apiKey.slice(7) : apiKey;
+    return token?.startsWith("sk-ant-oat") ?? false;
+  },
+
   getBaseUrl(): string | undefined {
     return config.llm.anthropic.baseUrl;
   },

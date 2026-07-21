@@ -1,4 +1,6 @@
 import {
+  SKILL_TOOL_PREFIX,
+  slugify,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_EDIT_SKILL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -12,11 +14,13 @@ import {
 } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
+  AgentModel,
   SkillModel,
   SkillTeamModel,
   SkillVersionModel,
   TeamModel,
 } from "@/models";
+import { skillVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import {
   MAX_FILES_PER_SKILL,
   MAX_SKILL_FILE_BYTES,
@@ -260,7 +264,7 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an organization context.");
       }
 
-      const skill = await findAccessibleSkill(ctx, args.name);
+      const skill = await findAccessibleSkill(ctx, args.name, context.agent.id);
       if (!skill) {
         return unknownSkillError(args.name);
       }
@@ -292,6 +296,11 @@ const registry = defineArchestraTools([
       }
 
       const files = await SkillVersionModel.findFiles(version.id);
+      // a name-only load is an activation; file reads above don't count.
+      SkillModel.recordUsage({
+        skillId: skill.id,
+        userId: ctx.userId ?? null,
+      });
       logger.info(
         {
           organizationId: ctx.organizationId,
@@ -324,7 +333,7 @@ const registry = defineArchestraTools([
                 organizationId: ctx.organizationId,
               })
             : null,
-        }),
+        }) + agentDesignationNote(skill),
       );
     },
   }),
@@ -354,11 +363,16 @@ const registry = defineArchestraTools([
       // team or the org stays a deliberate action in the Skills UI. A personal
       // skill owned by its author needs no further scope authorization beyond
       // the skill:create permission already enforced on this tool.
+      //
+      // The skill inherits the calling agent's environment so the authoring
+      // agent can see (and load) what it just created — skills are only
+      // visible within their environment.
       const skill = await SkillModel.createWithFiles({
         skill: {
           ...toSkillInsertFields(parsed),
           organizationId: ctx.organizationId,
           authorId: ctx.userId,
+          environmentId: await AgentModel.findEnvironmentId(context.agent.id),
           sourceType: "manual",
           scope: "personal",
         },
@@ -392,7 +406,7 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const skill = await findAccessibleSkill(ctx, args.name);
+      const skill = await findAccessibleSkill(ctx, args.name, context.agent.id);
       if (!skill) {
         return unknownSkillError(args.name);
       }
@@ -402,6 +416,9 @@ const registry = defineArchestraTools([
       const denied = await checkSkillModifyPermission(ctx, skill);
       if (denied) {
         return errorResult(denied);
+      }
+      if (skill.githubSyncInterval !== null) {
+        return errorResult(syncedSkillReadOnlyMessage(skill));
       }
 
       const parsed = parseManifest(args.content);
@@ -451,7 +468,7 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an authenticated user session.");
       }
 
-      const skill = await findAccessibleSkill(ctx, args.name);
+      const skill = await findAccessibleSkill(ctx, args.name, context.agent.id);
       if (!skill) {
         return unknownSkillError(args.name);
       }
@@ -459,6 +476,9 @@ const registry = defineArchestraTools([
       const denied = await checkSkillModifyPermission(ctx, skill);
       if (denied) {
         return errorResult(denied);
+      }
+      if (skill.githubSyncInterval !== null) {
+        return errorResult(syncedSkillReadOnlyMessage(skill));
       }
 
       const loadSkillName = archestraMcpBranding.getToolName(
@@ -720,9 +740,24 @@ async function canRunSkillSandbox(
  * `personal` skill shadows a `team` one, which shadows `org`. Returns null when
  * none are accessible, so callers surface a generic "no skill named …" without
  * leaking an inaccessible skill's existence.
+ *
+ * Skills are environment-scoped: when `agentId` is provided, only skills
+ * visible from that agent's environment resolve (strict match, null = Default,
+ * built-in skills exempt) — a cross-environment skill is indistinguishable
+ * from a nonexistent one.
  */
-async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
-  const candidates = await SkillModel.findAllByName(ctx.organizationId, name);
+async function findAccessibleSkill(
+  ctx: SkillReadContext,
+  name: string,
+  agentId?: string,
+) {
+  let candidates = await SkillModel.findAllByName(ctx.organizationId, name);
+  if (agentId !== undefined) {
+    const environmentId = await AgentModel.findEnvironmentId(agentId);
+    candidates = candidates.filter((skill) =>
+      skillVisibleInEnvironment(skill, environmentId),
+    );
+  }
   if (candidates.length === 0) return null;
 
   const isSkillAdmin =
@@ -800,6 +835,40 @@ async function checkSkillModifyPermission(
     if (error instanceof ApiError) return error.message;
     throw error;
   }
+}
+
+/**
+ * A GitHub-synced skill's content is owned by its source repo — the model
+ * must not edit it in place. Editing requires disconnecting the skill from
+ * its GitHub source, a deliberate action kept in the Skills UI.
+ */
+function syncedSkillReadOnlyMessage(
+  skill: Pick<Skill, "name" | "sourceRef">,
+): string {
+  const repo = skill.sourceRef?.split("@")[0];
+  return (
+    `Skill "${skill.name}" is synced from GitHub` +
+    (repo ? ` (${repo})` : "") +
+    " and its content is read-only here. Tell the user to edit it in the " +
+    "source repository, or to disconnect it from GitHub in the Skills UI " +
+    "to make it editable in the app."
+  );
+}
+
+/**
+ * Note appended to a loaded agent-designated skill: reading its instructions
+ * is for inspection/editing; running it should go through its subagent tool.
+ */
+function agentDesignationNote(
+  skill: Pick<Skill, "name" | "agentName">,
+): string {
+  if (skill.agentName === null) return "";
+  return (
+    `\nThis skill designates the agent "${neutralizeFrameTags(skill.agentName)}": it runs in that ` +
+    `subagent via the ${SKILL_TOOL_PREFIX}${slugify(skill.name)} tool (pass ` +
+    "the task as `message`) — prefer that over following these instructions " +
+    "yourself."
+  );
 }
 
 /** Parse a SKILL.md manifest, returning the parse error instead of throwing. */

@@ -38,6 +38,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useMembersPaginated } from "@/lib/member.query";
@@ -719,7 +720,7 @@ function TokenSection({ token }: { token?: TeamToken }) {
     },
     onSuccess: async (value) => {
       if (!value) return;
-      await navigator.clipboard.writeText(value);
+      await copyToClipboard(value);
       setDisplayedValue(value);
       setShowValue(true);
       setConfirmRotate(false);
@@ -747,7 +748,7 @@ function TokenSection({ token }: { token?: TeamToken }) {
 
   const handleCopy = async () => {
     if (!displayedValue) return;
-    await navigator.clipboard.writeText(displayedValue);
+    await copyToClipboard(displayedValue);
     setCopied(true);
     toast.success("Token copied to clipboard");
     setTimeout(() => setCopied(false), 2000);

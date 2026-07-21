@@ -45,6 +45,7 @@ export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-req
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
+export { default as agentExcludedSubagentsTable } from "./agent-excluded-subagent";
 export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
@@ -67,7 +68,6 @@ export {
 } from "./chat-active-run";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
-export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
 export {
   connectionSetupSkillsTable,
   default as connectionSetupsTable,
@@ -83,10 +83,12 @@ export {
   conversationShareUsersTable,
   default as conversationSharesTable,
 } from "./conversation-share";
+export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
 export { default as filesTable } from "./file";
 export { default as githubAppConfigsTable } from "./github-app-config";
+export { default as githubPatsTable } from "./github-pat";
 export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
@@ -156,6 +158,7 @@ export {
 } from "./skill-share-link";
 export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
+export { default as skillUsageEventsTable } from "./skill-usage-event";
 export { default as skillVersionsTable } from "./skill-version";
 export { default as skillVersionFilesTable } from "./skill-version-file";
 export { default as tasksTable } from "./task";

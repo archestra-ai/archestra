@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import ConversationModel from "./conversation";
@@ -800,8 +800,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       const message2 = await MessageModel.create({
         conversationId: conversation.id,
         role: "assistant",
@@ -811,8 +809,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "Message 2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       const message3 = await MessageModel.create({
         conversationId: conversation.id,
@@ -824,8 +820,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversation.id,
         role: "assistant",
@@ -835,8 +829,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "Message 4" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await MessageModel.create({
         conversationId: conversation.id,
@@ -848,6 +840,7 @@ describe("MessageModel", () => {
         },
       });
 
+      await pinMessageTimestamps(conversation.id);
       await MessageModel.deleteAfterMessage(conversation.id, message3.id);
 
       const remaining = await MessageModel.findByConversation(conversation.id);
@@ -885,8 +878,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversation.id,
         role: "assistant",
@@ -896,8 +887,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "Message 2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       const message3 = await MessageModel.create({
         conversationId: conversation.id,
@@ -909,6 +898,7 @@ describe("MessageModel", () => {
         },
       });
 
+      await pinMessageTimestamps(conversation.id);
       await MessageModel.deleteAfterMessage(conversation.id, message3.id);
 
       const remaining = await MessageModel.findByConversation(conversation.id);
@@ -975,8 +965,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversationA.id,
         role: "assistant",
@@ -986,8 +974,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "A2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await MessageModel.create({
         conversationId: conversationA.id,
@@ -1009,8 +995,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversationB.id,
         role: "assistant",
@@ -1020,8 +1004,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "B2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await MessageModel.create({
         conversationId: conversationB.id,
@@ -1033,6 +1015,7 @@ describe("MessageModel", () => {
         },
       });
 
+      await pinMessageTimestamps(conversationA.id);
       await MessageModel.deleteAfterMessage(conversationA.id, messageA1.id);
 
       const remainingA = await MessageModel.findByConversation(
@@ -1072,8 +1055,6 @@ describe("MessageModel", () => {
         },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
       await MessageModel.create({
         conversationId: conversation.id,
         role: "assistant",
@@ -1083,8 +1064,6 @@ describe("MessageModel", () => {
           parts: [{ type: "text", text: "Message 2" }],
         },
       });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
 
       await MessageModel.create({
         conversationId: conversation.id,
@@ -1096,6 +1075,7 @@ describe("MessageModel", () => {
         },
       });
 
+      await pinMessageTimestamps(conversation.id);
       await MessageModel.deleteAfterMessage(conversation.id, message1.id);
 
       const remaining = await MessageModel.findByConversation(conversation.id);
@@ -1151,3 +1131,25 @@ describe("MessageModel", () => {
     });
   });
 });
+
+/**
+ * Pin the conversation's messages to strictly increasing `createdAt` in
+ * insertion order (ids are client-generated monotonic UUIDv7). "After" tests
+ * must not derive order from insert-time clocks: `now()` is not monotonic — a
+ * clock step between back-to-back writes can date a later message before an
+ * earlier one, which flakes every assertion built on sleeps between inserts.
+ */
+async function pinMessageTimestamps(conversationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: schema.messagesTable.id })
+    .from(schema.messagesTable)
+    .where(eq(schema.messagesTable.conversationId, conversationId))
+    .orderBy(asc(schema.messagesTable.id));
+  const base = Date.now() - rows.length * 1_000;
+  for (const [index, row] of rows.entries()) {
+    await db
+      .update(schema.messagesTable)
+      .set({ createdAt: new Date(base + index * 1_000) })
+      .where(eq(schema.messagesTable.id, row.id));
+  }
+}

@@ -174,7 +174,7 @@ function SetDefaultModelDialog({
             setApiKeySelectorOpen(false);
           }}
           triggerVariant="select"
-          emptyTriggerLabel="Select API key..."
+          emptyTriggerLabel="Select provider key..."
         />
         <LlmModelSearchableSelect
           value={defaultModel}
@@ -183,7 +183,7 @@ function SetDefaultModelDialog({
           freeFilterable={canFilterFreeModels}
           placeholder={
             !selectedApiKeyId
-              ? "Select API key first..."
+              ? "Select provider key first..."
               : modelsPending
                 ? "Loading models..."
                 : "Select model..."

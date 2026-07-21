@@ -8,6 +8,7 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import GithubAppConfigModel from "@/models/github-app-config";
+import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -92,6 +93,7 @@ export const AUDIT_DECISIONS = {
     model: EnvironmentDefaultUserLimitModel,
   },
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
+  githubPatsTable: { audited: true, model: GithubPatModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {
@@ -294,6 +296,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × connector; parent (agent) audited",
   },
+  agentExcludedSubagentsTable: {
+    audited: false,
+    reason: "join: agent × subagent exclusion; parent (agent) audited",
+  },
   agentExcludedToolsTable: {
     audited: false,
     reason: "join: agent × tool exclusion; parent (agent) audited",
@@ -418,6 +424,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of skill; parent (skill) audited",
   },
+  skillUsageEventsTable: {
+    audited: false,
+    reason:
+      "append-only usage metric written by the system on every activation; not a user-driven state change",
+  },
   connectionSetupsTable: {
     audited: false,
     reason:
@@ -527,10 +538,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ChatOps message dedup; runtime state",
   },
-  chatopsThreadAgentOverrideTable: {
-    audited: false,
-    reason: "ChatOps thread override; runtime state",
-  },
 
   // =========================================================================
   // Email / messaging ingest
@@ -551,6 +558,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "secret material; presence audited via parent resource hasSecret flag",
+  },
+  encryptionKeyCanariesTable: {
+    audited: false,
+    reason:
+      "internal startup canary for encryption-key verification; no user-facing writes",
   },
 
   // =========================================================================

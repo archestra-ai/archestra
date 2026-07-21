@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-10
+lastUpdated: 2026-07-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -68,7 +68,7 @@ Reuse a ChatGPT/Codex subscription for chat instead of a metered API key. Add an
 
 First turn on device code authorization for the account, in ChatGPT → Settings → Security → **Enable device code authorization for Codex**. It is off by default, and ChatGPT blocks the approval step until you enable it.
 
-These keys are per-user and personal-only: each person connects their own ChatGPT account. Requests are billed to the subscription.
+These keys are per-user and personal-only: each person connects their own ChatGPT account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
 
 ## Anthropic
 
@@ -365,7 +365,7 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### Setup
 
-1. Go to **Settings > LLM API Keys** and add a new key with provider **vLLM**
+1. Go to **Model Providers** and add a new key with provider **vLLM**
 2. Set the **Base URL** to your vLLM server (e.g., `http://your-vllm-host:8000/v1`)
 3. API key can be left blank for most self-hosted deployments
 
@@ -400,7 +400,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 ### Setup
 
-1. Go to **Settings > LLM API Keys** and add a new key with provider **Ollama**
+1. Go to **Model Providers** and add a new key with provider **Ollama**
 2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
 3. API key can be left blank for self-hosted Ollama
 

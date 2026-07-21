@@ -42,6 +42,8 @@ describe("buildChatContext enabled-tool selection", () => {
       organizationId: params.organizationId,
       hookSessionContext: undefined,
       projectInstructions: undefined,
+      openedApp: undefined,
+      projectFileNames: undefined,
       hookRunCollector: [],
       elicitation: {} as never,
       subagentToolStream: {} as never,

@@ -22,7 +22,6 @@ import {
   AppToolModel,
   AppVersionModel,
   McpServerModel,
-  ToolModel,
   UserModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
@@ -45,7 +44,6 @@ import {
   deleteAppBacking,
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
-import { getAppAssignableBuiltinFullNames } from "@/services/apps/app-tool-runtime-gate";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
@@ -261,6 +259,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : null,
           viewerRole: viewerRoleOf(app),
           latestVersion: app.latestVersion,
+          enabled: app.enabled,
           teams: teamsByApp.get(app.id) ?? [],
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
@@ -669,24 +668,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      const teamsByApp = await AppAccessModel.getTeamDetailsForApps([app.id]);
-      const viewerRole = await resolveViewerRole({
-        app,
-        userId: user.id,
-        organizationId,
-      });
-      const authorName =
-        app.authorId !== null
-          ? ((await UserModel.getNamesByIds([app.authorId])).get(
-              app.authorId,
-            ) ?? null)
-          : null;
-      return reply.send({
-        ...app,
-        teams: teamsByApp.get(app.id) ?? [],
-        viewerRole,
-        authorName,
-      });
+      return reply.send(
+        await buildAppDetail({ app, userId: user.id, organizationId }),
+      );
     },
   );
 
@@ -738,7 +722,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertCallerMayAuthorApp({
           userId: user.id,
           organizationId,
-          app: { id: app.id, scope: app.scope, authorId: app.authorId },
+          app: {
+            id: app.id,
+            scope: app.scope,
+            authorId: app.authorId,
+            enabled: app.enabled,
+          },
           resourceTeamIds,
         });
       }
@@ -869,6 +858,58 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // Enable/disable an app — the enabled/disabled lifecycle. A disabled app is
+  // author-only and its launch tool is withheld from every gateway/agent
+  // surface; enabling makes it live at its scope, disabling pulls it back to
+  // author-only. Kept off the generic PATCH so the transition has its own
+  // audit and a stricter, single-purpose authorization.
+  for (const action of ["enable", "disable"] as const) {
+    const enable = action === "enable";
+    fastify.post(
+      `/api/apps/:appId/${action}`,
+      {
+        schema: {
+          operationId: enable ? RouteId.EnableApp : RouteId.DisableApp,
+          description: enable
+            ? "Enable a disabled app, making it live at its scope."
+            : "Disable an app, pulling it back to an author-only state.",
+          tags: ["Apps"],
+          params: z.object({ appId: UuidIdSchema }),
+          response: constructResponseSchema(AppWithTeamsSchema),
+        },
+      },
+      async ({ params: { appId }, user, organizationId }, reply) => {
+        const app = await loadViewableApp({
+          appId,
+          userId: user.id,
+          organizationId,
+        });
+        await assertCallerMayModifyApp({
+          userId: user.id,
+          organizationId,
+          scope: app.scope,
+          authorId: app.authorId,
+          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
+        });
+        const updated = await AppModel.setEnabled(appId, enable);
+        if (!updated) {
+          throw new ApiError(404, `No app found with id ${appId}.`);
+        }
+        logger.info(
+          { appId, userId: user.id, enabled: enable },
+          enable ? "App enabled via REST" : "App disabled via REST",
+        );
+        return reply.send(
+          await buildAppDetail({
+            app: updated,
+            userId: user.id,
+            organizationId,
+          }),
+        );
+      },
+    );
+  }
+
   fastify.get(
     "/api/apps/:appId/versions",
     {
@@ -924,31 +965,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { appId }, user, organizationId }, reply) => {
       await loadViewableApp({ appId, userId: user.id, organizationId });
       return reply.send(await AppToolModel.getToolsForApp(appId));
-    },
-  );
-
-  fastify.get(
-    "/api/apps/assignable-builtin-tools",
-    {
-      schema: {
-        operationId: RouteId.GetAppAssignableBuiltinTools,
-        description:
-          "List the built-in Archestra tools that can be assigned to apps (the read-only file tools). Empty when the governing feature flags are off.",
-        tags: ["Apps"],
-        response: constructResponseSchema(z.array(SelectToolSchema)),
-      },
-    },
-    async (_request, reply) => {
-      // The canonical availability predicate is the single filter: the tools
-      // editor renders exactly what this returns, so the frontend never
-      // duplicates the allowlist or the feature-flag logic.
-      const names = getAppAssignableBuiltinFullNames();
-      if (names.length === 0) {
-        return reply.send([]);
-      }
-      return reply.send(
-        await ToolModel.findArchestraCatalogToolsByNames(names),
-      );
     },
   );
 
@@ -1060,8 +1076,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.AssignToolToApp,
-        description:
-          "Assign a tool to an app: an upstream MCP-server tool, or one of the app-assignable built-in file tools.",
+        description: "Assign an upstream tool to an app.",
         tags: ["Apps"],
         params: z.object({ appId: UuidIdSchema, toolId: UuidIdSchema }),
         body: z
@@ -1148,6 +1163,32 @@ async function loadViewableApp(params: {
 }
 
 /**
+ * Assemble the single-app detail payload — team assignments, the caller's
+ * viewerRole, and the author's display name — shared by GET, enable, and
+ * disable so all three return the same shape.
+ */
+async function buildAppDetail(params: {
+  app: App;
+  userId: string;
+  organizationId: string;
+}) {
+  const { app, userId, organizationId } = params;
+  const teamsByApp = await AppAccessModel.getTeamDetailsForApps([app.id]);
+  const viewerRole = await resolveViewerRole({ app, userId, organizationId });
+  const authorName =
+    app.authorId !== null
+      ? ((await UserModel.getNamesByIds([app.authorId])).get(app.authorId) ??
+        null)
+      : null;
+  return {
+    ...app,
+    teams: teamsByApp.get(app.id) ?? [],
+    viewerRole,
+    authorName,
+  };
+}
+
+/**
  * The caller's relationship to an app they can already view: their own (owner),
  * reached through its scope (shared), or seen only via app:admin oversight
  * (admin). The single-app analogue of the list route's viewerRole labelling.
@@ -1166,6 +1207,7 @@ async function resolveViewerRole(params: {
       organizationId: params.app.organizationId,
       scope: params.app.scope,
       authorId: params.app.authorId,
+      enabled: params.app.enabled,
     },
     isAppAdmin: false,
   });
@@ -1204,8 +1246,8 @@ function isCanonicalBase64(value: string): boolean {
 /**
  * Authorize binding an app to `environmentId` (null = org default). Mirrors the
  * agent/knowledge-base/MCP-catalog path: org membership of the environment plus
- * the restricted-env permission are enforced by `assertCanAssignEnvironment`,
- * which also gates a restricted *default* environment.
+ * app:deploy-to-restricted are enforced by `assertCanAssignEnvironment`, which
+ * also gates a restricted *default* environment.
  */
 async function assertEnvironmentAssignable(params: {
   userId: string;
@@ -1213,19 +1255,16 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
-    userHasPermission(userId, organizationId, "environment", "admin"),
-    userHasPermission(
-      userId,
-      organizationId,
-      "environment",
-      "deploy-to-restricted",
-    ),
-  ]);
+  const hasAppDeploy = await userHasPermission(
+    userId,
+    organizationId,
+    "app",
+    "deploy-to-restricted",
+  );
   await assertCanAssignEnvironment({
     environmentId,
     organizationId,
-    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+    canDeployToRestricted: hasAppDeploy,
   });
 }
 

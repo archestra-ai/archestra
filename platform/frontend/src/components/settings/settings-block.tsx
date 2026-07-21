@@ -17,6 +17,8 @@ interface SettingsBlockProps {
   control: ReactNode;
   notice?: ReactNode;
   children?: ReactNode;
+  /** Anchor for a link that points at this specific setting. */
+  id?: string;
 }
 
 interface SettingsCardHeaderProps {
@@ -52,9 +54,10 @@ export function SettingsBlock({
   control,
   notice,
   children,
+  id,
 }: SettingsBlockProps) {
   return (
-    <Card>
+    <Card id={id} className="scroll-mt-24">
       <SettingsCardHeader
         title={title}
         description={description}

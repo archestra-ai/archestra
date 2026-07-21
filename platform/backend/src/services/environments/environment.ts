@@ -97,13 +97,14 @@ export async function updateEnvironment(params: {
 
 /**
  * Gate assigning a catalog item to an environment. Unrestricted environments
- * are open; a `restricted` environment requires the caller to hold
- * `environment:deploy-to-restricted` (or `environment:admin`, which implies it).
- * The default (null) environment is open unless the org has marked its default
- * environment restricted, in which case it is gated the same way. Callers
- * compute `canDeployToRestricted` with their own auth primitive (route headers
- * vs. MCP user context) and pass the result in, so this stays free of HTTP
- * concerns.
+ * are open; a `restricted` environment requires the caller to hold the
+ * resource-specific `deploy-to-restricted` permission (e.g.
+ * `mcpRegistry:deploy-to-restricted` for catalog items,
+ * `agent:deploy-to-restricted` for agents). The default (null) environment is
+ * open unless the org has marked its default environment restricted, in which
+ * case it is gated the same way. Callers compute `canDeployToRestricted` with
+ * their own auth primitive (route headers vs. MCP user context) and pass the
+ * result in, so this stays free of HTTP concerns.
  */
 export async function assertCanAssignEnvironment(params: {
   environmentId: string | null | undefined;

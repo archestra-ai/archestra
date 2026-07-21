@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { ScopeBadge } from "@/components/scope-badge";
 import {
   type TableRowAction,
@@ -36,8 +35,16 @@ type OwnedApp = Extract<AppListItem, { source: "owned" }>;
 // Table variant of one apps section (the caller keeps the same Pinned /
 // owned / external grouping as the card view). Row click opens the app in a
 // new chat, exactly like clicking a card; the actions mirror each card's
-// menu, with the type icon distinguishing owned vs MCP-server apps.
-export function AppsTable({ apps }: { apps: AppListItem[] }) {
+// menu, with the type icon distinguishing owned vs MCP-server apps. The
+// settings dialog lives on the page (deep-linkable `settings` URL param), so
+// the table only reports which app to open it for.
+export function AppsTable({
+  apps,
+  onOpenSettings,
+}: {
+  apps: AppListItem[];
+  onOpenSettings: (app: { id: string }) => void;
+}) {
   const router = useRouter();
   const openOwnedApp = useOpenAppInChat();
   const openExternalApp = useOpenExternalAppInChat();
@@ -47,7 +54,6 @@ export function AppsTable({ apps }: { apps: AppListItem[] }) {
   // resets it.
   const [openingKey, setOpeningKey] = useState<string | null>(null);
   const [deletingApp, setDeletingApp] = useState<OwnedApp | null>(null);
-  const [settingsAppId, setSettingsAppId] = useState<string | null>(null);
 
   const handleOpen = async (app: AppListItem) => {
     if (openingKey) return;
@@ -184,7 +190,7 @@ export function AppsTable({ apps }: { apps: AppListItem[] }) {
     {
       icon: <Settings className="h-4 w-4" />,
       label: "Settings",
-      onClick: () => setSettingsAppId(app.id),
+      onClick: () => onOpenSettings({ id: app.id }),
     },
     {
       icon: <SquareArrowOutUpRight className="h-4 w-4" />,
@@ -243,16 +249,6 @@ export function AppsTable({ apps }: { apps: AppListItem[] }) {
           open
           onOpenChange={(open) => {
             if (!open) setDeletingApp(null);
-          }}
-        />
-      )}
-
-      {settingsAppId && (
-        <AppSettingsDialog
-          appId={settingsAppId}
-          open
-          onOpenChange={(open) => {
-            if (!open) setSettingsAppId(null);
           }}
         />
       )}

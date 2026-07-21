@@ -1,3 +1,7 @@
+import {
+  isValidK8sCpuQuantity,
+  isValidK8sMemoryQuantity,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import {
   afterAll,
@@ -10,6 +14,7 @@ import {
 import config, {
   betaFeatureEnabled,
   getAnalyticsConfig,
+  getAppAssetBaseOrigin,
   getCorsOrigins,
   getDatabaseUrl,
   getMCPGatewayOauthAllowedPublicHosts,
@@ -31,13 +36,17 @@ import config, {
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
   parseFileStorageS3Config,
+  parseHackathonRecorderEnabled,
+  parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
+  parseOptionalPort,
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
   parseSampleRate,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
+  resolveRenderBaseUrl,
 } from "./config";
 
 // Mock the logger
@@ -1051,6 +1060,76 @@ describe("parseMetricsPort", () => {
   });
 });
 
+describe("parseOptionalPort", () => {
+  test("returns undefined (disabled) when no value provided", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: undefined,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("returns undefined when empty or whitespace-only string provided", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "",
+      }),
+    ).toBeUndefined();
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "   ",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("parses valid port value", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "9010",
+      }),
+    ).toBe(9010);
+  });
+
+  test("accepts boundary ports and trims whitespace", () => {
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "1",
+      }),
+    ).toBe(1);
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "65535",
+      }),
+    ).toBe(65535);
+    expect(
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "  9010  ",
+      }),
+    ).toBe(9010);
+  });
+
+  test("returns undefined and warns for invalid values", () => {
+    for (const envValue of ["abc", "0", "65536", "-1"]) {
+      expect(
+        parseOptionalPort({
+          envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+          envValue,
+        }),
+      ).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        `Invalid ARCHESTRA_PUBLIC_ENDPOINTS_PORT value "${envValue}", the dedicated listener will not be started`,
+      );
+    }
+  });
+});
+
 describe("parseActiveChatRunPollIntervalMs", () => {
   test("returns default when value is missing", () => {
     expect(
@@ -1553,11 +1632,17 @@ describe("parseProcessType", () => {
     expect(parseProcessType("worker")).toBe("worker");
   });
 
+  test("should return 'renderer' for 'renderer'", () => {
+    expect(parseProcessType("renderer")).toBe("renderer");
+  });
+
   test("should be case insensitive", () => {
     expect(parseProcessType("WEB")).toBe("web");
     expect(parseProcessType("WORKER")).toBe("worker");
+    expect(parseProcessType("RENDERER")).toBe("renderer");
     expect(parseProcessType("Web")).toBe("web");
     expect(parseProcessType("Worker")).toBe("worker");
+    expect(parseProcessType("Renderer")).toBe("renderer");
   });
 
   test("should return 'all' for unknown values", () => {
@@ -1567,25 +1652,55 @@ describe("parseProcessType", () => {
   });
 
   test.each([
-    { input: undefined, processType: "all", webServer: true, worker: true },
-    { input: "", processType: "all", webServer: true, worker: true },
-    { input: "all", processType: "all", webServer: true, worker: true },
-    { input: "web", processType: "web", webServer: true, worker: false },
-    { input: "WEB", processType: "web", webServer: true, worker: false },
-    { input: "worker", processType: "worker", webServer: false, worker: true },
-    { input: "WORKER", processType: "worker", webServer: false, worker: true },
-    { input: "unknown", processType: "all", webServer: true, worker: true },
-  ])("input=$input → shouldRunWebServer=$webServer, shouldRunWorker=$worker", ({
+    { input: undefined, type: "all", web: true, worker: true, renderer: false },
+    { input: "", type: "all", web: true, worker: true, renderer: false },
+    { input: "all", type: "all", web: true, worker: true, renderer: false },
+    { input: "web", type: "web", web: true, worker: false, renderer: false },
+    { input: "WEB", type: "web", web: true, worker: false, renderer: false },
+    {
+      input: "worker",
+      type: "worker",
+      web: false,
+      worker: true,
+      renderer: false,
+    },
+    {
+      input: "WORKER",
+      type: "worker",
+      web: false,
+      worker: true,
+      renderer: false,
+    },
+    {
+      input: "renderer",
+      type: "renderer",
+      web: false,
+      worker: false,
+      renderer: true,
+    },
+    {
+      input: "RENDERER",
+      type: "renderer",
+      web: false,
+      worker: false,
+      renderer: true,
+    },
+    { input: "unknown", type: "all", web: true, worker: true, renderer: false },
+  ])("input=$input → web=$web worker=$worker renderer=$renderer", ({
     input,
-    processType,
-    webServer,
+    type,
+    web,
     worker,
+    renderer,
   }) => {
     const result = parseProcessType(input);
-    expect(result).toBe(processType);
-    // These match the derivation: shouldRunWebServer = processType !== "worker", shouldRunWorker = processType !== "web"
-    expect(result !== "worker").toBe(webServer);
-    expect(result !== "web").toBe(worker);
+    expect(result).toBe(type);
+    // Mirror the derivations in config.ts: only "web"/"all" run the web
+    // server, only "worker"/"all" run the worker, and "renderer" is neither —
+    // it runs only the isolated app-recording render service.
+    expect(result === "web" || result === "all").toBe(web);
+    expect(result === "worker" || result === "all").toBe(worker);
+    expect(result === "renderer").toBe(renderer);
   });
 });
 
@@ -1624,34 +1739,15 @@ describe("parseSampleRate", () => {
 });
 
 describe("parseCodeRuntimeDaggerRunnerHost", () => {
-  test("should return undefined when runtime is disabled and host is unset", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: false, envValue: undefined }),
-    ).toBeUndefined();
-  });
-
-  test("should not validate host while runtime is disabled", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: false,
-        envValue: "kube-pod://dagger-engine?namespace=dagger",
-      }),
-    ).toBe("kube-pod://dagger-engine?namespace=dagger");
-  });
-
-  test("should return undefined when runtime is enabled but host is unset", () => {
-    expect(
-      parseCodeRuntimeDaggerRunnerHost({ enabled: true, envValue: undefined }),
-    ).toBeUndefined();
+  test("should return undefined when host is unset", () => {
+    expect(parseCodeRuntimeDaggerRunnerHost(undefined)).toBeUndefined();
   });
 
   test("should trim and return kube-pod runner host", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue:
-          " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
-      }),
+      parseCodeRuntimeDaggerRunnerHost(
+        " kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine ",
+      ),
     ).toBe(
       "kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine",
     );
@@ -1659,19 +1755,15 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
 
   test("should trim and return TCP runner host", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
-      }),
+      parseCodeRuntimeDaggerRunnerHost(
+        " tcp://dagger-runtime.dagger.svc.cluster.local:1234 ",
+      ),
     ).toBe("tcp://dagger-runtime.dagger.svc.cluster.local:1234");
   });
 
   test("should return undefined for unsupported runner hosts", () => {
     expect(
-      parseCodeRuntimeDaggerRunnerHost({
-        enabled: true,
-        envValue: "unix:///run/dagger/engine.sock",
-      }),
+      parseCodeRuntimeDaggerRunnerHost("unix:///run/dagger/engine.sock"),
     ).toBeUndefined();
   });
 });
@@ -1704,6 +1796,64 @@ describe("parseCommaSeparatedList", () => {
 
   test("should handle single value", () => {
     expect(parseCommaSeparatedList("anthropic")).toEqual(["anthropic"]);
+  });
+});
+
+describe("parseK8sResourceQuantity", () => {
+  const memoryParams = {
+    envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT",
+    validator: isValidK8sMemoryQuantity,
+    defaultValue: "512Mi",
+  };
+
+  test("returns default when unset", () => {
+    expect(
+      parseK8sResourceQuantity({ ...memoryParams, value: undefined }),
+    ).toBe("512Mi");
+  });
+
+  test("returns default when empty or whitespace-only", () => {
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: "" })).toBe(
+      "512Mi",
+    );
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: "   " })).toBe(
+      "512Mi",
+    );
+  });
+
+  test("returns trimmed valid value", () => {
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: " 1Gi " })).toBe(
+      "1Gi",
+    );
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: "2048Mi" })).toBe(
+      "2048Mi",
+    );
+  });
+
+  test("returns default for invalid quantity", () => {
+    expect(
+      parseK8sResourceQuantity({ ...memoryParams, value: "lots-of-ram" }),
+    ).toBe("512Mi");
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: "-1Gi" })).toBe(
+      "512Mi",
+    );
+  });
+
+  test("validates CPU quantities with the CPU validator", () => {
+    const cpuParams = {
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST",
+      validator: isValidK8sCpuQuantity,
+      defaultValue: "50m",
+    };
+    expect(parseK8sResourceQuantity({ ...cpuParams, value: "250m" })).toBe(
+      "250m",
+    );
+    expect(parseK8sResourceQuantity({ ...cpuParams, value: "0.5" })).toBe(
+      "0.5",
+    );
+    expect(parseK8sResourceQuantity({ ...cpuParams, value: "fast" })).toBe(
+      "50m",
+    );
   });
 });
 
@@ -1858,6 +2008,45 @@ describe("getMCPGatewayOauthAllowedPublicHosts", () => {
   });
 });
 
+describe("getAppAssetBaseOrigin", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.ARCHESTRA_API_BASE_URL;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("prefers a public https entry over a cluster-internal one", () => {
+    process.env.ARCHESTRA_API_BASE_URL =
+      "http://archestra.default.svc:9000,https://api.example.com";
+    expect(getAppAssetBaseOrigin()).toBe("https://api.example.com");
+  });
+
+  test("uses a non-https entry when no https entry is present", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "http://api.example.com:9000/base";
+    expect(getAppAssetBaseOrigin()).toBe("http://api.example.com:9000");
+  });
+
+  test("skips a malformed entry and uses the next candidate", () => {
+    process.env.ARCHESTRA_API_BASE_URL = "not-a-url,https://api.example.com";
+    expect(getAppAssetBaseOrigin()).toBe("https://api.example.com");
+  });
+
+  test("falls back to the frontend origin (never a loopback API origin) when ARCHESTRA_API_BASE_URL is unset", () => {
+    // The old fallback was http://127.0.0.1:<backend port>, which a public page
+    // (a tunnel, the shared catalog) cannot load — Private Network Access blocks
+    // it, taking the injected recorder/replay SDK down with it. The frontend
+    // origin is same-origin with the page, so the assets always load.
+    const origin = getAppAssetBaseOrigin();
+    expect(origin).toBe(new URL(config.frontendBaseUrl).origin);
+    expect(origin).not.toContain("127.0.0.1:9000");
+  });
+});
+
 describe("parseAuditLogRetentionDays", () => {
   test("returns 0 (disabled) when env var is not set", () => {
     expect(parseAuditLogRetentionDays(undefined)).toBe(0);
@@ -1888,6 +2077,68 @@ describe("parseAuditLogRetentionDays", () => {
   test("returns default and warns on negative value", () => {
     expect(parseAuditLogRetentionDays("-1")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
+  });
+});
+
+describe("parseHackathonRecorderEnabled", () => {
+  const parse = (
+    enterpriseLicenseActivated: boolean,
+    enterpriseOverride?: string,
+  ) =>
+    parseHackathonRecorderEnabled({
+      enterpriseLicenseActivated,
+      enterpriseOverride,
+    });
+
+  test("on for every community deployment — there is no opt-out flag", () => {
+    // The date window and the org toggle already decide when and whether it
+    // shows, so a community deployment has no switch of its own.
+    expect(parse(false)).toBe(true);
+    expect(parse(false, "true")).toBe(true);
+  });
+
+  test("stays off when the enterprise license is activated", () => {
+    expect(parse(true)).toBe(false);
+  });
+
+  test("the undocumented override is the only enterprise way in", () => {
+    expect(parse(true, "true")).toBe(true);
+  });
+
+  test("the override does nothing unless it is exactly true", () => {
+    expect(parse(true, "yes")).toBe(false);
+    expect(parse(true, "")).toBe(false);
+  });
+});
+
+describe("resolveRenderBaseUrl", () => {
+  test("films the deployment's own first configured origin", () => {
+    // The renderer must reach the frontend at an origin the app sandbox trusts
+    // to be framed by. Reaching it at loopback instead is refused by the
+    // sandbox's frame-ancestors policy, and the export films an empty app pane
+    // rather than failing — so the default has to come from the same set CORS
+    // and auth are built from.
+    expect(
+      resolveRenderBaseUrl({
+        explicit: undefined,
+        configuredOrigins: ["https://apps.example.com", "https://tunnel.test"],
+      }),
+    ).toBe("https://apps.example.com");
+  });
+
+  test("an explicit base URL wins, for a renderer pointed somewhere internal", () => {
+    expect(
+      resolveRenderBaseUrl({
+        explicit: "http://frontend.svc:3000",
+        configuredOrigins: ["https://apps.example.com"],
+      }),
+    ).toBe("http://frontend.svc:3000");
+  });
+
+  test("falls back to loopback only when nothing is configured", () => {
+    expect(
+      resolveRenderBaseUrl({ explicit: "  ", configuredOrigins: [] }),
+    ).toBe("http://localhost:3000");
   });
 });
 

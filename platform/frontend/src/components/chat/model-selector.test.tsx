@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ModelSelector } from "./model-selector";
@@ -20,23 +20,56 @@ vi.mock("@/lib/llm-models.query", () => ({
 }));
 
 // The dropdown internals are Radix-based and irrelevant to the branches under
-// test; render only the trigger so assertions target the visible button text.
+// test. The root mock exposes a toggle button wired to onOpenChange so tests
+// can flip the component's open state, and structural wrappers render their
+// children so the gating tests can observe what is mounted.
 vi.mock("@/components/ai-elements/model-selector", () => ({
-  ModelSelector: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
+  ModelSelector: ({
+    children,
+    open,
+    onOpenChange,
+  }: {
+    children: ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }) => (
+    <div>
+      <button
+        type="button"
+        data-testid="dialog-toggle"
+        onClick={() => onOpenChange?.(!open)}
+      />
+      {children}
+    </div>
   ),
   ModelSelectorTrigger: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
-  ModelSelectorContent: () => null,
-  ModelSelectorList: () => null,
+  ModelSelectorContent: ({ children }: { children: ReactNode }) => (
+    <div data-testid="dialog-content">{children}</div>
+  ),
+  ModelSelectorList: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
   ModelSelectorEmpty: () => null,
-  ModelSelectorGroup: () => null,
-  ModelSelectorItem: () => null,
+  ModelSelectorGroup: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  ModelSelectorItem: ({ children }: { children: ReactNode }) => (
+    <div data-testid="model-option">{children}</div>
+  ),
   ModelSelectorInput: () => null,
   ModelSelectorLogo: () => null,
   ModelSelectorName: ({ children }: { children: ReactNode }) => (
     <span>{children}</span>
+  ),
+}));
+
+// The dialog body renders a DialogClose, which requires a real Radix Dialog
+// ancestor — mocked away above, so stub it.
+vi.mock("@/components/ui/dialog", () => ({
+  DialogClose: ({ children }: { children?: ReactNode }) => (
+    <button type="button">{children}</button>
   ),
 }));
 
@@ -67,6 +100,7 @@ function setQuery(overrides: Partial<QueryShape>) {
 
 const model = (over: Record<string, unknown> = {}) => ({
   dbId: "m1",
+  id: "gpt-4o",
   displayName: "GPT-4o",
   provider: "openai",
   isBest: true,
@@ -173,6 +207,28 @@ describe("ModelSelector coverage matrix", () => {
       variant: "default",
     });
     expect(onModelChange).not.toHaveBeenCalled();
+  });
+
+  // The option tree is expensive with many models, and the toolbar rerenders
+  // on unrelated state changes; a closed selector must not build the dialog
+  // content at all (chat prompt typing froze when it did).
+  it("does not mount the dialog option tree while closed", () => {
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({ selectedModel: "m1", variant: "default" });
+    expect(screen.queryByTestId("dialog-content")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("model-option")).not.toBeInTheDocument();
+  });
+
+  it("mounts the option tree when opened and unmounts it again on close", () => {
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({ selectedModel: "m1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.getByTestId("dialog-content")).toBeInTheDocument();
+    expect(screen.getAllByTestId("model-option").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.queryByTestId("dialog-content")).not.toBeInTheDocument();
   });
 
   it("keeps the pinned model and shows the fallback name when auto-select is suppressed", () => {

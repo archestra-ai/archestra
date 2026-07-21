@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DialogFooter, DialogStickyFooter } from "@/components/ui/dialog";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
+  CATALOG_NAME_CONFLICT_CODE,
   getCatalogMutationErrorCode,
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
   useApproveCatalogItemImage,
@@ -134,6 +135,18 @@ export function EditCatalogContent({
                   : "Server URL is not allowed by the environment's network policy.",
             });
           }
+          // Rename 409s point at the Name field — same inline treatment.
+          if (
+            getCatalogMutationErrorCode(error) === CATALOG_NAME_CONFLICT_CODE
+          ) {
+            form.setError("name", {
+              type: "server",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "An MCP server with this name already exists in this organization.",
+            });
+          }
         },
       },
     );
@@ -180,7 +193,6 @@ export function EditCatalogContent({
         initialValues={item}
         onSubmit={onSubmit}
         embedded={keepOpenOnSave}
-        nameDisabled
         onDirtyChange={onDirtyChange}
         submitRef={submitRef}
         affectedServerCount={affectedServerCount}

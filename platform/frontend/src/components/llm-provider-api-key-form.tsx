@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  CHATGPT_SUBSCRIPTION_LABEL,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
   isProviderApiKeyOptional,
@@ -296,9 +297,6 @@ const PROVIDER_CONFIG: Record<
 export { PROVIDER_CONFIG };
 
 export const LLM_PROVIDER_API_KEY_PLACEHOLDER = "••••••••••••••••";
-
-/** Display name of the OpenAI "ChatGPT Subscription" (Codex) auth mode. */
-export const CHATGPT_SUBSCRIPTION_LABEL = "ChatGPT Subscription";
 
 interface LlmProviderApiKeyFormProps {
   /** Layout mode for the form container. */

@@ -899,6 +899,8 @@ class ModelModel {
       description: row.description ?? null,
       ignored: row.ignored,
       embeddingDimensions: row.embeddingDimensions,
+      inputModalities: row.inputModalities ?? null,
+      outputModalities: row.outputModalities ?? null,
       discoveredViaLlmProxy: row.discoveredViaLlmProxy,
       contextLength: caps.contextLength,
       pricePerMillionInput: caps.pricePerMillionInput,

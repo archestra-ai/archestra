@@ -9,9 +9,10 @@ const {
   getExternalApp,
   getAppVersions,
   getAppTools,
-  getAppAssignableBuiltinTools,
   createApp,
   updateApp,
+  enableApp,
+  disableApp,
   deleteApp,
   assignToolToApp,
   unassignToolFromApp,
@@ -107,22 +108,6 @@ export function useAppTools(appId: string | null) {
         path: { appId: appId as string },
       });
       throwOnApiError(error, { allowNotFound: true });
-      return data ?? [];
-    },
-  });
-}
-
-/**
- * The built-in Archestra tools an app may be granted (the read-only file
- * tools). Server-filtered: empty when the governing feature flags are off, so
- * the editor never re-implements the availability rule client-side.
- */
-export function useAppAssignableBuiltinTools() {
-  return useQuery({
-    queryKey: ["apps", "assignable-builtin-tools"],
-    queryFn: async () => {
-      const { data, error } = await getAppAssignableBuiltinTools();
-      throwOnApiError(error);
       return data ?? [];
     },
   });
@@ -331,6 +316,39 @@ export function useUpdateApp() {
       // which drives the MCP registry card — refresh it too.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("App updated");
+    },
+  });
+}
+
+// Enable/disable an app. Separate from useUpdateApp so the transition has its
+// own toast and its own cache invalidation — an enabled app newly exposes its
+// launch tool to gateways/agents (and vice versa), so the MCP catalog must
+// refresh alongside the apps list.
+export function useSetAppEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      appId,
+      enabled,
+    }: {
+      appId: string;
+      enabled: boolean;
+    }) => {
+      const { data, error } = await (enabled
+        ? enableApp({ path: { appId } })
+        : disableApp({ path: { appId } }));
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
+      queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success(variables.enabled ? "App enabled" : "App disabled");
     },
   });
 }

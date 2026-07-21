@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { render, screen, within } from "@testing-library/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganizationMembers } from "@/lib/organization.query";
@@ -121,6 +122,14 @@ async function setupUserEvent() {
 }
 
 beforeEach(() => {
+  vi.mocked(usePathname).mockReturnValue("/knowledge/connectors/connector-1");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+  );
+  vi.mocked(useRouter).mockReturnValue({
+    push: vi.fn(),
+    replace: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(useOrganizationMembers).mockReturnValue({
     data: [

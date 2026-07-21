@@ -1,12 +1,12 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
   isProviderApiKeyOptional,
+  providerDisplayNames,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
@@ -16,7 +16,7 @@ import {
   encodeBedrockSigV4Marker,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import config from "@/config";
+import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   LlmOauthClientModel,
@@ -50,7 +50,10 @@ import {
   type SelectSecret,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
-import { dockerLocalhostConnectionHint } from "@/utils/docker-localhost-hint";
+import {
+  dockerLocalhostConnectionHint,
+  isConnectionFailureMessage,
+} from "@/utils/docker-localhost-hint";
 
 async function testApiKeyOrThrow(
   provider: SupportedProvider,
@@ -62,15 +65,56 @@ async function testApiKeyOrThrow(
     await testProviderApiKey(provider, apiKey, baseUrl, extraHeaders);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const hint = dockerLocalhostConnectionHint({
-      baseUrl: effectiveBaseUrlForHint(provider, baseUrl),
-      errorMessage: message,
-    });
-    throw new ApiError(
-      400,
-      `Invalid API key: Failed to connect to ${capitalize(provider)}: ${message}${hint ? ` ${hint}` : ""}`,
-    );
+    // Name the URL actually tested: a base-URL override (user- or
+    // env-configured, e.g. the e2e WireMock) silently redirects validation
+    // away from the real provider, and the message is the only place that
+    // misconfiguration can surface.
+    const testedUrl = effectiveBaseUrlForHint(provider, baseUrl);
+    const providerName = providerDisplayNames[provider];
+    const providerLabel = testedUrl
+      ? `${providerName} (${testedUrl})`
+      : providerName;
+    // A connection failure means the key was never checked — surface it as a
+    // network problem, not a credentials problem.
+    if (isConnectionFailureMessage(message)) {
+      const hint = dockerLocalhostConnectionHint({
+        baseUrl: testedUrl,
+        errorMessage: message,
+      });
+      throw new ApiError(
+        400,
+        `Could not reach ${providerLabel} to validate the API key: ${message}. Check the server's outbound network connectivity.${hint ? ` ${hint}` : ""}`,
+      );
+    }
+    const providerSideSuffix = providerSideErrorSuffix(message);
+    if (providerSideSuffix) {
+      throw new ApiError(
+        400,
+        `${providerLabel} returned an error while validating the API key: ${message}. ${providerSideSuffix}`,
+      );
+    }
+    throw new ApiError(400, `Invalid API key: ${message}`);
   }
+}
+
+/**
+ * Classifies a failure where the tested endpoint responded but the credential
+ * wasn't the problem, returning the guidance to append (null = treat as a
+ * rejected credential). Model fetchers throw `Failed to fetch <provider>
+ * models: <status>` for non-2xx responses; 400/401/403 on a plain models-list
+ * read means the credential was rejected (Gemini uses 400 for invalid keys).
+ * A 404 or a non-JSON body means the URL isn't the provider's API; other
+ * statuses — 429, 5xx — are provider-side trouble.
+ */
+function providerSideErrorSuffix(message: string): string | null {
+  const status = message.match(/: (\d{3})$/)?.[1];
+  if (status === "404" || /not valid JSON|Unexpected token/i.test(message)) {
+    return "The endpoint does not look like the provider's API — if a custom base URL is configured, verify it.";
+  }
+  if (status && !["400", "401", "403"].includes(status)) {
+    return "This may be a temporary provider issue (e.g. rate limiting or an outage).";
+  }
+  return null;
 }
 
 /**
@@ -96,25 +140,23 @@ async function testKeylessConnectivityOrThrow(
     });
     throw new ApiError(
       400,
-      `Failed to connect to ${capitalize(provider)}: ${message}${hint ? ` ${hint}` : ""}`,
+      `Failed to connect to ${providerDisplayNames[provider]}: ${message}${hint ? ` ${hint}` : ""}`,
     );
   }
 }
 
 /**
  * The base URL connectivity is actually tested against: an explicit override if
- * present, otherwise the provider's configured default. Needed so the Docker
- * hint fires when an Ollama key is created with no Base URL (the default points
- * at localhost).
+ * present, otherwise the provider's configured default. Needed so validation
+ * errors name the URL they hit and so the Docker hint fires when a key is
+ * created with no Base URL but a loopback default (e.g. Ollama).
  */
 function effectiveBaseUrlForHint(
   provider: SupportedProvider,
   baseUrl: string | null | undefined,
 ): string | null {
   if (baseUrl) return baseUrl;
-  if (provider === "ollama") return config.llm.ollama.baseUrl ?? null;
-  if (provider === "vllm") return config.llm.vllm.baseUrl ?? null;
-  return null;
+  return getProviderConfiguredBaseUrl(provider) ?? null;
 }
 
 async function testKeylessAzureEntraOrThrow(
@@ -743,6 +785,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           apiKey: effectiveApiKey,
           headers,
         });
+      } else if (body.apiKey) {
+        // A new secret value alone can flip an existing shared key into a
+        // per-user credential (pasting an encoded ChatGPT-subscription
+        // credential into a team/org key would share one person's account
+        // with everyone), so classify the new value even when scope/team
+        // don't change.
+        assertPerUserCredentialScope({
+          provider: apiKeyFromDB.provider,
+          apiKey: body.apiKey,
+          scope: newScope,
+        });
       }
 
       const sigV4FromBody =
@@ -1089,19 +1142,7 @@ async function validateScopeAndAuthorization(params: {
   const { scope, teamId, userId, organizationId, provider, apiKey, headers } =
     params;
 
-  // Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
-  // (Codex) key on `openai` — hold an individual's token, so team/org scope
-  // would share one person's credential with everyone. Only personal keys are
-  // allowed; each user links their own account.
-  if (
-    credentialRequiresPerUserScope({ provider, apiKey }) &&
-    scope !== "personal"
-  ) {
-    throw new ApiError(
-      400,
-      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
-    );
-  }
+  assertPerUserCredentialScope({ provider, apiKey, scope });
 
   // Validate scope-specific requirements
   if (scope === "team" && !teamId) {
@@ -1154,6 +1195,29 @@ async function validateScopeAndAuthorization(params: {
         "Only llmProviderApiKey admins can use organization-wide scope",
       );
     }
+  }
+}
+
+/**
+ * Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
+ * (Codex) key on `openai` — hold an individual's token, so team/org scope
+ * would share one person's credential with everyone. Only personal keys are
+ * allowed; each user links their own account.
+ */
+function assertPerUserCredentialScope(params: {
+  provider: SupportedProvider;
+  apiKey: string | null | undefined;
+  scope: ResourceVisibilityScope;
+}): void {
+  const { provider, apiKey, scope } = params;
+  if (
+    credentialRequiresPerUserScope({ provider, apiKey }) &&
+    scope !== "personal"
+  ) {
+    throw new ApiError(
+      400,
+      `${perUserCredentialLabel({ provider, apiKey })} keys are per-user — each user connects their own account, so only the "personal" scope is allowed.`,
+    );
   }
 }
 

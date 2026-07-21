@@ -24,11 +24,13 @@ import {
 
 interface AuditLogDetailDialogProps {
   event: AuditLog | null;
+  shareUrl: string;
   onClose: () => void;
 }
 
 export function AuditLogDetailDialog({
   event,
+  shareUrl,
   onClose,
 }: AuditLogDetailDialogProps) {
   const open = event !== null;
@@ -39,7 +41,12 @@ export function AuditLogDetailDialog({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title="Event details"
+      title={
+        <span className="flex items-center gap-2">
+          Event details
+          <CopyButton text={shareUrl} />
+        </span>
+      }
       size="large"
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">

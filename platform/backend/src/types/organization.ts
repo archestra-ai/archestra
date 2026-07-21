@@ -401,6 +401,7 @@ export const UpdateSecuritySettingsSchema = z.object({
   defaultDiscoveredToolResultPolicy:
     TrustedData.TrustedDataPolicyActionSchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
+  appsHackathonRecorderEnabled: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
   allowToolAutoAssignment: z.boolean().optional(),
 });
@@ -408,6 +409,14 @@ export const UpdateSecuritySettingsSchema = z.object({
 export const UpdateLlmSettingsSchema = z.object({
   convertToolResultsToToon: z.boolean().optional(),
   compressionScope: OrganizationCompressionScopeSchema.optional(),
+});
+
+export const UpdateMcpSettingsSchema = z.object({
+  onlineMcpCatalogEnabled: z.boolean().optional(),
+});
+
+export const UpdateSkillsSettingsSchema = z.object({
+  onlineSkillCatalogEnabled: z.boolean().optional(),
 });
 
 export const UpdateAgentSettingsSchema = z.object({

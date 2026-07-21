@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { PublicEnvScript } from "next-runtime-env";
 import { AppShell } from "./_parts/app-shell";
@@ -6,6 +6,7 @@ import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
 import { ThemeProvider } from "./_parts/theme-provider";
+import { VisualViewportHeight } from "./_parts/visual-viewport-height";
 import "./globals.css";
 import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
@@ -174,6 +175,15 @@ export const metadata: Metadata = {
   description: DEFAULT_APP_DESCRIPTION,
 };
 
+// interactive-widget makes the Android on-screen keyboard resize the layout
+// viewport instead of overlaying it, so the viewport-locked shell keeps its
+// input visible. iOS ignores the property; VisualViewportHeight covers it.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -190,6 +200,7 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body className="font-sans antialiased">
+        <VisualViewportHeight />
         <MswInit>
           <ArchestraQueryClientProvider>
             <ChatProvider>

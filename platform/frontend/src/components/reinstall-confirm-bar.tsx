@@ -12,17 +12,26 @@ import { DialogStickyFooter } from "@/components/ui/dialog";
  * `mode` mirrors the backend cascade path: "manual" sets
  * `reinstallRequired: true` (servers stay on old config until the user
  * clicks Reinstall on each); "auto" fires a background reinstall now
- * (pods briefly restart). Title, body, and CTA all align to the path.
+ * (pods briefly restart); "rename" is a pure DB cascade (tools renamed
+ * in place, nothing restarts — but connected MCP clients must reload
+ * their tool list). Title, body, and CTA all align to the path.
  */
 export function ReinstallConfirmBar({
   mode,
+  renamed = false,
+  newName,
   isMultitenant = false,
   affectedServerCount,
   isSubmitting,
   onCancel,
   onConfirm,
 }: {
-  mode: "manual" | "auto";
+  mode: "manual" | "auto" | "rename";
+  /** A name change rides along with a manual/auto cascade — append the
+   *  MCP-client tool-list reload warning to that mode's body. */
+  renamed?: boolean;
+  /** The new catalog name, for concrete `<newname>__…` tool-prefix copy. */
+  newName?: string;
   isMultitenant?: boolean;
   affectedServerCount: number;
   isSubmitting: boolean;
@@ -60,19 +69,45 @@ export function ReinstallConfirmBar({
   const isPlural = !isMultitenant && affectedServerCount > 1;
   const installNoun = `install${isPlural ? "s" : ""}`;
 
-  const title =
-    mode === "manual"
-      ? isMultitenant
-        ? "Save change — shared deployment will need a Reinstall"
-        : `Save change — ${affectedServerCount} ${installNoun} will need a Reinstall`
-      : isMultitenant
-        ? "Restart the shared deployment now?"
-        : `Restart ${affectedServerCount} ${installNoun} now?`;
+  // Same per-character sanitization as ToolModel.slugifyName's prefix, so
+  // the copy shows the exact prefix the renamed tools will carry.
+  const toolPrefix = newName
+    ?.toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_-]/g, "");
 
-  const confirmLabel = mode === "manual" ? "Save change" : "Save and restart";
+  const title =
+    mode === "rename"
+      ? "Rename server — connected MCP clients must reload"
+      : mode === "manual"
+        ? isMultitenant
+          ? "Save change — shared deployment will need a Reinstall"
+          : `Save change — ${affectedServerCount} ${installNoun} will need a Reinstall`
+        : isMultitenant
+          ? "Restart the shared deployment now?"
+          : `Restart ${affectedServerCount} ${installNoun} now?`;
+
+  const confirmLabel =
+    mode === "rename"
+      ? "Save and rename"
+      : mode === "manual"
+        ? "Save change"
+        : "Save and restart";
+
+  const clientReloadWarning = (
+    <>
+      Connected MCP clients must reload their tool list, or calls using the old
+      tool names will fail.
+    </>
+  );
 
   const body =
-    mode === "manual" ? (
+    mode === "rename" ? (
+      <>
+        Tools become <strong>{toolPrefix || "the new name"}__…</strong>{" "}
+        immediately; no server restarts. {clientReloadWarning}
+      </>
+    ) : mode === "manual" ? (
       isMultitenant ? (
         <>
           Your change needs a new value. The deployment keeps running on the old
@@ -94,6 +129,22 @@ export function ReinstallConfirmBar({
       </>
     );
 
+  // A rename composed with a manual/auto cascade still renames every tool.
+  const renameNote =
+    renamed && mode !== "rename" ? (
+      <>
+        {" "}
+        Tools are also renamed
+        {toolPrefix ? (
+          <>
+            {" "}
+            to <strong>{toolPrefix}__…</strong>
+          </>
+        ) : null}
+        . {clientReloadWarning}
+      </>
+    ) : null;
+
   return (
     <DialogStickyFooter
       ref={barRef}
@@ -103,7 +154,10 @@ export function ReinstallConfirmBar({
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
         <div className="flex-1 space-y-1 text-foreground/90">
           <div className="font-semibold text-foreground">{title}</div>
-          <div>{body}</div>
+          <div>
+            {body}
+            {renameNote}
+          </div>
         </div>
       </div>
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

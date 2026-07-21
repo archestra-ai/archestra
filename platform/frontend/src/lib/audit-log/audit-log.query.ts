@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { throwOnApiError } from "@/lib/utils";
 
-const { getAuditLogs } = archestraApiSdk;
+const { getAuditLogs, getAuditLog } = archestraApiSdk;
 
 type AuditLogsQuery = NonNullable<archestraApiTypes.GetAuditLogsData["query"]>;
 type AuditLogsResponse = archestraApiTypes.GetAuditLogsResponses["200"];
@@ -91,5 +91,21 @@ export function useAuditLogs({
       throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? EMPTY_RESPONSE(limit);
     },
+  });
+}
+
+export function useAuditLog(id: string | undefined) {
+  return useQuery({
+    queryKey: [...AUDIT_LOG_QUERY_KEY, id],
+    queryFn: async () => {
+      if (!id) return null;
+      const response = await getAuditLog({ path: { id } });
+      throwOnApiError(response.error, {
+        allowNotFound: true,
+        toastOnError: false,
+      });
+      return response.data ?? null;
+    },
+    enabled: !!id,
   });
 }

@@ -27,6 +27,12 @@ export const TOOL_PERMISSIONS: Record<
   list_agents: { resource: "agent", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
 
+  // Agent lifecycle hooks — mirror the REST hook routes' permissions
+  list_hooks: { resource: "agent", action: "read" },
+  create_hook: { resource: "agent", action: "update" },
+  update_hook: { resource: "agent", action: "update" },
+  delete_hook: { resource: "agent", action: "update" },
+
   // LLM Proxies
   create_llm_proxy: { resource: "llmProxy", action: "create" },
   get_llm_proxy: { resource: "llmProxy", action: "read" },
@@ -68,6 +74,13 @@ export const TOOL_PERMISSIONS: Record<
   add_team_member: { resource: "team", action: "read" },
   update_team_member_role: { resource: "team", action: "read" },
   remove_team_member: { resource: "team", action: "read" },
+  // External group sync tools follow the same pattern as membership tools:
+  // team:read as the coarse gate (matching the REST routes), with the finer
+  // manage check (org-level team manager OR team admin) and the enterprise
+  // license gate enforced in the handlers.
+  list_team_external_groups: { resource: "team", action: "read" },
+  add_team_external_group: { resource: "team", action: "read" },
+  remove_team_external_group: { resource: "team", action: "read" },
 
   // Limits
   create_limit: { resource: "llmLimit", action: "create" },
@@ -137,8 +150,6 @@ export const TOOL_PERMISSIONS: Record<
 
   // Chat — available to all (operate within user's own chat session)
   todo_write: null,
-  swap_agent: { resource: "agent", action: "read" },
-  swap_to_default_agent: null,
   create_project_from_conversation: { resource: "project", action: "create" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself

@@ -33,6 +33,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "gemini:embeddings",
   "anthropic:messages",
   "bedrock:converse",
+  "bedrock:embeddings",
   "cohere:chat",
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
@@ -133,6 +134,13 @@ export function providerRequiresPerUserCredential(
 ): boolean {
   return PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.has(provider);
 }
+
+/**
+ * Display name of the OpenAI "ChatGPT Subscription" (Codex) auth mode — the
+ * credential-level per-user case on the `openai` provider, governed by the same
+ * rules as PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.
+ */
+export const CHATGPT_SUBSCRIPTION_LABEL = "ChatGPT Subscription";
 
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;

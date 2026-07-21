@@ -88,7 +88,10 @@ describe("hasPermission", () => {
 
       expect(result).toEqual({
         success: false,
-        error: expect.objectContaining({ message: "Forbidden" }),
+        error: expect.objectContaining({
+          message: expect.stringContaining("Missing permission: agent:admin"),
+        }),
+        missingPermissions: { agent: ["admin"] },
       });
     });
 
@@ -210,7 +213,10 @@ describe("hasPermission", () => {
 
       expect(result).toEqual({
         success: false,
-        error: expect.objectContaining({ message: "Forbidden" }),
+        error: expect.objectContaining({
+          message: expect.stringContaining("Missing permission: agent:admin"),
+        }),
+        missingPermissions: { agent: ["admin"] },
       });
     });
 

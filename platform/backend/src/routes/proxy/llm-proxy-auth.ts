@@ -31,7 +31,11 @@ import {
   credentialRequiresPerUserScope,
   perUserCredentialLabel,
 } from "@/services/openai-codex-credentials";
-import { type Agent, ApiError, type ResourceVisibilityScope } from "@/types";
+import {
+  ApiError,
+  type GatewayAgent,
+  type ResourceVisibilityScope,
+} from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackAddress } from "@/utils/network";
 
@@ -44,16 +48,16 @@ import { isLoopbackAddress } from "@/utils/network";
  */
 export async function resolveAgent(
   agentId: string | undefined,
-): Promise<Agent> {
+): Promise<GatewayAgent> {
   if (agentId) {
-    const agent = await AgentModel.findById(agentId);
+    const agent = await AgentModel.findGatewayAgentById(agentId);
     if (!agent) {
       throw new ApiError(404, `Agent with ID ${agentId} not found`);
     }
     return agent;
   }
 
-  const defaultProfile = await AgentModel.getDefaultProfile();
+  const defaultProfile = await AgentModel.getDefaultGatewayProfile();
   if (!defaultProfile) {
     throw new ApiError(400, "Please specify an LLMProxy ID in the URL path.");
   }
@@ -212,7 +216,7 @@ export async function validateVirtualApiKey(
  */
 export async function validatePassthroughVirtualKey(params: {
   tokenValue: string;
-  agent: Agent;
+  agent: GatewayAgent;
 }): Promise<PassthroughVirtualKeyResult> {
   const { tokenValue, agent } = params;
 
@@ -302,7 +306,7 @@ export type LlmOAuthAccessTokenValidationResult = {
 export async function validateLlmOAuthAccessToken(params: {
   tokenValue: string;
   expectedProvider: string;
-  agent: Agent;
+  agent: GatewayAgent;
 }): Promise<LlmOAuthAccessTokenValidationResult | null> {
   const accessToken = await OAuthAccessTokenModel.getByTokenHash(
     OAuthAccessTokenModel.hashTokenForLookup(params.tokenValue),
@@ -359,7 +363,7 @@ export interface JwksAuthResult {
  */
 export async function attemptJwksAuth(
   request: FastifyRequest,
-  resolvedAgent: Agent,
+  resolvedAgent: GatewayAgent,
   providerName: string,
 ): Promise<JwksAuthResult | null> {
   if (!resolvedAgent.identityProviderId) return null;
@@ -538,7 +542,7 @@ export const virtualKeyRateLimiter = new VirtualKeyRateLimiter(cacheManager);
 async function validateClientCredentialsLlmOAuthAccessToken(params: {
   clientId: string;
   expectedProvider: string;
-  agent: Agent;
+  agent: GatewayAgent;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
   if (!oauthClient) {
@@ -615,7 +619,7 @@ async function validateUserLlmOAuthAccessToken(params: {
   userId: string;
   clientId: string;
   expectedProvider: string;
-  agent: Agent;
+  agent: GatewayAgent;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const member = await MemberModel.getFirstMembershipForUser(params.userId);
   if (!member || member.organizationId !== params.agent.organizationId) {

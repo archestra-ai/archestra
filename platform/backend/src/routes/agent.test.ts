@@ -212,6 +212,40 @@ describe("agent routes", () => {
       const agent = response.json();
       expect(agent.toolExposureMode).toBe("search_and_run_only");
     });
+
+    test("rejects a team-scoped agent with no teams", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Orphan Team Agent ${crypto.randomUUID().slice(0, 8)}`,
+          scope: "team",
+          teams: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("creates a team-scoped agent when a team is assigned", async ({
+      makeTeam,
+    }) => {
+      const team = await makeTeam(organizationId, user.id);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Team Agent ${crypto.randomUUID().slice(0, 8)}`,
+          scope: "team",
+          teams: [team.id],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const agent = response.json();
+      expect(agent.teams.map((t: { id: string }) => t.id)).toEqual([team.id]);
+    });
   });
 
   describe("GET /api/agents/:id", () => {
@@ -290,6 +324,47 @@ describe("agent routes", () => {
       const agent = response.json();
       expect(agent).toHaveProperty("id");
       expect(agent.name).toBe(updatedName);
+    });
+
+    test("rejects clearing all teams on a team-scoped agent", async ({
+      makeAgent,
+      makeTeam,
+    }) => {
+      const team = await makeTeam(organizationId, user.id);
+      const created = await makeAgent({
+        name: `Team Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "team",
+        teams: [team.id],
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: { teams: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects switching an agent to team scope without teams", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Personal Agent ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: { scope: "team", teams: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
 
     test("rejects an update that sets a model without an API key", async ({

@@ -1,5 +1,6 @@
 "use client";
 
+import { APP_RECORDING_RENDER_ROUTE } from "@archestra/shared";
 import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
@@ -60,6 +61,9 @@ export function AppShell({ children }: AppShellProps) {
   // namespace is chrome-less by construction — no per-route regexes to keep in
   // sync. (The /apps gallery itself keeps the shell.)
   const isAppRuntime = pathname.startsWith("/a/");
+  // Driven by the offline video renderer: its frames must contain the replay
+  // and nothing of the surrounding app.
+  const isRecordingRender = pathname.startsWith(APP_RECORDING_RENDER_ROUTE);
   // Chat and project detail pages are viewport-locked, two-pane layouts
   // (content + right Files sidebar) that scroll each pane independently. They
   // need their children slot bounded to the viewport (min-h-0) so their
@@ -81,8 +85,9 @@ export function AppShell({ children }: AppShellProps) {
       !isAppRuntime,
   });
 
-  // Chromeless surfaces (browser preview, app runtime): no sidebar/header/version.
-  if (isBrowserPreview || isAppRuntime) {
+  // Chromeless surfaces (browser preview, app runtime, video render): no
+  // sidebar/header/version.
+  if (isBrowserPreview || isAppRuntime || isRecordingRender) {
     return (
       <>
         <MaintenanceModeOverlay />
@@ -95,7 +100,7 @@ export function AppShell({ children }: AppShellProps) {
   // Auth pages: render without sidebar, centered content with version at bottom
   if (isAuthPage) {
     return (
-      <main className="h-screen w-full flex flex-col bg-background">
+      <main className="h-app-viewport w-full flex flex-col bg-background">
         <MaintenanceModeOverlay />
         <EnvSiteNotificationBar />
         <div className="flex-1 flex flex-col">{children}</div>
@@ -116,7 +121,7 @@ export function AppShell({ children }: AppShellProps) {
         // Wait for the permission check before rendering the sidebar to avoid a
         // flash. Don't render Version here — the full-width layout centers
         // differently than the sidebar layout, so the footer would visibly jump.
-        <main className="h-screen w-full flex flex-col bg-background min-w-0 relative">
+        <main className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative">
           <MaintenanceModeOverlay />
           <div className="flex-1 min-w-0 flex flex-col">
             <div className="flex-1 flex flex-col">{children}</div>
@@ -133,7 +138,7 @@ export function AppShell({ children }: AppShellProps) {
             <main
               id={MAIN_CONTENT_ID}
               tabIndex={-1}
-              className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto focus:outline-none"
+              className="h-app-viewport w-full flex flex-col bg-background min-w-0 relative overflow-y-auto focus:outline-none"
             >
               <ConnectivityBar />
               <EnvSiteNotificationBar />

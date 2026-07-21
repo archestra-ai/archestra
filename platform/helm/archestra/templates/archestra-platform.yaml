@@ -76,6 +76,15 @@ spec:
       {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.frontend }}
       nodePort: {{ .Values.archestra.service.nodePorts.frontend }}
       {{- end }}
+    {{- if .Values.archestra.publicEndpointsPort }}
+    - port: {{ .Values.archestra.publicEndpointsPort }}
+      targetPort: public-api
+      protocol: TCP
+      name: public-api
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.publicEndpoints }}
+      nodePort: {{ .Values.archestra.service.nodePorts.publicEndpoints }}
+      {{- end }}
+    {{- end }}
   selector:
     {{- include "archestra-platform.selectorLabels" . | nindent 4 }}
 ---
@@ -132,11 +141,20 @@ spec:
             - name: frontend
               containerPort: 3000
               protocol: TCP
+            {{- if .Values.archestra.publicEndpointsPort }}
+            - name: public-api
+              containerPort: {{ .Values.archestra.publicEndpointsPort }}
+              protocol: TCP
+            {{- end }}
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
             {{- if .Values.archestra.worker.enabled }}
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"
+            {{- end }}
+            {{- if .Values.archestra.publicEndpointsPort }}
+            - name: ARCHESTRA_PUBLIC_ENDPOINTS_PORT
+              value: {{ .Values.archestra.publicEndpointsPort | quote }}
             {{- end }}
           {{- with .Values.archestra.envFrom }}
           envFrom:

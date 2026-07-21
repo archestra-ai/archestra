@@ -37,6 +37,22 @@ export function useAgentHooks(agentId: string | undefined) {
   });
 }
 
+/**
+ * Persist hooks that were staged in the agent create form, now that the agent
+ * exists. Sequential so the 409-uniqueness contract stays deterministic.
+ * Throws on the first failure (with a toast) so the caller's create rollback
+ * can kick in.
+ */
+export async function createHooksForAgent(
+  agentId: string,
+  hooks: Array<Omit<CreateHookInput, "agentId">>,
+): Promise<void> {
+  for (const hook of hooks) {
+    const { error } = await createHook({ body: { ...hook, agentId } });
+    throwOnApiError(error);
+  }
+}
+
 // Create a hook
 export function useCreateHook(agentId: string) {
   const queryClient = useQueryClient();

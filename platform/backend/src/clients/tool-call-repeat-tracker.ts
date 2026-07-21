@@ -6,7 +6,13 @@
 // the model, and — once the repeats cross a ceiling — so the run's stop policy
 // can terminate the loop instead of nudging into the void.
 
-import type { StopCondition, ToolSet } from "ai";
+import {
+  type DynamicToolCall,
+  NoSuchToolError,
+  type StopCondition,
+  type ToolSet,
+  type TypedToolCall,
+} from "ai";
 
 /**
  * Consecutive identical tool calls that execute normally before the tracker
@@ -32,7 +38,7 @@ export const REPEAT_CALL_TERMINATION_CEILING = 6;
  * not need this — it renders the breaker's terminal tool-result part directly.
  */
 export const REPEAT_CALL_TERMINATION_NOTICE =
-  "The run was stopped because the agent repeatedly issued the same tool call with identical arguments without making progress.";
+  "The run was stopped because the agent repeatedly issued the same tool call without making progress.";
 
 /**
  * How the breaker should respond to a recorded call:
@@ -65,6 +71,16 @@ export class ToolCallRepeatTracker {
    * fast nudge — only a consecutive identical repeat of the exact failing call.
    */
   private lastErroredFingerprint: string | null = null;
+  /**
+   * Streak of steps that called a tool outside the tool list, kept apart from
+   * the executed-call streak above. The two are recorded from different points
+   * in the loop — a tool's execute wrapper, and a step hook — so sharing one
+   * slot would let each reset the other: a step that calls one real tool and
+   * one missing tool would build neither streak, and a run that used to
+   * terminate on the real tool's repeats would instead run to MAX_AGENT_STEPS.
+   */
+  private lastUnavailableFingerprint: string | null = null;
+  private unavailableConsecutiveCount = 0;
 
   /**
    * Records one tool call. Increments the consecutive count when the call
@@ -117,13 +133,34 @@ export class ToolCallRepeatTracker {
   }
 
   /**
-   * Whether the current consecutive streak has reached the termination ceiling.
-   * Read by {@link repeatCeilingStopCondition} at each step boundary; the SDK
-   * evaluates stop conditions after the step's tool call has been recorded, so
-   * the streak this reads already includes the call that hit the ceiling.
+   * Records one step that asked for tools which are not in the tool list, keyed
+   * on the whole set it asked for. Kept separate from {@link record} — see
+   * {@link recordUnavailableToolCallStep} for why these calls are invisible to
+   * the tool wrappers in the first place.
+   */
+  recordUnavailableStep(toolNames: readonly string[]): void {
+    // JSON rather than a joined string so the key is injective: ["a,b"] and
+    // ["a","b"] are different attempts and must not share a streak.
+    const fingerprint = JSON.stringify([...new Set(toolNames)].sort());
+    if (fingerprint === this.lastUnavailableFingerprint) {
+      this.unavailableConsecutiveCount += 1;
+    } else {
+      this.lastUnavailableFingerprint = fingerprint;
+      this.unavailableConsecutiveCount = 1;
+    }
+  }
+
+  /**
+   * Whether either streak has reached the termination ceiling. Read by
+   * {@link repeatCeilingStopCondition} at each step boundary; the SDK evaluates
+   * stop conditions after the step's tool calls have been recorded, so the
+   * streaks this reads already include the call that hit the ceiling.
    */
   hasReachedTerminationCeiling(): boolean {
-    return this.consecutiveCount >= REPEAT_CALL_TERMINATION_CEILING;
+    return (
+      this.consecutiveCount >= REPEAT_CALL_TERMINATION_CEILING ||
+      this.unavailableConsecutiveCount >= REPEAT_CALL_TERMINATION_CEILING
+    );
   }
 }
 
@@ -136,6 +173,97 @@ export function repeatCeilingStopCondition(
   tracker: ToolCallRepeatTracker,
 ): StopCondition<ToolSet> {
   return () => tracker.hasReachedTerminationCeiling();
+}
+
+/**
+ * Fingerprints a finished step in which the model called a tool that is not in
+ * its tool list. Call from `onStepFinish` on every `streamText` config that
+ * wires {@link repeatCeilingStopCondition}, or that config keeps the blind spot.
+ *
+ * Such a call never reaches a tool's `execute` wrapper — the SDK turns it into
+ * an invalid tool-call plus a synthetic tool-error, feeds that back to the
+ * model, and takes another step — so {@link ToolCallRepeatTracker.record} is
+ * never reached for it and the ceiling can never fire. A model that keeps
+ * asking for a hidden or misremembered tool would otherwise spin to
+ * MAX_AGENT_STEPS.
+ *
+ * A step counts once, however many such calls it made. Six parallel calls at
+ * one missing tool are a single decision, not six attempts: counting each would
+ * reach the ceiling inside that step and kill the run before the errors it
+ * needs in order to recover ever reach it. Counting per step also means the
+ * streak measures what it claims — how many times the model saw the failure and
+ * repeated it anyway.
+ *
+ * The SDK awaits `onStepFinish` before it resolves the step, and the step
+ * resolves before stop conditions are evaluated, so a streak recorded here is
+ * already visible to the ceiling for the same step.
+ */
+export function recordUnavailableToolCallStep(
+  tracker: ToolCallRepeatTracker,
+  step: { toolCalls?: readonly ObservedToolCall[] },
+): void {
+  const names = (step.toolCalls ?? [])
+    .filter(isUnavailableToolCall)
+    .map((call) => call.toolName);
+  if (names.length === 0) return;
+  // Keyed on the whole set the step reached for, so naming the same missing
+  // tools in a different order is the same attempt — recording only one of them
+  // would let a model alternate [a, b] with [b, a] and reset the streak every
+  // step. Arguments are left out for the same reason: these calls failed
+  // because the tools do not exist, which is a function of the names alone, so
+  // fingerprinting the arguments would make every retry look like a fresh
+  // attempt and the ceiling would never fire.
+  tracker.recordUnavailableStep(names);
+}
+
+/**
+ * The fields {@link recordUnavailableToolCallStep} reads off a step's tool call.
+ * Deliberately structural rather than the SDK's tool-generic `TypedToolCall`,
+ * which would push `ToolSet` inference through this module for three fields —
+ * the assertions below are what keep that honest.
+ */
+type ObservedToolCall = {
+  toolName?: unknown;
+  invalid?: boolean;
+  error?: unknown;
+};
+
+// Two assertions, because either alone is decorative. Assignability catches a
+// field whose type changed, but never a rename: every field above is optional,
+// so a tool call carrying none of them still satisfies it. Key presence catches
+// the rename. Together, an SDK change that would otherwise leave the guard
+// silently matching nothing — quietly restoring the bug this module exists to
+// prevent — fails the build instead.
+type _SdkToolCallIsObservable =
+  TypedToolCall<ToolSet> extends ObservedToolCall ? true : never;
+const _assertSdkToolCallIsObservable: _SdkToolCallIsObservable = true;
+
+// Reads the keys off ObservedToolCall rather than repeating them, so a field
+// added there is covered without anyone remembering to update a literal. The
+// tuples keep the comparison a plain subset check, out of reach of union
+// distribution and of however a formatter chooses to break the line.
+type _SdkToolCallKeepsObservedKeys = [keyof ObservedToolCall] extends [
+  keyof DynamicToolCall,
+]
+  ? true
+  : never;
+const _assertSdkToolCallKeepsObservedKeys: _SdkToolCallKeepsObservedKeys = true;
+
+/**
+ * Narrows a step's tool call to one the SDK rejected because no such tool
+ * exists. `invalid` also covers unparsable arguments for a tool that *does*
+ * exist, so the error identity — not the flag alone — is what selects this
+ * case: an unparsable call is repaired or surfaced elsewhere, and its retry is
+ * fingerprinted normally by the tool wrapper once it parses.
+ */
+function isUnavailableToolCall(
+  call: ObservedToolCall,
+): call is ObservedToolCall & { toolName: string } {
+  return (
+    call.invalid === true &&
+    typeof call.toolName === "string" &&
+    NoSuchToolError.isInstance(call.error)
+  );
 }
 
 function severityFor(

@@ -11,6 +11,7 @@ export function ExpirationDateTimeField({
   placeholder = "No expiration",
   noExpirationText = "Will never expire",
   formatExpiration,
+  disabledDate = isPastDate,
 }: {
   value: Date | null;
   onChange: (value: Date | null) => void;
@@ -18,6 +19,7 @@ export function ExpirationDateTimeField({
   placeholder?: string;
   noExpirationText?: string;
   formatExpiration: (value: Date | string | null) => string;
+  disabledDate?: (date: Date) => boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -31,11 +33,7 @@ export function ExpirationDateTimeField({
         <DateTimePicker
           value={value ?? undefined}
           onChange={(date) => onChange(date ?? null)}
-          disabledDate={(date) => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            return date < today;
-          }}
+          disabledDate={disabledDate}
           placeholder={placeholder}
           className="flex-1"
         />
@@ -55,4 +53,10 @@ export function ExpirationDateTimeField({
       </p>
     </div>
   );
+}
+
+function isPastDate(date: Date): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date < today;
 }

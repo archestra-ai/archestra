@@ -23,21 +23,21 @@ in the website repo) and serves it via the catalog pages and the
 ## Adding a server
 
 1. Add its URL to `mcp-servers.json` (keep the JSON valid — trailing commas break the build).
-2. Open a pull request. CI validates the catalog data against the website's schema.
-3. For GitHub-hosted servers, that's it: after the PR merges, the evaluation pipeline
-   (`.github/workflows/evaluate-mcp-catalog.yml`) scores the new server with an LLM and
-   opens a follow-up PR adding its `mcp-evaluations/*.json` file. Until that merges, the
-   site shows the server as "being evaluated".
-4. For **remote** MCP servers the pipeline cannot introspect the endpoint, so also add a
-   manifest at `mcp-evaluations/{domain}__remote-mcp.json` in the same PR — copy an existing
-   remote entry (e.g. `linear__remote-mcp.json`) as a template. The `name` field must match
-   the file name.
+2. Add a manifest file in `mcp-evaluations/` in the same PR — copy an existing entry as a
+   template (`linear__remote-mcp.json` for remote servers; any `{org}__{repo}.json` for
+   GitHub-hosted ones). The `name` field must match the file name, which must match the
+   name derived from the URL (see [Layout](#layout) above). Without a manifest the site
+   lists the server as a bare unevaluated placeholder.
+3. For servers meant to be installable from the Archestra platform's registry picker, set
+   `archestra_config.works_in_archestra: true` and fill in `server` / `oauth_config` — the
+   picker only shows entries with that flag.
+4. Open a pull request. CI validates the catalog data against the website's schema.
 
 After a change lands on `main`, `.github/workflows/trigger-website-deploy-on-catalog-changes.yml`
 redeploys the website so the catalog updates on archestra.ai.
 
-## Updating or re-scoring servers
+## Updating servers
 
-Evaluations can be edited by hand (PRs welcome — e.g. fixing a category or description), or
-re-generated in bulk by running the `Evaluate MCP Catalog Servers` workflow manually with
-`force: true`.
+Manifests are maintained by hand — PRs welcome (e.g. fixing a category, description, or a
+server config that doesn't install). There is no automated evaluation/scoring pipeline;
+`quality_score` values are static data carried over from the historical evaluations.

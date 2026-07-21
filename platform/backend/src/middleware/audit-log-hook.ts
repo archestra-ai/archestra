@@ -25,7 +25,15 @@ function resolveEffectiveCfg(
 
 export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
   fastify.addHook("preHandler", async (request) => {
-    if (shouldSkip(request.method, request.url, request.user)) return;
+    if (
+      shouldSkip(
+        request.method,
+        request.url,
+        request.routeOptions.url,
+        request.user,
+      )
+    )
+      return;
 
     // Always stamp event time before the handler executes.
     request.auditOccurredAt = new Date();
@@ -75,10 +83,11 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
   });
 
   fastify.addHook("onResponse", async (request, reply) => {
-    if (shouldSkip(request.method, request.url, request.user)) return;
-
     // 4xx/5xx mutations are now recorded — outcome column carries the signal.
     const routePattern = request.routeOptions.url;
+    if (shouldSkip(request.method, request.url, routePattern, request.user))
+      return;
+
     const cfg = getEffectiveCfg(request);
     const outcome = deriveOutcome(reply.statusCode);
     const action = resolveActionName(cfg, request.method);
@@ -255,13 +264,22 @@ function extractCreatedResourceId(parsed: unknown): string | null {
  * (per product direction: MCP session proxy traffic and chat/browser streams
  * stay out of the org audit log; dedicated surfaces cover them).
  *
- * `exact` entries match the URL precisely; `prefix` entries match any URL that
- * starts with the value.  Use `exact` when a route and its siblings share a
- * common prefix that must NOT be excluded — the canonical example is
- * `/api/chat` (the streaming endpoint) vs `/api/chatops/*` (Slack/Teams
- * admin routes that ARE audited).
+ * `exact` entries match the concrete URL precisely; `prefix` entries match any
+ * concrete URL that starts with the value.  Use `exact` when a route and its
+ * siblings share a common prefix that must NOT be excluded — the canonical
+ * example is `/api/chat` (the streaming endpoint) vs `/api/chatops/*` (Slack/
+ * Teams admin routes that ARE audited).
+ *
+ * `route` entries match the fastify route PATTERN (`request.routeOptions.url`)
+ * exactly.  Use `route` for read-only/UI sub-routes shaped `/api/x/:id/suffix`
+ * where a variable id sits before a static suffix — a concrete-URL prefix would
+ * over-match the audited parent (`/api/apps/:appId`), and `exact` can't match a
+ * varying id.
  */
-type AuditDenylistEntry = { kind: "prefix" | "exact"; value: string };
+type AuditDenylistEntry = {
+  kind: "prefix" | "exact" | "route";
+  value: string;
+};
 
 const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/auth/" },
@@ -292,19 +310,83 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
     kind: "exact",
     value: "/api/organization/knowledge-settings/test-reranker",
   },
+
+  // Per-user UI state / onboarding — personal preference, not an access change
+  // (userOnboardingSeenItemsTable / projectPinsTable / appPinsTable are
+  // audited:false in AUDIT_DECISIONS).
+  { kind: "prefix", value: "/api/onboarding" },
+  { kind: "route", value: "/api/apps/:appId/pin" },
+  { kind: "route", value: "/api/apps/external/:mcpServerId/pin" },
+  // Deliberately-unaudited resource families (audited:false in AUDIT_DECISIONS):
+  // chat-project grouping, ephemeral connection-setup render tickets, incoming-
+  // email subscription config, oauth grant runtime (tokens are runtime state).
+  { kind: "prefix", value: "/api/projects" },
+  { kind: "prefix", value: "/api/connection-setups" },
+  { kind: "prefix", value: "/api/incoming-email" },
+  { kind: "exact", value: "/api/oauth/initiate" },
+  { kind: "exact", value: "/api/oauth/callback" },
+  // Device-authorization handshakes (github/microsoft/openai) — write better-auth
+  // account/session material (audited:false); the /poll endpoints are high-volume.
+  { kind: "prefix", value: "/api/github-copilot-auth/" },
+  { kind: "prefix", value: "/api/microsoft-365-copilot-auth/" },
+  { kind: "prefix", value: "/api/openai-codex-auth/" },
+  // Ephemeral Telegram link code (the account-binding /link IS audited).
+  { kind: "exact", value: "/api/chatops/telegram/link-code" },
+  // High-volume / best-effort artifact + recording surfaces.
+  { kind: "prefix", value: "/api/skill-sandbox/artifacts" },
+  { kind: "prefix", value: "/api/app-recordings" },
+  // Agent hook scripts (hookFilesTable is audited:false — child of the audited
+  // agent). Elevating hooks to a first-class audited resource is a follow-up.
+  { kind: "prefix", value: "/api/hooks" },
+  // Read-only probes / navigational / suggestion routes — mutate no org state.
+  {
+    kind: "exact",
+    value: "/api/internal_mcp_catalog/validate-deployment-yaml",
+  },
+  { kind: "route", value: "/api/mcp_server/:id/inspect" },
+  { kind: "route", value: "/api/connectors/:id/test" },
+  { kind: "route", value: "/api/agents/:id/suggest-skill-description" },
+  { kind: "route", value: "/api/apps/:appId/diagnostics" },
+  { kind: "route", value: "/api/apps/:appId/screenshot" },
+  { kind: "route", value: "/api/apps/:appId/open-in-chat" },
+  { kind: "route", value: "/api/apps/external/:mcpServerId/open-in-chat" },
+  {
+    kind: "route",
+    value: "/api/teams/:teamId/vault-folder/check-connectivity",
+  },
+  // Read-only: returns the key names of a secret in the team's vault folder.
+  { kind: "route", value: "/api/teams/:teamId/vault-folder/secrets/keys" },
+  {
+    kind: "route",
+    value: "/api/schedule-triggers/:id/runs/:runId/conversation",
+  },
 ];
 
-function isDenylisted(url: string): boolean {
-  return AUDIT_DENYLIST.some((entry) =>
-    entry.kind === "exact" ? url === entry.value : url.startsWith(entry.value),
-  );
+function isDenylisted(url: string, routePattern: string | undefined): boolean {
+  return AUDIT_DENYLIST.some((entry) => {
+    switch (entry.kind) {
+      case "exact":
+        return url === entry.value;
+      case "prefix":
+        return url.startsWith(entry.value);
+      case "route":
+        return routePattern === entry.value;
+      default:
+        return false;
+    }
+  });
 }
 
-function shouldSkip(method: string, url: string, user: unknown): boolean {
+function shouldSkip(
+  method: string,
+  url: string,
+  routePattern: string | undefined,
+  user: unknown,
+): boolean {
   if (!AUDIT_METHODS.has(method)) return true;
   const path = stripQueryString(url);
   if (!path.startsWith("/api/")) return true;
-  if (isDenylisted(path)) return true;
+  if (isDenylisted(path, routePattern)) return true;
   if (!user) return true;
   return false;
 }

@@ -3136,6 +3136,7 @@ class AgentModel {
       connectorIds,
       delegations,
       excludedSubagentIds,
+      suggestedPrompts,
       modelRows,
       keyRows,
     ] = await Promise.all([
@@ -3146,6 +3147,7 @@ class AgentModel {
       AgentConnectorAssignmentModel.getConnectorIds(id),
       AgentToolModel.getDelegationTargets(id),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      AgentSuggestedPromptModel.getForAgent(id),
       // Resolve the live modelId FK to its human-readable identity so a model
       // change surfaces as a real diff — the legacy llmModel text column is
       // deprecated (never written) and would always read null.
@@ -3197,9 +3199,20 @@ class AgentModel {
             scope: keyRows[0].scope,
           }
         : null,
+      icon: row.icon ?? null,
+      considerContextUntrusted: row.considerContextUntrusted,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
+      // passthrough_headers is a text[] of header NAMES (no values), so it is
+      // safe to capture verbatim.
+      passthroughHeaders: [...(row.passthroughHeaders ?? [])].sort(),
+      identityProviderId: row.identityProviderId ?? null,
+      environmentId: row.environmentId ?? null,
+      incomingEmailEnabled: row.incomingEmailEnabled,
+      incomingEmailSecurityMode: row.incomingEmailSecurityMode,
+      incomingEmailAllowedDomain: row.incomingEmailAllowedDomain ?? null,
+      builtInAgentConfig: row.builtInAgentConfig ?? null,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),
@@ -3207,6 +3220,7 @@ class AgentModel {
       labels: labels.sort(),
       delegationTargets,
       excludedSubagentIds: [...excludedSubagentIds].sort(),
+      suggestedPrompts,
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };

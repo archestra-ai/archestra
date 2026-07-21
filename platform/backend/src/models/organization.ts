@@ -347,6 +347,33 @@ class OrganizationModel {
     const media = (v: string | null | undefined) =>
       v && v.length > 0 ? "(set)" : null;
 
+    // Resolve the live default-model/key FKs to legible identities — the
+    // defaultLlmModel/defaultLlmProvider text columns are deprecated (never
+    // written), so an org default-model change would otherwise show no diff.
+    const [defaultModelRows, defaultKeyRows] = await Promise.all([
+      org.defaultModelId
+        ? db
+            .select({ externalId: schema.modelsTable.externalId })
+            .from(schema.modelsTable)
+            .where(eq(schema.modelsTable.id, org.defaultModelId))
+            .limit(1)
+        : Promise.resolve([]),
+      org.defaultLlmApiKeyId
+        ? db
+            .select({
+              id: schema.llmProviderApiKeysTable.id,
+              name: schema.llmProviderApiKeysTable.name,
+              scope: schema.llmProviderApiKeysTable.scope,
+              provider: schema.llmProviderApiKeysTable.provider,
+            })
+            .from(schema.llmProviderApiKeysTable)
+            .where(
+              eq(schema.llmProviderApiKeysTable.id, org.defaultLlmApiKeyId),
+            )
+            .limit(1)
+        : Promise.resolve([]),
+    ]);
+
     return {
       id: org.id,
       name: org.name,
@@ -371,9 +398,19 @@ class OrganizationModel {
       appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
-      defaultLlmModel: org.defaultLlmModel ?? null,
-      defaultLlmProvider: org.defaultLlmProvider ?? null,
+      defaultModel: defaultModelRows[0]?.externalId ?? null,
+      defaultLlmApiKey: defaultKeyRows[0]
+        ? {
+            id: defaultKeyRows[0].id,
+            name: defaultKeyRows[0].name,
+            scope: defaultKeyRows[0].scope,
+          }
+        : null,
+      defaultLlmProvider: defaultKeyRows[0]?.provider ?? null,
       defaultAgentId: org.defaultAgentId ?? null,
+      defaultDiscoveredToolInvocationPolicy:
+        org.defaultDiscoveredToolInvocationPolicy,
+      defaultDiscoveredToolResultPolicy: org.defaultDiscoveredToolResultPolicy,
       rerankerModel: org.rerankerModel ?? null,
       showTwoFactor: org.showTwoFactor,
       slimChatErrorUi: org.slimChatErrorUi,

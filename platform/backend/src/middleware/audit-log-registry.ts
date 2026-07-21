@@ -249,14 +249,20 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "serviceAccount",
     fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
   },
+  // Issuing/revoking a token mutates the account's credential surface; the
+  // account survives, so pin serviceAccount.updated (not the derived
+  // serviceAccount.created for the POST or serviceAccount.deleted for the
+  // per-token DELETE).
   "/api/service-accounts/:id/tokens": {
     resourceType: "serviceAccount",
     resourceIdParam: "id",
+    action: "serviceAccount.updated",
     fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
   },
   "/api/service-accounts/:id/tokens/:tokenId": {
     resourceType: "serviceAccount",
     resourceIdParam: "id",
+    action: "serviceAccount.updated",
     fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
   },
 
@@ -635,10 +641,181 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
 
   // Enterprise: team vault folder (same snapshot model as teams)
+  // Creating/removing a team's vault folder mutates the team; the team survives
+  // the folder DELETE, so pin team.updated (not the derived team.deleted).
   "/api/teams/:teamId/vault-folder": {
     resourceType: "team",
     resourceIdParam: "teamId",
+    action: "team.updated",
     fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
+  },
+  // Team membership & external-group mappings live in join tables the team
+  // snapshot reflects; the parent team survives member/mapping removal, so pin
+  // team.updated on both the POST (add) and the per-child DELETE.
+  "/api/teams/:id/members": {
+    resourceType: "team",
+    action: "team.updated",
+    fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
+  },
+  "/api/teams/:id/members/:userId": {
+    resourceType: "team",
+    action: "team.updated",
+    fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
+  },
+  "/api/teams/:id/external-groups": {
+    resourceType: "team",
+    action: "team.updated",
+    fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
+  },
+  "/api/teams/:id/external-groups/:groupId": {
+    resourceType: "team",
+    action: "team.updated",
+    fetchById: (id, orgId) => TeamModel.findByIdForAudit(id, orgId),
+  },
+
+  // Refreshing an MCP server's tool surface mutates the server.
+  "/api/mcp_server/:id/reload-tools": {
+    resourceType: "mcpServer",
+    action: "mcpServer.updated",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+  },
+
+  // Internal catalog lifecycle actions (reinstall/refresh/approve/reset) — POSTs
+  // carrying :id, so register directly to avoid the parent walk-up being dropped.
+  "/api/internal_mcp_catalog/:id/reinstall": {
+    resourceType: "internalMcpCatalog",
+    action: "internalMcpCatalog.reinstalled",
+    fetchById: (id, orgId) =>
+      InternalMcpCatalogModel.findByIdForAudit(id, orgId),
+  },
+  "/api/internal_mcp_catalog/:id/refresh-image": {
+    resourceType: "internalMcpCatalog",
+    action: "internalMcpCatalog.updated",
+    fetchById: (id, orgId) =>
+      InternalMcpCatalogModel.findByIdForAudit(id, orgId),
+  },
+  "/api/internal_mcp_catalog/:id/approve": {
+    resourceType: "internalMcpCatalog",
+    action: "internalMcpCatalog.updated",
+    fetchById: (id, orgId) =>
+      InternalMcpCatalogModel.findByIdForAudit(id, orgId),
+  },
+  "/api/internal_mcp_catalog/:id/reset-deployment-yaml": {
+    resourceType: "internalMcpCatalog",
+    action: "internalMcpCatalog.updated",
+    fetchById: (id, orgId) =>
+      InternalMcpCatalogModel.findByIdForAudit(id, orgId),
+  },
+
+  // Connector sync/resync + KB-link and document child mutations; the connector
+  // survives, so the per-child DELETEs pin connector.updated (not .deleted).
+  "/api/connectors/:id/sync": {
+    resourceType: "connector",
+    action: "connector.synced",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  "/api/connectors/:id/force-resync": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  "/api/connectors/:id/knowledge-bases": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  "/api/connectors/:id/knowledge-bases/:kbId": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  "/api/connectors/:id/documents/:docId": {
+    resourceType: "connector",
+    action: "connector.updated",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+
+  // Installation-request review actions (approve/decline/notes) are POSTs
+  // carrying :id; register directly so they log the update, not unknown.created.
+  "/api/mcp_server_installation_requests/:id/approve": {
+    resourceType: "mcpServerInstallationRequest",
+    action: "mcpServerInstallationRequest.updated",
+    fetchById: (id, orgId) =>
+      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
+  },
+  "/api/mcp_server_installation_requests/:id/decline": {
+    resourceType: "mcpServerInstallationRequest",
+    action: "mcpServerInstallationRequest.updated",
+    fetchById: (id, orgId) =>
+      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
+  },
+  "/api/mcp_server_installation_requests/:id/notes": {
+    resourceType: "mcpServerInstallationRequest",
+    action: "mcpServerInstallationRequest.updated",
+    fetchById: (id, orgId) =>
+      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
+  },
+
+  // Agent import (creates agents in bulk — no single resourceId, like skill
+  // import) and clone (creates one agent; its id comes from the response body,
+  // so resourceIdParam names a param the route lacks to skip the source :id).
+  "/api/agents/import": {
+    resourceType: "agent",
+    action: "agent.imported",
+  },
+  "/api/agents/:id/clone": {
+    resourceType: "agent",
+    action: "agent.created",
+    resourceIdParam: "clonedAgentId",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+
+  // Org-scoped admin actions that mutate organization state.
+  "/api/organization/knowledge-settings/drop-embedding": {
+    resourceType: "organization",
+    action: "organization.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, _orgId) => OrganizationModel.findByIdForAudit(id, _orgId),
+  },
+  "/api/organization/complete-onboarding": {
+    resourceType: "organization",
+    action: "organization.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, _orgId) => OrganizationModel.findByIdForAudit(id, _orgId),
+  },
+
+  // Schedule-trigger enable/disable/run-now — POSTs carrying :id.
+  "/api/schedule-triggers/:id/enable": {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.updated",
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+  "/api/schedule-triggers/:id/disable": {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.updated",
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+  "/api/schedule-triggers/:id/run-now": {
+    resourceType: "scheduleTrigger",
+    action: "scheduleTrigger.triggered",
+    fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+
+  // OAuth client secret rotation — security-critical.
+  "/api/llm-oauth-clients/:id/rotate-secret": {
+    resourceType: "llmOauthClient",
+    action: "llmOauthClient.rotated",
+    fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/mcp-oauth-clients/:id/rotate-secret": {
+    resourceType: "mcpOauthClient",
+    action: "mcpOauthClient.rotated",
+    fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 };
 

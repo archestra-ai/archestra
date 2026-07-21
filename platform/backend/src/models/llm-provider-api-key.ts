@@ -828,13 +828,20 @@ class LlmProviderApiKeyModel {
     if (!row) return null;
 
     // REDACTED: secretId and any resolved key material are never included.
+    // extraHeaders values may carry tokens, so capture header NAMES only.
     return {
       id: row.id,
       name: row.name,
       provider: row.provider,
       organizationId: row.organizationId,
       scope: row.scope,
+      teamId: row.teamId ?? null,
+      isPrimary: row.isPrimary,
       baseUrl: row.baseUrl ?? null,
+      inferenceBaseUrl: row.inferenceBaseUrl ?? null,
+      extraHeaderNames: row.extraHeaders
+        ? Object.keys(row.extraHeaders).sort()
+        : [],
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

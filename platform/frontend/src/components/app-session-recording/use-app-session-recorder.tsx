@@ -151,6 +151,13 @@ class AppRecorderCore {
   /** The conversation the in-flight recording belongs to; null while a
    * from-scratch recording awaits its chat's first message. */
   private recordingConversationId: string | null = null;
+  /**
+   * Segment indices already upgraded from their served source html to their
+   * frame's live record-start DOM — one live snapshot per app version, so a
+   * mid-recording app edit (which mounts a fresh frame that re-sends a snapshot)
+   * seeds its own new segment without re-touching the earlier ones.
+   */
+  private liveSeededSegments = new Set<number>();
 
   // ── React store surface ──
   subscribe = (listener: () => void) => {
@@ -222,6 +229,16 @@ class AppRecorderCore {
       if (!raw || typeof raw !== "object") continue;
       const { ts, ...rest } = raw as { ts?: unknown; kind?: unknown };
       if (typeof ts !== "number" || typeof rest.kind !== "string") continue;
+      // The app's live-DOM snapshot at record start: a control the SDK sends on
+      // the event channel so replay's first frame is what was actually on screen
+      // (an already-dismissed intro, the first render) rather than the served
+      // source html. Consumed here to seed the segment; never a timeline event —
+      // "snapshot" is not part of the stored event union, so it must not reach
+      // pushEvent (validation would reject the whole bundle).
+      if (rest.kind === "snapshot") {
+        this.seedLiveSnapshot((rest as { html?: unknown }).html);
+        continue;
+      }
       this.pushEvent({
         ...(rest as { kind: string }),
         t: Math.max(0, Math.round(ts - this.startEpoch)),
@@ -261,6 +278,7 @@ class AppRecorderCore {
     if (this.status !== "idle") return;
     this.startEpoch = Date.now();
     this.recordingConversationId = this.currentConversationId;
+    this.liveSeededSegments = new Set();
     this.events = [];
     // A chat can start recording before it has built an app (record from
     // scratch), so there may be no HTML yet. If one is already on screen it
@@ -361,6 +379,22 @@ class AppRecorderCore {
   private pushEvent(event: TimelineEvent) {
     if (this.events.length >= MAX_EVENTS) return;
     this.events.push(event);
+  }
+
+  /**
+   * Replace the currently-live segment's html with the app's live record-start
+   * DOM, so the replay's first frame for that app version is the on-screen state
+   * — not the served source html the app has already rendered over. Applied to
+   * the last segment (the one the live frame is showing) and only once per
+   * segment; a snapshot arriving before any segment exists is dropped, leaving
+   * the source-html fallback rather than mis-seeding a later version.
+   */
+  private seedLiveSnapshot(html: unknown) {
+    if (typeof html !== "string" || html.length === 0) return;
+    const index = this.segments.length - 1;
+    if (index < 0 || this.liveSeededSegments.has(index)) return;
+    this.segments[index] = { ...this.segments[index], html };
+    this.liveSeededSegments.add(index);
   }
 
   private postControl(action: "start" | "stop") {

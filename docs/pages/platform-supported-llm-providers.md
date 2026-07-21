@@ -406,6 +406,30 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 The default base URL is `http://localhost:11434/v1`. Override it per-key in the UI or globally via `ARCHESTRA_OLLAMA_BASE_URL`.
 
+## Ollama (Native)
+
+Ollama serves two APIs: the OpenAI-compatible one above, and its own native `/api/chat` endpoint. **Ollama (Native)** is a separate provider that uses the native endpoint. Pick it when you want to control Ollama's generation parameters — `num_ctx`, `num_predict`, `top_k`, `repeat_penalty`, thinking effort, and the rest — because the OpenAI-compatible `/v1` endpoint silently drops those options.
+
+Both providers talk to the same Ollama server, so you can add either or both. The OpenAI-compatible provider stays the simplest choice for standard chat; use the native one when parameters matter.
+
+### Model Parameters
+
+Open **LLM → Models**, edit a native Ollama model, and set any parameter under **Model parameters**. Archestra sends the values you set on every chat turn; leave a field empty to inherit Ollama's own default. A configured `num_ctx` also becomes the context window Archestra displays and enforces — so the context ring matches what Ollama actually allows, instead of the model's architectural maximum.
+
+### Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/ollama-native/{profile-id}`
+- **Authentication**: API key is **optional**, same as the OpenAI-compatible provider.
+
+### Setup
+
+1. Go to **Model Providers** and add a new key with provider **Ollama (Native)**
+2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
+
+The default base URL is `http://localhost:11434`. Override it per-key in the UI or globally via `ARCHESTRA_OLLAMA_NATIVE_BASE_URL`.
+
+Thinking effort currently maps to on/off for the underlying provider — a follow-up will send Ollama's exact effort levels.
+
 ### Environment Variables
 
 | Variable                        | Required | Description                                                                                  |

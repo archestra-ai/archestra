@@ -1010,6 +1010,11 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
+- **`ARCHESTRA_OLLAMA_NATIVE_BASE_URL`** - Base URL for the "Ollama (Native)" provider, which uses Ollama's native `/api/chat` endpoint.
+  - Default: `ARCHESTRA_OLLAMA_BASE_URL` with the `/v1` suffix stripped (`http://localhost:11434`)
+  - Set this only if the native endpoint runs on a different host than the OpenAI-compatible one
+  - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
 - **`ARCHESTRA_DEEPSEEK_BASE_URL`** - Override the DeepSeek API base URL.
   - Default: `https://api.deepseek.com`
   - Use this to point to your own proxy or other custom endpoints

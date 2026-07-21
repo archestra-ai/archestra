@@ -20,8 +20,7 @@ This directory is public so the community can contribute catalog entries. The Ar
    (with a filled-in `server`/`oauth_config`) for servers the Archestra platform's
    registry picker should offer.
 
-3. Open a pull request against this repository. CI validates the data against the
-   website's manifest schema.
+3. Open a pull request against this repository.
 
 A merged pull request shows up on the catalog page automatically — a workflow triggers a
 website deploy whenever catalog data lands on `main`.

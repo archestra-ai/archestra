@@ -20,6 +20,19 @@ function clearServersCache(): void {
   serversCache.clear();
 }
 
+// Hostnames treated as git-hosted (repository) catalog entries. Compare exact
+// hostnames rather than substrings so lookalike URLs (e.g.
+// https://github.com.evil.example) are not misclassified as GitHub repos.
+const GIT_HOST_HOSTNAMES = ['github.com', 'www.github.com', 'gitlab.com', 'www.gitlab.com'];
+
+function isGitHostUrl(url: string): boolean {
+  try {
+    return GIT_HOST_HOSTNAMES.includes(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 // Extract server info and generate name from URL (GitHub or remote MCP)
 export function extractServerInfo(url: string): {
   gitHubOrg: string;
@@ -33,7 +46,7 @@ export function extractServerInfo(url: string): {
     const cleanUrl = url.replace(/\/$/, ''); // Remove trailing slash
 
     // Check if this is a GitHub URL
-    if (cleanUrl.includes('github.com') || cleanUrl.includes('gitlab.com')) {
+    if (isGitHostUrl(cleanUrl)) {
       const parts = cleanUrl.split('/');
 
       // Ensure we have enough parts for a GitHub URL

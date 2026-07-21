@@ -22,6 +22,22 @@ import { MCP_SERVERS_EVALUATIONS_DIR, MCP_SERVERS_JSON_FILE_PATH } from './paths
 
 const CATEGORIES = McpServerCategorySchema.options;
 
+// Exact-hostname GitHub check (substring matching would also accept lookalike
+// hosts). The scheme-less retry keeps CLI ergonomics (`pnpm evaluate github.com/owner/repo`).
+const GITHUB_HOSTNAMES = ['github.com', 'www.github.com'];
+
+function isGitHubUrl(value: string): boolean {
+  for (const candidate of [value, `https://${value}`]) {
+    try {
+      return GITHUB_HOSTNAMES.includes(new URL(candidate).hostname);
+    } catch {
+      // not parseable as a URL; try the next candidate
+    }
+  }
+  return false;
+}
+
+
 const CanonicalServerAndUserConfigSchema = z
   .object({
     server: McpbManifestServerSchema,
@@ -1972,11 +1988,11 @@ async function evaluateAllRepos(options: EvaluateAllReposOptions = {}): Promise<
   let allUrls: string[] = JSON.parse(fs.readFileSync(MCP_SERVERS_JSON_FILE_PATH, 'utf8'));
 
   // Filter out non-GitHub URLs (e.g., GitLab, remote servers)
-  let githubUrls = allUrls.filter((url) => url.includes('github.com'));
+  let githubUrls = allUrls.filter((url) => isGitHubUrl(url));
 
   // Also filter out remote servers (URLs starting with http:// or https:// but not GitHub)
   const remoteServers = allUrls.filter(
-    (url) => (url.startsWith('http://') || url.startsWith('https://')) && !url.includes('github.com')
+    (url) => (url.startsWith('http://') || url.startsWith('https://')) && !isGitHubUrl(url)
   );
 
   if (githubUrls.length < allUrls.length) {
@@ -2234,7 +2250,7 @@ Note: For Gemini models, set GEMINI_API_KEY or GOOGLE_API_KEY environment variab
     options.force = true;
   }
 
-  const url = args.find((arg) => arg.includes('://') || arg.includes('github.com'));
+  const url = args.find((arg) => arg.includes('://') || isGitHubUrl(arg));
 
   // Check GitHub token
   if (!process.env.GITHUB_TOKEN) {
@@ -2244,7 +2260,7 @@ Note: For Gemini models, set GEMINI_API_KEY or GOOGLE_API_KEY environment variab
 
   // Single repo evaluation
   if (url) {
-    if (!url.includes('github.com')) {
+    if (!isGitHubUrl(url)) {
       const isRemoteServer = url.startsWith('http://') || url.startsWith('https://');
       if (isRemoteServer) {
         console.log(`⚠️  Skipping remote MCP server: ${url}`);

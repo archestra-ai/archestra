@@ -2175,7 +2175,17 @@ function PlayerSurface({
             own filled bar already separates the transport from the stage. */}
         {/* `w-0 min-w-full`: span the shrink-wrapped dialog without
             contributing intrinsic width — the render region alone sets it. */}
-        <div className="flex w-0 min-w-full shrink-0 items-end gap-3 px-4 py-2.5">
+        {/* Filming: invisible, not gone. The offline renderer composites the
+            whole viewport and skips frames without damage, so the transport's
+            per-seek ticks (readout, playhead pin) would mark every frame as
+            changed and defeat that. Visibility keeps the layout — the render
+            region must not move — while a hidden repaint is no damage. */}
+        <div
+          className={cn(
+            "flex w-0 min-w-full shrink-0 items-end gap-3 px-4 py-2.5",
+            filming && "invisible",
+          )}
+        >
           {(() => {
             const playButton = (
               <Button

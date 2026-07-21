@@ -5,8 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { AppSessionPlayer } from "@/components/app-session-recording/app-session-player";
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import {
-  encodeFrame,
+  drainEncoder,
+  enqueueFrame,
   finishEncoder,
+  repeatFrame,
   startEncoder,
 } from "@/lib/app-session-recording/app-recording-video-encoder";
 
@@ -50,7 +52,10 @@ export default function AppRecordingRenderPage() {
       await replay.seek(ms);
     };
     window.__archestraRenderEncoderStart = startEncoder;
-    window.__archestraRenderEncodeFrame = encodeFrame;
+    window.__archestraRenderEncodeFrame = async (jpeg, index) =>
+      enqueueFrame(jpeg, index);
+    window.__archestraRenderRepeatFrame = async (index) => repeatFrame(index);
+    window.__archestraRenderEncodeDrain = drainEncoder;
     window.__archestraRenderEncoderFinish = finishEncoder;
   }, [seed]);
 

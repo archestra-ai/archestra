@@ -257,12 +257,12 @@ function ShareDialogBody(props: {
   }
   if (state.step === "done") {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         <p className="flex items-center gap-2 text-sm">
           <Check className="h-4 w-4 text-green-500" aria-hidden="true" />
           Your pull request is open — it opened in a new tab.
         </p>
-        <Button asChild>
+        <Button asChild variant="outline" size="sm" className="w-fit">
           <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
             Open the pull request
             <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
@@ -273,20 +273,20 @@ function ShareDialogBody(props: {
   }
   if (state.step === "error") {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         <p className="text-sm text-destructive">{state.message}</p>
-        <Button variant="outline" onClick={props.onRetry}>
-          Retry
-        </Button>
-        <div className="flex flex-col gap-1">
-          <Button variant="outline" onClick={props.onManual}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={props.onRetry}>
+            Retry
+          </Button>
+          <Button variant="outline" size="sm" onClick={props.onManual}>
             Submit the pull request yourself
           </Button>
-          <p className="text-xs text-muted-foreground">
-            Get the exact files we would have uploaded, with step-by-step
-            instructions — all in the browser.
-          </p>
         </div>
+        <p className="text-xs text-muted-foreground">
+          "Submit yourself" gives you the exact files we would have uploaded,
+          with step-by-step instructions — all in the browser.
+        </p>
       </div>
     );
   }
@@ -299,7 +299,7 @@ function ShareDialogBody(props: {
 /**
  * The one manual step GitHub's device flow requires: enter the one-time code
  * on github.com. Same interaction as the GitHub Copilot provider sign-in
- * (`github-copilot-sign-in.tsx`): ONE primary button copies the code and then
+ * (`github-copilot-sign-in.tsx`): one small outline button copies the code and
  * opens GitHub — copy must happen first, while the document still has focus,
  * or the Clipboard API refuses the write; GitHub can't pre-fill the field (it
  * omits RFC 8628's verification_uri_complete). The visible code doubles as a
@@ -328,23 +328,28 @@ function ConnectStep(props: { userCode: string; verificationUri: string }) {
     }
   };
 
+  // The Copilot sign-in card verbatim: bordered card, xs helper line, then
+  // ONE ROW — small outline action, code chip, waiting spinner — so nothing
+  // renders as a full-width slab.
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">
+    <div className="space-y-2 rounded-md border p-3">
+      <p className="text-xs text-muted-foreground">
         Click below to copy the code and open GitHub, then paste it and approve.
         Your submission continues automatically once you authorize.
       </p>
-      <Button
-        type="button"
-        onClick={async () => {
-          await copyCode();
-          window.open(props.verificationUri, "_blank", "noopener,noreferrer");
-        }}
-      >
-        <Github className="mr-2 h-4 w-4" />
-        Copy code &amp; open GitHub
-      </Button>
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            await copyCode();
+            window.open(props.verificationUri, "_blank", "noopener,noreferrer");
+          }}
+        >
+          <Github className="mr-2 h-4 w-4" />
+          Copy code &amp; open GitHub
+        </Button>
         <button
           type="button"
           className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest hover:bg-muted/70"
@@ -389,26 +394,31 @@ function ManualStep(props: {
   // file so the folder exists to upload into.
   const keepPath = `submissions/${props.login ?? "YOUR-GITHUB-USERNAME"}/${props.slug}/.gitkeep`;
 
+  // Same compact language as the connect card: xs muted copy, small outline
+  // actions that hug their label instead of stretching into slabs.
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           1. Download your submission — the same files we would have uploaded.
         </p>
-        {props.files.map((file) => (
-          <Button
-            key={file.name}
-            type="button"
-            variant="outline"
-            onClick={() => downloadSubmissionFile(file)}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Download {file.name}
-          </Button>
-        ))}
+        <div className="flex flex-wrap items-center gap-2">
+          {props.files.map((file) => (
+            <Button
+              key={file.name}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => downloadSubmissionFile(file)}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download {file.name}
+            </Button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+      <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
         <p>
           2.{" "}
           <a

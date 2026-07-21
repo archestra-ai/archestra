@@ -49219,6 +49219,17 @@ export type GetModelsWithApiKeysResponses = {
         defaultParameters: {
             [key: string]: string | number | Array<string>;
         } | null;
+        configuredParameters: {
+            temperature?: number;
+            top_p?: number;
+            top_k?: number;
+            repeat_penalty?: number;
+            seed?: number;
+            stop?: Array<string>;
+            num_ctx?: number;
+            num_predict?: number;
+            reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
+        } | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -49254,6 +49265,17 @@ export type UpdateModelData = {
         embeddingDimensions?: EmbeddingDimensionsInput | null;
         inputModalities?: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities?: Array<'text' | 'image' | 'audio'> | null;
+        configuredParameters?: {
+            temperature?: number;
+            top_p?: number;
+            top_k?: number;
+            repeat_penalty?: number;
+            seed?: number;
+            stop?: Array<string>;
+            num_ctx?: number;
+            num_predict?: number;
+            reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
+        } | null;
     };
     path: {
         id: string;
@@ -49354,6 +49376,17 @@ export type UpdateModelResponses = {
         embeddingDimensions: EmbeddingDimensions | null;
         defaultParameters: {
             [key: string]: string | number | Array<string>;
+        } | null;
+        configuredParameters: {
+            temperature?: number;
+            top_p?: number;
+            top_k?: number;
+            repeat_penalty?: number;
+            seed?: number;
+            stop?: Array<string>;
+            num_ctx?: number;
+            num_predict?: number;
+            reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;

@@ -579,6 +579,9 @@ class ModelModel {
     if (data.embeddingDimensions !== undefined) {
       set.embeddingDimensions = data.embeddingDimensions;
     }
+    if (data.configuredParameters !== undefined) {
+      set.configuredParameters = data.configuredParameters;
+    }
 
     const [result] = await db
       .update(schema.modelsTable)

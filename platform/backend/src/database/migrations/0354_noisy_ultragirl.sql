@@ -1,0 +1,1 @@
+ALTER TABLE "models" ADD COLUMN "configured_parameters" jsonb;

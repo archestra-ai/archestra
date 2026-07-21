@@ -37,6 +37,33 @@ export type ModelDefaultParameters = z.infer<
 >;
 
 /**
+ * Thinking-effort levels for Ollama's native `think` parameter.
+ * `none` → `think: false`; the rest map to the native string levels.
+ */
+export const ReasoningEffortSchema = z.enum(["none", "low", "medium", "high"]);
+export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
+
+/**
+ * Admin-configured, per-model generation parameters that Archestra SENDS on
+ * every native Ollama (`ollama-native`) chat turn (unlike `defaultParameters`,
+ * which is display-only). Each field is optional — an omitted field inherits
+ * Ollama's own Modelfile/server default. Precedence at request time is:
+ * request body > these configured values > omitted.
+ */
+export const ConfiguredParametersSchema = z.object({
+  temperature: z.number().min(0).optional(),
+  top_p: z.number().min(0).max(1).optional(),
+  top_k: z.number().int().min(0).optional(),
+  repeat_penalty: z.number().min(0).optional(),
+  seed: z.number().int().optional(),
+  stop: z.array(z.string()).optional(),
+  num_ctx: z.number().int().min(1).optional(),
+  num_predict: z.number().int().optional(),
+  reasoning_effort: ReasoningEffortSchema.optional(),
+});
+export type ConfiguredParameters = z.infer<typeof ConfiguredParametersSchema>;
+
+/**
  * Fields to extend for drizzle-zod schema generation.
  */
 const fieldsToExtend = {
@@ -45,6 +72,7 @@ const fieldsToExtend = {
   inputModalities: z.array(ModelInputModalitySchema).nullable(),
   outputModalities: z.array(ModelOutputModalitySchema).nullable(),
   defaultParameters: ModelDefaultParametersSchema.nullable(),
+  configuredParameters: ConfiguredParametersSchema.nullable(),
 };
 
 /**
@@ -69,6 +97,7 @@ export const CreateModelSchema = InsertModelSchema.omit({
 }).extend({
   embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable().optional(),
   defaultParameters: ModelDefaultParametersSchema.nullable().optional(),
+  configuredParameters: ConfiguredParametersSchema.nullable().optional(),
 });
 
 /**
@@ -138,6 +167,7 @@ export const PatchModelBodySchema = createUpdateSchema(
     embeddingDimensions: true,
     inputModalities: true,
     outputModalities: true,
+    configuredParameters: true,
   })
   .extend({
     customPricePerMillionInput: z.string().nullable().optional(),
@@ -153,6 +183,8 @@ export const PatchModelBodySchema = createUpdateSchema(
       .nullable()
       .optional(),
     outputModalities: z.array(ModelOutputModalitySchema).nullable().optional(),
+    // Per-model generation parameters sent on every native Ollama chat turn.
+    configuredParameters: ConfiguredParametersSchema.nullable().optional(),
   })
   .refine(
     (data) => {

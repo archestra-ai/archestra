@@ -189562,6 +189562,61 @@
                           ]
                         }
                       },
+                      "configuredParameters": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "temperature": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "top_p": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "top_k": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "repeat_penalty": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "stop": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "num_ctx": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "num_predict": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "reasoning_effort": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "low",
+                              "medium",
+                              "high"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
                       },
@@ -189677,6 +189732,7 @@
                       "ignored",
                       "embeddingDimensions",
                       "defaultParameters",
+                      "configuredParameters",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -190002,6 +190058,60 @@
                         "audio"
                       ]
                     }
+                  },
+                  "configuredParameters": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "temperature": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "top_p": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "top_k": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "repeat_penalty": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "seed": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "stop": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "num_ctx": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "num_predict": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "reasoning_effort": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "low",
+                          "medium",
+                          "high"
+                        ]
+                      }
+                    }
                   }
                 }
               }
@@ -190173,6 +190283,61 @@
                         ]
                       }
                     },
+                    "configuredParameters": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "temperature": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "top_p": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "top_k": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "repeat_penalty": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "stop": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "num_ctx": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "num_predict": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "reasoning_effort": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
                     },
@@ -190211,6 +190376,7 @@
                     "ignored",
                     "embeddingDimensions",
                     "defaultParameters",
+                    "configuredParameters",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",

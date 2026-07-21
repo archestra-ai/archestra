@@ -48,7 +48,7 @@ describe("ollamaNativeAdapterFactory — identity", () => {
 
   test("extractApiKey returns the authorization value as-is", () => {
     expect(factory.extractApiKey({ authorization: "secret" })).toBe("secret");
-    expect(factory.extractApiKey({})).toBeUndefined();
+    expect(factory.extractApiKey({ authorization: undefined })).toBeUndefined();
   });
 });
 
@@ -263,7 +263,7 @@ describe("stream adapter", () => {
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
     });
-    const end = JSON.parse(adapter.formatEndSSE().trim());
+    const end = JSON.parse(String(adapter.formatEndSSE()).trim());
     expect(end.done).toBe(true);
     expect(end.done_reason).toBe("stop");
     expect(end.prompt_eval_count).toBe(7);
@@ -313,7 +313,7 @@ describe("stream adapter", () => {
     );
     const events = adapter.formatCompleteTextSSE("Blocked by policy");
     expect(events[0]).toContain("Blocked by policy");
-    const end = JSON.parse(adapter.formatEndSSE().trim());
+    const end = JSON.parse(String(adapter.formatEndSSE()).trim());
     expect(end.done_reason).toBe("stop");
     // The refusal drops the blocked tool calls from the persisted response.
     expect(adapter.toProviderResponse().message.tool_calls).toBeUndefined();

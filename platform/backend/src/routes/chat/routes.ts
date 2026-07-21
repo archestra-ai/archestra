@@ -167,6 +167,7 @@ import {
   normalizeChatMessages,
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
+import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 import { buildModelMessages } from "./prepare-model-messages";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
@@ -1275,6 +1276,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       responseModalities: ["TEXT", "IMAGE"],
                     },
                   };
+                }
+
+                // Send admin-configured per-model generation parameters
+                // (num_ctx, num_predict, top_k, think, …) on native Ollama turns.
+                // These are the values `/v1` cannot carry; the native adapter
+                // forwards them into the `/api/chat` `options` bag.
+                if (provider === "ollama-native") {
+                  const ollamaProviderOptions =
+                    buildOllamaNativeProviderOptions({
+                      configured: modelRow?.configuredParameters,
+                      requestTemperature: temperature,
+                    });
+                  if (ollamaProviderOptions) {
+                    streamTextConfig.providerOptions = {
+                      ...streamTextConfig.providerOptions,
+                      ...ollamaProviderOptions,
+                    };
+                  }
                 }
 
                 // Request the model's real output ceiling (clamped by the

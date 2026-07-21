@@ -1281,4 +1281,67 @@ describe("ModelModel", () => {
       expect(pricing.cacheSource).toBe("derived_multiplier");
     });
   });
+
+  describe("configuredParameters (native Ollama)", () => {
+    async function makeNativeModel() {
+      return ModelModel.create({
+        externalId: "ollama/llama3.2",
+        provider: "ollama-native",
+        modelId: "llama3.2",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+    }
+
+    test("persists configured parameters via update", async () => {
+      const created = await makeNativeModel();
+      expect(created.configuredParameters).toBeNull();
+
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: {
+          num_ctx: 8192,
+          num_predict: 1024,
+          reasoning_effort: "medium",
+          stop: ["END"],
+        },
+      });
+      expect(updated?.configuredParameters).toEqual({
+        num_ctx: 8192,
+        num_predict: 1024,
+        reasoning_effort: "medium",
+        stop: ["END"],
+      });
+
+      // Round-trips through a fresh read.
+      const reloaded = await ModelModel.findByProviderAndModelId(
+        "ollama-native",
+        "llama3.2",
+      );
+      expect(reloaded?.configuredParameters?.num_ctx).toBe(8192);
+    });
+
+    test("clears configured parameters when set to null", async () => {
+      const created = await makeNativeModel();
+      await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 4096 },
+      });
+      const cleared = await ModelModel.update(created.id, {
+        configuredParameters: null,
+      });
+      expect(cleared?.configuredParameters).toBeNull();
+    });
+
+    test("leaves configured parameters untouched when the field is omitted", async () => {
+      const created = await makeNativeModel();
+      await ModelModel.update(created.id, {
+        configuredParameters: { top_k: 40 },
+      });
+      // A pricing-only update must not wipe the stored parameters.
+      const afterUnrelated = await ModelModel.update(created.id, {
+        ignored: true,
+      });
+      expect(afterUnrelated?.configuredParameters).toEqual({ top_k: 40 });
+    });
+  });
 });

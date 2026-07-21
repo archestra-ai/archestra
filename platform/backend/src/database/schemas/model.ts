@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type {
+  ConfiguredParameters,
   ModelDefaultParameters,
   ModelInputModality,
   ModelOutputModality,
@@ -138,6 +139,17 @@ const modelsTable = pgTable(
      */
     defaultParameters:
       jsonb("default_parameters").$type<ModelDefaultParameters>(),
+
+    /**
+     * Admin-configured, per-model generation parameters that ARE applied at
+     * request time on every native Ollama (`ollama-native`) chat turn
+     * (num_ctx, num_predict, top_k, temperature, think, …). Contrast
+     * `default_parameters`, which is display-only. Null/absent → send nothing
+     * for that field and inherit Ollama's own default.
+     */
+    configuredParameters: jsonb(
+      "configured_parameters",
+    ).$type<ConfiguredParameters>(),
 
     /** Whether this model was discovered via an LLM Proxy request (ensureModelExists).
      * Models with this flag are preserved even without API key links,

@@ -21,6 +21,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
@@ -1926,6 +1927,31 @@ export function ChatPageContent({
     openRightPanelTab,
   ]);
 
+  // While a session recording runs, the side panel is the recording surface —
+  // it locks itself to the replay player's app aspect (see RightSidePanel) —
+  // so the moment a recording is live and the chat has an app, nudge the app
+  // into the panel by opening the Apps tab. Once per recording: the author may
+  // close the panel mid-take (the replay stays undistorted either way, just at
+  // the shape it was actually captured at), and re-opening it on every render
+  // would trap them. An app built mid-recording triggers the nudge when it
+  // appears.
+  const recorderCore = appSessionRecorder.core;
+  const recorderStatus = useSyncExternalStore(
+    recorderCore ? recorderCore.subscribe : noopRecorderSubscribe,
+    recorderCore ? recorderCore.getStatus : idleRecorderStatus,
+    idleRecorderStatus,
+  );
+  const nudgedIntoPanelRef = useRef(false);
+  useEffect(() => {
+    if (recorderStatus !== "recording") {
+      nudgedIntoPanelRef.current = false;
+      return;
+    }
+    if (nudgedIntoPanelRef.current || mcpApps.length === 0) return;
+    nudgedIntoPanelRef.current = true;
+    openRightPanelTab("apps");
+  }, [recorderStatus, mcpApps.length, openRightPanelTab]);
+
   const browserAutoOpenConversationRef = useRef<string | undefined>(undefined);
   const seenBrowserToolCallIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -3138,4 +3164,14 @@ type ChatMessagePart =
 // so the message is well-formed and the backend can inject the skill
 function ensureNonEmptyParts(parts: ChatMessagePart[]): ChatMessagePart[] {
   return parts.length === 0 ? [{ type: "text", text: "" }] : parts;
+}
+
+// Inert store fallbacks for deployments without a recorder core (feature
+// off): the subscription never fires and the status reads idle, keeping the
+// panel-nudge subscription unconditional.
+function noopRecorderSubscribe() {
+  return () => {};
+}
+function idleRecorderStatus() {
+  return "idle" as const;
 }

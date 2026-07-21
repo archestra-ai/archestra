@@ -1,7 +1,9 @@
 "use client";
 
+import { APP_RECORDING_VIEWPORT_ASPECT } from "@archestra/shared";
 import { AppWindow } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { useAppSessionRecorder } from "@/components/app-session-recording/use-app-session-recorder";
 import { useApps } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
@@ -60,6 +62,12 @@ export function RightSidePanel({
   onInitialNavigateComplete,
 }: RightSidePanelProps) {
   const { setSettingsOpen } = useApps();
+  // While a session recording runs, the panel is the recording surface: it
+  // locks to the shape the replay player shows the app at, so the session is
+  // captured at exactly the aspect it will play back at — one uniform scale,
+  // no letterbox, no distortion. Inert (status stays "idle") outside a chat
+  // page or when the recorder feature is off.
+  const recorder = useAppSessionRecorder();
 
   let resolvedTab: RightPanelTab = activeTab;
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
@@ -82,7 +90,19 @@ export function RightSidePanel({
   // Content only — the Files/Browser/Apps/Runs tab strip lives in the header's
   // top bar now, so the panel just renders the selected tab's content.
   return (
-    <ResizableRightPanel>
+    <ResizableRightPanel
+      // Only the Apps tab is a recording surface — on any other tab the app
+      // isn't hosted here (it falls back inline), so locking the panel would
+      // squeeze Files/Browser content for nothing.
+      aspectLock={
+        recorder.status === "recording" && resolvedTab === "apps"
+          ? {
+              ratio: APP_RECORDING_VIEWPORT_ASPECT,
+              hint: "App view is locked to the session player size while recording.",
+            }
+          : undefined
+      }
+    >
       <div className="flex-1 min-h-0 overflow-hidden relative">
         {resolvedTab === "runs" && scheduledRun && (
           <RunsPanel

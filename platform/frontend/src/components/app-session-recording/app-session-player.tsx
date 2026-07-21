@@ -775,9 +775,10 @@ function PlayerSurface({
   // The app renders for the whole replay at the recorded viewport it was used
   // at — the size that carried the actual interaction, not merely the one left
   // on screen the longest (see dominantViewport) — uniformly scaled into the
-  // stage. Laying it out at its recorded width means pointer coordinates map 1:1
-  // (the visual scale doesn't touch the frame's coordinate space), so the mouse
-  // replays smoothly with no remapping error.
+  // stage. Laying it out at its recorded size in both dimensions means pointer
+  // coordinates map 1:1 (the visual scale doesn't touch the frame's coordinate
+  // space) and a viewport-sized surface (a game, a WebGL canvas) keeps its
+  // recorded shape instead of reflowing to the stage's.
   const viewport = useMemo(() => dominantViewport(events), [events]);
   // False while the (re)mounted app frame's SDK hasn't connected yet — the
   // clock and event dispatch hold until it does, so no event is lost to a
@@ -1784,8 +1785,22 @@ function PlayerSurface({
         {/* The app view shares the dialog's single top bar (app icon + name);
             the only per-app chrome is the running-tool chip, floated over the
             stage so it doesn't reintroduce a second header. */}
+        {/* The column takes the RECORDED shape: its width follows from its
+            height and the recording's aspect (clamped so neither pane ever
+            vanishes), and the chat pane flexes into the rest. A recording made
+            at the canonical locked aspect (the side panel's shape while
+            recording) therefore fills its stage exactly — one uniform scale,
+            no margins; the clamps only engage for off-shape recordings, whose
+            stage then contain-fits with neutral margins. */}
         <div
-          className="relative flex min-w-0 flex-[55_1_0%] select-none flex-col bg-muted/20"
+          // h-full makes the height the aspect-ratio transfers from
+          // explicitly definite rather than leaning on flex-stretch
+          // definiteness. The max-width both keeps a wide (landscape,
+          // legacy) recording from crowding the chat and reserves the chat
+          // pane a readable floor; when a narrow window forces the min-width
+          // to win over it, the chat compresses rather than the row clipping.
+          className="relative flex h-full min-w-[280px] max-w-[min(62%,calc(100%_-_240px))] flex-none select-none flex-col bg-muted/20"
+          style={{ aspectRatio: `${viewport.width} / ${viewport.height}` }}
           data-tour="stage"
         >
           {activity && (
@@ -3188,7 +3203,7 @@ function ReplayChatPane({
   return (
     <div
       className={cn(
-        "group/pane relative isolate flex min-h-0 min-w-0 flex-[45_1_0%] flex-col border-r bg-background select-none [&_*]:pointer-events-none",
+        "group/pane relative isolate flex min-h-0 min-w-0 flex-1 flex-col border-r bg-background select-none [&_*]:pointer-events-none",
         // A message caught mid-reveal must freeze with the rest of the replay:
         // its stream is clock-driven and stops on its own, but the CSS enter
         // animations and pulses around it would otherwise play on. Never while
@@ -3336,7 +3351,7 @@ function ReplayChatEditPane({
   return (
     <TooltipProvider delayDuration={300}>
       <div
-        className="flex min-h-0 min-w-0 flex-[45_1_0%] flex-col border-r bg-background"
+        className="flex min-h-0 min-w-0 flex-1 flex-col border-r bg-background"
         data-tour="chat"
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
@@ -4009,19 +4024,18 @@ function ReplayToolPill({
 }
 
 /**
- * Fills the stage with the app, no letterbox margins, while keeping captured
- * pointer coordinates valid. The frame's layout WIDTH is locked to the
- * recorded viewport — width drives an app's reflow, so recorded x/y positions
- * only hold at the recorded width — and the whole frame is uniformly scaled
- * so that width exactly fills the stage. The frame's layout HEIGHT is then
- * whatever fills the stage's remaining aspect at that scale: an app's content
- * flows vertically, so a taller-or-shorter viewport shows more or less of the
- * page below the recorded fold without moving anything within it (and each
- * replayed event's target anchor lets the SDK self-correct any app that does
- * lay out against viewport height). The CSS transform is purely visual and
- * never touches the frame's coordinate space. A transparent overlay makes the
- * frame read-only — real clicks, scrolls, and keystrokes never reach the app,
- * which responds only to the replayed events.
+ * Shows the app exactly as it was recorded. The frame is laid out at the
+ * recorded viewport in BOTH dimensions and uniformly scaled to fit the stage,
+ * centered — so recorded x/y positions hold (width drives an app's reflow,
+ * height drives a viewport-sized canvas), and a WebGL scene or game keeps its
+ * recorded shape instead of stretching to the stage's. A recording made at the
+ * canonical locked aspect (APP_RECORDING_VIEWPORT_ASPECT — the side panel's
+ * shape while recording) fills the stage edge to edge, because the stage
+ * column takes the recorded shape too; any other recording sits centered with
+ * the surface's own background as the margin. The CSS transform is purely
+ * visual and never touches the frame's coordinate space. A transparent overlay
+ * makes the frame read-only — real clicks, scrolls, and keystrokes never reach
+ * the app, which responds only to the replayed events.
  */
 function ReplayAppStage({
   viewport,
@@ -4031,7 +4045,8 @@ function ReplayAppStage({
   children: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState({ scale: 1, height: viewport.height });
+  const [fit, setFit] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
+  const { width: recordedWidth, height: recordedHeight } = viewport;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -4043,33 +4058,33 @@ function ReplayAppStage({
       // short, and no ResizeObserver callback would ever correct it — the
       // layout size never changes, only the transform — leaving the app
       // letterboxed inside the stage for the rest of the session.
-      const width = el.clientWidth;
-      const height = el.clientHeight;
-      if (width <= 0 || height <= 0) return;
-      const scale = width / viewport.width;
-      setFit({ scale, height: height / scale });
+      const next = replayStageFit({
+        stageWidth: el.clientWidth,
+        stageHeight: el.clientHeight,
+        viewport: { width: recordedWidth, height: recordedHeight },
+      });
+      if (next) setFit(next);
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [viewport.width]);
+  }, [recordedWidth, recordedHeight]);
 
   return (
     <div
       ref={containerRef}
-      // The scaled app is anchored top-left, so whatever the fit leaves over
-      // sits along the right and bottom edges. A tinted letterbox reads there
-      // as a stray light border around the app rather than as empty stage, so
-      // the leftover is the surface's own background.
+      // The margins the fit leaves are the surface's own background: a tinted
+      // letterbox would read as a stray border around the app rather than as
+      // empty stage.
       className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
     >
       <div
         className="absolute left-0 top-0 origin-top-left [&>div]:!h-full [&>div]:!w-full [&_iframe]:!h-full [&_iframe]:!max-h-none [&_iframe]:!min-h-0 [&_iframe]:!w-full"
         style={{
-          width: viewport.width,
-          height: fit.height,
-          transform: `scale(${fit.scale})`,
+          width: recordedWidth,
+          height: recordedHeight,
+          transform: `translate(${fit.offsetX}px, ${fit.offsetY}px) scale(${fit.scale})`,
         }}
       >
         {children}
@@ -4490,10 +4505,11 @@ export function partEditId(messageId: string, partIndex: number): string {
 }
 
 /**
- * Size the dialog from the screen alone — the recorded app's dimensions never
- * influence the player's size or aspect, so every recording (inline, side
- * panel, any surface) opens in the same, predictable player. Recomputed on
- * window resize; returns null only during SSR (the dialog opens client-side).
+ * Size the dialog's shell from the screen alone, so the player always opens
+ * at the same, predictable size. Within that shell the app column takes the
+ * recorded aspect and the chat pane the rest — the recording decides the
+ * split, never the shell. Recomputed on window resize; returns null only
+ * during SSR (the dialog opens client-side).
  */
 function usePlayerDialogSize() {
   const [size, setSize] = useState(() => measureDialog());
@@ -4507,11 +4523,12 @@ function usePlayerDialogSize() {
 }
 
 /**
- * The player's size is a property of the SCREEN and nothing else — not the
- * recorded app's viewport, and not the width the user happens to have dragged
- * their side panel to. Deriving it from the panel made the same app replay in a
- * different-sized player depending on how the session was recorded. The app
- * column instead scales the recorded viewport to fit whatever width it gets.
+ * The dialog shell's size is a property of the SCREEN — not the width the
+ * user happens to have dragged their side panel to, which would make the same
+ * app replay in a different-sized player depending on the recording machine.
+ * The recording's shape enters one level down: the app column inside the
+ * shell takes the recorded aspect, and its stage scales the recorded viewport
+ * uniformly into whatever box that yields.
  */
 function measureDialog() {
   if (typeof window === "undefined") return null;
@@ -4699,6 +4716,40 @@ export function dominantViewport(events: TimelineEvent[]) {
   return { width: best.width, height: best.height };
 }
 
+/**
+ * Uniform contain-fit of the recorded viewport inside the stage: one scale
+ * for both dimensions — the smaller of the two ratios, so nothing is cropped
+ * and nothing is stretched — and the offsets that center the scaled frame,
+ * splitting the leftover evenly on whichever axis the shapes disagree.
+ * A stage shaped exactly like the recording (the canonical locked-aspect
+ * case) fits with zero offsets and fills edge to edge. Null while either box
+ * has no size yet (mid-mount, display:none), so the caller keeps its previous
+ * fit instead of collapsing to nothing.
+ *
+ * @public — exported for testability
+ */
+export function replayStageFit({
+  stageWidth,
+  stageHeight,
+  viewport,
+}: {
+  stageWidth: number;
+  stageHeight: number;
+  viewport: { width: number; height: number };
+}): { scale: number; offsetX: number; offsetY: number } | null {
+  if (stageWidth <= 0 || stageHeight <= 0) return null;
+  if (viewport.width <= 0 || viewport.height <= 0) return null;
+  const scale = Math.min(
+    stageWidth / viewport.width,
+    stageHeight / viewport.height,
+  );
+  return {
+    scale,
+    offsetX: (stageWidth - viewport.width * scale) / 2,
+    offsetY: (stageHeight - viewport.height * scale) / 2,
+  };
+}
+
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) {
@@ -4760,9 +4811,9 @@ export function neutralizeAppScripts(html: string): string {
 /**
  * Hide the replayed app's scrollbars.
  *
- * The stage gives the app its recorded WIDTH and whatever height the window
- * leaves, so on a shorter window the recorded content overflows and the app
- * draws scrollbars — in the browser's default light scheme, which against a
+ * The stage lays the app out at its exact recorded viewport, so scrollbars
+ * appear only when the app's own content overflowed that viewport during the
+ * session — and then in the browser's default light scheme, which against a
  * dark app reads as light strips down the right and along the bottom. They
  * also mean nothing here: a replay is a playback surface, scrolling is driven
  * by the recorded scroll events, and a pointer shield already stops the viewer

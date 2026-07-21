@@ -13,6 +13,7 @@ import {
   keptTimelineRanges,
   neutralizeAppScripts,
   presentedTranscript,
+  replayStageFit,
   revealSchedule,
   uncutRecording,
 } from "./app-session-player";
@@ -919,6 +920,58 @@ describe("dominantViewport", () => {
       { kind: "canvas", t: 9_500, sel: "canvas", data: "frame" },
     ];
     expect(dominantViewport(events)).toEqual({ width: 400, height: 600 });
+  });
+});
+
+describe("replayStageFit", () => {
+  it("scales uniformly by the limiting axis and centers the leftover", () => {
+    // Stage wider than the recording's shape: height limits the scale and the
+    // spare width splits evenly — the app is never stretched to fill.
+    expect(
+      replayStageFit({
+        stageWidth: 1000,
+        stageHeight: 400,
+        viewport: { width: 400, height: 800 },
+      }),
+    ).toEqual({ scale: 0.5, offsetX: 400, offsetY: 0 });
+    // Stage taller than the recording's shape: width limits instead.
+    expect(
+      replayStageFit({
+        stageWidth: 400,
+        stageHeight: 1000,
+        viewport: { width: 800, height: 400 },
+      }),
+    ).toEqual({ scale: 0.5, offsetX: 0, offsetY: 400 });
+  });
+
+  it("fills a stage of the recorded shape edge to edge — the locked-aspect contract", () => {
+    // A session recorded in the aspect-locked side panel replays in a stage
+    // column of the same shape: one uniform factor for both dimensions, no
+    // margins, no distortion. This is the exact bug this guards: a WebGL scene
+    // recorded portrait must not replay squashed into a different aspect.
+    const fit = replayStageFit({
+      stageWidth: 900,
+      stageHeight: 1600,
+      viewport: { width: 450, height: 800 },
+    });
+    expect(fit).toEqual({ scale: 2, offsetX: 0, offsetY: 0 });
+  });
+
+  it("reports no fit while either box is sizeless, so a mid-mount measurement never collapses the app", () => {
+    expect(
+      replayStageFit({
+        stageWidth: 0,
+        stageHeight: 500,
+        viewport: { width: 400, height: 800 },
+      }),
+    ).toBeNull();
+    expect(
+      replayStageFit({
+        stageWidth: 500,
+        stageHeight: 500,
+        viewport: { width: 0, height: 0 },
+      }),
+    ).toBeNull();
   });
 });
 

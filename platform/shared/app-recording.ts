@@ -377,6 +377,17 @@ export const APP_RECORDING_RENDER_REGION_ATTR =
   "data-app-recording-render-region";
 export const APP_RECORDING_RENDER_REGION_SELECTOR = `[${APP_RECORDING_RENDER_REGION_ATTR}]`;
 
+/**
+ * The canonical width:height aspect the app is recorded at — the side panel
+ * locks itself to this shape while a recording runs, and the player's app
+ * stage replays at the recorded shape. One constant on both ends means a
+ * recorded session scales into the player by a single uniform factor: no
+ * letterbox, no distortion, and pointer coordinates that line up exactly.
+ * Portrait, because the side panel — the surface a recording nudges the app
+ * into — is a tall column beside the chat.
+ */
+export const APP_RECORDING_VIEWPORT_ASPECT = 9 / 16;
+
 const AppRecordingEnhancementSchema = z
   .object({
     description: z.string().max(1_000),

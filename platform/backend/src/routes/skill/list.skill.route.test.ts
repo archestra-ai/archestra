@@ -95,7 +95,9 @@ describe("GET /api/skills", () => {
       .json()
       .data.find((s: { name: string }) => s.name === "beta");
 
-    SkillModel.recordUsage(beta.id);
+    SkillModel.recordUsage({ skillId: beta.id, userId: null });
+    SkillModel.recordUsage({ skillId: beta.id, userId: ctx.user.id });
+    SkillModel.recordUsage({ skillId: beta.id, userId: ctx.user.id });
     await drainBackgroundWork();
 
     const byUsage = await ctx.app.inject({
@@ -106,7 +108,10 @@ describe("GET /api/skills", () => {
       .json()
       .data.map((s: { name: string; usageCount: number }) => s.name);
     expect(names[0]).toBe("beta");
-    expect(byUsage.json().data[0].usageCount).toBe(1);
+    expect(byUsage.json().data[0].usageCount).toBe(3);
+    // distinct attributed users; the null-user activation doesn't count one.
+    expect(byUsage.json().data[0].usageUserCount).toBe(1);
+    expect(byUsage.json().data[1].usageUserCount).toBe(0);
 
     const byName = await ctx.app.inject({
       method: "GET",

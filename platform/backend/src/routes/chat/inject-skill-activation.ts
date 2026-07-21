@@ -164,7 +164,7 @@ export async function injectSkillActivation({
 
   // an inline slash-command activation counts one use; the agent-designated
   // branch above doesn't — its use is counted at delegation dispatch.
-  SkillModel.recordUsage(skill.id);
+  SkillModel.recordUsage({ skillId: skill.id, userId });
   logger.info(
     {
       organizationId,

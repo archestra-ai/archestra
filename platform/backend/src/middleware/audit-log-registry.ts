@@ -193,6 +193,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "app.updated",
     fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
   },
+  // Live/author-only lifecycle transitions are POSTs carrying :appId, so the
+  // parent walk-up is suppressed — register directly so the transition has the
+  // audit trail its route comment promises.
+  "/api/apps/:appId/enable": {
+    resourceType: "app",
+    resourceIdParam: "appId",
+    action: "app.updated",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
+  "/api/apps/:appId/disable": {
+    resourceType: "app",
+    resourceIdParam: "appId",
+    action: "app.updated",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
 
   // MCP Servers
   "/api/mcp_server": {
@@ -433,6 +448,17 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     action: "skill.imported",
   },
+  // Creates a skill from an agent; a POST carrying the *agent's* :id, so the
+  // default param would mis-attribute the agent id to the skill.
+  // `resourceIdParam` names a param the route lacks; the handler supplies the
+  // created skill's id via `request.auditResourceId`, and fetchById then
+  // captures the after-state.
+  "/api/agents/:id/convert-to-skill": {
+    resourceType: "skill",
+    action: "skill.created",
+    resourceIdParam: "createdSkillId",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
 
   // Scheduled agent triggers (sub-routes resolve via `resolveAuditableRouteConfig`)
   "/api/schedule-triggers": {
@@ -587,8 +613,27 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/chatops/config/ngrok": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",
+    // Clearing the ngrok config leaves the org config object in place, and
+    // `chatOpsConfig.deleted` is not in the event vocabulary — without this
+    // pin the DELETE derives `unknown.deleted` (and warns on every request).
+    actionByMethod: { DELETE: "chatOpsConfig.updated" },
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/telegram": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  // Binding the caller's Telegram account creates/claims a DM binding row.
+  // Same org-level fingerprint snapshot as the bindings collection routes.
+  "/api/chatops/telegram/link": {
+    resourceType: "chatOpsBinding",
+    action: "chatOpsBinding.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
   },
   // Channel discovery refresh is semantically distinct from a generic binding update.
   "/api/chatops/channel-discovery/refresh": {

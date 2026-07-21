@@ -793,8 +793,93 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snap).toHaveProperty("organizationId", org.id);
     expect(snap).toHaveProperty("sourceType", "manual");
     expect(snap?.createdAt).toBeInstanceOf(Date);
+    expect(snap?.files).toEqual([]);
+    expect(snap?.teams).toEqual([]);
 
     expect(await SkillModel.findByIdForAudit(skill.id, org2.id)).toBeNull();
+  });
+
+  test("child-carrying snapshots expose the fields whose edits previously diffed empty", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+
+    // Auto-tools "removals" live in agent_excluded_tools — the agent snapshot
+    // must reflect them or a tool-exclusions edit renders as no change.
+    const agentSnap = await AgentModel.findByIdForAudit(agent.id, org.id);
+    expect(agentSnap).toHaveProperty("excludedToolIds", []);
+
+    const [catalog] = await db
+      .insert(schema.internalMcpCatalogTable)
+      .values({
+        name: "Audit Catalog",
+        organizationId: org.id,
+        serverType: "remote",
+        scope: "org",
+        deploymentSpecYaml: "kind: Deployment",
+      })
+      .returning();
+    const catalogSnap = await InternalMcpCatalogModel.findByIdForAudit(
+      catalog.id,
+      org.id,
+    );
+    // Labels/teams are audited:false children; the YAML hash surfaces
+    // in-place manifest edits a boolean would hide.
+    expect(catalogSnap).toHaveProperty("labels", []);
+    expect(catalogSnap).toHaveProperty("teams", []);
+    expect(catalogSnap?.deploymentSpecYamlHash).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  test("SkillModel.findByIdForAudit fingerprints resource files and lists teams so child-only edits diff", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id, { name: "Skill Team" });
+
+    const [skill] = await db
+      .insert(schema.skillsTable)
+      .values({
+        organizationId: org.id,
+        name: "Skill With Files",
+        description: "Does things",
+        content: "# Skill With Files",
+        sourceType: "manual",
+        scope: "team",
+        latestVersion: 1,
+      })
+      .returning();
+    await db
+      .insert(schema.skillTeamsTable)
+      .values({ skillId: skill.id, teamId: team.id });
+    await db.insert(schema.skillFilesTable).values({
+      skillId: skill.id,
+      path: "references/GUIDE.md",
+      content: "guide v1",
+      encoding: "utf8",
+      kind: "reference",
+    });
+
+    const snap = await SkillModel.findByIdForAudit(skill.id, org.id);
+    expect(snap?.teams).toEqual(["Skill Team"]);
+    expect(snap?.files).toHaveLength(1);
+    const fingerprint = (snap?.files as string[])[0];
+    expect(fingerprint).toMatch(
+      /^references\/GUIDE\.md \(8 bytes, sha256:[0-9a-f]{12}\)$/,
+    );
+
+    // An in-place content edit must change the fingerprint (hash), so the
+    // audit diff surfaces edits that keep path and size identical.
+    await db
+      .update(schema.skillFilesTable)
+      .set({ content: "guide v2" })
+      .where(eq(schema.skillFilesTable.skillId, skill.id));
+    const snapAfter = await SkillModel.findByIdForAudit(skill.id, org.id);
+    expect((snapAfter?.files as string[])[0]).not.toEqual(fingerprint);
   });
 
   test("AgentToolModel.findByAgentAndToolForAudit scopes to organization", async ({

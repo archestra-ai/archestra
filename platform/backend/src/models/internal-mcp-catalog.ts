@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   and,
   count,
@@ -1412,9 +1413,15 @@ class InternalMcpCatalogModel {
 
     if (!row) return null;
 
-    const toolCount =
-      (await InternalMcpCatalogModel.getToolStats([id])).get(id)?.toolCount ??
-      0;
+    // Labels and teams live in audited:false child tables ("parent carries
+    // the signal") — without them a labels-only or team-reassignment edit
+    // diffs as empty.
+    const [toolStats, labels, teams] = await Promise.all([
+      InternalMcpCatalogModel.getToolStats([id]),
+      McpCatalogLabelModel.getLabelsForCatalogItem(id),
+      McpCatalogTeamModel.getTeamDetailsForCatalog(id),
+    ]);
+    const toolCount = toolStats.get(id)?.toolCount ?? 0;
 
     const transportType = row.localConfig?.transportType ?? "stdio";
     const envKeys = Array.isArray(row.localConfig?.environment)
@@ -1448,7 +1455,18 @@ class InternalMcpCatalogModel {
       hasClientSecret: Boolean(row.clientSecretId),
       hasLocalConfigSecret: Boolean(row.localConfigSecretId),
       hasDeploymentSpecYaml: Boolean(row.deploymentSpecYaml),
+      // A boolean alone hides in-place YAML edits (reset-deployment-yaml,
+      // config PUTs) — a short content hash lets the diff show the change
+      // without persisting the (potentially large) manifest itself.
+      deploymentSpecYamlHash: row.deploymentSpecYaml
+        ? createHash("sha256")
+            .update(row.deploymentSpecYaml)
+            .digest("hex")
+            .slice(0, 12)
+        : null,
       hasEnterpriseManagedConfig: row.enterpriseManagedConfig !== null,
+      labels: labels.map((l) => `${l.key}:${l.value}`).sort(),
+      teams: teams.map((t) => t.name).sort(),
       toolCount,
       createdAt: row.createdAt.toISOString(),
     };

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   getProvidersWithOptionalApiKey,
   isVaultReference,
@@ -825,8 +826,20 @@ class LlmProviderApiKeyModel {
 
     if (!row) return null;
 
+    // Rotating the key value rewrites the secret row (same id, new material).
+    // Its updatedAt is a safe rotation fingerprint: it diffs when the value
+    // changes without ever touching the material itself.
+    const [secretRow] = row.secretId
+      ? await db
+          .select({ updatedAt: schema.secretsTable.updatedAt })
+          .from(schema.secretsTable)
+          .where(eq(schema.secretsTable.id, row.secretId))
+          .limit(1)
+      : [];
+
     // REDACTED: secretId and any resolved key material are never included.
-    // extraHeaders values may carry tokens, so capture header NAMES only.
+    // extraHeaders values may carry tokens, so capture header NAMES plus a
+    // short value hash (value-only edits would otherwise diff as empty).
     return {
       id: row.id,
       name: row.name,
@@ -840,6 +853,14 @@ class LlmProviderApiKeyModel {
       extraHeaderNames: row.extraHeaders
         ? Object.keys(row.extraHeaders).sort()
         : [],
+      extraHeadersHash: row.extraHeaders
+        ? createHash("sha256")
+            .update(JSON.stringify(row.extraHeaders))
+            .digest("hex")
+            .slice(0, 12)
+        : null,
+      hasSecret: Boolean(row.secretId),
+      secretRotatedAt: secretRow?.updatedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

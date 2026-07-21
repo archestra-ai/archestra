@@ -1,4 +1,5 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
+import { createHash } from "node:crypto";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
@@ -629,6 +630,33 @@ class KnowledgeBaseConnectorModel {
       row.config && typeof row.config === "object" && !Array.isArray(row.config)
         ? Object.keys(row.config as Record<string, unknown>).sort()
         : [];
+    // Keys alone hide value-only edits (e.g. pointing at a different repo);
+    // a short hash of the serialized config lets the diff show a change
+    // happened without recording values that may hold sensitive references.
+    const configHash =
+      configKeys.length > 0
+        ? createHash("sha256")
+            .update(JSON.stringify(row.config))
+            .digest("hex")
+            .slice(0, 12)
+        : null;
+
+    // Member overrides and documents are audited:false children of the
+    // connector — their route registrations promise connector.updated diffs,
+    // which only materialize if the snapshot reflects them.
+    const [overrides, [docCountRow]] = await Promise.all([
+      db
+        .select({
+          externalAccountId: schema.kbMemberOverridesTable.externalAccountId,
+          userId: schema.kbMemberOverridesTable.userId,
+        })
+        .from(schema.kbMemberOverridesTable)
+        .where(eq(schema.kbMemberOverridesTable.connectorId, id)),
+      db
+        .select({ count: count() })
+        .from(schema.kbDocumentsTable)
+        .where(eq(schema.kbDocumentsTable.connectorId, id)),
+    ]);
 
     return {
       id: row.id,
@@ -647,6 +675,11 @@ class KnowledgeBaseConnectorModel {
         : null,
       knowledgeBases,
       configKeys,
+      configHash,
+      memberOverrides: overrides
+        .map((o) => `${o.externalAccountId} -> ${o.userId}`)
+        .sort(),
+      documentCount: docCountRow?.count ?? 0,
       permissionSyncIntervalSeconds: row.permissionSyncIntervalSeconds ?? null,
       environmentId: row.environmentId ?? null,
       createdAt: row.createdAt.toISOString(),

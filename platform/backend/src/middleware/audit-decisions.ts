@@ -265,7 +265,7 @@ export const AUDIT_DECISIONS = {
   twoFactorsTable: {
     audited: false,
     reason:
-      "better-auth 2FA material; auth events captured via handleAfterHook",
+      "better-auth 2FA material; enable/disable audited via recordUserSecurityAudit (user.two_factor_*)",
   },
   verificationsTable: {
     audited: false,

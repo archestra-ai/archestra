@@ -393,7 +393,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(ConvertAgentToSkillResponseSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        body,
+        user,
+        organizationId,
+      } = request;
       const { agent, agentChecker } =
         await authorizeInternalAgentForSkillConversion({
           id,
@@ -502,6 +508,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { agentId: agent.id, skillId: skill.id, organizationId, deletedAgent },
         "[Skills] Converted agent to skill",
       );
+
+      // The route's :id is the source agent; hand the created skill's id to
+      // the audit hook (registered as skill.created with a fetchById) so the
+      // row targets the skill instead of logging unknown.created.
+      request.auditResourceId = { value: skill.id };
+
       return reply.send({
         skill: await loadSkillDetail(skill),
         report,

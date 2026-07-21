@@ -3166,6 +3166,7 @@ class AgentModel {
       connectorIds,
       delegations,
       excludedSubagentIds,
+      excludedToolIds,
       suggestedPrompts,
       modelRows,
       keyRows,
@@ -3177,6 +3178,7 @@ class AgentModel {
       AgentConnectorAssignmentModel.getConnectorIds(id),
       AgentToolModel.getDelegationTargets(id),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      AgentExcludedToolModel.findToolIdsByAgent(id),
       AgentSuggestedPromptModel.getForAgent(id),
       // Resolve the live modelId FK to its human-readable identity so a model
       // change surfaces as a real diff — the legacy llmModel text column is
@@ -3250,6 +3252,9 @@ class AgentModel {
       labels: labels.sort(),
       delegationTargets,
       excludedSubagentIds: [...excludedSubagentIds].sort(),
+      // Auto-tools mode "removes" tools via exclusion rows — without this an
+      // exclusions-only edit (PUT /:id/tool-exclusions) diffs as empty.
+      excludedToolIds: [...excludedToolIds].sort(),
       suggestedPrompts,
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),

@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -555,6 +562,54 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(second.env.ANTHROPIC_CUSTOM_HEADERS).toContain("X-Foo: bar");
   });
 
+  test("claude-code settings merge: expands $HOME, creates the config dir, and backs up on re-run", async () => {
+    // Regression: sh()-quoting the config path kept $HOME literal, so the
+    // merge block dropped a junk ./'$HOME' dir in the cwd, never took the
+    // promised backup, and crashed the whole script (set -e) on a machine
+    // without ~/.claude. Run the real rendered block against a fresh HOME.
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: null,
+      skills: null,
+      proxy: ANTHROPIC_PASSTHROUGH_PROXY,
+    });
+    const start = script.indexOf("if command -v python3");
+    const endMarker = "\nARCHESTRA_MANUAL\nfi";
+    const end = script.indexOf(endMarker, start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const block = `set -euo pipefail\n${script.slice(start, end + endMarker.length)}\n`;
+
+    const home = await mkdtemp(path.join(tmpdir(), "archestra-home-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "archestra-cwd-"));
+    try {
+      const blockFile = path.join(cwd, "merge-block.sh");
+      await writeFile(blockFile, block, "utf8");
+      const env = { ...process.env, HOME: home };
+
+      // Fresh machine: no ~/.claude yet — the merge creates it, no crash.
+      await execFileAsync("bash", [blockFile], { cwd, env });
+      const settingsPath = path.join(home, ".claude", "settings.json");
+      const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+      expect(settings.env.ANTHROPIC_BASE_URL).toBe(
+        ANTHROPIC_PASSTHROUGH_PROXY.url,
+      );
+      // No junk literal-$HOME directory in the cwd.
+      await expect(stat(path.join(cwd, "$HOME"))).rejects.toThrow();
+      // Nothing existed on the first run, so no backup yet…
+      await expect(stat(`${settingsPath}.archestra-backup`)).rejects.toThrow();
+      // …and a re-run backs up the now-existing file, exactly once.
+      await execFileAsync("bash", [blockFile], { cwd, env });
+      const backup = JSON.parse(
+        await readFile(`${settingsPath}.archestra-backup`, "utf8"),
+      );
+      expect(backup).toEqual(settings);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   test("codex: manages a marker-delimited TOML block and logs in via stdin", () => {
     const script = renderSetupScript(fullContext("codex"));
     expect(script).toContain("# >>> archestra:default_proxy >>>");
@@ -970,9 +1025,10 @@ describe("color output", () => {
 describe("idempotent re-runs", () => {
   test("config backups are taken once, never clobbering the pristine copy", () => {
     const claude = renderSetupScript(fullContext("claude-code"));
-    // Guarded so a second run keeps the original (pre-Archestra) backup.
+    // Guarded so a second run keeps the original (pre-Archestra) backup. The
+    // path is double-quoted: $HOME must expand for the guard to ever match.
     expect(claude).toContain(
-      "[ ! -f '$HOME/.claude/settings.json.archestra-backup' ]",
+      '[ ! -f "$HOME/.claude/settings.json.archestra-backup" ]',
     );
 
     const codex = renderSetupScript(fullContext("codex"));

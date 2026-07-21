@@ -454,12 +454,17 @@ function mergeJsonFileSnippet(params: {
     .map(([key, value]) => `export ${key}=${sh(value)}`)
     .join("\n");
 
+  // params.file is an internal constant like $HOME/.claude/settings.json and
+  // MUST render double-quoted: $HOME has to expand. sh()'s single quotes kept
+  // it literal, so mkdir dropped a junk ./'$HOME' dir in the cwd, the backup
+  // cp never matched, and on a machine without the config dir the python merge
+  // crashed and aborted the whole script under set -e.
   return `if command -v python3 >/dev/null 2>&1; then
-  mkdir -p "$(dirname ${sh(params.file)})"
+  mkdir -p "$(dirname "${params.file}")"
   # Back up once: a re-run must not overwrite the pristine pre-Archestra copy
   # with our already-modified file. The merge below is itself idempotent.
-  if [ -f ${sh(params.file)} ] && [ ! -f ${sh(`${params.file}.archestra-backup`)} ]; then
-    cp ${sh(params.file)} ${sh(`${params.file}.archestra-backup`)}
+  if [ -f "${params.file}" ] && [ ! -f "${params.file}.archestra-backup" ]; then
+    cp "${params.file}" "${params.file}.archestra-backup"
   fi
 ${indent(envAssignments, "  ")}
   python3 - <<'ARCHESTRA_PY'

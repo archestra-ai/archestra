@@ -255,8 +255,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Gate assigning a restricted environment. Requires
-      // environment:deploy-to-restricted (environment:admin implies it).
-      // Unrestricted and default (null) environments are open.
+      // mcpRegistry:deploy-to-restricted. Unrestricted and default (null)
+      // environments are open.
       await assertCanAssignEnvironment({
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
@@ -1057,8 +1057,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // When the environment assignment changes, gate it the same way create
       // does — the target must belong to this org, and a restricted environment
-      // (or restricted default) requires environment:deploy-to-restricted
-      // (environment:admin implies it).
+      // (or restricted default) requires mcpRegistry:deploy-to-restricted.
       const environmentChanged =
         "environmentId" in restBody &&
         restBody.environmentId !== originalCatalogItem.environmentId;
@@ -1804,17 +1803,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 /**
  * Whether the caller may deploy catalog items to restricted environments.
- * Holding `environment:admin` (full environment management) implies the
- * `environment:deploy-to-restricted` capability.
+ * Gated by `mcpRegistry:deploy-to-restricted`.
  */
 async function callerCanDeployToRestricted(
   headers: FastifyRequest["headers"],
 ): Promise<boolean> {
-  const [{ success: hasAdmin }, { success: hasDeploy }] = await Promise.all([
-    hasPermission({ environment: ["admin"] }, headers),
-    hasPermission({ environment: ["deploy-to-restricted"] }, headers),
-  ]);
-  return hasAdmin || hasDeploy;
+  const { success: hasDeploy } = await hasPermission(
+    { mcpRegistry: ["deploy-to-restricted"] },
+    headers,
+  );
+  return hasDeploy;
 }
 
 async function upsertCatalogClientSecretValue(params: {

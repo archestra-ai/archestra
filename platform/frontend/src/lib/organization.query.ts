@@ -11,7 +11,12 @@ import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { environmentKeys } from "./environment.query";
-import { handleApiError, throwOnApiError } from "./utils";
+import {
+  getApiErrorInternalCode,
+  handleApiError,
+  throwOnApiError,
+  toApiError,
+} from "./utils";
 
 export const appearanceKeys = {
   all: ["appearance"] as const,
@@ -637,8 +642,17 @@ export function useUpdateKnowledgeSettings(
         await archestraApiSdk.updateKnowledgeSettings({ body: data });
 
       if (error) {
-        toast.error(onErrorMessage);
-        return null;
+        // Field-validation failures carry an `internal_code` (which of
+        // embedding/reranker failed) and are shown inline per-field by the page,
+        // so don't also toast them; every other error toasts generically. The
+        // code is preserved on the thrown error for the page to read.
+        const internalCode = getApiErrorInternalCode(error);
+        if (!internalCode) {
+          toast.error(onErrorMessage);
+        }
+        const apiError = toApiError(error) as Error & { internalCode?: string };
+        apiError.internalCode = internalCode;
+        throw apiError;
       }
 
       return updatedOrganization;
@@ -677,7 +691,9 @@ export function useDropEmbeddingConfig() {
 }
 
 /**
- * Test embedding connection by embedding a sample text
+ * Test the embedding connection by embedding a sample text. Returns the result
+ * (never throws) so the caller can drive a per-section status indicator; a
+ * transport error still toasts.
  */
 export function useTestEmbeddingConnection() {
   return useMutation({
@@ -697,15 +713,28 @@ export function useTestEmbeddingConnection() {
 
       return data ?? { success: false, error: "No response" };
     },
-    onSuccess: (result) => {
-      if (!result) return;
-      if (result.success) {
-        toast.success("Connection test successful");
-      } else {
-        toast.error("Connection test failed", {
-          description: result.error,
-        });
+  });
+}
+
+/**
+ * Test the reranker connection with a sample structured-output call. Same
+ * contract as the embedding test — returns the result for a per-section status.
+ */
+export function useTestRerankerConnection() {
+  return useMutation({
+    mutationFn: async (
+      params: NonNullable<archestraApiTypes.TestRerankerConnectionData["body"]>,
+    ) => {
+      const { data, error } = await archestraApiSdk.testRerankerConnection({
+        body: params,
+      });
+
+      if (error) {
+        handleApiError(error);
+        return { success: false, error: "Request failed" };
       }
+
+      return data ?? { success: false, error: "No response" };
     },
   });
 }

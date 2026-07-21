@@ -94,6 +94,19 @@ describe("k8s-yaml-generator", () => {
       expect(yaml).toContain("imagePullPolicy: Never");
     });
 
+    test("generates YAML with resource governance (memory limit + ephemeral-storage request/limit)", () => {
+      const yaml = generateDeploymentYamlTemplate({
+        serverId: "test-id",
+        serverName: "test-server",
+        namespace: "default",
+        dockerImage: "test-image:latest",
+      });
+
+      expect(yaml).toContain("ephemeral-storage: 256Mi");
+      expect(yaml).toContain("ephemeral-storage: 1Gi");
+      expect(yaml).toContain("memory: 512Mi");
+    });
+
     test("generates YAML with secret env vars", () => {
       const yaml = generateDeploymentYamlTemplate({
         serverId: "test-id",

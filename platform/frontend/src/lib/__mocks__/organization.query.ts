@@ -35,6 +35,7 @@ export const useUpdateAuthSettings = vi.fn();
 export const useUpdateKnowledgeSettings = vi.fn();
 export const useDropEmbeddingConfig = vi.fn();
 export const useTestEmbeddingConnection = vi.fn();
+export const useTestRerankerConnection = vi.fn();
 export const useOrganizationMembers = vi.fn();
 export const useMemberSignupStatus = vi.fn();
 export const useDeletePendingSignupMember = vi.fn();

@@ -14,9 +14,20 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import {
+  EmbeddingConfigUnresolvableError,
+  RerankerConfigUnresolvableError,
+} from "./errors";
 
 export interface EmbeddingConfig {
-  apiKey: string;
+  /**
+   * The provider secret, or `null` when the provider is keyless. `null` is a
+   * meaningful value, not a placeholder: Bedrock IAM/IRSA keys are deliberately
+   * secretless and must resolve to no key so the Bedrock client selects IAM auth
+   * (a synthetic `"unused"` would force bearer auth and break IAM). Clients that
+   * need a non-empty key string (OpenAI SDK) synthesize a local placeholder.
+   */
+  apiKey: string | null;
   baseUrl: string | null;
   model: EmbeddingModel;
   dimensions: number;
@@ -47,11 +58,13 @@ export async function resolveEmbeddingConfig(
 
   const resolved = await resolveApiKeyFromChatApiKey(org.embeddingChatApiKeyId);
   if (!resolved) {
+    // Configured but unresolvable (e.g. a credential that won't decrypt) is a
+    // real, diagnosable fault — distinct from "not configured" (null above).
     logger.warn(
       { organizationId, chatApiKeyId: org.embeddingChatApiKeyId },
       "[KB] Embedding API key configured but secret could not be resolved",
     );
-    return null;
+    throw new EmbeddingConfigUnresolvableError();
   }
 
   const model = await ModelModel.findByProviderAndModelId(
@@ -87,11 +100,14 @@ export async function resolveRerankerConfig(
 
   const resolved = await resolveApiKeyFromChatApiKey(org.rerankerChatApiKeyId);
   if (!resolved) {
+    // Configured but unresolvable. Reranking is optional and degrades at query
+    // time, so the caller catches this and continues unranked — but it is still a
+    // typed, surfaced fault (and blocks save).
     logger.warn(
       { organizationId, chatApiKeyId: org.rerankerChatApiKeyId },
       "[KB] Reranker API key configured but secret could not be resolved",
     );
-    return null;
+    throw new RerankerConfigUnresolvableError();
   }
 
   const modelName = org.rerankerModel;
@@ -99,7 +115,8 @@ export async function resolveRerankerConfig(
   return {
     llmModel: createDirectLLMModel({
       provider: resolved.provider,
-      apiKey: resolved.apiKey,
+      // createDirectLLMModel expects `string | undefined`; map keyless `null`.
+      apiKey: resolved.apiKey ?? undefined,
       modelName,
       baseUrl: resolved.baseUrl,
     }),
@@ -132,7 +149,8 @@ export async function getDefaultOrgEmbeddingConfig(): Promise<{
 export async function resolveApiKeyFromChatApiKey(
   chatApiKeyId: string,
 ): Promise<{
-  apiKey: string;
+  /** `null` when the provider is keyless (e.g. Ollama, Bedrock IAM). */
+  apiKey: string | null;
   baseUrl: string | null;
   provider: SupportedProvider;
 } | null> {
@@ -153,11 +171,13 @@ export async function resolveApiKeyFromChatApiKey(
     getProviderConfiguredBaseUrl(chatApiKey.provider) ||
     null;
 
-  // Providers like Ollama don't require an API key — use a placeholder
-  // since the OpenAI SDK requires a non-empty apiKey string
+  // Keyless providers (Ollama, Bedrock IAM) have no secret. Return `null` rather
+  // than a placeholder so keyless-aware clients (Bedrock IAM) can distinguish "no
+  // key" from a real key; clients that need a non-empty string synthesize their
+  // own placeholder.
   if (!chatApiKey.secretId) {
     return {
-      apiKey: "unused",
+      apiKey: null,
       baseUrl,
       provider: chatApiKey.provider,
     };

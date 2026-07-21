@@ -334,8 +334,8 @@ const organizationsTable = pgTable("organization", {
 
   /**
    * When true, assigning a catalog item to the implicit "default" environment
-   * (environment_id = null) requires the `environment:admin` permission — i.e.
-   * creating a catalog item without choosing an environment is admin-gated.
+   * (environment_id = null) requires the resource-specific `deploy-to-restricted` permission — i.e.
+   * creating a catalog item without choosing an environment is gated too.
    * Mirrors the per-environment `environment.restricted` flag for the default.
    */
   defaultEnvironmentRestricted: boolean("default_environment_restricted")

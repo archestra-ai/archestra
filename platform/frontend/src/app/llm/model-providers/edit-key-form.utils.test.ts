@@ -17,7 +17,6 @@ function makeValues(
     vaultSecretPath: null,
     vaultSecretKey: null,
     isPrimary: false,
-    billingMode: "metered",
     bedrockAuthMethod: "api-key",
     awsAccessKeyId: null,
     awsSecretAccessKey: null,

@@ -132,6 +132,34 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}
 {{- end }}
+{{- with .Values.archestra.orchestrator.mcpServerResources }}
+{{- if .requests.cpu }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST
+  value: {{ .requests.cpu | quote }}
+{{- end }}
+{{- if .requests.memory }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST
+  value: {{ .requests.memory | quote }}
+{{- end }}
+{{- if .requests.ephemeralStorage }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST
+  value: {{ .requests.ephemeralStorage | quote }}
+{{- end }}
+{{- if .limits.memory }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT
+  value: {{ .limits.memory | quote }}
+{{- end }}
+{{- if .limits.ephemeralStorage }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT
+  value: {{ .limits.ephemeralStorage | quote }}
+{{- end }}
+{{- end }}
+{{/* "0" is a meaningful value (disables the reaper), so compare against the
+     empty string instead of relying on truthiness. */}}
+{{- if ne (toString .Values.archestra.orchestrator.failedPodReapIntervalSeconds) "" }}
+- name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
+  value: {{ .Values.archestra.orchestrator.failedPodReapIntervalSeconds | quote }}
+{{- end }}
 {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
 - name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
   value: {{ printf "%s/config" .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath | quote }}

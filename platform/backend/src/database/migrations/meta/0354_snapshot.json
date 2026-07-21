@@ -1,5 +1,5 @@
 {
-  "id": "7a8ffafa-0dbb-43b9-bd8e-63a307ce4c33",
+  "id": "fce10424-3379-4af7-9a44-ac0a1b38b5cb",
   "prevId": "33acff2f-6fb4-4588-9a55-9aa41113f245",
   "version": "7",
   "dialect": "postgresql",
@@ -9061,13 +9061,6 @@
           "notNull": true,
           "default": false
         },
-        "billing_mode": {
-          "name": "billing_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'metered'"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -10507,12 +10500,6 @@
         },
         "default_parameters": {
           "name": "default_parameters",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "configured_parameters": {
-          "name": "configured_parameters",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

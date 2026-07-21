@@ -1003,26 +1003,18 @@ async function handleCreateMcpServer(
     }
 
     try {
-      // Deploying to a restricted environment requires
-      // environment:deploy-to-restricted (environment:admin implies it).
-      const [hasAdmin, hasDeploy] = await Promise.all([
-        userHasPermission(
-          context.userId,
-          organizationId,
-          "environment",
-          "admin",
-        ),
-        userHasPermission(
-          context.userId,
-          organizationId,
-          "environment",
-          "deploy-to-restricted",
-        ),
-      ]);
+      // Deploying a catalog item to a restricted environment requires
+      // mcpRegistry:deploy-to-restricted.
+      const hasDeploy = await userHasPermission(
+        context.userId,
+        organizationId,
+        "mcpRegistry",
+        "deploy-to-restricted",
+      );
       await assertCanAssignEnvironment({
         environmentId: args.environmentId ?? null,
         organizationId,
-        canDeployToRestricted: hasAdmin || hasDeploy,
+        canDeployToRestricted: hasDeploy,
       });
     } catch (error) {
       return errorResult(

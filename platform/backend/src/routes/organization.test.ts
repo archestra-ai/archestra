@@ -9,6 +9,7 @@ import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -677,7 +678,18 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/knowledge-settings", () => {
-    test("allows clearing embedding model with null", async ({
+    beforeEach(() => {
+      // Save-time validation issues a real embedding call; mock the network so
+      // the validation logic runs without a live provider.
+      vi.spyOn(embeddingClients, "callEmbedding").mockResolvedValue({
+        object: "list",
+        data: [{ object: "embedding", embedding: [0.1, 0.2, 0.3], index: 0 }],
+        model: "test",
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+      });
+    });
+
+    test("rejects clearing the embedding model via PATCH once locked (must use Drop)", async ({
       makeSecret,
     }) => {
       const secret = await makeSecret({ secret: { apiKey: "test-key" } });
@@ -721,6 +733,8 @@ describe("organization routes", () => {
 
       expect(setResponse.statusCode).toBe(200);
 
+      // Clearing the model on a locked config would leave a key with no model and
+      // orphan the ingested vectors — it must go through the drop-embedding route.
       const clearResponse = await app.inject({
         method: "PATCH",
         url: "/api/organization/knowledge-settings",
@@ -729,8 +743,66 @@ describe("organization routes", () => {
         },
       });
 
-      expect(clearResponse.statusCode).toBe(200);
-      expect(clearResponse.json().embeddingModel).toBeNull();
+      expect(clearResponse.statusCode).toBe(400);
+      expect(clearResponse.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("rejects a half-configured embedding (key with no model)", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      // A fresh org: selecting a key but no model must not persist a half-config
+      // (the bug: an "empty" embedding configuration could be saved).
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { embeddingChatApiKeyId: apiKey.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("allows a patch that does not touch embedding fields even when embedding is half-configured", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      // Half-configured pre-existing state (key, no model), seeded directly.
+      await OrganizationModel.patch(organizationId, {
+        embeddingChatApiKeyId: apiKey.id,
+      });
+
+      // An empty patch (what a stripped unrelated-field patch reduces to) must
+      // not be blocked by — or fire a live probe for — state it doesn't change.
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(embeddingClients.callEmbedding).not.toHaveBeenCalled();
     });
 
     test("rejects embedding models that are missing configured dimensions", async ({
@@ -895,7 +967,123 @@ describe("organization routes", () => {
 
       expect(changeKeyResponse.statusCode).toBe(400);
       expect(changeKeyResponse.json().error.message).toContain(
-        "Embedding API key cannot be changed once configured",
+        "cannot be changed once set",
+      );
+      expect(changeKeyResponse.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("blocks save when the embedding validation call fails", async ({
+      makeSecret,
+    }) => {
+      vi.spyOn(embeddingClients, "callEmbedding").mockRejectedValue(
+        new Error("provider down"),
+      );
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Embedding Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+      const model = await ModelModel.create({
+        externalId: "gemini/gemini-embedding-001",
+        provider: "gemini",
+        modelId: "gemini-embedding-001",
+        description: "Gemini Embedding 001",
+        contextLength: null,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        embeddingDimensions: 3072,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: model.id, modelId: model.modelId }],
+        "gemini",
+      );
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          embeddingChatApiKeyId: apiKey.id,
+          embeddingModel: model.modelId,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "embedding_validation_failed",
+      );
+    });
+
+    test("validates the reranker on save and blocks an invalid one", async ({
+      makeSecret,
+    }) => {
+      vi.spyOn(
+        knowledgeSettingsService,
+        "validateRerankerConfig",
+      ).mockResolvedValue({
+        ok: false,
+        error: "Reranker could not be reached.",
+      });
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const rerankerKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Reranker Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: {
+          rerankerChatApiKeyId: rerankerKey.id,
+          rerankerModel: "gemini-1.5-flash",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "reranker_validation_failed",
+      );
+      expect(response.json().error.message).toContain(
+        "Reranker could not be reached.",
+      );
+    });
+
+    test("rejects a half-configured reranker (key without model)", async ({
+      makeSecret,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const rerankerKey = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: secret.id,
+        name: "Reranker Key",
+        provider: "gemini",
+        scope: "personal",
+        userId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/knowledge-settings",
+        payload: { rerankerChatApiKeyId: rerankerKey.id },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.internal_code).toBe(
+        "reranker_validation_failed",
       );
     });
   });
@@ -1005,6 +1193,57 @@ describe("organization routes", () => {
           dimensions: 3072,
         }),
       );
+    });
+  });
+
+  describe("POST /api/organization/knowledge-settings/test-reranker", () => {
+    test("returns success and maps the body to the service (scoped to the org)", async () => {
+      const validateSpy = vi
+        .spyOn(knowledgeSettingsService, "validateRerankerConfig")
+        .mockResolvedValue({ ok: true });
+      const keyId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-reranker",
+        payload: {
+          rerankerChatApiKeyId: keyId,
+          rerankerModel: "claude-haiku",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+      expect(validateSpy).toHaveBeenCalledWith({
+        keyId,
+        model: "claude-haiku",
+        organizationId,
+      });
+    });
+
+    test("returns the failure reason when the reranker validation fails", async () => {
+      vi.spyOn(
+        knowledgeSettingsService,
+        "validateRerankerConfig",
+      ).mockResolvedValue({
+        ok: false,
+        error: "Reranker could not be reached.",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-reranker",
+        payload: {
+          rerankerChatApiKeyId: crypto.randomUUID(),
+          rerankerModel: "claude-haiku",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        success: false,
+        error: "Reranker could not be reached.",
+      });
     });
   });
 });

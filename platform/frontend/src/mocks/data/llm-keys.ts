@@ -20,7 +20,6 @@ export function makeLlmProviderApiKey(
     extraHeaders: null,
     isSystem: false,
     isPrimary: true,
-    billingMode: "metered",
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     teamName: null,

@@ -9,6 +9,7 @@ import {
   getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
 } from "./embedding-clients";
+import { normalizeEmbeddingError, toKnowledgeBaseUserMessage } from "./errors";
 import {
   buildEmbeddingInteraction,
   withKbObservability,
@@ -20,6 +21,16 @@ import {
 
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;
+
+/**
+ * The outcome of an embedding batch, reported to the connector run so a failure's
+ * cause is visible (not just server logs). `errorMessage` carries the same typed,
+ * user-facing message the query path surfaces.
+ */
+interface EmbeddingBatchOutcome {
+  failedDocumentCount: number;
+  errorMessage: string | null;
+}
 
 class EmbeddingService {
   async processDocument(
@@ -111,7 +122,7 @@ class EmbeddingService {
   async processDocuments(
     documentIds: string[],
     connectorRunId?: string,
-  ): Promise<void> {
+  ): Promise<EmbeddingBatchOutcome> {
     // 1. Load all documents in one query, filter to pending, gather chunks
     const documents = await KbDocumentModel.findByIds(documentIds);
     const documentsById = new Map(documents.map((d) => [d.id, d]));
@@ -175,11 +186,34 @@ class EmbeddingService {
       }
     }
 
-    if (allChunks.length === 0) return;
+    if (allChunks.length === 0) {
+      return { failedDocumentCount: 0, errorMessage: null };
+    }
 
     // 2. Get embedding config
-    const orgConfig = await getDefaultOrgEmbeddingConfig();
+    let orgConfig: Awaited<ReturnType<typeof getDefaultOrgEmbeddingConfig>>;
+    try {
+      orgConfig = await getDefaultOrgEmbeddingConfig();
+    } catch (error) {
+      // Configured but unresolvable (e.g. an undecryptable credential) is a real,
+      // diagnosable fault — fail the documents and surface the cause on the run,
+      // rather than crashing the task (which would retry a config retry can't fix).
+      const message = embeddingFailureMessage(error);
+      logger.error(
+        { runId: connectorRunId, error: message },
+        "[Embedder] Embedding configuration could not be resolved",
+      );
+      for (const { documentId } of docChunkMap) {
+        await KbDocumentModel.update(documentId, { embeddingStatus: "failed" });
+      }
+      return {
+        failedDocumentCount: docChunkMap.length,
+        errorMessage: message,
+      };
+    }
     if (!orgConfig) {
+      // Not configured (vs unresolvable): defer, keep the documents pending so a
+      // later run embeds them once an embedding model is set.
       logger.debug(
         { runId: connectorRunId },
         "[Embedder] No embedding API key configured, skipping",
@@ -189,12 +223,13 @@ class EmbeddingService {
           embeddingStatus: "pending",
         });
       }
-      return;
+      return { failedDocumentCount: 0, errorMessage: null };
     }
 
     const ctx = orgConfig.config;
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
+    let firstErrorMessage: string | null = null;
 
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -212,12 +247,17 @@ class EmbeddingService {
           embeddingResults.set(batch[j].chunkId, response.data[j].embedding);
         }
       } catch (error) {
+        const message = embeddingFailureMessage(error, {
+          provider: ctx.provider,
+          model: ctx.model,
+        });
+        firstErrorMessage ??= message;
         logger.error(
           {
             runId: connectorRunId,
             batchStart: i,
             batchSize: batch.length,
-            error: error instanceof Error ? error.message : String(error),
+            error: message,
           },
           "[Embedder] Batch embedding API call failed",
         );
@@ -232,12 +272,30 @@ class EmbeddingService {
       ([chunkId, embedding]) => ({ chunkId, embedding }),
     );
     if (successfulUpdates.length > 0) {
-      await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+      try {
+        await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+      } catch (error) {
+        // Persistence failed (e.g. a pgvector dimension error on write). Fail the
+        // affected documents and surface the cause rather than crashing.
+        firstErrorMessage ??= embeddingFailureMessage(error, {
+          provider: ctx.provider,
+          model: ctx.model,
+        });
+        logger.error(
+          { runId: connectorRunId, error: firstErrorMessage },
+          "[Embedder] Failed to persist embeddings",
+        );
+        for (const { chunkId } of successfulUpdates) {
+          failedChunkIds.add(chunkId);
+        }
+      }
     }
 
+    let failedDocumentCount = 0;
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
       const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
       if (anyFailed) {
+        failedDocumentCount++;
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
         });
@@ -256,6 +314,11 @@ class EmbeddingService {
         );
       }
     }
+
+    return {
+      failedDocumentCount,
+      errorMessage: failedDocumentCount > 0 ? firstErrorMessage : null,
+    };
   }
 
   private async callEmbeddingApiWithRetry(
@@ -319,6 +382,23 @@ class EmbeddingService {
 export const embeddingService = new EmbeddingService();
 
 // ===== Internal helpers =====
+
+/**
+ * A cause-specific, user-facing message for an embedding failure. When the
+ * embedding context (provider/model) is known, a raw provider/network error is
+ * first normalized into the typed taxonomy — the same messages the query path
+ * surfaces — so connector runs never expose opaque SDK/SQL text.
+ */
+function embeddingFailureMessage(
+  error: unknown,
+  ctx?: { provider: string; model: string },
+): string {
+  const normalized = ctx ? normalizeEmbeddingError(error, ctx) : error;
+  return (
+    toKnowledgeBaseUserMessage(normalized) ??
+    (error instanceof Error ? error.message : String(error))
+  );
+}
 
 /**
  * Convert a raw chunk content string to an EmbeddingInput.

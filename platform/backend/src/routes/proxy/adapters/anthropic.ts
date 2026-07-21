@@ -1218,15 +1218,17 @@ export const anthropicAdapterFactory: LLMProvider<
     return undefined;
   },
 
-  isForwardedSubscriptionCredential(apiKey: string | undefined): boolean {
-    // `extractApiKey` tags a forwarded `Authorization: Bearer` token with a
-    // `Bearer:` sentinel; `x-api-key` API keys are returned raw. For Anthropic
-    // only OAuth uses Bearer, so a Bearer sentinel means an OAuth/subscription
-    // credential (metered API keys always arrive via `x-api-key`). The caller
-    // additionally requires a Claude-client body signal before treating this as
-    // a subscription, so a forwarded metered Bearer (e.g. Workload Identity) is
-    // not misclassified.
-    return apiKey?.startsWith("Bearer:") ?? false;
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // Anthropic credentials are format-distinguishable: OAuth access tokens
+    // (Claude Pro/Max subscriptions — what Claude Code sends as
+    // `Authorization: Bearer`) are `sk-ant-oat…`, while metered API keys are
+    // `sk-ant-api…`. Checking the token itself (not just the Bearer transport)
+    // keeps other Bearer-shaped credentials (e.g. Workload Identity Federation
+    // access tokens) classified as metered. `extractApiKey` tags forwarded
+    // Bearer tokens with a `Bearer:` sentinel; strip it before the check so
+    // both forwarded and stored credentials are classified uniformly.
+    const token = apiKey?.startsWith("Bearer:") ? apiKey.slice(7) : apiKey;
+    return token?.startsWith("sk-ant-oat") ?? false;
   },
 
   getBaseUrl(): string | undefined {

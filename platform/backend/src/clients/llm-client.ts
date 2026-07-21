@@ -1,4 +1,3 @@
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createCerebras } from "@ai-sdk/cerebras";
 import { createCohere } from "@ai-sdk/cohere";
@@ -7,6 +6,7 @@ import { createVertex } from "@ai-sdk/google-vertex";
 import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
@@ -32,9 +32,7 @@ import {
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
 import {
-  decodeBedrockSigV4Marker,
-  getBedrockCredentialProvider,
-  getBedrockRegion,
+  buildBedrockProvider,
   isBedrockIamAuthEnabled,
 } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -55,8 +53,10 @@ import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 const KEYLESS_PROVIDER_API_KEY_PLACEHOLDER = "EMPTY";
 
 /**
- * Note: vLLM and Ollama use the @ai-sdk/openai provider since they expose OpenAI-compatible APIs.
- * When creating a vLLM/Ollama model, we use createOpenAI with the respective base URL.
+ * Note: vLLM uses the @ai-sdk/openai provider (createOpenAI) since it exposes an
+ * OpenAI-compatible API. Ollama uses @ai-sdk/openai-compatible instead so that
+ * reasoning ("thinking") streamed in the `reasoning_content` field — which the
+ * strict @ai-sdk/openai chat parser drops — surfaces as native reasoning parts.
  */
 
 /**
@@ -574,13 +574,26 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   ollama: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "Ollama base URL is required.");
+      }
+      // Ollama is OpenAI-compatible, but streams reasoning ("thinking") in a
+      // `reasoning_content` delta field that @ai-sdk/openai's chat parser drops
+      // — so qwen3-style thinking never reaches the UI. @ai-sdk/openai-compatible
+      // parses `reasoning_content` / `reasoning` into native reasoning parts.
+      return createOpenAICompatible({
+        name: "ollama",
         apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
         baseURL,
         headers,
         fetch,
-      }).chat(modelName),
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.ollama.baseUrl,
     // No apiKeyRequiredMessage — key is optional
   },
@@ -638,44 +651,10 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   bedrock: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      const region = getBedrockRegion(baseURL);
-
-      if (!apiKey && isBedrockIamAuthEnabled()) {
-        return createAmazonBedrock({
-          region,
-          baseURL,
-          credentialProvider: getBedrockCredentialProvider(),
-          headers,
-          fetch,
-        })(modelName);
-      }
-
-      const sigV4 = decodeBedrockSigV4Marker(apiKey);
-      if (sigV4) {
-        return createAmazonBedrock({
-          region,
-          baseURL,
-          accessKeyId: sigV4.accessKeyId,
-          secretAccessKey: sigV4.secretAccessKey,
-          sessionToken: sigV4.sessionToken,
-          headers,
-          fetch,
-        })(modelName);
-      }
-
-      return createAmazonBedrock({
-        apiKey,
-        region,
-        baseURL,
-        secretAccessKey: undefined,
-        accessKeyId: undefined,
-        sessionToken: undefined,
-        credentialProvider: undefined,
-        headers,
-        fetch,
-      })(modelName);
-    },
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      buildBedrockProvider({ apiKey, baseUrl: baseURL, headers, fetch })(
+        modelName,
+      ),
     defaultBaseUrl: config.llm.bedrock.baseUrl,
     apiKeyRequiredMessage: isBedrockIamAuthEnabled()
       ? undefined

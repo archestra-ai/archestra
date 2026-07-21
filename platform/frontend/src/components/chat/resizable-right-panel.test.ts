@@ -6,11 +6,11 @@ describe("aspectLockedPanelWidth", () => {
     expect(
       aspectLockedPanelWidth({
         height: 960,
-        ratio: 9 / 16,
+        ratio: 1 / 2,
         minWidth: 300,
         maxWidth: 900,
       }),
-    ).toBe(540);
+    ).toBe(480);
   });
 
   it("respects the same bounds user resizing does — a lock may demand a shape, never a squashed layout", () => {
@@ -19,7 +19,7 @@ describe("aspectLockedPanelWidth", () => {
     expect(
       aspectLockedPanelWidth({
         height: 2000,
-        ratio: 9 / 16,
+        ratio: 1 / 2,
         minWidth: 300,
         maxWidth: 700,
       }),
@@ -28,7 +28,7 @@ describe("aspectLockedPanelWidth", () => {
     expect(
       aspectLockedPanelWidth({
         height: 400,
-        ratio: 9 / 16,
+        ratio: 1 / 2,
         minWidth: 300,
         maxWidth: 900,
       }),

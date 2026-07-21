@@ -950,9 +950,9 @@ describe("replayStageFit", () => {
     // margins, no distortion. This is the exact bug this guards: a WebGL scene
     // recorded portrait must not replay squashed into a different aspect.
     const fit = replayStageFit({
-      stageWidth: 900,
-      stageHeight: 1600,
-      viewport: { width: 450, height: 800 },
+      stageWidth: 800,
+      stageHeight: 1000,
+      viewport: { width: 400, height: 500 },
     });
     expect(fit).toEqual({ scale: 2, offsetX: 0, offsetY: 0 });
   });

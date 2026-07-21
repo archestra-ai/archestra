@@ -383,10 +383,12 @@ export const APP_RECORDING_RENDER_REGION_SELECTOR = `[${APP_RECORDING_RENDER_REG
  * stage replays at the recorded shape. One constant on both ends means a
  * recorded session scales into the player by a single uniform factor: no
  * letterbox, no distortion, and pointer coordinates that line up exactly.
- * Portrait, because the side panel — the surface a recording nudges the app
- * into — is a tall column beside the chat.
+ * 4:5 — the near-square portrait standard (the Instagram-post shape): still
+ * a tall column beside the chat, the surface a recording nudges the app
+ * into, but square-ish enough that apps aren't forced into a phone-narrow
+ * strip and the player splits close to evenly between chat and app.
  */
-export const APP_RECORDING_VIEWPORT_ASPECT = 9 / 16;
+export const APP_RECORDING_VIEWPORT_ASPECT = 4 / 5;
 
 const AppRecordingEnhancementSchema = z
   .object({

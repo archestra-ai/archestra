@@ -572,7 +572,9 @@ for key in os.environ:
 # header and the passthrough key header).
 append_headers = os.environ.get("ARCHESTRA_APPEND_${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}")
 if append_headers:
-    new_lines = [ln for ln in append_headers.splitlines() if ln.strip()]
+    # strip each line: the script's env-assignment block is indented, which
+    # indents the continuation lines of this multi-line value too.
+    new_lines = [ln.strip() for ln in append_headers.splitlines() if ln.strip()]
     new_names = {ln.split(":", 1)[0].strip().lower() for ln in new_lines}
     existing = env.get("${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}", "") or ""
     lines = [

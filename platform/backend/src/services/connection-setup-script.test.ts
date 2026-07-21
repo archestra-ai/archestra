@@ -163,7 +163,9 @@ async function runClaudeSettingsMerge(params: {
         HOME: home,
         // The script exports one "Name: Value" per line — the client-attribution
         // header plus the passthrough key header — so the merge dedupes both.
-        ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS: `${AGENT_ID_HEADER_LINE}\nX-Archestra-Virtual-Key: arch_passthroughcafe`,
+        // The continuation line arrives indented (the script's env-assignment
+        // block indents multi-line values); the merge must strip it.
+        ARCHESTRA_APPEND_ANTHROPIC_CUSTOM_HEADERS: `${AGENT_ID_HEADER_LINE}\n  X-Archestra-Virtual-Key: arch_passthroughcafe`,
       },
     });
     return JSON.parse(await readFile(settingsPath, "utf8"));

@@ -486,8 +486,12 @@ async function resolveAfterState(params: {
   });
 }
 
-/** Drop volatile timestamp fields so diffs surface real config changes. */
-function sanitizeAuditSnapshot(
+/**
+ * Drop volatile timestamp fields so diffs surface real config changes.
+ * @public — shared with the non-HTTP audit writers (Archestra MCP tool
+ * dispatch, system provenance rows) so all snapshots sanitize identically.
+ */
+export function sanitizeAuditSnapshot(
   state: Record<string, unknown> | null,
 ): Record<string, unknown> | null {
   if (state === null) return null;

@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { SkillModel, SkillVersionModel } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import { createGithubPat } from "@/services/github-pat";
 import { afterEach, expect, test } from "@/test";
 import {
@@ -80,6 +81,24 @@ test("pulls new content when the source commit moved", async ({
   const v2 = await SkillVersionModel.findBySkillAndVersion(skill.id, 2);
   const files = await SkillVersionModel.findFiles(v2?.id ?? "");
   expect(files.map((f) => f.content)).toEqual(["# A v2"]);
+
+  // A content rewrite from upstream leaves a system-actor audit row with the
+  // before/after diff — the version fork alone is not the surface reviewers
+  // check.
+  const { data: auditRows } = await AuditLogModel.findPaginated({
+    organizationId: org.id,
+    resourceType: "skill",
+    limit: 10,
+    offset: 0,
+  });
+  const row = auditRows.find(
+    (r) => r.action === "skill.updated" && r.resourceId === skill.id,
+  );
+  expect(row?.actorType).toBe("system");
+  expect(row?.actorName).toBe("GitHub skill sync");
+  expect(row?.before?.content).toContain("# old body");
+  expect(row?.after?.content).toContain("# new body");
+  expect(row?.after?.sourceCommit).toBe(STUB_COMMIT_SHA);
 });
 
 test("stamps lastSyncedAt without forking when the commit is unchanged", async ({

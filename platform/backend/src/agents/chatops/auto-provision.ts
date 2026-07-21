@@ -11,6 +11,7 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
+import { recordSystemAudit } from "@/services/system-audit";
 import type { ChatOpsProviderType, User } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 
@@ -55,6 +56,18 @@ export async function autoProvisionUser(params: {
 
     // Create member record linking user to organization
     await MemberModel.create(userId, org.id, MEMBER_ROLE_NAME);
+
+    // The identical UI flows (invite accept, admin add) write member.created
+    // rows; a member materializing from a first chat message must too, or the
+    // org roster grows with no provenance.
+    void recordSystemAudit({
+      organizationId: org.id,
+      action: "member.created",
+      resourceType: "member",
+      resourceId: userId,
+      actorName: `ChatOps auto-provision (${provider})`,
+      after: await MemberModel.findByUserIdForAudit(userId, org.id),
+    });
 
     // Create personal default chat agent for the new member
     try {

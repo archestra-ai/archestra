@@ -1,5 +1,6 @@
 import logger from "@/logging";
 import { SkillModel } from "@/models";
+import { recordSystemAudit } from "@/services/system-audit";
 import {
   resolveGithubAppInstallationToken,
   resolveGithubPatToken,
@@ -92,6 +93,15 @@ async function syncSkill(skill: Skill): Promise<void> {
     return;
   }
 
+  // A sync that moves the commit rewrites the skill's executable content —
+  // record it in the org audit log with a before/after diff (files show as
+  // fingerprints, sourceCommit carries the upstream provenance). Without this
+  // row the skill silently changes with no trace where reviewers look.
+  const before = await SkillModel.findByIdForAudit(
+    skill.id,
+    skill.organizationId,
+  );
+
   try {
     await SkillModel.updateWithFiles({
       id: skill.id,
@@ -110,6 +120,16 @@ async function syncSkill(skill: Skill): Promise<void> {
     }
     throw error;
   }
+
+  await recordSystemAudit({
+    organizationId: skill.organizationId,
+    action: "skill.updated",
+    resourceType: "skill",
+    resourceId: skill.id,
+    actorName: "GitHub skill sync",
+    before,
+    after: await SkillModel.findByIdForAudit(skill.id, skill.organizationId),
+  });
 
   logger.info(
     {

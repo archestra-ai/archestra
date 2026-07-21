@@ -24,6 +24,7 @@ import {
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError } from "@/routes/chat/errors";
+import { recordSystemAudit } from "@/services/system-audit";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
@@ -603,7 +604,7 @@ export class ChatOpsManager {
     const channelName = isDm
       ? `Direct Message - ${senderEmail}`
       : await provider.getChannelName(selection.channelId);
-    await ChatOpsChannelBindingModel.upsertByChannel({
+    const boundBinding = await ChatOpsChannelBindingModel.upsertByChannel({
       organizationId,
       provider: provider.providerId,
       channelId: selection.channelId,
@@ -613,6 +614,21 @@ export class ChatOpsManager {
       isDm,
       dmOwnerEmail: isDm ? senderEmail : undefined,
       agentId: selection.agentId,
+    });
+
+    // Binding an agent to a channel from the chat picker is the same mutation
+    // the audited /api/chatops/bindings routes perform — record it, attributing
+    // the chat user who clicked.
+    void recordSystemAudit({
+      organizationId,
+      action: "chatOpsBinding.updated",
+      resourceType: "chatOpsBinding",
+      resourceId: boundBinding.id,
+      actorName: `${senderEmail} (via ${provider.providerId} agent picker)`,
+      after: await ChatOpsChannelBindingModel.findByIdForAudit(
+        boundBinding.id,
+        organizationId,
+      ),
     });
 
     // Confirm the selection in the thread

@@ -934,6 +934,8 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
  * - Accepting invitations after sign-up
  * - Auto-accepting pending invitations on sign-in
  * - Setting active organization for new sessions
+ * - Audit rows for security-posture changes (2FA, passwords, bans,
+ *   impersonation, api-key plugin CRUD)
  * @public — exported for testability
  */
 export async function handleAfterHook(ctx: HookEndpointContext) {
@@ -942,6 +944,8 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   if (!path) {
     return ctx;
   }
+
+  await recordUserSecurityAudit(ctx);
 
   logger.trace({ path, method }, "[auth:afterHook] Processing post-auth hook");
 
@@ -1658,6 +1662,97 @@ async function cleanupRejectedSsoLogin(params: {
  * Writes a single auth-event row to audit_logs.
  * Always called with `void … .catch(logger.error)` so it never blocks or throws.
  */
+/**
+ * Better-auth endpoints that change a user's security posture or credentials.
+ * The `/api/auth/` surface is denylisted from the HTTP audit hook, and the
+ * sign-in/out branches below only cover session lifecycle — without this map,
+ * 2FA toggles, password changes, admin bans/impersonation, and api-key-plugin
+ * CRUD mutate audited state with no trail.
+ */
+const USER_SECURITY_AUDIT_PATHS: Record<string, AuditEventName> = {
+  "/two-factor/enable": "user.two_factor_enabled",
+  "/two-factor/disable": "user.two_factor_disabled",
+  "/change-password": "user.password_changed",
+  "/set-password": "user.password_changed",
+  "/delete-user": "user.deleted",
+  "/admin/ban-user": "user.banned",
+  "/admin/unban-user": "user.unbanned",
+  "/admin/impersonate-user": "user.impersonated",
+  "/admin/set-user-password": "user.password_changed",
+  "/admin/remove-user": "user.deleted",
+  "/api-key/create": "apiKey.created",
+  "/api-key/delete": "apiKey.deleted",
+};
+
+/**
+ * Audit a security-posture change performed through better-auth. Admin-plugin
+ * actions attribute the acting admin and target the `body.userId` user;
+ * self-service actions target the actor. Sessionless flows (token-based
+ * password reset) are skipped — there is no actor session to attribute, and
+ * the org cannot be resolved.
+ */
+async function recordUserSecurityAudit(
+  ctx: HookEndpointContext,
+): Promise<void> {
+  const { path, method, body, request } = ctx;
+  if (method !== "POST" || !path) return;
+  const action = USER_SECURITY_AUDIT_PATHS[path];
+  if (!action || !request) return;
+
+  try {
+    const headers = new Headers(request.headers as HeadersInit);
+    const resolved = await auth.api.getSession({ headers });
+    if (!resolved?.user || !resolved.session) return;
+
+    const organizationId =
+      resolved.session.activeOrganizationId ??
+      (await MemberModel.getFirstMembershipForUser(resolved.user.id))
+        ?.organizationId;
+    if (!organizationId) return;
+
+    const bodyRecord = (body ?? {}) as Record<string, unknown>;
+    const targetUserId =
+      typeof bodyRecord.userId === "string"
+        ? bodyRecord.userId
+        : resolved.user.id;
+    const isApiKey = action.startsWith("apiKey.");
+
+    await AuditLogModel.create({
+      organizationId,
+      actorId: resolved.user.id,
+      actorType: "user",
+      actorName: resolved.user.name ?? null,
+      actorEmail: resolved.user.email,
+      action,
+      outcome: "success",
+      resourceType: isApiKey ? "apiKey" : "user",
+      // api-key rows can't name the key id here (create returns it in the
+      // response body better-auth has already serialized); the action + actor
+      // still carry the signal.
+      resourceId: isApiKey ? null : targetUserId,
+      before: null,
+      after:
+        action === "user.banned" && typeof bodyRecord.banReason === "string"
+          ? { banReason: bodyRecord.banReason }
+          : null,
+      httpMethod: "POST",
+      httpPath: `/api/auth${path}`,
+      httpRoute: null,
+      httpStatus: null,
+      requestId: null,
+      sourceIp: resolveAuthClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? null,
+      occurredAt: new Date(),
+    });
+  } catch (err) {
+    logger.error(
+      { err, path },
+      "[auth:audit] failed to write user security audit row",
+    );
+    reportAuditWriteFailure({ source: "auth", resourceType: "user" });
+  }
+}
+
 async function writeAuthAuditLog(params: {
   user: { id: string; name?: string | null; email: string };
   session: { id: string; activeOrganizationId?: string | null };

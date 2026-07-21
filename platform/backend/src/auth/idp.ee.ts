@@ -15,6 +15,7 @@ import IdentityProviderModel, {
 } from "@/models/identity-provider.ee";
 import MemberModel from "@/models/member";
 import TeamModel from "@/models/team";
+import { recordSystemAudit } from "@/services/system-audit";
 
 /** @public — consumed via dynamic import in src/auth/better-auth.ts */
 export const ssoConfig = {
@@ -258,6 +259,18 @@ export async function syncSsoRole(
       idpProvider.organizationId,
       result.role,
     );
+    // An IdP-driven role change is an escalation/demotion like any other —
+    // without this row the role history shows a change whose only trace is an
+    // auth.sso_callback with no before/after.
+    void recordSystemAudit({
+      organizationId: idpProvider.organizationId,
+      action: "member.role_updated",
+      resourceType: "member",
+      resourceId: userId,
+      actorName: `SSO role sync (${providerId})`,
+      before: { userId, email: userEmail, role: existingMember.role },
+      after: { userId, email: userEmail, role: result.role },
+    });
     logger.info(
       {
         userId,

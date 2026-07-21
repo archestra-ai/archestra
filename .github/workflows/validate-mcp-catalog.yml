@@ -1,0 +1,62 @@
+name: Validate MCP Catalog
+
+on:
+  pull_request:
+    paths:
+      - "mcp-catalog/data/**"
+
+permissions: {}
+
+concurrency:
+  group: "validate-mcp-catalog-${{ github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate MCP Catalog Data
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # The validation script and manifest schema live in the website repo,
+      # which consumes this data at build time.
+      - name: Checkout website repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: archestra-ai/website
+          path: website
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 11.4.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.4.1"
+          cache: "pnpm"
+          cache-dependency-path: website/app/pnpm-lock.yaml
+
+      - name: Install website dependencies
+        working-directory: website/app
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      # The website's catalog loader reads .platform-mcp-catalog-data when it
+      # exists (that's where scripts/pull-catalog.js normally puts a snapshot
+      # of this directory), so validation runs against this PR's data.
+      - name: Copy catalog data into website checkout
+        run: cp -R mcp-catalog/data website/app/.platform-mcp-catalog-data
+
+      - name: Validate catalog data
+        working-directory: website/app
+        run: pnpm catalog:validate

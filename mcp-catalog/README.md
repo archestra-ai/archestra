@@ -6,10 +6,25 @@ This directory is public so the community can contribute catalog entries. The Ar
 
 ## Contribute a server
 
-1. Add or edit a JSON file under `data/mcp-evaluations/<owner>__<repo>.json`.
-2. Open a pull request against this repository.
+1. Add the server's URL to `data/mcp-servers.json` — a GitHub repository URL, or the
+   endpoint URL for a remote MCP server. An entry only appears in the catalog if its URL
+   is listed here.
+2. Add or edit its JSON file under `data/mcp-evaluations/`. The file name (and its `name`
+   field) must match the name the catalog derives from the URL:
+   - GitHub: `<owner>__<repo>.json` (plus `__<path segments>` for monorepo subdirectories)
+   - Remote: `<domain>__remote-mcp.json`, where the domain is the hostname minus any
+     leading `www.`/`mcp.`/`api.` and everything after the first dot
+     (`https://mcp.linear.app/mcp` → `linear__remote-mcp.json`)
 
-A merged pull request shows up on the catalog page after the next website build.
+   Copy an existing entry as a template. Set `archestra_config.works_in_archestra: true`
+   (with a filled-in `server`/`oauth_config`) for servers the Archestra platform's
+   registry picker should offer.
+
+3. Open a pull request against this repository. CI validates the data against the
+   website's manifest schema.
+
+A merged pull request shows up on the catalog page automatically — a workflow triggers a
+website deploy whenever catalog data lands on `main`.
 
 ## Data
 

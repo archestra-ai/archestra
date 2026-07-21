@@ -38,7 +38,10 @@ import {
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
-import { ChatLinkButton } from "@/components/chat/chat-help-link";
+import {
+  ChatLinkButton,
+  MobileHeaderChatLinks,
+} from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import {
   collectBrowserToolCallIds,
@@ -2858,6 +2861,11 @@ export function ChatPageContent({
                         }
                       }}
                     >
+                      {/* On mobile the splash buttons would overlap the logo,
+                          so the links move into the app shell's header bar. */}
+                      <MobileHeaderChatLinks
+                        links={organization?.chatLinks ?? []}
+                      />
                       {((organization?.chatLinks?.length ?? 0) > 0 ||
                         organization?.onboardingWizard) && (
                         <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
@@ -2866,6 +2874,7 @@ export function ChatPageContent({
                               key={`link-${link.label}-${link.url}`}
                               url={link.url}
                               label={link.label}
+                              className="hidden md:inline-flex"
                             />
                           ))}
                           {organization?.onboardingWizard && (

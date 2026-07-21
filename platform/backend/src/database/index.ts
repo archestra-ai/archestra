@@ -117,6 +117,30 @@ export async function isDatabaseHealthy(): Promise<boolean> {
 }
 
 /**
+ * Live connection-pool counters for observability. `waitingCount` is the
+ * number of queries queued for a free client — a sustained non-zero value
+ * means the pool max is the bottleneck (checkout queueing is otherwise
+ * invisible: individual query spans stay fast while requests stall).
+ * Returns null before the pool is initialized.
+ */
+export function getPoolStats(): {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+  maxSize: number;
+} | null {
+  if (!pool) {
+    return null;
+  }
+  return {
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+    maxSize: config.database.poolMax,
+  };
+}
+
+/**
  * Default export to use a Proxy to defer access until after database initialization.
  */
 export default new Proxy({} as ReturnType<typeof getDb>, {

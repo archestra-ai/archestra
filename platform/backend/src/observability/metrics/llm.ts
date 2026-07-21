@@ -23,7 +23,7 @@ import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini
 import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minimax";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
-import type { Agent } from "@/types";
+import type { GatewayAgent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 type UsageExtractor =
@@ -272,7 +272,7 @@ export function initializeMetrics(labelKeys: string[]): void {
  * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
  */
 function buildMetricLabels(
-  profile: Agent,
+  profile: GatewayAgent,
   additionalLabels: Record<string, string>,
   model: string | undefined,
   source: InteractionSource,
@@ -309,7 +309,7 @@ function buildMetricLabels(
  */
 export function reportLLMTokens(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   usage: {
     input?: number;
     output?: number;
@@ -381,7 +381,7 @@ export function reportLLMTokens(
  */
 export function reportBlockedTools(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   count: number,
   model: string,
   source: InteractionSource,
@@ -409,7 +409,7 @@ export function reportBlockedTools(
  */
 export function reportLLMCost(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   cost: number | null | undefined,
   source: InteractionSource,
@@ -447,7 +447,7 @@ export function reportLLMCost(
  */
 export function reportLLMCacheCost(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   cache: { cacheCost?: number | null; cacheReadSavings?: number | null },
   source: InteractionSource,
@@ -484,7 +484,7 @@ export function reportLLMCacheCost(
  */
 export function reportTimeToFirstToken(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   ttftSeconds: number,
   source: InteractionSource,
@@ -517,7 +517,7 @@ export function reportTimeToFirstToken(
  */
 export function reportTokensPerSecond(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   outputTokens: number,
   durationSeconds: number,
@@ -559,7 +559,7 @@ export function reportTokensPerSecond(
  */
 export function reportRequestDuration(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string,
   durationSeconds: number,
   statusCode: string,
@@ -589,7 +589,7 @@ export function reportRequestDuration(
  */
 export function getObservableFetch(
   provider: SupportedProvider,
-  profile: Agent,
+  profile: GatewayAgent,
   source: InteractionSource,
 ): Fetch {
   return async function observableFetch(
@@ -731,7 +731,7 @@ export function getObservableFetch(
  */
 export function getObservableGenAI(
   genAI: GoogleGenAI,
-  profile: Agent,
+  profile: GatewayAgent,
   source: InteractionSource,
 ) {
   const originalGenerateContent = genAI.models.generateContent;
@@ -936,7 +936,7 @@ function extractGeminiModel(arg: unknown): string | undefined {
 function observeGeminiError(
   error: unknown,
   startTime: number,
-  profile: Agent,
+  profile: GatewayAgent,
   model: string | undefined,
   source: InteractionSource,
 ): void {

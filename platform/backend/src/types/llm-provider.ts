@@ -35,7 +35,7 @@ import type {
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
 
-import type { Agent } from "./agent";
+import type { GatewayAgent } from "./agent";
 
 /**
  * GenAI operation names for tracing span names.
@@ -59,7 +59,7 @@ export interface CreateClientOptions {
   /** Base URL override for the provider API */
   baseUrl?: string;
   /** Agent for observability metrics (request duration, tokens) */
-  agent?: Agent;
+  agent?: GatewayAgent;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
   /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */

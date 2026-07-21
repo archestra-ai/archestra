@@ -58,9 +58,9 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
-  type Agent,
   ApiError,
   type DualLlmAnalysis,
+  type GatewayAgent,
   type InteractionAuthMethod,
   type InteractionRequest,
   type LLMProvider,
@@ -117,7 +117,7 @@ const toolPolicyCache = new LRUCacheManager<boolean>({
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
-  agent: Agent;
+  agent: GatewayAgent;
   originalRequest: TRequest;
   baselineModel: string;
   actualModel: string;

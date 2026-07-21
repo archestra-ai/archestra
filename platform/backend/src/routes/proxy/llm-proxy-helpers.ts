@@ -22,9 +22,9 @@ import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
 import { getTokenizer } from "@/tokenizers";
 import type {
-  Agent,
   CommonMcpToolDefinition,
   DualLlmAnalysis,
+  GatewayAgent,
   InsertInteraction,
   InteractionAuthMethod,
   InteractionRequest,
@@ -216,7 +216,7 @@ export function applyInputTokenFallback(params: {
  * Pure function — callers handle `InteractionModel.create()` and error handling.
  */
 export function buildInteractionRecord(params: {
-  agent: Agent;
+  agent: GatewayAgent;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   billingMode: BillingMode;
@@ -297,7 +297,7 @@ export function buildInteractionRecord(params: {
 export function recordBlockedToolCallMetrics(params: {
   allToolCallNames: string[];
   reason: string;
-  agent: Agent;
+  agent: GatewayAgent;
   teams?: SpanTeamInfo[];
   userTeams?: SpanTeamInfo[];
   sessionId?: string | null;

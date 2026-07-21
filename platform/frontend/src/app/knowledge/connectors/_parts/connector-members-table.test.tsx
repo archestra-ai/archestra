@@ -177,16 +177,16 @@ describe("ConnectorMembersTable", () => {
     // (with the reason on hover), while the manually-assigned (Dave) and
     // unassigned (Erin) rows stay editable.
     expect(
-      within(rows[1]).getByRole("button", { name: "Assign Archestra user" }),
+      within(rows[1]).getByRole("button", { name: /^Assign Archestra user/ }),
     ).toBeDisabled();
     expect(
       screen.getByText(/Assigned automatically by email/),
     ).toBeInTheDocument();
     expect(
-      within(rows[2]).getByRole("button", { name: "Assign Archestra user" }),
+      within(rows[2]).getByRole("button", { name: /^Assign Archestra user/ }),
     ).toBeEnabled();
     expect(
-      within(rows[3]).getByRole("button", { name: "Assign Archestra user" }),
+      within(rows[3]).getByRole("button", { name: /^Assign Archestra user/ }),
     ).toBeEnabled();
   });
 
@@ -199,7 +199,7 @@ describe("ConnectorMembersTable", () => {
     // Erin (unassigned) sorts last, after the assigned users.
     const rows = screen.getAllByRole("row");
     await user.click(
-      within(rows[3]).getByRole("button", { name: "Assign Archestra user" }),
+      within(rows[3]).getByRole("button", { name: /^Assign Archestra user/ }),
     );
     expect(
       screen.getByText(/source hides this user's email/),
@@ -234,7 +234,7 @@ describe("ConnectorMembersTable", () => {
     // Dave (manually assigned) sorts between auto-assigned Alice and unassigned Erin.
     const rows = screen.getAllByRole("row");
     await user.click(
-      within(rows[2]).getByRole("button", { name: "Assign Archestra user" }),
+      within(rows[2]).getByRole("button", { name: /^Assign Archestra user/ }),
     );
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("combobox"));

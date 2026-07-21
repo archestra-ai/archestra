@@ -56,7 +56,7 @@ export function PageLayout({
   // Keep the browser tab title in sync with the page so screen reader and
   // switcher users can tell client-side navigated pages apart (WCAG 2.4.2).
   useEffect(() => {
-    if (typeof title === "string" && title) {
+    if (typeof title === "string" && title && appName) {
       document.title = `${title} - ${appName}`;
     }
   }, [title, appName]);

@@ -501,6 +501,11 @@ export function AppSessionPlayer({
         // drive the shell wide) — which keeps the player's shape a property
         // of the recording, not of the viewer's screen width.
         className="flex max-h-[94vh] w-fit max-w-[96vw] flex-col gap-0 overflow-hidden border-0 p-0"
+        // The player is an immersive surface: the page behind it drops to the
+        // same dim the tour's spotlight uses, so the replay is the one lit
+        // thing on screen — and when the tour IS up, its in-dialog scrim and
+        // this backdrop read as one uninterrupted dim across the whole page.
+        overlayClassName="bg-black/85"
         // The close control lives in the header's own button cluster so every
         // header action shares one size, style, and baseline — the floating
         // default X can't align with an in-flow row.
@@ -5501,10 +5506,12 @@ function PlayerTour({
           left: spot.left - 4,
           width: spot.width + 8,
           height: spot.height + (step.padTop ?? 4) + 4,
-          // 0.9, not the usual 0.5-ish scrim: the player is itself a dark
+          // 0.85, not the usual 0.5-ish scrim: the player is itself a dark
           // surface over a dark app, so anything lighter barely reads and the
-          // spotlight doesn't pop.
-          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.9)",
+          // spotlight doesn't pop. Matches the player dialog's own backdrop
+          // (`overlayClassName`), so during the tour the dialog interior and
+          // the page behind it dim as one surface.
+          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.85)",
         }}
       />
       {/* The way out lives on the dimmed page itself, not in the bubble. */}

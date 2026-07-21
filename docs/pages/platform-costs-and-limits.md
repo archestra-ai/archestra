@@ -35,12 +35,9 @@ Each interaction records a billing mode. Metered traffic is billed per token, so
 
 The "Actual Cost" line and the per-team, per-agent, and per-model cost figures show billed spend. Subscription usage appears as a separate "Subscription (Not Billed)" line on the Costs chart and as a badge on the affected sessions.
 
-Archestra resolves the billing mode two ways:
+Archestra detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example) use OAuth tokens with a distinct format, so no configuration is needed. Turn detection off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false` to treat all traffic as metered.
 
-- A provider key you mark as Subscription in the LLM Gateways settings applies that mode to every request it fulfills. Use this when the key's secret is itself a subscription token, such as a shared Claude Code token.
-- Claude Code and Claude Desktop that forward an OAuth Bearer token (a subscription login) are detected automatically. Turn this off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false`.
-
-Detection applies to new interactions. Traffic recorded before the billing mode was set stays metered.
+Detection applies to new interactions. Traffic recorded before detection existed stays metered.
 
 Cost-based usage limits are the one exception: they still count the list-price estimate, including subscription usage. A subscription-heavy setup can therefore reach a dollar limit on usage that was never billed. Use token-based limits for those setups.
 

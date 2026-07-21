@@ -190869,13 +190869,6 @@
                       "isPrimary": {
                         "type": "boolean"
                       },
-                      "billingMode": {
-                        "type": "string",
-                        "enum": [
-                          "metered",
-                          "subscription"
-                        ]
-                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -190934,7 +190927,6 @@
                       "extraHeaders",
                       "isSystem",
                       "isPrimary",
-                      "billingMode",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -191257,13 +191249,6 @@
                   "isPrimary": {
                     "type": "boolean"
                   },
-                  "billingMode": {
-                    "type": "string",
-                    "enum": [
-                      "metered",
-                      "subscription"
-                    ]
-                  },
                   "vaultSecretPath": {
                     "type": "string",
                     "minLength": 1
@@ -191379,13 +191364,6 @@
                     "isPrimary": {
                       "type": "boolean"
                     },
-                    "billingMode": {
-                      "type": "string",
-                      "enum": [
-                        "metered",
-                        "subscription"
-                      ]
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -191409,7 +191387,6 @@
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
-                    "billingMode",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -191790,13 +191767,6 @@
                       "isPrimary": {
                         "type": "boolean"
                       },
-                      "billingMode": {
-                        "type": "string",
-                        "enum": [
-                          "metered",
-                          "subscription"
-                        ]
-                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -191855,7 +191825,6 @@
                       "extraHeaders",
                       "isSystem",
                       "isPrimary",
-                      "billingMode",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -192207,13 +192176,6 @@
                     "isPrimary": {
                       "type": "boolean"
                     },
-                    "billingMode": {
-                      "type": "string",
-                      "enum": [
-                        "metered",
-                        "subscription"
-                      ]
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -192272,7 +192234,6 @@
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
-                    "billingMode",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -192572,13 +192533,6 @@
                   "isPrimary": {
                     "type": "boolean"
                   },
-                  "billingMode": {
-                    "type": "string",
-                    "enum": [
-                      "metered",
-                      "subscription"
-                    ]
-                  },
                   "vaultSecretPath": {
                     "type": "string",
                     "minLength": 1
@@ -192702,13 +192656,6 @@
                     "isPrimary": {
                       "type": "boolean"
                     },
-                    "billingMode": {
-                      "type": "string",
-                      "enum": [
-                        "metered",
-                        "subscription"
-                      ]
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -192732,7 +192679,6 @@
                     "extraHeaders",
                     "isSystem",
                     "isPrimary",
-                    "billingMode",
                     "createdAt",
                     "updatedAt"
                   ],

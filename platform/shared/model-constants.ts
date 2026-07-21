@@ -33,6 +33,10 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "gemini:embeddings",
   "anthropic:messages",
   "bedrock:converse",
+  // Bedrock InvokeModel with an Anthropic model: the wire format is the
+  // Anthropic Messages API (what the Anthropic SDK's Bedrock client and
+  // Claude Code send), transported over Bedrock.
+  "bedrock:invoke",
   "bedrock:embeddings",
   "cohere:chat",
   "cerebras:chatCompletions",

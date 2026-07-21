@@ -294,6 +294,18 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
+  // Bedrock InvokeModel carries the Anthropic Messages wire format.
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["bedrock:invoke"]),
+    request: withReadFallback(Bedrock.API.InvokeRequestSchema),
+    processedRequest: withReadFallback(Bedrock.API.InvokeRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Bedrock.API.InvokeResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["cerebras:chatCompletions"]),
     request: withReadFallback(Cerebras.API.ChatCompletionRequestSchema),

@@ -276,6 +276,13 @@ export const RouteId = {
   BedrockConverseWithAgentAndModel: "bedrockConverseWithAgentAndModel",
   BedrockConverseStreamWithAgentAndModel:
     "bedrockConverseStreamWithAgentAndModel",
+  // Native InvokeModel routes (Anthropic Messages wire format, model ID in URL)
+  BedrockInvokeWithDefaultAgentAndModel:
+    "bedrockInvokeWithDefaultAgentAndModel",
+  BedrockInvokeWithAgentAndModel: "bedrockInvokeWithAgentAndModel",
+  BedrockInvokeStreamWithDefaultAgentAndModel:
+    "bedrockInvokeStreamWithDefaultAgentAndModel",
+  BedrockInvokeStreamWithAgentAndModel: "bedrockInvokeStreamWithAgentAndModel",
   // OpenAI-compatible routes (translate OpenAI chat/completions ↔ Converse)
   BedrockOpenaiChatCompletionsWithDefaultAgent:
     "bedrockOpenaiChatCompletionsWithDefaultAgent",

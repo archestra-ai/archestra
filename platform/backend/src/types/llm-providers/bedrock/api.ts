@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  MessagesRequestSchema as AnthropicMessagesRequestSchema,
+  MessagesResponseSchema as AnthropicMessagesResponseSchema,
+} from "../anthropic/api";
+import {
   MessageSchema,
   ResponseContentBlockSchema,
   SystemSchema,
@@ -76,6 +80,37 @@ export const ConverseRequestWithModelInUrlSchema = ConverseRequestSchema.extend(
     modelId: z.string().optional(),
   },
 );
+
+// =============================================================================
+// INVOKE MODEL (Anthropic Messages wire format)
+// =============================================================================
+
+/**
+ * Bedrock InvokeModel request for Anthropic models. The body is the Anthropic
+ * Messages API format (what the Anthropic SDK's Bedrock client and Claude Code
+ * send), except:
+ * - `model` is not in the body — it lives in the URL path; the route handler
+ *   injects it before processing
+ * - `anthropic_version` replaces the `anthropic-version` header
+ * - `anthropic_beta` (array) replaces the `anthropic-beta` header
+ * - streaming is selected by the endpoint (`invoke` vs
+ *   `invoke-with-response-stream`), not a `stream` body field
+ * https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages.html
+ */
+export const InvokeRequestSchema = AnthropicMessagesRequestSchema.extend({
+  model: z.string().optional(),
+  anthropic_version: z.string().optional(),
+  anthropic_beta: z.array(z.string()).optional(),
+  // Internal flag set by routes based on endpoint URL
+  // (invoke-with-response-stream vs invoke)
+  _isStreaming: z.boolean().optional(),
+});
+
+/**
+ * Bedrock InvokeModel response for Anthropic models: exactly the Anthropic
+ * Messages API response.
+ */
+export const InvokeResponseSchema = AnthropicMessagesResponseSchema;
 
 // =============================================================================
 // RESPONSE SCHEMAS

@@ -1220,10 +1220,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // ===== Internal helpers =====
 
 /**
- * Assigning a skill to a restricted environment is gated by the same
- * environment:deploy-to-restricted permission the agent and MCP-catalog
- * assignment paths use (environment:admin implies it). Throws 403/404 if the
- * caller may not assign the environment.
+ * Assigning a skill to a restricted environment is gated by
+ * skill:deploy-to-restricted (environment:admin implies it), mirroring the
+ * per-resource permissions the agent and MCP-catalog assignment paths use.
+ * Throws 403/404 if the caller may not assign the environment.
  */
 async function assertSkillEnvironmentAssignable(params: {
   userId: string;
@@ -1231,19 +1231,14 @@ async function assertSkillEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+  const [hasEnvAdmin, hasSkillDeploy] = await Promise.all([
     userHasPermission(userId, organizationId, "environment", "admin"),
-    userHasPermission(
-      userId,
-      organizationId,
-      "environment",
-      "deploy-to-restricted",
-    ),
+    userHasPermission(userId, organizationId, "skill", "deploy-to-restricted"),
   ]);
   await assertCanAssignEnvironment({
     environmentId,
     organizationId,
-    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+    canDeployToRestricted: hasEnvAdmin || hasSkillDeploy,
   });
 }
 

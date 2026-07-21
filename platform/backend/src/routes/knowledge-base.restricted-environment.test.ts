@@ -7,9 +7,10 @@ import type { User } from "@/types";
 
 // The connector write paths gate environment assignment exactly like the agent
 // and MCP-catalog paths: assigning a *restricted* environment requires
-// environment:deploy-to-restricted (or environment:admin). The gate computes
-// canDeployToRestricted from `userHasPermission`, so we override only that
-// export (resource-aware) and leave the rest of @/auth/utils intact.
+// knowledgeSource:deploy-to-restricted (or environment:admin, which implies
+// it). The gate computes canDeployToRestricted from `userHasPermission`, so we
+// override only that export (permission-aware) and leave the rest of
+// @/auth/utils intact.
 vi.mock("@/auth/utils");
 
 import { userHasPermission } from "@/auth/utils";
@@ -21,16 +22,27 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  // Toggles the answer to the environment permission probes (admin / deploy).
+  // Toggles the answer to the restricted-deploy permission probes
+  // (environment:admin / knowledgeSource:deploy-to-restricted).
   let canDeployToRestricted: boolean;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     canDeployToRestricted = false;
-    // Only the `environment` probe varies per test; everything else (knowledge
-    // source access, etc.) is granted so the suite isolates the environment gate.
+    // Only the environment-gate probes vary per test; everything else
+    // (knowledge source access, etc.) is granted so the suite isolates the
+    // environment gate.
     mockUserHasPermission.mockImplementation(
-      async (_userId: string, _organizationId: string, resource: string) =>
-        resource === "environment" ? canDeployToRestricted : true,
+      async (
+        _userId: string,
+        _organizationId: string,
+        resource: string,
+        action: string,
+      ) => {
+        if (resource === "environment" && action === "admin")
+          return canDeployToRestricted;
+        if (action === "deploy-to-restricted") return canDeployToRestricted;
+        return true;
+      },
     );
 
     user = await makeUser();

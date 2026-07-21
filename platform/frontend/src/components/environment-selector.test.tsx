@@ -28,7 +28,9 @@ describe("EnvironmentSelector — Manage environments link", () => {
 
   test("omits the Manage environments link when the user lacks environment:admin", () => {
     setEnvAdmin(false);
-    render(<EnvironmentSelector value={null} onChange={vi.fn()} />);
+    render(
+      <EnvironmentSelector value={null} onChange={vi.fn()} resource="agent" />,
+    );
 
     expect(
       screen.getByText(/Only the default environment is available/i),
@@ -40,7 +42,9 @@ describe("EnvironmentSelector — Manage environments link", () => {
 
   test("renders the Manage environments link when the user has environment:admin", () => {
     setEnvAdmin(true);
-    render(<EnvironmentSelector value={null} onChange={vi.fn()} />);
+    render(
+      <EnvironmentSelector value={null} onChange={vi.fn()} resource="agent" />,
+    );
 
     expect(
       screen.getByRole("link", { name: /manage environments/i }),

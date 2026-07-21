@@ -1246,8 +1246,9 @@ function isCanonicalBase64(value: string): boolean {
 /**
  * Authorize binding an app to `environmentId` (null = org default). Mirrors the
  * agent/knowledge-base/MCP-catalog path: org membership of the environment plus
- * the restricted-env permission are enforced by `assertCanAssignEnvironment`,
- * which also gates a restricted *default* environment.
+ * app:deploy-to-restricted (environment:admin implies it) are enforced by
+ * `assertCanAssignEnvironment`, which also gates a restricted *default*
+ * environment.
  */
 async function assertEnvironmentAssignable(params: {
   userId: string;
@@ -1255,19 +1256,14 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+  const [hasEnvAdmin, hasAppDeploy] = await Promise.all([
     userHasPermission(userId, organizationId, "environment", "admin"),
-    userHasPermission(
-      userId,
-      organizationId,
-      "environment",
-      "deploy-to-restricted",
-    ),
+    userHasPermission(userId, organizationId, "app", "deploy-to-restricted"),
   ]);
   await assertCanAssignEnvironment({
     environmentId,
     organizationId,
-    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+    canDeployToRestricted: hasEnvAdmin || hasAppDeploy,
   });
 }
 

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-20
+lastUpdated: 2026-07-21
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -135,6 +135,7 @@ The following table lists all available permissions that can be assigned to cust
 | `agent:delete` | Delete agents |
 | `agent:team-admin` | Manage team assignments for agents |
 | `agent:admin` | Full administrative control over all agents, bypassing team restrictions |
+| `agent:deploy-to-restricted` | Assign agents to restricted deployment environments |
 | `agentSettings:read` | View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
 | `agentSettings:update` | Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
 | `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |
@@ -150,6 +151,7 @@ The following table lists all available permissions that can be assigned to cust
 | `app:delete` | Delete MCP Apps |
 | `app:team-admin` | Manage team assignments for MCP Apps |
 | `app:admin` | Full administrative control over all MCP Apps, bypassing team restrictions |
+| `app:deploy-to-restricted` | Assign MCP Apps to restricted deployment environments |
 | `auditLog:read` | View the organization-wide audit log of administrative actions |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
@@ -158,8 +160,7 @@ The following table lists all available permissions that can be assigned to cust
 | `chatAgentPicker:enable` | Show agent picker in chat |
 | `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
-| `environment:admin` | Create, edit, and delete deployment environments (everyone can view them) |
-| `environment:deploy-to-restricted` | Deploy catalog items to restricted environments |
+| `environment:admin` | Create, edit, and delete deployment environments (everyone can view them); implies every per-resource deploy-to-restricted permission |
 | `file:manage` | List, read, write, and delete files in chats and projects |
 | `githubAppConfig:read` | View GitHub App configurations |
 | `githubAppConfig:create` | Create GitHub App configurations |
@@ -179,6 +180,7 @@ The following table lists all available permissions that can be assigned to cust
 | `knowledgeSource:delete` | Delete Knowledge Bases and Connectors |
 | `knowledgeSource:query` | Query knowledge sources for information retrieval |
 | `knowledgeSource:admin` | View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions |
+| `knowledgeSource:deploy-to-restricted` | Assign Knowledge Bases and Connectors to restricted deployment environments |
 | `knowledgeSourceAutoSync:read` | View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings |
 | `knowledgeSourceAutoSync:create` | Create connectors with auto-sync permissions (access mirrors the source system) |
 | `knowledgeSourceAutoSync:update` | Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs |
@@ -207,6 +209,7 @@ The following table lists all available permissions that can be assigned to cust
 | `llmProxy:delete` | Delete LLM proxies |
 | `llmProxy:team-admin` | Manage team assignments for LLM proxies |
 | `llmProxy:admin` | Full administrative control over all LLM proxies, bypassing team restrictions |
+| `llmProxy:deploy-to-restricted` | Assign LLM proxies to restricted deployment environments |
 | `llmSettings:read` | View LLM settings (compression, cleanup interval) |
 | `llmSettings:update` | Modify LLM settings |
 | `llmVirtualKey:read` | View LLM virtual keys |
@@ -221,6 +224,7 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpGateway:delete` | Delete MCP gateways |
 | `mcpGateway:team-admin` | Manage team assignments for MCP gateways |
 | `mcpGateway:admin` | Full administrative control over all MCP gateways, bypassing team restrictions |
+| `mcpGateway:deploy-to-restricted` | Assign MCP gateways to restricted deployment environments |
 | `mcpOauthClient:read` | View MCP OAuth client registrations |
 | `mcpOauthClient:create` | Create MCP OAuth client registrations |
 | `mcpOauthClient:update` | Modify MCP OAuth client registrations |
@@ -232,6 +236,7 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpRegistry:update` | Modify MCP registry entries |
 | `mcpRegistry:delete` | Remove servers from the MCP registry |
 | `mcpRegistry:team-admin` | Manage team assignments for MCP registry entries |
+| `mcpRegistry:deploy-to-restricted` | Deploy MCP servers (catalog items) to restricted environments |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
@@ -282,6 +287,7 @@ The following table lists all available permissions that can be assigned to cust
 | `skill:delete` | Delete agent skills |
 | `skill:team-admin` | Manage team assignments for agent skills |
 | `skill:admin` | Full administrative control over all agent skills, bypassing team restrictions |
+| `skill:deploy-to-restricted` | Assign agent skills to restricted deployment environments |
 | `skillsSettings:read` | View Skills settings (online catalog availability) |
 | `skillsSettings:update` | Modify Skills settings |
 | `team:read` | View teams and their members |

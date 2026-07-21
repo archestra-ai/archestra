@@ -1003,8 +1003,8 @@ async function handleCreateMcpServer(
     }
 
     try {
-      // Deploying to a restricted environment requires
-      // environment:deploy-to-restricted (environment:admin implies it).
+      // Deploying a catalog item to a restricted environment requires
+      // mcpRegistry:deploy-to-restricted (environment:admin implies it).
       const [hasAdmin, hasDeploy] = await Promise.all([
         userHasPermission(
           context.userId,
@@ -1015,7 +1015,7 @@ async function handleCreateMcpServer(
         userHasPermission(
           context.userId,
           organizationId,
-          "environment",
+          "mcpRegistry",
           "deploy-to-restricted",
         ),
       ]);

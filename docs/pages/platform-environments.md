@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-19
+lastUpdated: 2026-07-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ lastUpdated: 2026-07-19
 This document is the canonical reference for deployment Environments. Include:
 - What an environment is and the implicit "Default" environment (null)
 - Who can view vs. manage environments (environment:admin), Settings > Environments
-- Restricted environments and the environment:deploy-to-restricted / environment:admin permissions
+- Restricted environments and the per-resource deploy-to-restricted / environment:admin permissions
 - Environment isolation: how an environment scopes which tools, knowledge,
   skills, and delegation targets an agent / MCP gateway / LLM proxy can use
   (strict matching; Default is a peer, not a wildcard; built-in servers and
@@ -33,7 +33,7 @@ Every organization has an implicit **Default** environment. Any resource whose e
 
 ## Restricted environments
 
-An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign resources to a restricted environment. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
+An environment can be marked **restricted**. Assigning a resource to a restricted environment requires the `deploy-to-restricted` permission on that resource — `mcpRegistry:deploy-to-restricted` for MCP servers, or `llmProxy:deploy-to-restricted` for LLM proxies, for example. The `environment:admin` permission implies all of them. Each resource is gated on its own permission, so an organization can allow agents, apps, and proxies in a restricted environment while still limiting who deploys MCP servers there. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
 
 ## Trusted image registries
 

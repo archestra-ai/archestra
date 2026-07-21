@@ -15,19 +15,19 @@ const mockHasPermission = hasPermission as Mock;
 
 /**
  * POST /api/internal_mcp_catalog must refuse to assign a *restricted*
- * environment unless the caller can deploy to restricted environments — i.e.
- * holds `environment:deploy-to-restricted` (or `environment:admin`, which
- * implies it). The route ORs both probes into `canDeployToRestricted` and feeds
- * it into `assertCanAssignEnvironment`, which throws 403 for a restricted env
- * the caller can't touch.
+ * environment unless the caller can deploy catalog items to restricted
+ * environments — i.e. holds `mcpRegistry:deploy-to-restricted` (or
+ * `environment:admin`, which implies it). The route ORs both probes into
+ * `canDeployToRestricted` and feeds it into `assertCanAssignEnvironment`,
+ * which throws 403 for a restricted env the caller can't touch.
  *
  * The harness mirrors internal-mcp-catalog.headers.test.ts (real PGlite via
  * `@/test`, identity injected on the onRequest hook, mocked `hasPermission`),
- * but the mock here is *resource-aware*: it answers any `environment` probe
- * (admin or deploy-to-restricted) from a per-test flag so we can model a caller
- * who can deploy to restricted envs vs. one who can't. Every other permission
- * probe (e.g. the `mcpServerInstallation:["admin"]` scope check) stays
- * `success: true` so the test isolates the environment gate.
+ * but the mock here is *permission-aware*: it answers the `environment:admin`
+ * and `mcpRegistry:deploy-to-restricted` probes from a per-test flag so we can
+ * model a caller who can deploy to restricted envs vs. one who can't. Every
+ * other permission probe (e.g. the `mcpServerInstallation:["admin"]` scope
+ * check) stays `success: true` so the test isolates the environment gate.
  */
 describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () => {
   let app: FastifyInstanceWithZod;
@@ -41,8 +41,12 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     canDeployToRestricted = false;
     mockHasPermission.mockImplementation(async (permissions: Permissions) => {
       // The environment gate is the only probe whose answer varies per test.
-      // Both the `admin` and `deploy-to-restricted` probes resolve to the flag.
-      if (permissions.environment?.length) {
+      // Both the `environment:admin` and `mcpRegistry:deploy-to-restricted`
+      // probes resolve to the flag.
+      if (
+        permissions.environment?.includes("admin") ||
+        permissions.mcpRegistry?.includes("deploy-to-restricted")
+      ) {
         return { success: canDeployToRestricted, error: null };
       }
       // Everything else (scope check, etc.) is granted so this suite isolates

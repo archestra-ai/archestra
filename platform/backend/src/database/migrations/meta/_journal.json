@@ -2486,6 +2486,13 @@
       "when": 1784613981188,
       "tag": "0354_messy_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 355,
+      "version": "7",
+      "when": 1784623364626,
+      "tag": "0355_split-deploy-to-restricted",
+      "breakpoints": true
     }
   ]
 }

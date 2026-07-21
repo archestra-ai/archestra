@@ -1005,7 +1005,7 @@ function GithubSyncPanel({
   const authLabel = skill.githubPatId ? (
     <Link
       href="/settings/github"
-      className="max-w-44 min-w-0 truncate underline-offset-4 hover:underline"
+      className="max-w-44 min-w-0 truncate underline underline-offset-4 hover:text-primary"
       title="Manage saved tokens in Settings → GitHub"
     >
       {patName ? `saved token “${patName}”` : "a saved token"}
@@ -1031,7 +1031,7 @@ function GithubSyncPanel({
             href={`https://github.com/${sourceRepo}${skill.githubSyncRef ? `/tree/${skill.githubSyncRef}` : ""}`}
             target="_blank"
             rel="noreferrer"
-            className="min-w-0 truncate font-mono underline-offset-4 hover:underline"
+            className="min-w-0 truncate font-mono underline underline-offset-4 hover:text-primary"
             title="Open on GitHub"
           >
             {sourceRepo}
@@ -1104,7 +1104,7 @@ function GithubSyncPanel({
         {" · "}Content is read-only here —{" "}
         <button
           type="button"
-          className="cursor-pointer font-medium text-foreground underline-offset-4 hover:underline"
+          className="cursor-pointer font-medium text-foreground underline underline-offset-2 hover:text-primary"
           onClick={() => setConfirmingDisconnect(true)}
           disabled={updateGithubSync.isPending}
         >
@@ -1144,7 +1144,7 @@ function ChatWithSkillButton({ skillId }: { skillId: string | null }) {
     >
       <Link href={`/chat/new?skill_id=${skillId}`}>
         <MessageSquare className="h-4 w-4" />
-        Chat
+        Chat with a skill
       </Link>
     </PermissionButton>
   );

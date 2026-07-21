@@ -602,6 +602,9 @@ jobs:
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Normal runs are 2.3-6.1 min (Jul 2026 sample) even with Playwright's
+    # in-job retries; 15 minutes means the dev server or a runner is hung.
+    timeout-minutes: 15
     permissions:
       contents: read
     defaults:

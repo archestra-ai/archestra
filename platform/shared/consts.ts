@@ -128,6 +128,39 @@ export const MCP_CATALOG_API_BASE_URL =
   `${WEBSITE_URL}/mcp-catalog/api`;
 
 /**
+ * The env keys the Claude Code connect flow writes into the `env` block of
+ * `~/.claude/settings.json` to route Claude Code through the LLM proxy, per
+ * provider. The connect setup script sets them, and the disconnect surfaces
+ * (the /connection Disconnect panel and the startup guard's disconnect action)
+ * remove exactly these keys — one list so the two directions can't drift.
+ * `ANTHROPIC_CUSTOM_HEADERS` is handled separately: it is merged/stripped
+ * line-wise so user-owned header lines survive.
+ */
+export const CLAUDE_CODE_PROXY_ENV_KEYS = {
+  anthropic: ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"],
+  bedrock: [
+    "CLAUDE_CODE_USE_BEDROCK",
+    "AWS_REGION",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+  ],
+} as const;
+
+/** Claude Code custom-headers env key (line-wise merged/stripped, see above). */
+export const CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY = "ANTHROPIC_CUSTOM_HEADERS";
+
+/**
+ * Claude Code startup guard ("pre-loader") install locations. The connect
+ * setup script writes the guard to `~/<relpath>` and wraps `claude` in the
+ * user's shell profiles inside the marker block; the Disconnect panel tells
+ * users to remove exactly these.
+ */
+export const CLAUDE_CODE_GUARD_SCRIPT_RELPATH =
+  ".archestra/claude-startup-guard.sh";
+export const CLAUDE_CODE_GUARD_MARKER_START =
+  "# >>> archestra claude guard >>>";
+export const CLAUDE_CODE_GUARD_MARKER_END = "# <<< archestra claude guard <<<";
+
+/**
  * Header name for external agent ID.
  * Clients can pass this header to associate interactions with their own agent identifiers.
  */

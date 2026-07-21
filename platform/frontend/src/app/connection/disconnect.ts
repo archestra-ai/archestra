@@ -1,3 +1,11 @@
+import {
+  CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
+  CLAUDE_CODE_GUARD_MARKER_END,
+  CLAUDE_CODE_GUARD_MARKER_START,
+  CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
+  CLAUDE_CODE_PROXY_ENV_KEYS,
+} from "@archestra/shared";
+
 /**
  * The reverse of the connect flow: how to detach a client from the MCP gateway
  * and the LLM proxy. Every step is a LOCAL change to the client's own config,
@@ -28,7 +36,12 @@ export function getDisconnectSteps(
         },
         {
           title: "Remove the proxy base URL",
-          body: `Delete the ANTHROPIC_BASE_URL line from the env block in ~/.claude/settings.json — plus CLAUDE_CODE_USE_BEDROCK, AWS_REGION, and ANTHROPIC_BEDROCK_BASE_URL if you set up Bedrock. Restart Claude Code.`,
+          body: `Delete the ${CLAUDE_CODE_PROXY_ENV_KEYS.anthropic.join(" and ")} lines from the env block in ~/.claude/settings.json — plus ${CLAUDE_CODE_PROXY_ENV_KEYS.bedrock.join(", ")} if you set up Bedrock, and the ${appName} lines in ${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}. Restart Claude Code.`,
+        },
+        {
+          title: "Remove the startup guard",
+          body: `Deletes the pre-loader script and the claude() wrapper the connect script added to your shell profile. Open a new terminal afterward.`,
+          command: `for f in ~/.zshrc ~/.bashrc; do [ -f "$f" ] && sed -i.bak '/^${CLAUDE_CODE_GUARD_MARKER_START}$/,/^${CLAUDE_CODE_GUARD_MARKER_END}$/d' "$f"; done; rm -f ~/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}`,
         },
       ];
     case "cursor":

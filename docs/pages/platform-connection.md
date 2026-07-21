@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-07-07
+lastUpdated: 2026-07-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -21,6 +21,8 @@ A script can set up three things, in any combination you selected on the page:
 - **MCP gateway** — gives the client access to your Archestra tools. Its tools unlock after a one-time sign-in.
 - **LLM proxy** — routes the client's model calls through Archestra. In passthrough mode the script leaves your own provider credential untouched and changes only the base URL. In virtual-key mode it injects a key Archestra provisions for you.
 - **Skills** — installs a shared skills bundle into the client.
+
+For Claude Code the script also installs a [startup guard](#startup-guard) that checks these remotes before every launch.
 
 The exact commands and files differ per client — see [Supported Clients](#supported-clients) below.
 
@@ -72,8 +74,17 @@ The `claude` CLI must be on your `PATH`.
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it sets the Bedrock variables instead and prints an `AWS_BEARER_TOKEN_BEDROCK` line to add to your shell profile.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`.
+- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch (macOS and Linux). See [Startup Guard](#startup-guard) below.
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
-- **Revert** — restore the backup, or delete the Archestra env keys; run `claude mcp remove <name>`; drop the exported Bedrock token from your profile.
+- **Revert** — open the Disconnect panel on the Connection page for the exact reverse steps. Or restore the backup, delete the Archestra env keys, run `claude mcp remove <name>`, and drop the exported Bedrock token from your profile.
+
+#### Startup Guard
+
+The guard runs each time you start `claude`. It checks that the configured Archestra remotes — the LLM proxy, the MCP gateway, and the skills marketplace — answer. When everything answers, it hands off to `claude` in well under a second.
+
+When a remote is unreachable, the guard retries it for 15 seconds and shows a status line. Press `s` to skip the remote for this session, or `d` to disconnect it from Claude Code — the same reverse-of-connect steps as the Disconnect panel. Skipping and disconnecting both end with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
+
+The guard lives at `~/.archestra/claude-startup-guard.sh`, hooked in by a marked `claude()` block in your shell profile. Set `ARCHESTRA_CLAUDE_GUARD=0` to disable it without uninstalling. The Disconnect panel has a one-liner that removes both pieces.
 
 ### Codex
 

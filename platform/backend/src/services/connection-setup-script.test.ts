@@ -402,6 +402,38 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain(`select "${MCP.serverName}"`);
   });
 
+  test("claude-code: installs the startup guard and wraps claude in the shell profiles", () => {
+    const script = renderSetupScript(fullContext("claude-code"));
+    // The guard file is written and made executable…
+    expect(script).toContain(
+      'cat > "$HOME/.archestra/claude-startup-guard.sh"',
+    );
+    expect(script).toContain(
+      'chmod +x "$HOME/.archestra/claude-startup-guard.sh"',
+    );
+    // …and the profile hook is marker-delimited so re-runs never duplicate it.
+    expect(script).toContain("# >>> archestra claude guard >>>");
+    expect(script).toContain("# <<< archestra claude guard <<<");
+    expect(script).toContain('command claude "$@"');
+    // The guard probes every configured remote, in pre-loader order.
+    expect(script).toContain("LLM proxy (Anthropic)");
+    expect(script).toContain(`MCP gateway (${MCP.serverName})`);
+    expect(script).toContain(`Skills marketplace (${SKILLS.marketplaceName})`);
+    expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
+  });
+
+  test("only claude-code gets the startup guard", () => {
+    for (const clientId of ["codex", "copilot-cli", "cursor"] as const) {
+      expect(renderSetupScript(fullContext(clientId))).not.toContain(
+        "claude-startup-guard",
+      );
+    }
+    // Windows renders no guard yet (bash only).
+    expect(
+      renderSetupScript(fullContext("claude-code", "windows")),
+    ).not.toContain("claude-startup-guard");
+  });
+
   test("claude-code (windows): next steps carry the same OAuth guidance", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
     expect(script).toContain("claude /mcp");
@@ -448,9 +480,11 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
     expect(script).toContain("ANTHROPIC_CUSTOM_HEADERS");
     // The base URL is still set; the subscription token passes through, so no
-    // ANTHROPIC_AUTH_TOKEN is injected (that would override the subscription).
+    // ANTHROPIC_AUTH_TOKEN is injected into the settings merge (that would
+    // override the subscription). The key name itself still appears in the
+    // startup guard's disconnect strip list.
     expect(script).toContain("ANTHROPIC_BASE_URL");
-    expect(script).not.toContain("ANTHROPIC_AUTH_TOKEN");
+    expect(script).not.toContain("ARCHESTRA_SET_ENV_ANTHROPIC_AUTH_TOKEN");
   });
 
   test("claude-code anthropic passthrough: always sends the client-id header, no virtual key when there's no passthrough key", () => {
@@ -492,8 +526,9 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain("X-Archestra-Virtual-Key: arch_passthroughcafe");
     expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
     // Passthrough: the user's own AWS credentials keep working — no bearer
-    // token export is printed.
-    expect(script).not.toContain("AWS_BEARER_TOKEN_BEDROCK");
+    // token export is printed. (The startup guard's disconnect note may still
+    // *mention* the variable; only the export line injects a secret.)
+    expect(script).not.toContain("export AWS_BEARER_TOKEN_BEDROCK");
   });
 
   test("claude-code passthrough merge: preserves existing headers, no duplicate on re-run", async () => {

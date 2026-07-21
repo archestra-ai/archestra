@@ -1,11 +1,17 @@
 "use client";
 
 import { Play } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Loader } from "@/components/ai-elements/loader";
 import { AppSessionPlayer } from "@/components/app-session-recording/app-session-player";
 import { useAppSessionRecorder } from "@/components/app-session-recording/use-app-session-recorder";
 import { Button } from "@/components/ui/button";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import {
   Tooltip,
   TooltipContent,
@@ -16,6 +22,12 @@ import {
   useAppRecording,
   useLatestAppRecordingKeyForApp,
 } from "@/lib/app-session-recording/app-recording.query";
+import {
+  APPS_HACKATHON_DATE_RANGE_LABEL,
+  APPS_HACKATHON_REGISTER_URL,
+  APPS_HACKATHON_SETTINGS_HREF,
+} from "@/lib/app-session-recording/apps-hackathon";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,6 +56,11 @@ export function AppRecordingControls() {
     ? recorder.conversationId
     : (appBoundKey ?? null);
   const [playerOpen, setPlayerOpen] = useState(false);
+  // The toggle is admin-only, so a member offered a link to it would land on a
+  // control they cannot move. Same permission the setting itself is gated on.
+  const { data: canDisableRecorder } = useHasPermissions({
+    agentSettings: ["update"],
+  });
 
   const isRecording = recorder.status === "recording";
   // Live elapsed timer while recording. The recorder exposes the true start
@@ -76,15 +93,58 @@ export function AppRecordingControls() {
             : "border-primary/30 bg-primary/5",
         )}
       >
-        {/* Names the cluster and sets it apart from the neutral composer chrome. */}
-        <span
-          className={cn(
-            "select-none whitespace-nowrap text-[11px] font-semibold leading-none",
-            isRecording ? "text-destructive" : "text-primary/80",
-          )}
-        >
-          Apps Hackathon
-        </span>
+        {/* Names the cluster and sets it apart from the neutral composer
+            chrome, and carries the only explanation of why the cluster is
+            there at all — including the way out for someone who does not want
+            it. A HoverCard rather than a Tooltip because that way out is a
+            link, and a tooltip closes before it can be clicked. */}
+        <HoverCard openDelay={200}>
+          <HoverCardTrigger asChild>
+            <span
+              className={cn(
+                "-mx-0.5 cursor-help select-none whitespace-nowrap rounded px-0.5 py-1 text-[11px] font-semibold leading-none",
+                isRecording ? "text-destructive" : "text-primary/80",
+              )}
+            >
+              Apps Hackathon
+            </span>
+          </HoverCardTrigger>
+          <HoverCardContent
+            side="top"
+            align="start"
+            className="w-80 space-y-2 text-xs"
+          >
+            <p className="font-semibold">
+              The Apps Hackathon runs {APPS_HACKATHON_DATE_RANGE_LABEL}!
+            </p>
+            <p className="text-muted-foreground">
+              Record how you build your app, demo it, and win prizes.{" "}
+              <a
+                href={APPS_HACKATHON_REGISTER_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-medium text-primary underline underline-offset-2"
+              >
+                Register now.
+              </a>
+            </p>
+            <p className="text-muted-foreground">
+              Don&apos;t want to see this?{" "}
+              {/* Only an admin can actually switch it off, so only an admin is
+                  sent to the setting — anyone else is told who can. */}
+              {canDisableRecorder ? (
+                <Link
+                  href={APPS_HACKATHON_SETTINGS_HREF}
+                  className="font-medium text-primary underline underline-offset-2"
+                >
+                  Disable in settings.
+                </Link>
+              ) : (
+                "Ask your admin to disable this."
+              )}
+            </p>
+          </HoverCardContent>
+        </HoverCard>
         <span className="h-4 w-px bg-border" aria-hidden="true" />
         <Tooltip>
           <TooltipTrigger asChild>

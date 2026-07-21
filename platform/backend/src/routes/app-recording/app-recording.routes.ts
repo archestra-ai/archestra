@@ -1,15 +1,16 @@
-import { RouteId, validateRecordingBundle } from "@archestra/shared";
+import {
+  APPS_HACKATHON_OPENS_AT_MS,
+  isAppsHackathonOpen,
+  RouteId,
+  validateRecordingBundle,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
-import { AgentModel, ConversationModel } from "@/models";
+import { AgentModel, ConversationModel, OrganizationModel } from "@/models";
 import { draftRecordingEnhancement } from "@/services/apps/app-recording-enhancement";
-import {
-  cancelRenderJob,
-  renderJobStatus,
-  startRenderJob,
-  takeRenderedVideo,
-} from "@/services/apps/app-recording-render-jobs";
+import { renderJobClient } from "@/services/apps/app-recording-render-client";
+import { RENDER_BUNDLE_BODY_LIMIT_BYTES } from "@/services/apps/app-recording-render-protocol";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
@@ -25,8 +26,8 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // registered once here rather than repeated in each handler — a per-handler
   // check is one forgotten line away from an endpoint that answers on a
   // deployment where the feature is switched off.
-  fastify.addHook("preHandler", async () => {
-    assertSessionRecordingEnabled();
+  fastify.addHook("preHandler", async ({ organizationId }) => {
+    await assertAppsHackathonAvailable(organizationId);
   });
 
   fastify.post(
@@ -88,6 +89,9 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
     "/api/app-recordings/render",
     {
+      // A recording bundle carries the whole session (frames as data URIs), so
+      // it runs well past the general API body limit; this route accepts it.
+      bodyLimit: RENDER_BUNDLE_BODY_LIMIT_BYTES,
       schema: {
         operationId: RouteId.RenderAppRecordingVideo,
         description:
@@ -115,7 +119,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // gap compression both move it. It is checked in the renderer, against
       // the length the replay itself reports. Measuring the raw recording here
       // instead would refuse a trimmed-to-14s session for being 35s long.
-      const jobId = startRenderJob({
+      const jobId = await renderJobClient.start({
         bundle: validation.bundle,
         userId: user.id,
         title: body.title,
@@ -143,7 +147,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params, user }, reply) => {
       return reply.send(
-        renderJobStatus({ jobId: params.jobId, userId: user.id }),
+        await renderJobClient.status({ jobId: params.jobId, userId: user.id }),
       );
     },
   );
@@ -160,7 +164,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, user }, reply) => {
-      const { video, fileName } = takeRenderedVideo({
+      const { video, fileName } = await renderJobClient.takeVideo({
         jobId: params.jobId,
         userId: user.id,
       });
@@ -193,7 +197,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, user }, reply) => {
-      cancelRenderJob({ jobId: params.jobId, userId: user.id });
+      await renderJobClient.cancel({ jobId: params.jobId, userId: user.id });
       return reply.send({ cancelled: true });
     },
   );
@@ -206,16 +210,44 @@ export default appRecordingRoutes;
 // =============================================================================
 
 /**
- * 403 unless app session recording is enabled on this deployment.
+ * 403 unless the Apps Hackathon recorder is available to this caller.
  *
- * Not 400: the request is well formed and there is nothing the caller can
- * change about it — the feature is switched off for everyone here.
+ * Gates a request has to clear: the deployment must offer the feature at all
+ * (community deployments always do; an activated enterprise licence never
+ * does), the hackathon must be inside its date window, and the caller's
+ * organization must not have switched it off. Not 400 for any of them — the
+ * request is well formed and there is nothing the caller can change about it.
+ *
+ * The staging override is the one thing that skips the date window (it forces
+ * the feature on there in the first place), so Archestra's own staging can
+ * exercise the recorder before the hackathon opens and after it closes.
  */
-function assertSessionRecordingEnabled(): void {
+async function assertAppsHackathonAvailable(
+  organizationId: string,
+): Promise<void> {
   if (!config.hackathonRecorder.enabled) {
+    // Only reachable on an activated enterprise licence without the override —
+    // community deployments always pass this gate.
     throw new ApiError(
       403,
-      "The hackathon recorder is disabled on this deployment (ARCHESTRA_HACKATHON_RECORDER).",
+      "The Apps Hackathon recorder is not available on this deployment.",
+    );
+  }
+  // Read per request rather than captured at boot: a pod that started before
+  // an edge of the window would otherwise keep answering as it did then.
+  if (!config.hackathonRecorder.overrideActive && !isAppsHackathonOpen()) {
+    throw new ApiError(
+      403,
+      Date.now() < APPS_HACKATHON_OPENS_AT_MS
+        ? "The Apps Hackathon has not started yet, so session recording is not available."
+        : "The Apps Hackathon has ended, so session recording is no longer available.",
+    );
+  }
+  const organization = await OrganizationModel.getById(organizationId);
+  if (!organization?.appsHackathonRecorderEnabled) {
+    throw new ApiError(
+      403,
+      "The Apps Hackathon recorder is switched off for this organization.",
     );
   }
 }

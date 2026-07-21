@@ -74,6 +74,13 @@ export const TOOL_PERMISSIONS: Record<
   add_team_member: { resource: "team", action: "read" },
   update_team_member_role: { resource: "team", action: "read" },
   remove_team_member: { resource: "team", action: "read" },
+  // External group sync tools follow the same pattern as membership tools:
+  // team:read as the coarse gate (matching the REST routes), with the finer
+  // manage check (org-level team manager OR team admin) and the enterprise
+  // license gate enforced in the handlers.
+  list_team_external_groups: { resource: "team", action: "read" },
+  add_team_external_group: { resource: "team", action: "read" },
+  remove_team_external_group: { resource: "team", action: "read" },
 
   // Limits
   create_limit: { resource: "llmLimit", action: "create" },

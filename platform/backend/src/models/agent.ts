@@ -121,6 +121,48 @@ class AgentModel {
       .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
   }
 
+  /**
+   * Auto-mode agents (accessAllTools = true) grouped by organization. These
+   * agents have implicit access to every tool, so they can reach every MCP
+   * server without an explicit tool assignment. They are therefore surfaced
+   * separately from `assignedAgents` (e.g. below a divider in the server card
+   * "Used by N agents" tooltip). Batched by organization to avoid an N+1 when
+   * decorating a list of servers.
+   */
+  static async getAutoModeAgentDetailsByOrganizations(
+    organizationIds: string[],
+  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
+    const agentsByOrg = new Map<string, Array<{ id: string; name: string }>>();
+    for (const organizationId of organizationIds) {
+      agentsByOrg.set(organizationId, []);
+    }
+    if (organizationIds.length === 0) {
+      return agentsByOrg;
+    }
+
+    const rows = await db
+      .select({
+        organizationId: schema.agentsTable.organizationId,
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          inArray(schema.agentsTable.organizationId, organizationIds),
+          eq(schema.agentsTable.accessAllTools, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name), asc(schema.agentsTable.id));
+
+    for (const { organizationId, id, name } of rows) {
+      agentsByOrg.get(organizationId)?.push({ id, name });
+    }
+
+    return agentsByOrg;
+  }
+
   static async activeNameExistsInOrganization(params: {
     name: string;
     organizationId: string;
@@ -1857,6 +1899,36 @@ class AgentModel {
   }
 
   /**
+   * Lean counterpart of {@link getDefaultProfile} for the LLM proxy hot path:
+   * the raw agents row plus labels, like {@link findGatewayAgentById}. The
+   * proxy resolves the default profile on every request that omits an agent id
+   * in the URL, and it only reads scalar config (org, agent type,
+   * considerContextUntrusted, identity provider) and trace/metric labels — the
+   * tools join and team/knowledge/connector hydration of the full method are
+   * unused there.
+   */
+  static async getDefaultGatewayProfile(): Promise<GatewayAgent | null> {
+    const [agent] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, "profile"),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    if (!agent) {
+      return null;
+    }
+
+    const labels = await AgentLabelModel.getLabelsForAgent(agent.id);
+    return { ...agent, labels };
+  }
+
+  /**
    * Minimal agent lookup for opening a conversation: the SAME access gate as
    * {@link findById}, but selecting only the LLM-selection fields that path uses
    * (`llmApiKeyId`, `modelId`). Skips the tool join and the
@@ -3094,6 +3166,7 @@ class AgentModel {
       connectorIds,
       delegations,
       excludedSubagentIds,
+      suggestedPrompts,
       modelRows,
       keyRows,
     ] = await Promise.all([
@@ -3104,6 +3177,7 @@ class AgentModel {
       AgentConnectorAssignmentModel.getConnectorIds(id),
       AgentToolModel.getDelegationTargets(id),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      AgentSuggestedPromptModel.getForAgent(id),
       // Resolve the live modelId FK to its human-readable identity so a model
       // change surfaces as a real diff — the legacy llmModel text column is
       // deprecated (never written) and would always read null.
@@ -3155,9 +3229,20 @@ class AgentModel {
             scope: keyRows[0].scope,
           }
         : null,
+      icon: row.icon ?? null,
+      considerContextUntrusted: row.considerContextUntrusted,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
+      // passthrough_headers is a text[] of header NAMES (no values), so it is
+      // safe to capture verbatim.
+      passthroughHeaders: [...(row.passthroughHeaders ?? [])].sort(),
+      identityProviderId: row.identityProviderId ?? null,
+      environmentId: row.environmentId ?? null,
+      incomingEmailEnabled: row.incomingEmailEnabled,
+      incomingEmailSecurityMode: row.incomingEmailSecurityMode,
+      incomingEmailAllowedDomain: row.incomingEmailAllowedDomain ?? null,
+      builtInAgentConfig: row.builtInAgentConfig ?? null,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),
@@ -3165,6 +3250,7 @@ class AgentModel {
       labels: labels.sort(),
       delegationTargets,
       excludedSubagentIds: [...excludedSubagentIds].sort(),
+      suggestedPrompts,
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };

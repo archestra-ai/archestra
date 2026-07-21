@@ -71,6 +71,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useFeature } from "@/lib/config/config.query";
 import {
+  useDialogFlagUrlParam,
+  useDialogUrlParam,
+} from "@/lib/hooks/use-dialog-url-param";
+import {
   useAssignConnectorToKnowledgeBases,
   useConnector,
   useConnectorKnowledgeBases,
@@ -194,12 +198,23 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   });
   const triggerPermissionSync = useTriggerPermissionSync();
   const permissionSyncRunning = coverage?.permissionSyncRunning ?? false;
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  const { open: isEditOpen, setOpen: setIsEditOpen } =
+    useDialogFlagUrlParam("edit");
   const [isForceResyncOpen, setIsForceResyncOpen] = useState(false);
 
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  // The run details dialog fetches the run itself from the id, so synthesize
+  // the entity from the URL id instead of fetching it here.
+  const runId = searchParams.get("run");
+  const {
+    entity: selectedRun,
+    open: openRunDetails,
+    close: closeRunDetails,
+  } = useDialogUrlParam({
+    paramName: "run",
+    entityFromUrl: runId ? { id: runId } : null,
+  });
   const [runTypeFilter, setRunTypeFilter] = useState<
     "all" | "content" | "permission"
   >(tabParam === "permission-runs" ? "permission" : "all");
@@ -362,7 +377,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground"
-                  onClick={() => setSelectedRunId(row.original.id)}
+                  onClick={() => openRunDetails(row.original)}
                   aria-label="View run logs"
                 >
                   <Logs className="h-4 w-4" />
@@ -374,7 +389,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         },
       },
     ],
-    [isAutoSync],
+    [isAutoSync, openRunDetails],
   );
 
   if (isPending) {
@@ -735,8 +750,8 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
 
         <ConnectorRunDetailsDialog
           connectorId={connectorId}
-          runId={selectedRunId}
-          onClose={() => setSelectedRunId(null)}
+          runId={selectedRun?.id ?? null}
+          onClose={closeRunDetails}
         />
 
         <EditConnectorDialog

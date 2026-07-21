@@ -6,6 +6,7 @@
  */
 
 import {
+  type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
@@ -57,9 +58,9 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
-  type Agent,
   ApiError,
   type DualLlmAnalysis,
+  type GatewayAgent,
   type InteractionAuthMethod,
   type InteractionRequest,
   type LLMProvider,
@@ -116,7 +117,7 @@ const toolPolicyCache = new LRUCacheManager<boolean>({
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
-  agent: Agent;
+  agent: GatewayAgent;
   originalRequest: TRequest;
   baselineModel: string;
   actualModel: string;
@@ -128,6 +129,8 @@ export interface LLMProxyContext<TRequest> {
   unsafeContextBoundary?: UnsafeContextBoundary;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
+  /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
+  billingMode: BillingMode;
   authenticatedApp?: {
     id: string;
     name: string;
@@ -918,9 +921,10 @@ export async function handleLLMProxy<
     // calls have no chat_api_key row, so no extra headers.
     let perKeyExtraHeaders: Record<string, string> | null = null;
     if (perKeyChatApiKeyId) {
-      const row =
-        perKeyProviderApiKeyRow ??
-        (await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId));
+      // Reuse the row when an earlier auth path already loaded it.
+      perKeyProviderApiKeyRow ??=
+        await LlmProviderApiKeyModel.findById(perKeyChatApiKeyId);
+      const row = perKeyProviderApiKeyRow;
       perKeyExtraHeaders = row?.extraHeaders ?? null;
       if (!row) {
         logger.warn(
@@ -992,6 +996,17 @@ export async function handleLLMProxy<
       }
     }
 
+    // Billing mode: whether this call actually incurs a per-token charge,
+    // classified purely from the resolved credential's format (e.g. Anthropic
+    // `sk-ant-oat…` OAuth tokens = Claude Pro/Max subscription). Stored on the
+    // interaction so analytics can report billed spend (metered `cost`, $0 for
+    // subscription) alongside the list-price cost.
+    const billingMode = utils.resolveInteractionBillingMode({
+      isSubscriptionCredential:
+        provider.isSubscriptionCredential?.(apiKey) ?? false,
+      autodetectEnabled: config.llmCost.subscriptionAutodetect,
+    });
+
     const ctx: LLMProxyContext<TRequest> = {
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -1005,6 +1020,7 @@ export async function handleLLMProxy<
       unsafeContextBoundary,
       externalAgentId,
       authMethod,
+      billingMode,
       authenticatedApp,
       userId,
       resolvedUser,
@@ -1121,6 +1137,7 @@ async function handleStreaming<
     unsafeContextBoundary,
     externalAgentId,
     authMethod,
+    billingMode,
     authenticatedApp,
     userId,
     virtualKeyId,
@@ -1573,6 +1590,7 @@ async function handleStreaming<
           actualModel,
           costs.actualCost,
           source,
+          billingMode,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1592,6 +1610,7 @@ async function handleStreaming<
             agent,
             externalAgentId,
             authMethod,
+            billingMode,
             authenticatedApp,
             executionId,
             userId,
@@ -1654,6 +1673,7 @@ async function handleNonStreaming<
     unsafeContextBoundary,
     externalAgentId,
     authMethod,
+    billingMode,
     authenticatedApp,
     userId,
     virtualKeyId,
@@ -1877,6 +1897,7 @@ async function handleNonStreaming<
           actualModel,
           costs.actualCost,
           source,
+          billingMode,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1895,6 +1916,7 @@ async function handleNonStreaming<
           agent,
           externalAgentId,
           authMethod,
+          billingMode,
           authenticatedApp,
           executionId,
           userId,
@@ -1951,6 +1973,7 @@ async function handleNonStreaming<
       actualModel,
       costs.actualCost,
       source,
+      billingMode,
     );
     metrics.llm.reportLLMCacheCost(
       providerName,
@@ -1967,6 +1990,7 @@ async function handleNonStreaming<
         agent,
         externalAgentId,
         authMethod,
+        billingMode,
         authenticatedApp,
         executionId,
         userId,

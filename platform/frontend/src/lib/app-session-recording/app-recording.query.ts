@@ -1,6 +1,7 @@
 import {
   APP_RECORDING_RENDER_FPS,
   archestraApiSdk,
+  pruneTrailingTrimEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
 import {
@@ -186,7 +187,13 @@ export function useRenderAppRecordingVideo() {
 
       try {
         const started = await renderAppRecordingVideo({
-          body: { bundle: validation.bundle, title: params.title },
+          // Ship the trimmed recording without its cut-away tail: a size
+          // optimization that renders byte-for-byte the same (see
+          // pruneTrailingTrimEvents). Nothing else about the bundle changes.
+          body: {
+            bundle: pruneTrailingTrimEvents(validation.bundle),
+            title: params.title,
+          },
         });
         if (started.error || !started.data?.jobId) {
           toast.dismiss(toastId);
@@ -273,6 +280,13 @@ async function awaitRenderJob(
   cancelled: AbortSignal,
 ): Promise<"done" | "cancelled"> {
   const deadline = Date.now() + RENDER_POLL_TIMEOUT_MS;
+  // A backend blip mid-render — a rolling deploy draining the pod that answered
+  // the last poll, a momentary 5xx, a dropped connection — must not tear the
+  // whole render down on the very first failed poll and surface a raw "Internal
+  // Server Error" the author can do nothing with. Ride out a bounded run of
+  // them: the render is either still going on a server that is coming back, or
+  // already gone in a way the next good poll reports cleanly.
+  let consecutiveTransientFailures = 0;
   while (Date.now() < deadline) {
     if (cancelled.aborted) return "cancelled";
     await new Promise((resolve) =>
@@ -286,15 +300,24 @@ async function awaitRenderJob(
     // so the intent is read from the signal, not inferred from the answer.
     if (cancelled.aborted) return "cancelled";
     if (error) {
-      // Jobs live in the server's memory, so a deploy or a restart takes every
-      // render that was running with it. That reads as a plain 404 here, which
-      // is true but says nothing an author can act on.
-      throw new Error(
-        isMissingJob(error)
-          ? "The server restarted while your video was being prepared. Start the download again."
-          : toApiError(error).message,
-      );
+      // A definitive "no such job" means the server lost it — jobs live in
+      // memory, so a deploy or a restart takes every render running with it.
+      // That is something the author can act on, so report it at once rather
+      // than retrying a job that is provably gone.
+      if (isMissingJob(error)) {
+        throw new Error(
+          "The server restarted while your video was being prepared. Start the download again.",
+        );
+      }
+      // Anything else — a 5xx from a server mid-restart, a dropped connection —
+      // is treated as transient: keep polling until it clears or the render
+      // resolves, giving up only once it has failed this many times running.
+      if (++consecutiveTransientFailures <= MAX_TRANSIENT_POLL_FAILURES) {
+        continue;
+      }
+      throw new Error(toApiError(error).message);
     }
+    consecutiveTransientFailures = 0;
     if (data?.status === "cancelled") return "cancelled";
     if (data?.status === "failed") {
       throw new Error(data.error ?? "The video could not be rendered.");
@@ -322,6 +345,14 @@ const runningRenders = new Set<AbortController>();
 const RENDER_POLL_INTERVAL_MS = 1_500;
 /** Well past the longest export the editor allows, as a stuck-job backstop. */
 const RENDER_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * How many status polls in a row may fail with a transient error — a 5xx from a
+ * server mid-restart, a dropped connection — before the render is given up. At
+ * the poll interval this rides out a backend hiccup of roughly a dozen seconds
+ * (a rolling deploy, a pod restart) without abandoning a render that is still
+ * fine, while a genuinely broken server still surfaces its error soon after.
+ */
+const MAX_TRANSIENT_POLL_FAILURES = 8;
 
 /**
  * Whether a video render is running anywhere in this tab. The export button
@@ -555,8 +586,20 @@ function videoFileName(title: string): string {
  * of rendering, so a finer number would be false precision either way.
  */
 function renderEstimate(bundle: AppRecordingBundle): string {
+  // Estimate against the FINAL CUT, not the raw recording: cuts shorten the
+  // video, so a session trimmed 35s → 14s renders ~14s of frames. Only the part
+  // of a cut overlapping the recording counts — a cut addressing the
+  // pre-recording chat head (negative time) removes no rendered frames. Coarse
+  // on purpose (the real length comes from the replay at render time); this only
+  // has to land in the right bucket, so overlapping cuts aren't merged.
+  const { durationMs } = bundle.recording;
+  const cutMs = (bundle.edits?.cuts ?? []).reduce((total, cut) => {
+    const from = Math.max(0, cut.fromMs);
+    const to = Math.min(durationMs, cut.toMs);
+    return total + Math.max(0, to - from);
+  }, 0);
   const frames =
-    (bundle.recording.durationMs / 1000) * APP_RECORDING_RENDER_FPS;
+    (Math.max(0, durationMs - cutMs) / 1000) * APP_RECORDING_RENDER_FPS;
   const seconds = RENDER_STARTUP_SECONDS + frames * RENDER_SECONDS_PER_FRAME;
   if (seconds < 30) return "half a minute";
   if (seconds < 75) return "a minute";

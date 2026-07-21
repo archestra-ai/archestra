@@ -78,10 +78,20 @@ function decryptSecretValueWithKey(
   });
   decipher.setAuthTag(authTag);
 
-  const decrypted = Buffer.concat([
-    decipher.update(ciphertext),
-    decipher.final(),
-  ]);
+  let decrypted: Buffer;
+  try {
+    decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  } catch (error) {
+    // Node throws an opaque "Unsupported state or unable to authenticate
+    // data" here; name the overwhelmingly likely operational cause instead.
+    throw new Error(
+      "Failed to decrypt stored secret: it was encrypted with a different key " +
+        "than the one derived from the current ARCHESTRA_AUTH_SECRET " +
+        "(the auth secret was rotated, or the database came from an " +
+        "environment with a different auth secret)",
+      { cause: error },
+    );
+  }
 
   return JSON.parse(decrypted.toString("utf8"));
 }

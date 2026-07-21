@@ -826,18 +826,18 @@ describe("deploy_mcp_server", () => {
 
 /**
  * create_mcp_server must refuse to assign a *restricted* environment unless the
- * caller holds `environment:admin`. This mirrors the REST guard
+ * caller holds `mcpRegistry:deploy-to-restricted`. This mirrors the REST guard
  * (internal-mcp-catalog.restricted-environment.test.ts) but exercises the MCP
  * tool path, which uses the real `userHasPermission` against the caller's
- * member role: the built-in Admin role holds `environment:admin`, a plain
- * member does not. Personal-scope create (the default) needs no
+ * member role: the built-in Admin role holds the permission, a plain member
+ * does not. Personal-scope create (the default) needs no
  * `mcpServerInstallation:admin`, so a plain member can reach the environment
  * gate.
  */
 describe("create_mcp_server restricted environment guard", () => {
   const CREATE_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`;
 
-  test("non-env-admin member assigning a RESTRICTED env is rejected and nothing is created", async ({
+  test("member without mcpRegistry:deploy-to-restricted assigning a RESTRICTED env is rejected and nothing is created", async ({
     makeAgent,
     makeCustomRole,
     makeUser,
@@ -847,7 +847,8 @@ describe("create_mcp_server restricted environment guard", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     // A role that can create registry entries (so it passes the centralized
-    // tool RBAC gate and a personal-scope create) but lacks `environment:admin`.
+    // tool RBAC gate and a personal-scope create) but lacks
+    // `mcpRegistry:deploy-to-restricted`.
     const role = await makeCustomRole(org.id, {
       permission: { mcpRegistry: ["create"] },
     });
@@ -882,7 +883,7 @@ describe("create_mcp_server restricted environment guard", () => {
     expect(created).toBeFalsy();
   });
 
-  test("env-admin (built-in Admin) assigning a RESTRICTED env succeeds", async ({
+  test("built-in Admin (holds mcpRegistry:deploy-to-restricted) assigning a RESTRICTED env succeeds", async ({
     makeAgent,
     makeUser,
     makeOrganization,

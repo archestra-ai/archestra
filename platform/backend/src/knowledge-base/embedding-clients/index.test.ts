@@ -2,7 +2,12 @@ import { HttpResponse, http } from "msw";
 import { describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import {
+  UnsupportedEmbeddingProviderError,
+  UnusableEmbeddingResponseError,
+} from "../errors";
+import {
   AzureEmbeddingError,
+  BedrockEmbeddingError,
   callEmbedding,
   GeminiEmbeddingError,
   getEmbeddingRetryDelayMs,
@@ -24,6 +29,9 @@ function encodeEmbedding(values: number[]): string {
 describe("callEmbedding dimensions handling", () => {
   const BASE_URL = "https://embed.example.com/v1";
   const captured: Array<{ dimensions?: number }> = [];
+  // The dispatcher validates each vector's length against the configured
+  // dimension, so the mock must return a correctly-sized vector.
+  let mockEmbeddingLength = 2;
   useMswServer(
     http.post(`${BASE_URL}/embeddings`, async ({ request }) => {
       const body = (await request.json()) as { dimensions?: number };
@@ -33,7 +41,9 @@ describe("callEmbedding dimensions handling", () => {
         data: [
           {
             object: "embedding",
-            embedding: encodeEmbedding([0.1, 0.2]),
+            embedding: encodeEmbedding(
+              new Array(mockEmbeddingLength).fill(0.1),
+            ),
             index: 0,
           },
         ],
@@ -45,6 +55,7 @@ describe("callEmbedding dimensions handling", () => {
 
   test("drops the dimensions param for Ollama (fixed native dimension)", async () => {
     captured.length = 0;
+    mockEmbeddingLength = 1024;
     await callEmbedding({
       inputs: ["hello"],
       model: "mxbai-embed-large",
@@ -58,6 +69,7 @@ describe("callEmbedding dimensions handling", () => {
 
   test("forwards the dimensions param for OpenAI (Matryoshka truncation)", async () => {
     captured.length = 0;
+    mockEmbeddingLength = 1536;
     await callEmbedding({
       inputs: ["hello"],
       model: "text-embedding-3-small",
@@ -67,6 +79,89 @@ describe("callEmbedding dimensions handling", () => {
       provider: "openai",
     });
     expect(captured[0].dimensions).toBe(1536);
+  });
+});
+
+describe("callEmbedding response validation", () => {
+  const BASE_URL = "https://embed-validate.example.com/v1";
+  let responseBody: Record<string, unknown>;
+  useMswServer(
+    http.post(`${BASE_URL}/embeddings`, () => HttpResponse.json(responseBody)),
+  );
+
+  const call = (params?: { dimensions?: number; inputs?: string[] }) =>
+    callEmbedding({
+      inputs: params?.inputs ?? ["hi"],
+      model: "text-embedding-3-small",
+      apiKey: "k",
+      baseUrl: BASE_URL,
+      dimensions: params?.dimensions,
+      provider: "openai",
+    });
+
+  const embeddingItem = (values: number[], index = 0) => ({
+    object: "embedding",
+    embedding: encodeEmbedding(values),
+    index,
+  });
+
+  test("throws when the response has no embeddings array (the historic crash)", async () => {
+    responseBody = {
+      object: "list",
+      model: "m",
+      usage: { prompt_tokens: 1, total_tokens: 1 },
+    };
+    await expect(call()).rejects.toBeInstanceOf(UnusableEmbeddingResponseError);
+  });
+
+  test("throws when the embedding count does not match the inputs", async () => {
+    responseBody = {
+      object: "list",
+      data: [embeddingItem([0.1, 0.2])],
+      model: "m",
+      usage: { prompt_tokens: 1, total_tokens: 1 },
+    };
+    await expect(call({ inputs: ["a", "b"] })).rejects.toBeInstanceOf(
+      UnusableEmbeddingResponseError,
+    );
+  });
+
+  test("throws when a vector's length differs from the configured dimension", async () => {
+    responseBody = {
+      object: "list",
+      data: [embeddingItem([0.1, 0.2])],
+      model: "m",
+      usage: { prompt_tokens: 1, total_tokens: 1 },
+    };
+    await expect(call({ dimensions: 1536 })).rejects.toBeInstanceOf(
+      UnusableEmbeddingResponseError,
+    );
+  });
+});
+
+describe("callEmbedding provider gating", () => {
+  // Providers with no embedding path must be rejected, never sent to the
+  // OpenAI-compatible client where they crash on a non-OpenAI response.
+  test.each([
+    "anthropic",
+    "cohere",
+    "cerebras",
+    "deepseek",
+    "groq",
+    "perplexity",
+    "xai",
+    "minimax",
+    "github-copilot",
+    "microsoft-365-copilot",
+  ] as const)("rejects %s with UnsupportedEmbeddingProviderError", async (provider) => {
+    await expect(
+      callEmbedding({
+        inputs: ["hi"],
+        model: "some-model",
+        apiKey: "k",
+        provider,
+      }),
+    ).rejects.toBeInstanceOf(UnsupportedEmbeddingProviderError);
   });
 });
 
@@ -81,6 +176,9 @@ describe("isRetryableEmbeddingError", () => {
     expect(
       isRetryableEmbeddingError(new OpenAIEmbeddingError(503, "server")),
     ).toBe(true);
+    expect(
+      isRetryableEmbeddingError(new BedrockEmbeddingError(503, "server")),
+    ).toBe(true);
   });
 
   test("returns false for non-retryable provider status codes", () => {
@@ -92,6 +190,9 @@ describe("isRetryableEmbeddingError", () => {
     ).toBe(false);
     expect(
       isRetryableEmbeddingError(new OpenAIEmbeddingError(404, "missing")),
+    ).toBe(false);
+    expect(
+      isRetryableEmbeddingError(new BedrockEmbeddingError(400, "bad")),
     ).toBe(false);
   });
 

@@ -13,6 +13,7 @@ type AllVirtualApiKeysParams = Partial<AllVirtualApiKeysQuery> & {
 
 const {
   getAllVirtualApiKeys,
+  getVirtualApiKey,
   createVirtualApiKey,
   updateVirtualApiKey,
   deleteVirtualApiKey,
@@ -165,5 +166,18 @@ export function useAllVirtualApiKeys(params?: AllVirtualApiKeysParams) {
       );
     },
     enabled: params?.enabled,
+  });
+}
+
+export function useVirtualKey(id: string | undefined) {
+  return useQuery({
+    queryKey: ["virtual-api-keys", "detail", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await getVirtualApiKey({ path: { id } });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!id,
   });
 }

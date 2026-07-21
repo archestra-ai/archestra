@@ -460,6 +460,154 @@ describe("ChatProvider retries", () => {
     });
   });
 
+  it("counts heartbeats as response progress while a tool call awaits output", async () => {
+    // While a tool executes server-side the stream is intentionally silent
+    // apart from heartbeats. Those heartbeats must keep the response-progress
+    // window fresh, or the "upstream provider may have stalled" warning fires
+    // for any tool run longer than the idle threshold.
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    const messages: UIMessage[] = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "run the tool" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "archestra__run_command",
+            toolCallId: "tool-call-1",
+            state: "input-available",
+            input: {},
+          } as unknown as UIMessage["parts"][number],
+        ],
+      },
+    ];
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "streaming",
+        stop: mocks.stop,
+      };
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+    const initialProgressSequence =
+      latestSessionRef.current?.responseProgressSequence ?? 0;
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-heartbeat",
+        data: { timestamp: Date.now() },
+      });
+    });
+
+    await waitFor(() => {
+      expect(latestSessionRef.current?.responseProgressSequence).toBe(
+        initialProgressSequence + 1,
+      );
+    });
+  });
+
+  it("keeps heartbeats transport-only once the pending tool call has output", async () => {
+    // Output arrived and the provider is generating again: silence is now a
+    // potential upstream stall, so heartbeats must not refresh the
+    // response-progress window.
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    const messages: UIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "archestra__run_command",
+            toolCallId: "tool-call-1",
+            state: "output-available",
+            input: {},
+            output: { ok: true },
+          } as unknown as UIMessage["parts"][number],
+        ],
+      },
+    ];
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "streaming",
+        stop: mocks.stop,
+      };
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+    const initialTransportSequence =
+      latestSessionRef.current?.transportActivitySequence ?? 0;
+    const initialProgressSequence =
+      latestSessionRef.current?.responseProgressSequence ?? 0;
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-heartbeat",
+        data: { timestamp: Date.now() },
+      });
+    });
+
+    await waitFor(() => {
+      expect(latestSessionRef.current?.transportActivitySequence).toBe(
+        initialTransportSequence + 1,
+      );
+    });
+    expect(latestSessionRef.current?.responseProgressSequence).toBe(
+      initialProgressSequence,
+    );
+  });
+
   it("updates live context token estimate from usage and compaction data", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,

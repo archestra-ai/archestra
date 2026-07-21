@@ -296,6 +296,11 @@ const registry = defineArchestraTools([
       }
 
       const files = await SkillVersionModel.findFiles(version.id);
+      // a name-only load is an activation; file reads above don't count.
+      SkillModel.recordUsage({
+        skillId: skill.id,
+        userId: ctx.userId ?? null,
+      });
       logger.info(
         {
           organizationId: ctx.organizationId,
@@ -412,6 +417,9 @@ const registry = defineArchestraTools([
       if (denied) {
         return errorResult(denied);
       }
+      if (skill.githubSyncInterval !== null) {
+        return errorResult(syncedSkillReadOnlyMessage(skill));
+      }
 
       const parsed = parseManifest(args.content);
       if (parsed instanceof SkillParseError) {
@@ -468,6 +476,9 @@ const registry = defineArchestraTools([
       const denied = await checkSkillModifyPermission(ctx, skill);
       if (denied) {
         return errorResult(denied);
+      }
+      if (skill.githubSyncInterval !== null) {
+        return errorResult(syncedSkillReadOnlyMessage(skill));
       }
 
       const loadSkillName = archestraMcpBranding.getToolName(
@@ -824,6 +835,24 @@ async function checkSkillModifyPermission(
     if (error instanceof ApiError) return error.message;
     throw error;
   }
+}
+
+/**
+ * A GitHub-synced skill's content is owned by its source repo — the model
+ * must not edit it in place. Editing requires disconnecting the skill from
+ * its GitHub source, a deliberate action kept in the Skills UI.
+ */
+function syncedSkillReadOnlyMessage(
+  skill: Pick<Skill, "name" | "sourceRef">,
+): string {
+  const repo = skill.sourceRef?.split("@")[0];
+  return (
+    `Skill "${skill.name}" is synced from GitHub` +
+    (repo ? ` (${repo})` : "") +
+    " and its content is read-only here. Tell the user to edit it in the " +
+    "source repository, or to disconnect it from GitHub in the Skills UI " +
+    "to make it editable in the app."
+  );
 }
 
 /**

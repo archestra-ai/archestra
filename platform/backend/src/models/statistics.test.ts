@@ -352,6 +352,55 @@ describe("StatisticsModel", () => {
     });
   });
 
+  describe("billing-mode cost split", () => {
+    test("excludes subscription traffic from billed spend and reports it separately", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+
+      // Two metered interactions ($1 each) and one subscription interaction ($5).
+      await makeInteraction(agent.id, {
+        cost: "1.0000000000",
+        billingMode: "metered",
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        cost: "1.0000000000",
+        billingMode: "metered",
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        cost: "5.0000000000",
+        billingMode: "subscription",
+        model: "gpt-4o",
+      });
+
+      const savings = await StatisticsModel.getCostSavingsStatistics(
+        "24h",
+        user.id,
+        true,
+      );
+      // Billed spend (the "Actual Cost" line) counts only metered cost; the
+      // subscription list-price is reported separately, never as spend.
+      expect(savings.totalActualCost).toBeCloseTo(2, 5);
+      expect(savings.totalSubscriptionCost).toBeCloseTo(5, 5);
+
+      // Per-model "Cost" is billed spend only.
+      const models = await StatisticsModel.getModelStatistics(
+        "24h",
+        user.id,
+        true,
+      );
+      const gpt4o = models.find((m) => m.model === "gpt-4o");
+      expect(gpt4o?.cost).toBeCloseTo(2, 5);
+    });
+  });
+
   describe("getOverviewStatistics", () => {
     test("should return overview statistics", async ({
       makeUser,

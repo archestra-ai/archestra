@@ -29,12 +29,34 @@ export type SkillFileKind = z.infer<typeof SkillFileKindSchema>;
 export const SkillFileEncodingSchema = z.enum(["utf8", "base64"]);
 export type SkillFileEncoding = z.infer<typeof SkillFileEncodingSchema>;
 
+/**
+ * Recurring-pull frequency for a GitHub-synced skill. Non-null on a skill
+ * marks it content-read-only and scheduled for background re-pull.
+ */
+export const SkillGithubSyncIntervalSchema = z.enum(["15m", "1h", "1d"]);
+export type SkillGithubSyncInterval = z.infer<
+  typeof SkillGithubSyncIntervalSchema
+>;
+
 const SkillMetadataSchema = z.record(z.string(), z.string());
+
+/** Columns the skills list can be sorted by. */
+export const SkillSortBy = [
+  "usageCount",
+  "lastUsedAt",
+  "name",
+  "createdAt",
+] as const;
+export type SkillSortBy = (typeof SkillSortBy)[number];
 
 export const SelectSkillSchema = createSelectSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema,
   scope: ResourceVisibilityScopeSchema,
   metadata: SkillMetadataSchema,
+  // a union (not .nullable()) serializes to OpenAPI as anyOf, which the
+  // client generator keeps as `| null` — `nullable: true` on an enum is
+  // silently dropped (see connector lastSyncStatus).
+  githubSyncInterval: z.union([SkillGithubSyncIntervalSchema, z.null()]),
 });
 
 // drizzle-zod uses field overrides verbatim, so `.optional()` is applied here
@@ -46,9 +68,15 @@ export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
   scope: ResourceVisibilityScopeSchema.optional(),
   metadata: SkillMetadataSchema.optional(),
   templated: z.boolean().optional(),
+  githubSyncInterval: SkillGithubSyncIntervalSchema.nullable().optional(),
 }).omit({
   id: true,
   latestVersion: true,
+  usageCount: true,
+  lastUsedAt: true,
+  // sync bookkeeping is system-owned (stamped by the sync worker).
+  lastSyncedAt: true,
+  lastSyncError: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -58,10 +86,21 @@ export const UpdateSkillSchema = createUpdateSchema(schema.skillsTable, {
   scope: ResourceVisibilityScopeSchema.optional(),
   metadata: SkillMetadataSchema.optional(),
   templated: z.boolean().optional(),
+  githubSyncInterval: SkillGithubSyncIntervalSchema.nullable().optional(),
 }).omit({
   id: true,
   organizationId: true,
   latestVersion: true,
+  usageCount: true,
+  lastUsedAt: true,
+  // sync state changes only through dedicated model methods
+  // (setGithubSync / markGithubSyncResult), never a generic update.
+  githubSyncInterval: true,
+  githubSyncRef: true,
+  githubAppConfigId: true,
+  githubPatId: true,
+  lastSyncedAt: true,
+  lastSyncError: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -118,7 +157,35 @@ export const SkillWithFilesSchema = SelectSkillSchema.extend({
   files: z.array(SelectSkillFileSchema),
 });
 
+/**
+ * Per-user activation analytics for one skill over a recent window, built from
+ * `skill_usage_events`. `userId: null` groups events with no attributable user;
+ * `name: null` marks ids whose `users` row is gone (deleted user) or never
+ * existed (synthetic service-account ids).
+ */
+export const SkillUsageStatisticsSchema = z.object({
+  /** Window start (inclusive, ISO timestamp); events before it are excluded. */
+  since: z.string(),
+  users: z.array(
+    z.object({
+      userId: z.string().nullable(),
+      name: z.string().nullable(),
+      total: z.number(),
+    }),
+  ),
+  /** Daily activation counts per user; days without activity are omitted. */
+  daily: z.array(
+    z.object({
+      /** UTC calendar day, `YYYY-MM-DD`. */
+      date: z.string(),
+      userId: z.string().nullable(),
+      count: z.number(),
+    }),
+  ),
+});
+
 export type Skill = z.infer<typeof SelectSkillSchema>;
+export type SkillUsageStatistics = z.infer<typeof SkillUsageStatisticsSchema>;
 export type InsertSkill = z.infer<typeof InsertSkillSchema>;
 export type UpdateSkill = z.infer<typeof UpdateSkillSchema>;
 export type SkillFile = z.infer<typeof SelectSkillFileSchema>;

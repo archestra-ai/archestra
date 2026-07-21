@@ -1,5 +1,6 @@
 import GithubAppConfigModel from "@/models/github-app-config";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import SkillModel from "@/models/skill";
 import { secretManager } from "@/secrets-manager";
 import {
   ApiError,
@@ -101,6 +102,16 @@ export async function deleteGithubAppConfig(params: {
     throw new ApiError(
       409,
       `GitHub App configuration is in use by ${referencingConnectors} connector(s) and cannot be deleted`,
+    );
+  }
+
+  // synced skills authenticate their scheduled pulls with this config
+  const referencingSkills =
+    await SkillModel.countSyncedReferencingGithubAppConfig(existing.id);
+  if (referencingSkills > 0) {
+    throw new ApiError(
+      409,
+      `GitHub App configuration is in use by ${referencingSkills} synced skill(s) and cannot be deleted. Disconnect those skills from GitHub first.`,
     );
   }
 

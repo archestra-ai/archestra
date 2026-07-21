@@ -382,6 +382,7 @@ export function CreateConnectorDialog({
                     <EnvironmentSelector
                       value={field.value ?? null}
                       onChange={field.onChange}
+                      resource="knowledgeSource"
                       helpText="The environment this connector belongs to, controlling which gateways and agents can use its knowledge."
                     />
                   )}

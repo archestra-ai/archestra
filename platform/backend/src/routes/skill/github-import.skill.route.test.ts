@@ -1,7 +1,8 @@
-import { EDITOR_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import { GithubAppConfigModel, SkillFileModel, SkillModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { createGithubPat } from "@/services/github-pat";
 import { afterEach, describe, expect, test, useRouteTestApp } from "@/test";
 import {
   STUB_COMMIT_SHA,
@@ -307,5 +308,152 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
       });
       expect(response.statusCode).toBe(400);
     });
+  });
+});
+
+describe("import sync mode", () => {
+  const ctx = useRouteTestApp(skillRoutes);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("defaults to daily sync and persists the tracking ref", async () => {
+    stubGithub([
+      {
+        owner: "sync-default",
+        repo: "skills",
+        files: { "pdf/SKILL.md": stubSkillManifest("pdf-sync-default") },
+      },
+    ]);
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: {
+        repoUrl: "https://github.com/sync-default/skills/tree/main",
+        skillPaths: ["pdf"],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const [created] = response.json().created;
+    expect(created.githubSyncInterval).toBe("1d");
+    expect(created.githubSyncRef).toBe("main");
+    expect(created.githubAppConfigId).toBeNull();
+  });
+
+  test("one-time imports no longer exist: sync cannot be null", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: {
+        repoUrl: "https://github.com/sync-none/skills",
+        skillPaths: ["pdf"],
+        sync: null,
+      },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("a ref-less sync import tracks the default branch (null ref)", async () => {
+    stubGithub([
+      {
+        owner: "sync-headless",
+        repo: "skills",
+        files: { "pdf/SKILL.md": stubSkillManifest("pdf-sync-headless") },
+      },
+    ]);
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: {
+        repoUrl: "https://github.com/sync-headless/skills",
+        skillPaths: ["pdf"],
+        sync: { interval: "15m" },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const [created] = response.json().created;
+    expect(created.githubSyncInterval).toBe("15m");
+    expect(created.githubSyncRef).toBeNull();
+  });
+
+  test("rejects a transient token on import (imports are always synced)", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: {
+        repoUrl: "https://github.com/sync-pat/skills",
+        skillPaths: ["pdf"],
+        githubToken: "ghp_secret",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.stringify(response.json())).toContain("never stored");
+  });
+});
+
+describe("import with a stored PAT", () => {
+  const ctx = useRouteTestApp(skillRoutes);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("sync with a saved token is allowed and persists githubPatId", async ({
+    makeMember,
+  }) => {
+    // resolving a stored credential requires githubAppConfig:read
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const pat = await createGithubPat({
+      organizationId: ctx.organizationId,
+      data: { name: "skills token", token: "ghp_stored_token" },
+    });
+    const fetchMock = stubGithub([
+      {
+        owner: "sync-stored-pat",
+        repo: "skills",
+        files: { "pdf/SKILL.md": stubSkillManifest("pdf-stored-pat") },
+      },
+    ]);
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: {
+        repoUrl: "https://github.com/sync-stored-pat/skills",
+        skillPaths: ["pdf"],
+        githubPatId: pat.id,
+        sync: { interval: "1h" },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const [created] = response.json().created;
+    expect(created.githubSyncInterval).toBe("1h");
+    expect(created.githubPatId).toBe(pat.id);
+    expect(created.githubAppConfigId).toBeNull();
+
+    // the stored token authenticates the GitHub calls
+    const sawToken = fetchMock.mock.calls.some(([, init]) =>
+      JSON.stringify(
+        (init as { headers?: unknown } | undefined)?.headers ?? {},
+      ).includes("ghp_stored_token"),
+    );
+    expect(sawToken).toBe(true);
+  });
+
+  test("rejects combining a stored token with a one-time token", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: {
+        repoUrl: "https://github.com/dual-auth/skills",
+        skillPaths: ["pdf"],
+        githubPatId: "11111111-1111-4111-8111-111111111111",
+        githubToken: "ghp_transient",
+      },
+    });
+    expect(response.statusCode).toBe(400);
   });
 });

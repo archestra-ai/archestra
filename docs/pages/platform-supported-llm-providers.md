@@ -365,7 +365,7 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### Setup
 
-1. Go to **Settings > LLM API Keys** and add a new key with provider **vLLM**
+1. Go to **Model Providers** and add a new key with provider **vLLM**
 2. Set the **Base URL** to your vLLM server (e.g., `http://your-vllm-host:8000/v1`)
 3. API key can be left blank for most self-hosted deployments
 
@@ -400,7 +400,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 ### Setup
 
-1. Go to **Settings > LLM API Keys** and add a new key with provider **Ollama**
+1. Go to **Model Providers** and add a new key with provider **Ollama**
 2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
 3. API key can be left blank for self-hosted Ollama
 

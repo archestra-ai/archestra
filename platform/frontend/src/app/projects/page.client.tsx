@@ -43,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
   parseProjectScope,
@@ -54,6 +55,7 @@ import {
   useCreateProject,
   useDeleteProject,
   usePinProject,
+  useProject,
   useProjects,
 } from "@/lib/projects/projects.query";
 import { ProjectDeleteConfirmDialog } from "./project-delete-confirm-dialog";
@@ -102,9 +104,16 @@ function ProjectsList() {
     refetch: refetchApiKeys,
   } = useHasAnyApiKey();
   const [createOpen, setCreateOpen] = useState(false);
-  const [editingProject, setEditingProject] = useState<ProjectListItem | null>(
-    null,
-  );
+  const editId = searchParams.get("edit");
+  const { data: editingProjectFromUrl } = useProject(editId ?? undefined);
+  const {
+    entity: editingProject,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<ProjectListItem>({
+    paramName: "edit",
+    entityFromUrl: editingProjectFromUrl ?? null,
+  });
   const [deletingProject, setDeletingProject] =
     useState<ProjectListItem | null>(null);
   // Pinned-first grouping applies in every scope: oversight projects simply
@@ -177,7 +186,7 @@ function ProjectsList() {
           projectId={editingProject.id}
           open
           onOpenChange={(open) => {
-            if (!open) setEditingProject(null);
+            if (!open) closeEditDialog();
           }}
         />
       )}
@@ -220,7 +229,7 @@ function ProjectsList() {
                 title="Pinned"
                 projects={pinnedProjects}
                 onTogglePin={togglePin}
-                onEdit={setEditingProject}
+                onEdit={openEditDialog}
                 onDelete={setDeletingProject}
               />
             )}
@@ -228,7 +237,7 @@ function ProjectsList() {
               title={pinnedProjects.length > 0 ? "All projects" : undefined}
               projects={unpinnedProjects}
               onTogglePin={togglePin}
-              onEdit={setEditingProject}
+              onEdit={openEditDialog}
               onDelete={setDeletingProject}
             />
           </>

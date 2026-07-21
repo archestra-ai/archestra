@@ -1811,11 +1811,21 @@ export default class K8sDeployment {
               }),
           // Add volume mounts for mounted secrets
           ...(volumeMounts.length > 0 ? { volumeMounts } : {}),
-          // Set resource requests/limits for the container (with defaults)
+          // Set resource requests/limits for the container (with defaults).
+          // Ephemeral-storage governance keeps the scheduler disk-aware and
+          // prevents DiskPressure eviction cascades on over-packed nodes.
           resources: {
             requests: {
-              memory: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
-              cpu: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
+              memory: config.orchestrator.mcpServerResources.requests.memory,
+              cpu: config.orchestrator.mcpServerResources.requests.cpu,
+              "ephemeral-storage":
+                config.orchestrator.mcpServerResources.requests
+                  .ephemeralStorage,
+            },
+            limits: {
+              memory: config.orchestrator.mcpServerResources.limits.memory,
+              "ephemeral-storage":
+                config.orchestrator.mcpServerResources.limits.ephemeralStorage,
             },
           },
         },

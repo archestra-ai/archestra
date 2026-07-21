@@ -94,6 +94,23 @@ function shouldResumeActiveRun(messages: UIMessage[]): boolean {
   return messages.at(-1)?.role === "user";
 }
 
+// True while the trailing assistant message has a tool call whose input is
+// complete but whose output hasn't arrived — i.e. a tool is executing (or a
+// client-side tool awaits its result). "input-streaming" is excluded: there
+// the provider is still emitting deltas, so silence IS an upstream stall.
+function awaitingToolOutput(messages: UIMessage[]): boolean {
+  const lastMessage = messages.at(-1);
+  if (lastMessage?.role !== "assistant") {
+    return false;
+  }
+  return lastMessage.parts.some(
+    (part) =>
+      (part.type === "dynamic-tool" || part.type.startsWith("tool-")) &&
+      "state" in part &&
+      part.state === "input-available",
+  );
+}
+
 interface ChatSession {
   conversationId: string;
   messages: UIMessage[];
@@ -545,6 +562,11 @@ function ChatSessionHook({
   // resumed stream ends and immediately when there is nothing to resume.
   const [resumeSettled, setResumeSettled] = useState(!shouldResume);
 
+  // Latest SDK messages for callbacks defined inside the useChat config (like
+  // onData), which close over the config object before `messages` exists.
+  // Assigned every render right after useChat returns.
+  const latestMessagesRef = useRef<UIMessage[]>(initialMessages);
+
   const {
     messages,
     sendMessage,
@@ -853,9 +875,18 @@ function ChatSessionHook({
     },
     onData: (dataPart) => {
       // A transient heartbeat proves the browser-to-backend stream is alive,
-      // but not that the upstream provider is making response progress.
+      // but not, in general, that the upstream provider is making response
+      // progress. The exception is while a tool call is executing (input
+      // complete, output pending): the stream is intentionally silent — the
+      // backend sends heartbeats precisely to cover long-running tool
+      // executions and subagent calls — so the heartbeat counts as progress,
+      // not as a stalled upstream provider.
       if (dataPart.type === "data-heartbeat") {
-        recordTransportActivity();
+        if (awaitingToolOutput(latestMessagesRef.current)) {
+          recordResponseProgress();
+        } else {
+          recordTransportActivity();
+        }
       } else {
         recordResponseProgress();
       }
@@ -951,6 +982,8 @@ function ChatSessionHook({
         messages: msgs,
       }),
   } as Parameters<typeof useChat>[0]);
+
+  latestMessagesRef.current = messages;
 
   // Text and tool-call deltas update the SDK's raw message list. Track that
   // progress independently from displayedMessages, which can intentionally be

@@ -293,4 +293,37 @@ describe("POST /api/apps", () => {
     });
     expect(response.statusCode).toBe(403);
   });
+
+  test("a custom role holding app:deploy-to-restricted may bind to a restricted environment", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const restricted = await EnvironmentModel.create({
+      organizationId,
+      name: "restricted-prod",
+      restricted: true,
+    });
+    // The role holds the app-specific deploy permission and nothing else
+    // environment-related — pinning that the per-resource action alone
+    // unlocks the restricted bind for apps.
+    const role = await makeCustomRole(organizationId, {
+      permission: { app: ["read", "create", "deploy-to-restricted"] },
+    });
+    const deployer = await makeUser();
+    await makeMember(deployer.id, organizationId, { role: role.role });
+    user = deployer;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: {
+        name: "Restricted OK",
+        scope: "personal",
+        environmentId: restricted.id,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(restricted.id);
+  });
 });

@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import AgentModel from "@/models/agent";
@@ -9,6 +10,7 @@ import KnowledgeBaseModel from "@/models/knowledge-base";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
@@ -104,6 +106,35 @@ describe("audit snapshot redaction", () => {
       expect(snapshot).toHaveProperty("name", "OpenAI Key");
       expect(snapshot).toHaveProperty("provider", "openai");
       expect(snapshot).toHaveProperty("organizationId", org.id);
+    });
+
+    test("captures extra-header NAMES only — never header values (may hold tokens)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const [row] = await db
+        .insert(schema.llmProviderApiKeysTable)
+        .values({
+          organizationId: org.id,
+          name: "Header Key",
+          provider: "openai",
+          scope: "org",
+          baseUrl: null,
+          isPrimary: true,
+          extraHeaders: { "X-Org": "acme", Authorization: "Bearer sk-secret" },
+        })
+        .returning();
+
+      const snapshot = await LlmProviderApiKeyModel.findByIdForAudit(
+        row.id,
+        org.id,
+      );
+
+      expect(snapshot?.extraHeaderNames).toEqual(["Authorization", "X-Org"]);
+      expect(snapshot).toHaveProperty("isPrimary", true);
+      // The header VALUES (a bearer token here) must never reach the snapshot.
+      expect(JSON.stringify(snapshot)).not.toContain("sk-secret");
+      expect(JSON.stringify(snapshot)).not.toContain("Bearer");
     });
   });
 
@@ -508,6 +539,62 @@ describe("audit snapshot shape — non-redacted models", () => {
 
     expect(snapshot).toHaveProperty("model", null);
     expect(snapshot).toHaveProperty("llmProvider", null);
+  });
+
+  test("AgentModel.findByIdForAudit captures config fields that were previously invisible to the diff", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await AgentModel.create({
+      name: "Config Agent",
+      organizationId: org.id,
+      scope: "org",
+      agentType: "agent",
+      teams: [],
+      knowledgeBaseIds: [],
+      icon: "🤖",
+      considerContextUntrusted: true,
+      passthroughHeaders: ["X-Trace-Id", "Authorization"],
+    });
+
+    const snapshot = await AgentModel.findByIdForAudit(agent.id, org.id);
+
+    expect(snapshot).toHaveProperty("icon", "🤖");
+    expect(snapshot).toHaveProperty("considerContextUntrusted", true);
+    // Header names only (text[]), sorted.
+    expect(snapshot?.passthroughHeaders).toEqual([
+      "Authorization",
+      "X-Trace-Id",
+    ]);
+    expect(snapshot).toHaveProperty("environmentId");
+    expect(snapshot).toHaveProperty("identityProviderId");
+    expect(snapshot).toHaveProperty("incomingEmailEnabled");
+    expect(Array.isArray(snapshot?.suggestedPrompts)).toBe(true);
+  });
+
+  test("OrganizationModel.findByIdForAudit resolves the default-model FK and drops the dead text column", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const model = await ModelModel.create({
+      externalId: "google/gemini-2.5-pro",
+      provider: "gemini",
+      modelId: "gemini-2.5-pro",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await db
+      .update(schema.organizationsTable)
+      .set({ defaultModelId: model.id })
+      .where(eq(schema.organizationsTable.id, org.id));
+
+    const snapshot = await OrganizationModel.findByIdForAudit(org.id, org.id);
+
+    expect(snapshot).toHaveProperty("defaultModel", "google/gemini-2.5-pro");
+    expect(snapshot).not.toHaveProperty("defaultLlmModel");
+    // Security-posture toggles must be captured so a change diffs.
+    expect(snapshot).toHaveProperty("defaultDiscoveredToolInvocationPolicy");
+    expect(snapshot).toHaveProperty("defaultDiscoveredToolResultPolicy");
   });
 
   test("AgentModel.findByIdForAudit returns null for wrong org", async ({

@@ -144,6 +144,37 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/llm-virtual-keys/:id",
+    {
+      schema: {
+        operationId: RouteId.GetVirtualApiKey,
+        description:
+          "Get a virtual API key visible to the current user, with provider key mappings",
+        tags: ["Virtual API Keys"],
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        response: constructResponseSchema(VirtualApiKeyWithParentInfoSchema),
+      },
+    },
+    async ({ params, organizationId, user }, reply) => {
+      const virtualKey = await VirtualApiKeyModel.findVisibleById({
+        id: params.id,
+        organizationId,
+        userId: user.id,
+        getUserTeamIds: () => TeamModel.getUserTeamIds(user.id),
+        getIsAdmin: () =>
+          userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+      });
+      if (!virtualKey) {
+        throw new ApiError(404, "Virtual API key not found");
+      }
+
+      return reply.send(virtualKey);
+    },
+  );
+
   fastify.post(
     "/api/llm-virtual-keys",
     {

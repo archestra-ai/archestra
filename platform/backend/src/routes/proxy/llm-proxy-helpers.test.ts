@@ -281,6 +281,7 @@ describe("buildInteractionRecord", () => {
     } satisfies ToolCompressionStats,
     toonSkipReason: null,
     dualLlmAnalyses: [],
+    billingMode: "metered" as const,
   };
 
   test("builds correct record with all fields", () => {
@@ -306,6 +307,7 @@ describe("buildInteractionRecord", () => {
     expect(record.response).toEqual({ id: "resp-1" });
     expect(record.model).toBe("gpt-3.5-turbo");
     expect(record.baselineModel).toBe("gpt-4");
+    expect(record.billingMode).toBe("metered");
     expect(record.inputTokens).toBe(100);
     expect(record.outputTokens).toBe(50);
     expect(record.toonTokensBefore).toBe(500);
@@ -317,6 +319,18 @@ describe("buildInteractionRecord", () => {
       toolCallId: "call-1",
       toolName: "read_email",
     });
+  });
+
+  test("carries a subscription billing mode through to the record", () => {
+    const record = buildInteractionRecord({
+      ...baseParams,
+      billingMode: "subscription",
+    });
+
+    expect(record.billingMode).toBe("subscription");
+    // `cost` is unchanged — it remains the list-price estimate; billed spend is
+    // derived downstream from billingMode, not by zeroing cost at write time.
+    expect(record.cost).toBe("0.0005000000");
   });
 
   test("formats costs to 10 decimal places", () => {

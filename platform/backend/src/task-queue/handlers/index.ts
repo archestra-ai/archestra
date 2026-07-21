@@ -4,9 +4,11 @@ import { handleBatchEmbedding } from "./batch-embedding-handler";
 import { handleCheckDueConnectors } from "./check-due-connectors-handler";
 import { handleCheckDuePermissionSyncs } from "./check-due-permission-syncs-handler";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
+import { handleCheckDueSkillGithubSyncs } from "./check-due-skill-github-syncs-handler";
 import { handleConnectorSync } from "./connector-sync-handler";
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
+import { handleSkillGithubSync } from "./skill-github-sync-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
@@ -29,4 +31,9 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     handleScheduleTriggerRunExecution,
   );
   taskQueueService.registerHandler("audit_log_cleanup", handleAuditLogCleanup);
+  taskQueueService.registerHandler(
+    "check_due_skill_github_syncs",
+    handleCheckDueSkillGithubSyncs,
+  );
+  taskQueueService.registerHandler("skill_github_sync", handleSkillGithubSync);
 }

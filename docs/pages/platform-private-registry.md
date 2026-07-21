@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-07-16
+lastUpdated: 2026-07-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -77,7 +77,7 @@ Registry entries can carry labels — key-value pairs set under **Labels** in th
 
 ## Environments
 
-A catalog entry can be assigned to a deployment [environment](/docs/platform-environments). The environment determines the Kubernetes namespace and network egress policy its installed MCP server runs under, and scopes which agents and gateways can use the server's tools (an agent only sees servers in its own environment). Restricted environments gate assignment behind the `environment:deploy-to-restricted` permission.
+A catalog entry can be assigned to a deployment [environment](/docs/platform-environments). The environment determines the Kubernetes namespace and network egress policy its installed MCP server runs under, and scopes which agents and gateways can use the server's tools (an agent only sees servers in its own environment). Restricted environments gate assignment behind the `mcpRegistry:deploy-to-restricted` permission.
 
 See [Environments](/docs/platform-environments) for the full isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) (including the provider support matrix and domain presets).
 

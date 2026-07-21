@@ -9,6 +9,9 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
+  isValidK8sCpuQuantity,
+  isValidK8sMemoryQuantity,
+  MCP_ORCHESTRATOR_DEFAULTS,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -22,7 +25,7 @@ import {
 } from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
-type ProcessType = "web" | "worker" | "all";
+type ProcessType = "web" | "worker" | "renderer" | "all";
 type FileStorageProviderType = "db" | "filesystem" | "s3";
 
 /**
@@ -252,6 +255,10 @@ export function resolveRenderBaseUrl(params: {
 }
 
 const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
+  // Undocumented on purpose, like the rest of the Apps Hackathon recorder (a
+  // temporary, hackathon-only feature — see the recorder flag below). Do not add
+  // this to .env.example or the deployment docs. It rarely needs setting anyway:
+  // the fallback already targets a trusted configured origin.
   explicit: process.env.ARCHESTRA_HACKATHON_RECORDER_RENDER_BASE_URL,
   configuredOrigins: getConfiguredOrigins(),
 });
@@ -1013,7 +1020,13 @@ export function parseConnectorSyncMaxDuration(
 /** @public — exported for testability */
 export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();
-  if (normalized === "web" || normalized === "worker") return normalized;
+  if (
+    normalized === "web" ||
+    normalized === "worker" ||
+    normalized === "renderer"
+  ) {
+    return normalized;
+  }
   return "all";
 }
 
@@ -1038,6 +1051,31 @@ export const parseAuditLogRetentionDays = (
   }
   return parsed;
 };
+
+/**
+ * Parse a Kubernetes resource quantity (memory/CPU/ephemeral-storage) from an
+ * environment variable, falling back to the default when unset or invalid.
+ *
+ * @public — exported for testability
+ */
+export function parseK8sResourceQuantity(params: {
+  envName: string;
+  value: string | undefined;
+  validator: (value: string) => boolean;
+  defaultValue: string;
+}): string {
+  const trimmed = params.value?.trim();
+  if (!trimmed) {
+    return params.defaultValue;
+  }
+  if (!params.validator(trimmed)) {
+    logger.warn(
+      `Invalid ${params.envName} value "${trimmed}", using default "${params.defaultValue}"`,
+    );
+    return params.defaultValue;
+  }
+  return trimmed;
+}
 
 /** @public — consumed by config.test.ts */
 export function parseCommaSeparatedList(value: string): string[] {
@@ -1076,6 +1114,51 @@ export const getAnalyticsConfig = () => {
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
   `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
+
+/**
+ * Default resource requests/limits applied to generated MCP server
+ * containers. Ephemeral-storage governance is required so the scheduler
+ * accounts for disk usage — without it nodes get over-packed until kubelet
+ * DiskPressure eviction cascades kick in.
+ */
+const mcpServerResources = {
+  requests: {
+    cpu: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST,
+      validator: isValidK8sCpuQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
+    }),
+    memory: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
+    }),
+    ephemeralStorage: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST",
+      value:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestEphemeralStorage,
+    }),
+  },
+  limits: {
+    memory: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceLimitMemory,
+    }),
+    ephemeralStorage: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT",
+      value:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceLimitEphemeralStorage,
+    }),
+  },
+};
 
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
@@ -1129,20 +1212,35 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 }
 
 /**
- * The hackathon recorder (record/replay/edit app demo sessions): on by default
- * for community deployments, off by default when an enterprise license is
- * activated. An explicit `"true"`/`"false"` on
- * `ARCHESTRA_HACKATHON_RECORDER` always wins.
+ * The hackathon recorder (record/replay/edit app demo sessions).
+ *
+ * On for every community deployment, and NEVER on for a deployment running an
+ * activated enterprise license: a licensed customer must not be shown a
+ * temporary community promotion. There is no deployment opt-out flag, because
+ * the two gates above this one already cover "when" and "whether" — the
+ * hackathon date window keeps it hidden outside the event, and the
+ * per-organization toggle lets an admin switch it off — so a community
+ * deployment needs no third switch of its own.
+ *
+ * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
+ * Archestra's own licensed staging AND bypasses the date window. It is
+ * documented nowhere and named as an enterprise override on purpose, so no
+ * customer stumbles onto the enterprise path.
+ *
+ * This is the DEPLOYMENT gate only. Two more gates sit above it at request
+ * time — the organization's own toggle, and the hackathon date window —
+ * because neither can be decided once at boot. See `assertAppsHackathonAvailable`.
  *
  * @public — exported for testability
  */
-export function parseHackathonRecorderEnabled(
-  envValue: string | undefined,
-  enterpriseLicenseActivated: boolean,
-): boolean {
-  if (envValue === "true") return true;
-  if (envValue === "false") return false;
-  return !enterpriseLicenseActivated;
+export function parseHackathonRecorderEnabled(params: {
+  enterpriseLicenseActivated: boolean;
+  enterpriseOverride: string | undefined;
+}): boolean {
+  if (params.enterpriseLicenseActivated) {
+    return params.enterpriseOverride === "true";
+  }
+  return true;
 }
 
 // the code execution sandbox (run_command / upload_file / download_file, plus
@@ -1334,6 +1432,18 @@ const config = {
     statementTimeoutMillis: parseDatabaseStatementTimeoutMillis(
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
+  },
+  // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
+  // is a per-provider config map iterated as provider descriptors).
+  llmCost: {
+    // When on (default), traffic robustly attributed to a Claude client AND
+    // forwarding an OAuth Bearer token (Claude Code/Desktop on a Max/Pro
+    // subscription) is classified `subscription` and reported as $0 billed spend
+    // while retaining its list-price estimate. Set to "false" to treat all
+    // raw-passthrough traffic as metered and rely solely on the per-provider-key
+    // billing-mode override. See resolveInteractionBillingMode.
+    subscriptionAutodetect:
+      process.env.ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT !== "false",
   },
   llm: {
     openai: {
@@ -1655,15 +1765,30 @@ const config = {
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
   },
   hackathonRecorder: {
-    enabled: parseHackathonRecorderEnabled(
-      process.env.ARCHESTRA_HACKATHON_RECORDER,
-      process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
-    ),
+    enabled: parseHackathonRecorderEnabled({
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+      // Undocumented on purpose — see parseHackathonRecorderEnabled. Do not
+      // add this to .env.example or the deployment docs.
+      enterpriseOverride:
+        process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
+    }),
+    /**
+     * The staging override is active. It forces the recorder on for Archestra's
+     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
+     * hackathon date window, so staging can exercise the feature before it
+     * opens and after it closes. Undocumented, same as the override itself.
+     */
+    overrideActive:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
     /**
      * Escape hatch, not a requirement: the renderer finds or installs its own
      * Chromium (see app-recording-render-runtime). Set this only to pin a
      * specific browser — it must be a FULL Chromium, since Playwright's
      * headless shell carries no WebCodecs encoder.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
      */
     chromiumPath:
       process.env.ARCHESTRA_HACKATHON_RECORDER_CHROMIUM_PATH?.trim() ||
@@ -1683,6 +1808,20 @@ const config = {
     renderFrameAncestors: addLoopbackEquivalents([
       hackathonRecorderRenderBaseUrl,
     ]),
+    /**
+     * The in-cluster URL of the dedicated render service, when video rendering
+     * runs as its own single-replica deployment (see startRenderer). Set it and
+     * the web tier stops rendering in-process and proxies render/status/
+     * download/cancel there instead — so a multi-replica web tier no longer
+     * scatters a render's follow-up requests across pods that never held its
+     * (in-memory) job. Unset — the OSS single container, local dev — and the web
+     * process renders in-process exactly as before.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    rendererUrl:
+      process.env.ARCHESTRA_APP_RECORDING_RENDERER_URL?.trim() || undefined,
   },
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
@@ -1692,6 +1831,20 @@ const config = {
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
     mcpServerBaseImage,
+    mcpServerResources,
+    /**
+     * How often (in seconds) to sweep Failed/Evicted MCP server pods.
+     * DiskPressure eviction cascades can leave hundreds of Failed pod
+     * corpses behind that nothing else cleans up. Set to 0 to disable.
+     */
+    failedPodReapIntervalSeconds:
+      process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS?.trim() ===
+      "0"
+        ? 0
+        : parsePositiveInt(
+            process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
+            600,
+          ),
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
@@ -1939,6 +2092,13 @@ const config = {
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
     vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
+    /**
+     * One-boot escape hatch for a deliberate ARCHESTRA_AUTH_SECRET rotation:
+     * lets startup accept an encryption key that cannot decrypt previously
+     * stored secrets instead of aborting.
+     */
+    acceptNewEncryptionKey:
+      process.env.ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY === "true",
   },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
@@ -1996,8 +2156,15 @@ const config = {
   },
 };
 
-export const shouldRunWebServer = config.processType !== "worker";
-export const shouldRunWorker = config.processType !== "web";
+// "all" runs the web server and the worker in one process; "web"/"worker" run
+// exactly one. "renderer" is neither — it runs only the isolated app-recording
+// video render service (see startRenderer), so a multi-replica web tier can
+// offload rendering to a single stable pod that owns every in-memory job.
+export const shouldRunWebServer =
+  config.processType === "web" || config.processType === "all";
+export const shouldRunWorker =
+  config.processType === "worker" || config.processType === "all";
+export const shouldRunRenderer = config.processType === "renderer";
 
 export default config;
 

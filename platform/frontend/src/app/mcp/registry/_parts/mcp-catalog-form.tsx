@@ -1196,6 +1196,7 @@ export function McpCatalogForm({
                   <EnvironmentSelector
                     value={field.value ?? null}
                     onChange={field.onChange}
+                    resource="mcpRegistry"
                   />
                 )}
               />

@@ -758,13 +758,13 @@ export async function fetchConversationEnabledTools(conversationId: string) {
   if (response.error) {
     return {
       data: null,
-      status: response.response.status,
+      status: response.response?.status,
     };
   }
 
   return {
     data: response.data,
-    status: response.response.status,
+    status: response.response?.status,
   };
 }
 

@@ -19,6 +19,7 @@ import {
 } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertSkill, InsertSkillFile } from "@/types";
+import { drainBackgroundWork } from "@/utils/background-work";
 import {
   type ArchestraContext,
   archestraMcpBranding,
@@ -266,6 +267,32 @@ describe("skill tool execution", () => {
         config.enterpriseFeatures as { fullWhiteLabeling: boolean }
       ).fullWhiteLabeling = original;
     }
+  });
+
+  test("load_skill by name counts one use; a file read does not", async () => {
+    const seeded = await seedSkill({
+      files: [
+        { path: "references/FORMS.md", content: "# Forms", kind: "reference" },
+      ],
+    });
+    if (!seeded) throw new Error("seed failed");
+
+    await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "pdf-processing" },
+      context,
+    );
+    await drainBackgroundWork();
+    expect((await SkillModel.findById(seeded.id))?.usageCount).toBe(1);
+
+    // a path read is a follow-up of the activation, not another use
+    await executeArchestraTool(
+      TOOL_LOAD_SKILL_FULL_NAME,
+      { name: "pdf-processing", path: "references/FORMS.md" },
+      context,
+    );
+    await drainBackgroundWork();
+    expect((await SkillModel.findById(seeded.id))?.usageCount).toBe(1);
   });
 
   // The mount side effect of a path read (both load_skill modes resolve via
@@ -518,6 +545,46 @@ describe("skill tool execution", () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("skill:create");
+  });
+
+  test("update_skill and edit_skill refuse a GitHub-synced skill", async () => {
+    await seedSkill({
+      skill: {
+        sourceType: "github",
+        sourceRef: "acme/skills@main:pdf-processing",
+        githubSyncInterval: "1d",
+      },
+    });
+
+    const updated = await executeArchestraTool(
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      {
+        name: "pdf-processing",
+        content: manifest("pdf-processing", "Edited."),
+      },
+      context,
+    );
+    expect(updated.isError).toBe(true);
+    expect(textOf(updated)).toContain("synced from GitHub");
+
+    const edited = await executeArchestraTool(
+      TOOL_EDIT_SKILL_FULL_NAME,
+      {
+        name: "pdf-processing",
+        baseVersion: 1,
+        edits: [{ old_str: "pdftotext", new_str: "pdfplumber" }],
+      },
+      context,
+    );
+    expect(edited.isError).toBe(true);
+    expect(textOf(edited)).toContain("synced from GitHub");
+
+    // content untouched
+    const [skill] = await SkillModel.findAllByName(
+      organizationId,
+      "pdf-processing",
+    );
+    expect(skill?.content).toContain("pdftotext");
   });
 
   test("update_skill replaces the SKILL.md body", async () => {

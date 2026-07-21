@@ -5,6 +5,7 @@ import {
 import type * as k8s from "@kubernetes/client-node";
 import * as yaml from "js-yaml";
 import type { z } from "zod";
+import config from "@/config";
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 
 // Helper to create placeholder strings without triggering noTemplateCurlyInString lint rule
@@ -123,10 +124,19 @@ export function generateDeploymentYamlTemplate(
     imagePullPolicy: getMcpImagePullPolicy(dockerImage),
     // command and args come from basic config
     ...(envSection.length > 0 ? { env: envSection } : {}),
+    // Ephemeral-storage governance keeps the scheduler disk-aware and
+    // prevents DiskPressure eviction cascades on over-packed nodes.
     resources: {
       requests: {
-        memory: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
-        cpu: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
+        memory: config.orchestrator.mcpServerResources.requests.memory,
+        cpu: config.orchestrator.mcpServerResources.requests.cpu,
+        "ephemeral-storage":
+          config.orchestrator.mcpServerResources.requests.ephemeralStorage,
+      },
+      limits: {
+        memory: config.orchestrator.mcpServerResources.limits.memory,
+        "ephemeral-storage":
+          config.orchestrator.mcpServerResources.limits.ephemeralStorage,
       },
     },
   };

@@ -43,8 +43,8 @@ Load these project skills when the task matches their domain:
 - **Backend**: <http://localhost:9000/> (Fastify API server)
 - **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools, conversations in main sidebar)
 - **Tools**: <http://localhost:3000/tools> (Unified tools management with server-side pagination)
-- **Settings**: <http://localhost:3000/settings> (Main settings page with tabs for LLM & MCP Gateways, Dual LLM, Your Account, Members, Teams, Appearance)
-- **Appearance Settings**: <http://localhost:3000/settings/appearance> (Admin-only: customize theme, logo, fonts)
+- **Settings**: <http://localhost:3000/settings> (lands on the first permitted tab; tabs: Organization, Service Accounts, Chat, LLM, MCP, Security, Knowledge, Environments, Users, Teams, Roles, GitHub, Identity Providers, Secrets)
+- **Your Account**: <http://localhost:3000/account> (personal profile, API keys, gateway token, sessions; opened by clicking your name in the sidebar)
 - **MCP Registry**: <http://localhost:3000/mcp/registry> (Install and manage MCP servers)
 - **MCP Installation Requests**: <http://localhost:3000/mcp/registry/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/llm/logs> (View LLM proxy request logs)
@@ -273,6 +273,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
+- **Audit logging**: When you add or change a state-mutating route, ensure it produces a correct audit record — registered with the right action, non-secret, and a non-empty before/after diff — and assert on that record in the route's existing integration test.
 - **MCP Tool Impact (IMPORTANT)**: When updating an API endpoint's request/response schema, also check if there is an associated Archestra MCP tool in `backend/src/archestra-mcp-server/` that exposes the same functionality. If so, update the MCP tool's `inputSchema` and handler to match the new API schema. Ask the user if you're unsure whether an MCP tool is affected.
 - Only export public APIs
 - **knip --production (IMPORTANT)**: Backend `check:ci` runs `pnpm knip` = `knip:dev && knip:production`. The `--production` pass ignores `*.test.ts` and cross-workspace consumers (e.g. the `standalone-scripts/` index generator), so an export used only by tests or those scripts fails CI even though plain `knip` passes. Before pushing backend export changes, run `cd backend && pnpm knip` (the full dev+production combo). Tag intentionally-public exports consumed only outside knip's view with a JSDoc `/** @public — reason */` tag (see `config.ts`, `middleware.ts`).
@@ -380,6 +381,12 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Enabled via `convert_tool_results_to_toon` boolean field on agents
 - Automatically converts JSON tool results to TOON format before sending to LLM
 - Particularly useful for agents dealing with structured data from database or API tools
+
+**LLM Cost Billing Mode**:
+
+- Every interaction records a `billing_mode` (`metered` | `subscription`, default `metered`) alongside `cost`. `cost` stays the list-price estimate; **billed spend** = `cost` for metered rows, `0` for subscription rows. Never re-interpret `cost` as billed spend — derive billed spend with a `billing_mode = 'metered'` filter (statistics/session aggregations already do this).
+- Resolved at proxy write time by `resolveInteractionBillingMode` (`routes/proxy/utils/billing-mode.ts`) purely from the credential format via the provider adapter's `isSubscriptionCredential`: Anthropic OAuth access tokens (Claude Pro/Max, what Claude Code forwards) are `sk-ant-oat…` while metered API keys are `sk-ant-api…`. Applies uniformly to passthrough, virtual-key, and DB-managed keys — there is deliberately NO per-key billing configuration or UI. Gated by `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT` (default true). Bearer transport alone is NOT a signal (Workload Identity etc. stay metered).
+- Read sites split billed vs subscription: `statistics.getCostSavingsStatistics` (`totalSubscriptionCost` + per-bucket `subscriptionCost`), `interaction.getSessions` (`totalBilledCost`/`totalSubscriptionCost`). Frontend uses the `<BilledCost>` component. Metric `llm_cost_total` carries a `billing_mode` label. **Not yet billing-aware (documented follow-up): cost-based usage limits in `models/limit.ts`.**
 
 **Chat Feature**:
 

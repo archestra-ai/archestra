@@ -1073,6 +1073,9 @@ describe("planPaintFlush", () => {
       cfg,
       k2,
       d2,
+      // The burst feeds a fresh decoder and then stops; without a flush the
+      // decoder may hold every decoded frame and paint nothing.
+      { kind: "video-flush", sel: "#v" },
     ]);
   });
 
@@ -1088,6 +1091,7 @@ describe("planPaintFlush", () => {
       cfg2,
       k2,
       d2,
+      { kind: "video-flush", sel: "#v" },
     ]);
   });
 
@@ -1099,6 +1103,7 @@ describe("planPaintFlush", () => {
       frame,
       cfg,
       key,
+      { kind: "video-flush", sel: "#v" },
     ]);
   });
 });

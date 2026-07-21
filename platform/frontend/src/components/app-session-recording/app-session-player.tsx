@@ -831,6 +831,18 @@ function PlayerSurface({
   // frame whose replay listener isn't attached (fresh play, restart, seek, or
   // a mid-timeline version switch that remounts the frame).
   const [frameReady, setFrameReady] = useState(false);
+  /**
+   * Bumped per replay-frame announcement. The sandbox can navigate its inner
+   * document more than once while settling, and each document announces for
+   * itself — every announcement gets its own full catch-up delivery, so the
+   * document that ends up on screen has everything regardless of how many
+   * came before it.
+   */
+  const [frameReadyNonce, setFrameReadyNonce] = useState(0);
+  /** Pending ready-fallback for a stale cached SDK without the announcement. */
+  const legacyReadyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const clockRef = useRef(0);
   const appliedRef = useRef(0);
@@ -847,6 +859,10 @@ function PlayerSurface({
   // biome-ignore lint/correctness/useExhaustiveDependencies: segmentIndex/runNonce are the intended re-run triggers
   useEffect(() => {
     setFrameReady(false);
+    if (legacyReadyTimerRef.current) {
+      clearTimeout(legacyReadyTimerRef.current);
+      legacyReadyTimerRef.current = null;
+    }
   }, [segmentIndex, runNonce]);
 
   // Which recorded version segment is visible at a given clock time, by the
@@ -1106,7 +1122,7 @@ function PlayerSurface({
    */
   const primeCanvases = useCallback(
     (clock: number) => {
-      const paint = (event: TimelineEvent) => {
+      const paint = (event: PaintDispatch) => {
         iframeElRef.current?.contentWindow?.postMessage(
           { type: REPLAY_CONTROL_TYPE, action: "paint", event },
           "*",
@@ -1144,10 +1160,12 @@ function PlayerSurface({
         }
       }
       for (const event of latest.values()) paint(event);
-      for (const poster of posters.values()) {
+      for (const [sel, poster] of posters) {
         if (poster.reached || !poster.key) continue;
         paint(poster.config);
         paint(poster.key);
+        // A lone keyframe sits inside the decoder until flushed out.
+        paint({ kind: "video-flush", sel });
       }
     },
     [events],
@@ -1218,12 +1236,31 @@ function PlayerSurface({
   // every event from the applied cursor up to `clock`, so a fresh play,
   // restart, seek, or version switch lands the app at the right state even
   // while paused.
+  /**
+   * A replay document announced its listener is live: reset the applied
+   * cursor to its segment's start and deliver everything up to the clock
+   * (the catch-up effect below). Runs once per announcing document.
+   */
+  const armReplayFrame = useCallback(() => {
+    if (legacyReadyTimerRef.current) {
+      clearTimeout(legacyReadyTimerRef.current);
+      legacyReadyTimerRef.current = null;
+    }
+    const segStart = segments[segmentIndexRef.current]?.atMs ?? 0;
+    let idx = 0;
+    while (idx < events.length && events[idx].t < segStart) idx++;
+    appliedRef.current = idx;
+    setFrameReady(true);
+    setFrameReadyNonce((nonce) => nonce + 1);
+  }, [segments, events]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: frameReadyNonce re-delivers to each announcing document
   useEffect(() => {
     if (!frameReady) return;
     applyEventsUpTo(clockRef.current);
     primeCanvases(clockRef.current);
     setDisplayClock(clockRef.current);
-  }, [frameReady, applyEventsUpTo, primeCanvases]);
+  }, [frameReady, frameReadyNonce, applyEventsUpTo, primeCanvases]);
 
   // Freeze the app frame when the replay is paused: the injected SDK halts the
   // app's own animations and timers so nothing keeps moving inside the frame.
@@ -1997,7 +2034,23 @@ function PlayerSurface({
                     el.setAttribute("inert", "");
                   }
                 }}
-                onConnected={() => setFrameReady(true)}
+                // Readiness comes from the SDK's own announcement (relayed on
+                // the recording-event channel), NOT from the bridge connect:
+                // connect can resolve against a transient document while the
+                // sandbox settles, and paints delivered then die with it.
+                onRecordingEvents={(data) => {
+                  if ((data as { replayReady?: boolean } | null)?.replayReady) {
+                    armReplayFrame();
+                  }
+                }}
+                // Fallback for a stale cached SDK that predates the
+                // announcement: after a beat, treat connect as ready.
+                onConnected={() => {
+                  if (legacyReadyTimerRef.current) return;
+                  legacyReadyTimerRef.current = setTimeout(() => {
+                    if (!frameReadyRef.current) armReplayFrame();
+                  }, 1500);
+                }}
               />
             ) : null}
           </ReplayAppStage>
@@ -4499,9 +4552,19 @@ export function buildPlayback(recording: PlaybackRecording): {
  * mid-stream continuation whose decoder holds state — every chunk passes
  * through in order.
  *
+ * A rebuilt stream's feed ends with a synthetic `video-flush` marker. The
+ * burst is fed to a FRESH decoder and then stops, and a decoder may hold
+ * decoded frames until more input or a flush arrives — verified live: without
+ * the flush a backward seek painted nothing, the canvas simply stayed black.
+ * A continuation never flushes: flushing mid-stream would reimpose the
+ * decoder's key-chunk requirement and stall playback until the next keyframe.
+ *
  * @public — exported for testability
  */
-export function planPaintFlush(paints: TimelineEvent[]): TimelineEvent[] {
+export type PaintDispatch =
+  | TimelineEvent
+  | { kind: "video-flush"; sel: string };
+export function planPaintFlush(paints: TimelineEvent[]): PaintDispatch[] {
   const stills = new Map<string, TimelineEvent>();
   const streams = new Map<
     string,
@@ -4528,10 +4591,13 @@ export function planPaintFlush(paints: TimelineEvent[]): TimelineEvent[] {
       stream.chunks.push(event);
     }
   }
-  const flush: TimelineEvent[] = [...stills.values()];
-  for (const stream of streams.values()) {
+  const flush: PaintDispatch[] = [...stills.values()];
+  for (const [sel, stream] of streams) {
     if (stream.config) flush.push(stream.config);
     flush.push(...stream.chunks);
+    if (stream.rebuilt && stream.chunks.length > 0) {
+      flush.push({ kind: "video-flush", sel });
+    }
   }
   return flush;
 }

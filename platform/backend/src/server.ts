@@ -1042,12 +1042,15 @@ const registerSandboxRoute = (
   }
 
   // The Archestra Apps SDK (window.archestra), loaded by the <script src>
-  // injected into every owned app at serve time. Same delivery posture as the
-  // ext-apps bundle above: public asset, brief cache so fixes roll out.
+  // injected into every owned app at serve time. Revalidate on every load
+  // (no-cache still allows conditional requests): the session-recording half
+  // of this file evolves with the player it talks to, and a browser replaying
+  // yesterday's cached SDK against today's player drops replay messages on
+  // the floor in ways that read as a broken recording.
   if (archestraAppSdk) {
     fastify.get(APP_SDK_PATH, async (_request, reply) => {
       void reply.header("Access-Control-Allow-Origin", "*");
-      void reply.header("Cache-Control", "public, max-age=3600");
+      void reply.header("Cache-Control", "no-cache");
       void reply.type("text/javascript");
       return reply.send(archestraAppSdk);
     });

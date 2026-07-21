@@ -1503,6 +1503,22 @@
       videoPlayback.set(sel, state);
     } catch {}
   };
+  /**
+   * Emit everything a stream's decoder still holds. Sent by the host after a
+   * rebuild burst (seek, poster): the burst is fed to a fresh decoder and then
+   * stops, and a decoder may hold decoded frames until more input or a flush
+   * arrives — without this a backward seek painted nothing at all. Flushing
+   * reimposes the decoder's key-chunk requirement, so the key gate re-arms:
+   * continuation deltas are skipped until the next keyframe.
+   */
+  const flushVideoPlayback = (event) => {
+    try {
+      const state = videoPlayback.get(event.sel);
+      if (!state || state.decoder.state !== "configured") return;
+      state.sawKey = false;
+      state.decoder.flush().catch(() => {});
+    } catch {}
+  };
   const feedVideoPlaybackChunk = (event) => {
     try {
       const state = videoPlayback.get(event.sel);
@@ -1532,6 +1548,10 @@
       }
       if (event.kind === "video-chunk") {
         feedVideoPlaybackChunk(event);
+        return;
+      }
+      if (event.kind === "video-flush") {
+        flushVideoPlayback(event);
         return;
       }
       if (event.kind === "canvas") {
@@ -1710,4 +1730,14 @@
       }
     }
   });
+
+  // Announce that THIS document's replay listener exists, on the same
+  // host-allow-listed channel the recorder uses. The player must not gate
+  // replay delivery on the bridge connect: that can resolve against a
+  // transient document (the sandbox re-delivers html while settling), and
+  // paints posted then die with it — verified live as a replay frame whose
+  // SDK parsed AFTER the host had already marked it ready. Every document
+  // announces for itself, so the player re-delivers to whichever document
+  // ends up being the one on screen.
+  post({ type: EVENT_TYPE, replayReady: true });
 })();

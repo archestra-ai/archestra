@@ -53,13 +53,17 @@ describe("provider API key optional helpers", () => {
   });
 
   test("lists providers with optional API keys", () => {
-    expect(getProvidersWithOptionalApiKey()).toEqual(["ollama", "vllm"]);
+    expect(getProvidersWithOptionalApiKey()).toEqual([
+      "ollama",
+      "ollama-native",
+      "vllm",
+    ]);
     expect(
       getProvidersWithOptionalApiKey({ azureEntraIdEnabled: true }),
-    ).toEqual(["ollama", "vllm", "azure"]);
+    ).toEqual(["ollama", "ollama-native", "vllm", "azure"]);
     expect(
       getProvidersWithOptionalApiKey({ anthropicWifEnabled: true }),
-    ).toEqual(["ollama", "vllm", "anthropic"]);
+    ).toEqual(["ollama", "ollama-native", "vllm", "anthropic"]);
   });
 });
 

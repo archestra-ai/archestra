@@ -27,8 +27,7 @@ interface EnvironmentSelectorProps {
   /**
    * The RBAC resource being assigned to the environment (e.g. "agent",
    * "llmProxy", "mcpRegistry"). Restricted environments require the
-   * resource-specific `deploy-to-restricted` permission; environment:admin
-   * implies all of them.
+   * resource-specific `deploy-to-restricted` permission.
    */
   resource: Resource;
   /**
@@ -59,14 +58,15 @@ export function EnvironmentSelector({
   const environments = environmentList?.environments ?? [];
   const defaultEnvironment = useDefaultEnvironment();
   // Deploying to a restricted environment needs the resource-specific
-  // deploy-to-restricted permission; environment:admin (full environment
-  // management) implies it.
-  const { data: hasEnvAdmin } = useHasPermissions({ environment: ["admin"] });
+  // deploy-to-restricted permission.
   const { data: hasDeployToRestricted } = useHasPermissions({
     [resource]: ["deploy-to-restricted"],
   });
-  const canDeployRestricted =
-    (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
+  // Gates the "Manage environments" link, mirroring the settings page.
+  const { data: canManageEnvironments } = useHasPermissions({
+    environment: ["update"],
+  });
+  const canDeployRestricted = hasDeployToRestricted ?? false;
   // Restricted environments the user can't deploy to are hidden entirely; the
   // default is always available.
   const accessibleEnvironments = environments.filter(
@@ -130,7 +130,7 @@ export function EnvironmentSelector({
       {!hasCustomEnvironmentOptions ? (
         <p className="text-xs text-muted-foreground">
           Only the default environment is available.
-          {hasEnvAdmin ? (
+          {canManageEnvironments ? (
             <>
               {" "}
               <Link

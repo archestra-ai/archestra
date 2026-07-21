@@ -304,9 +304,9 @@ describe("POST /api/apps", () => {
       name: "restricted-prod",
       restricted: true,
     });
-    // The role holds the app-specific deploy permission but NOT
-    // environment:admin — pinning that the per-resource action alone unlocks
-    // the restricted bind for apps.
+    // The role holds the app-specific deploy permission and nothing else
+    // environment-related — pinning that the per-resource action alone
+    // unlocks the restricted bind for apps.
     const role = await makeCustomRole(organizationId, {
       permission: { app: ["read", "create", "deploy-to-restricted"] },
     });

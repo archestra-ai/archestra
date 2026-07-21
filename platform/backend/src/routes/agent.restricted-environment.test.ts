@@ -9,14 +9,14 @@ import type { User } from "@/types";
  * Binding an agent to a *restricted* environment routes its code sandbox to
  * that environment's isolated runtime, so the agent create/update routes must
  * gate it on the resource-specific deploy-to-restricted permission for the
- * agent's type — agent, mcpGateway, or llmProxy — with `environment:admin`
- * implying all of them, exactly like the MCP-catalog assignment path — see
+ * agent's type — agent, mcpGateway, or llmProxy — exactly like the
+ * MCP-catalog assignment path — see
  * internal-mcp-catalog.restricted-environment.test.ts.
  *
  * `@/auth` is fully mocked so the agent-type permission stack always grants
  * (isolating the environment gate). `userHasPermission` grants everything
- * except `environment:admin` and `deploy-to-restricted` actions, which are
- * controlled per test via `envAdmin` and `deployGrants` (a set of resources).
+ * except `deploy-to-restricted` actions, which are controlled per test via
+ * `deployGrants` (a set of resources).
  */
 vi.mock("@/auth");
 // The create route records agent metrics on success; the real registry rejects
@@ -37,7 +37,6 @@ describe("Agent routes - restricted environment assignment guard", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  let envAdmin: boolean;
   let deployGrants: Set<string>;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
@@ -54,7 +53,6 @@ describe("Agent routes - restricted environment assignment guard", () => {
     (hasAnyAgentTypeReadPermission as Mock).mockResolvedValue(true);
     (requireAgentModifyPermission as Mock).mockImplementation(() => {});
 
-    envAdmin = false;
     deployGrants = new Set();
     mockUserHasPermission.mockImplementation(
       async (
@@ -63,7 +61,6 @@ describe("Agent routes - restricted environment assignment guard", () => {
         resource: string,
         action: string,
       ) => {
-        if (resource === "environment" && action === "admin") return envAdmin;
         if (action === "deploy-to-restricted")
           return deployGrants.has(resource);
         return true;
@@ -159,21 +156,6 @@ describe("Agent routes - restricted environment assignment guard", () => {
     });
 
     expect(res.statusCode).toBe(403);
-  });
-
-  test("environment:admin alone implies deploy-to-restricted (200)", async () => {
-    envAdmin = true;
-    const restricted = await makeRestrictedEnvironment();
-    const agent = await makeOrgAgent();
-
-    const res = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${agent.id}`,
-      payload: { environmentId: restricted.id },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json().environmentId).toBe(restricted.id);
   });
 
   test("updating to an UNRESTRICTED env without deploy-to-restricted succeeds (200)", async () => {

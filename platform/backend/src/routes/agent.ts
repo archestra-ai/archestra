@@ -1650,8 +1650,7 @@ function getPermittedAgentTypesForList(params: {
  * Binding an agent to a restricted environment routes its code sandbox to that
  * environment's isolated runtime, so it is gated by the resource-specific
  * deploy-to-restricted permission for the agent's type — agent, llmProxy, or
- * mcpGateway — (environment:admin implies all of them). Throws 403/404 if the
- * caller may not assign the environment.
+ * mcpGateway. Throws 403/404 if the caller may not assign the environment.
  */
 async function assertEnvironmentAssignable(params: {
   userId: string;
@@ -1660,19 +1659,16 @@ async function assertEnvironmentAssignable(params: {
   agentType: AgentType;
 }): Promise<void> {
   const { userId, organizationId, environmentId, agentType } = params;
-  const [hasEnvAdmin, hasResourceDeploy] = await Promise.all([
-    userHasPermission(userId, organizationId, "environment", "admin"),
-    userHasPermission(
-      userId,
-      organizationId,
-      getResourceForAgentType(agentType),
-      "deploy-to-restricted",
-    ),
-  ]);
+  const hasResourceDeploy = await userHasPermission(
+    userId,
+    organizationId,
+    getResourceForAgentType(agentType),
+    "deploy-to-restricted",
+  );
   await assertCanAssignEnvironment({
     environmentId,
     organizationId,
-    canDeployToRestricted: hasEnvAdmin || hasResourceDeploy,
+    canDeployToRestricted: hasResourceDeploy,
   });
 }
 

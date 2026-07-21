@@ -7,10 +7,9 @@ import type { User } from "@/types";
 
 // The connector write paths gate environment assignment exactly like the agent
 // and MCP-catalog paths: assigning a *restricted* environment requires
-// knowledgeSource:deploy-to-restricted (or environment:admin, which implies
-// it). The gate computes canDeployToRestricted from `userHasPermission`, so we
-// override only that export (permission-aware) and leave the rest of
-// @/auth/utils intact.
+// knowledgeSource:deploy-to-restricted. The gate computes
+// canDeployToRestricted from `userHasPermission`, so we override only that
+// export (permission-aware) and leave the rest of @/auth/utils intact.
 vi.mock("@/auth/utils");
 
 import { userHasPermission } from "@/auth/utils";
@@ -22,8 +21,7 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
-  // Toggles the answer to the restricted-deploy permission probes
-  // (environment:admin / knowledgeSource:deploy-to-restricted).
+  // Toggles the answer to the knowledgeSource:deploy-to-restricted probe.
   let canDeployToRestricted: boolean;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
@@ -35,14 +33,9 @@ describe("Knowledge connector - restricted environment assignment guard", () => 
       async (
         _userId: string,
         _organizationId: string,
-        resource: string,
+        _resource: string,
         action: string,
-      ) => {
-        if (resource === "environment" && action === "admin")
-          return canDeployToRestricted;
-        if (action === "deploy-to-restricted") return canDeployToRestricted;
-        return true;
-      },
+      ) => (action === "deploy-to-restricted" ? canDeployToRestricted : true),
     );
 
     user = await makeUser();

@@ -103386,7 +103386,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:read`: View and list deployment environments",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -103760,9 +103760,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "environment:read"
+          ]
         }
       },
       "post": {
@@ -103770,7 +103771,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Create an org-level deployment environment.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them); implies every per-resource deploy-to-restricted permission",
+        "description": "Create an org-level deployment environment.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:create`: Create deployment environments",
         "requestBody": {
           "required": true,
           "content": {
@@ -104212,7 +104213,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:admin"
+            "environment:create"
           ]
         }
       }
@@ -104223,7 +104224,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update an environment's name, description, namespace, network policy, and restricted flag. When the namespace or network policy changes and the runtime is enabled, all MCP servers assigned to this environment are reconciled.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them); implies every per-resource deploy-to-restricted permission",
+        "description": "Update an environment's name, description, namespace, network policy, and restricted flag. When the namespace or network policy changes and the runtime is enabled, all MCP servers assigned to this environment are reconciled.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environments, including the org default environment",
         "requestBody": {
           "required": true,
           "content": {
@@ -104674,7 +104675,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:admin"
+            "environment:update"
           ]
         }
       },
@@ -104683,7 +104684,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them); implies every per-resource deploy-to-restricted permission",
+        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:delete`: Delete deployment environments",
         "parameters": [
           {
             "schema": {
@@ -104948,7 +104949,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:admin"
+            "environment:delete"
           ]
         }
       }
@@ -169928,7 +169929,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Inspect Kubernetes capabilities available to Archestra.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them); implies every per-resource deploy-to-restricted permission",
+        "description": "Inspect Kubernetes capabilities available to Archestra.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environments, including the org default environment",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -170226,7 +170227,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:admin"
+            "environment:update"
           ]
         }
       }
@@ -234723,7 +234724,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them); implies every per-resource deploy-to-restricted permission",
+        "description": "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environments, including the org default environment",
         "requestBody": {
           "required": true,
           "content": {
@@ -235601,7 +235602,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:admin"
+            "environment:update"
           ]
         }
       }

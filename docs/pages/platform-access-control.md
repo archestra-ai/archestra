@@ -36,13 +36,13 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 
 | Resource | Actions |
 |----------|--------|
-| Agents | `read`, `create`, `update`, `delete`, `team-admin` |
-| Skills | `read`, `create`, `update`, `delete`, `team-admin` |
-| Apps | `read`, `create`, `update`, `delete`, `team-admin` |
+| Agents | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
+| Skills | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
+| Apps | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
-| LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
+| LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | LLM Provider API Keys | `read`, `create`, `update`, `delete` |
 | LLM Virtual Keys | `read`, `create`, `update`, `delete` |
 | LLM OAuth Clients | `read`, `create`, `update`, `delete`, `team-admin` |
@@ -50,15 +50,15 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | Optimization Rules | `read`, `create`, `update`, `delete` |
 | LLM Costs | `read` |
-| MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
+| MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | MCP OAuth Clients | `read`, `create`, `update`, `delete`, `team-admin` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
-| MCP Registry | `read`, `create`, `update`, `delete`, `team-admin` |
+| MCP Registry | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
-| Environments | `admin` |
+| Environments | `read`, `create`, `update`, `delete` |
 | GitHub App Configurations | `read`, `create`, `update`, `delete` |
-| Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
+| Knowledge Sources | `read`, `create`, `update`, `delete`, `query`, `deploy-to-restricted` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
 | Files | `manage` |
@@ -102,6 +102,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Registry | `read`, `update` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
+| Environments | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -160,7 +161,10 @@ The following table lists all available permissions that can be assigned to cust
 | `chatAgentPicker:enable` | Show agent picker in chat |
 | `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
-| `environment:admin` | Create, edit, and delete deployment environments (everyone can view them); implies every per-resource deploy-to-restricted permission |
+| `environment:read` | View and list deployment environments |
+| `environment:create` | Create deployment environments |
+| `environment:update` | Modify deployment environments, including the org default environment |
+| `environment:delete` | Delete deployment environments |
 | `file:manage` | List, read, write, and delete files in chats and projects |
 | `githubAppConfig:read` | View GitHub App configurations |
 | `githubAppConfig:create` | Create GitHub App configurations |

@@ -96,7 +96,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
-  environment: ["admin"],
+  environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
@@ -149,15 +149,43 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
-  agent: ["read", "create", "update", "delete", "team-admin"],
-  skill: ["read", "create", "update", "delete", "team-admin"],
-  app: ["read", "create", "update", "delete", "team-admin"],
+  agent: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
+  skill: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
+  app: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
-  llmProxy: ["read", "create", "update", "delete", "team-admin"],
+  llmProxy: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   llmProviderApiKey: ["read", "create", "update", "delete"],
   llmVirtualKey: ["read", "create", "update", "delete"],
   llmOauthClient: ["read", "create", "update", "delete", "team-admin"],
@@ -167,17 +195,38 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: ["read", "create", "update", "delete", "team-admin"],
+  mcpGateway: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   mcpOauthClient: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
+  mcpRegistry: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
-  environment: ["admin"],
+  environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeSource: ["read", "create", "update", "delete", "query"],
+  knowledgeSource: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "query",
+    "deploy-to-restricted",
+  ],
   knowledgeSourceAutoSync: [],
 
   // Other
@@ -246,7 +295,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
-  environment: [],
+  environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
   githubAppConfig: [],
@@ -399,8 +448,11 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpServerInstallationRequest:delete": "Delete installation requests",
   "mcpServerInstallationRequest:admin":
     "Approve or decline installation requests",
-  "environment:admin":
-    "Create, edit, and delete deployment environments (everyone can view them); implies every per-resource deploy-to-restricted permission",
+  "environment:read": "View and list deployment environments",
+  "environment:create": "Create deployment environments",
+  "environment:update":
+    "Modify deployment environments, including the org default environment",
+  "environment:delete": "Delete deployment environments",
   "githubAppConfig:read": "View GitHub App configurations",
   "githubAppConfig:create": "Create GitHub App configurations",
   "githubAppConfig:update": "Modify GitHub App configurations",
@@ -1201,21 +1253,23 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   },
   // Listing environments is available to any authenticated user (read is ungated).
-  [RouteId.ListEnvironments]: {},
+  [RouteId.ListEnvironments]: {
+    environment: ["read"],
+  },
   [RouteId.CreateEnvironment]: {
-    environment: ["admin"],
+    environment: ["create"],
   },
   [RouteId.UpdateEnvironment]: {
-    environment: ["admin"],
+    environment: ["update"],
   },
   [RouteId.DeleteEnvironment]: {
-    environment: ["admin"],
+    environment: ["delete"],
   },
   [RouteId.UpdateDefaultEnvironment]: {
-    environment: ["admin"],
+    environment: ["update"],
   },
   [RouteId.GetK8sCapabilities]: {
-    environment: ["admin"],
+    environment: ["update"],
   },
   [RouteId.ListGithubAppConfigs]: {
     githubAppConfig: ["read"],
@@ -1739,7 +1793,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/security": { agentSettings: ["read"] },
-  "/settings/environments": { environment: ["admin"] },
+  "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },

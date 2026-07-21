@@ -310,7 +310,7 @@ describe("environment routes", () => {
     expect(mcpServerRuntimeManager.getOrLoadDeployment).not.toHaveBeenCalled();
   });
 
-  test("member without environment:admin is forbidden from creating", async ({
+  test("member without environment:create is forbidden from creating", async ({
     makeUser,
     makeOrganization,
   }) => {

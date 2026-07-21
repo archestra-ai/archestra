@@ -9,9 +9,9 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/environment.query", () => ({ useEnvironments: vi.fn() }));
 
-function setEnvAdmin(hasAdmin: boolean) {
+function setCanManageEnvironments(canManage: boolean) {
   vi.mocked(useHasPermissions).mockReturnValue({
-    data: hasAdmin,
+    data: canManage,
   } as unknown as ReturnType<typeof useHasPermissions>);
 }
 
@@ -26,8 +26,8 @@ describe("EnvironmentSelector — Manage environments link", () => {
     } as unknown as ReturnType<typeof useDefaultEnvironment>);
   });
 
-  test("omits the Manage environments link when the user lacks environment:admin", () => {
-    setEnvAdmin(false);
+  test("omits the Manage environments link when the user lacks environment:update", () => {
+    setCanManageEnvironments(false);
     render(
       <EnvironmentSelector value={null} onChange={vi.fn()} resource="agent" />,
     );
@@ -40,8 +40,8 @@ describe("EnvironmentSelector — Manage environments link", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("renders the Manage environments link when the user has environment:admin", () => {
-    setEnvAdmin(true);
+  test("renders the Manage environments link when the user has environment:update", () => {
+    setCanManageEnvironments(true);
     render(
       <EnvironmentSelector value={null} onChange={vi.fn()} resource="agent" />,
     );

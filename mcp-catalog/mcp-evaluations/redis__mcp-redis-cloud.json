@@ -1,0 +1,117 @@
+{
+  "name": "redis__mcp-redis-cloud",
+  "display_name": "mcp-redis-cloud",
+  "description": "MCP server from redis/mcp-redis-cloud",
+  "author": {
+    "name": "redis"
+  },
+  "server": {
+    "command": "node",
+    "args": ["--experimental-fetch", "${__dirname}/dist/index.js"],
+    "env": {
+      "API_KEY": "${user_config.api_key}",
+      "SECRET_KEY": "${user_config.secret_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Redis Cloud API Key",
+      "description": "Your Redis Cloud API Key for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "secret_key": {
+      "type": "string",
+      "title": "Redis Cloud Secret Key",
+      "description": "Your Redis Cloud Secret Key for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Redis Cloud API MCP Server\n\nModel Context Protocol (MCP) is a standardized protocol for managing context between large language models (LLMs) and external systems. This repository provides an MCP Server for Redis Cloud's API, allowing you to manage your Redis Cloud resources using natural language.\n\nThis lets you use Claude Desktop, or any MCP Client, to use natural language to accomplish things on your Redis Cloud account, e.g.:\n\n- \"Create a new Redis database in AWS\"\n- \"What are my current subscriptions?\"\n- \"Help me choose the right Redis database for my e-commerce application\"\n\n## Features\n\n### Account Management\n- `get_current_account`: Get details about your current Redis Cloud account\n- `get_current_payment_methods`: List all payment methods configured for your account\n\n### Subscription Management\n\n#### Pro Subscriptions\n- `get_pro_subscriptions`: List all Pro subscriptions in your account\n- `create_pro_subscription`: Create a new Pro subscription with advanced configuration options\n  - Supports multi-cloud deployment\n  - Configure memory, persistence, and modules\n  - Set up Active-Active deployments\n  - Custom networking configuration\n\n#### Essential Subscriptions\n- `get_essential_subscriptions`: List all Essential subscriptions (paginated)\n- `get_essential_subscription_by_id`: Get detailed information about a specific Essential subscription\n- `create_essential_subscription`: Create a new Essential subscription\n- `delete_essential_subscription`: Delete an Essential subscription\n\n### Database Capabilities\n- `get_database_modules`: List all available database modules (capabilities) supported in your account\n  - Redis modules\n  - Database features\n  - Performance options\n\n### Cloud Provider Management\n- `get_pro_plans_regions`: Get available regions across cloud providers\n  - AWS regions\n  - GCP regions\n  - Networking options\n  - Availability zones\n\n### Plans and Pricing\n- `get_essentials_plans`: List available Essential subscription plans (paginated)\n  - Supports AWS, GCP, and Azure\n  - Redis Flex options\n  - Fixed plans\n\n### Task Management\n- `get_tasks`: List all current tasks in your account\n- `get_task_by_id`: Get detailed information about a specific task\n  - Track deployment status\n  - Monitor subscription changes\n  - View task progress\n\n\n## Usage\n\n#### Prerequisites\n- Valid Redis Cloud API credentials (API Key and Secret Key)\n- Task IDs are returned for long-running operations and can be monitored\n- Paginated responses require multiple calls to retrieve all data\n\n\n### Claude Desktop\n\nTo run the MCP server with Claude Desktop, follow these steps:\n\n1. Build the package:\n   ```bash\n   npm run build\n   ```\n\n2. Add the server to Claude Desktop:\n    - Open Claude Desktop settings\n    - Navigate to the Developer tab (make sure you have enabled Developer Mode)\n    - Click on \"Edit config\"\n    - Open the `claude_desktop_config.json` file in your text editor and add the following configuration:\n   ```json\n   {\n     \"mcpServers\": {\n       \"mcp-redis-cloud\": {\n         \"command\": \"node\",\n         \"args\": [\"--experimental-fetch\", \"<absolute_path_to_project_root>/dist/index.js\"],\n         \"env\": {\n           \"API_KEY\": \"<redis_cloud_api_key>\",\n           \"SECRET_KEY\": \"<redis_cloud_api_secret_key>\"\n         }\n       }\n     }\n   }\n   ```\n\n3. Close Claude Desktop and restart it. The server should now be available in the MCP Servers section.\n\n### Cursor IDE\n\nTo run the MCP server with Cursor IDE, follow these steps:\n\n1. Build the package:\n   ```bash\n   npm run build\n   ```\n\n2. Add the server to Cursor:\n    - Open Cursor Settings\n    - Navigate to the MCP tab\n    - Click on \"Add new global MCP Server\"\n    - Update the automatically opened `mcp.json` file with the following configuration:\n   ```json\n   {\n     \"mcpServers\": {\n       \"mcp-redis-cloud\": {\n         \"command\": \"node\",\n         \"args\": [\"--experimental-fetch\", \"<absolute_path_to_project_root>/dist/index.js\"],\n         \"env\": {\n           \"API_KEY\": \"<redis_cloud_api_key>\",\n           \"SECRET_KEY\": \"<redis_cloud_api_secret_key>\"\n         }\n       }\n     }\n   }\n   ```\n\n3. Restart Cursor. The server should now be available in the MCP Servers section.\n\n\n## Development\n\n### Prerequisites\n\n1. nvm (Node Version Manager)\n2. Node v22.14.0\n3. npm 10.9.2\n\n### Getting Started\n\n1. Install dependencies:\n   ```bash\n   nvm use v22.14.0\n   npm install\n   ```\n\n2. Build the project:\n   ```bash\n   npm run build\n   ```\n\n3. Test it by using the MCP Inspector:\n    ```bash\n    npx @modelcontextprotocol/inspector node dist/index.js --api-key=<api_key> --secret-key=<secret_key>\n    ```\n\n### Project Structure\n\n```\nsrc/\n├── index.ts              # Entry point\n├── clients/              # API Clients for external services\n│   └── generated         # Generated Redis Cloud API client\n└── tools/                # Tool implementations\n    └── accounts/         # Account tools\n    └── subscriptions/    # Subscription tools\n    └── tasks/            # Task tools\n```\n\n\nNote: If you make changes to your code, remember to rebuild and restart Claude Desktop / Cursor:\n```bash\nnpm run build\n```\n\n## Docker Usage\n\n### Building the Docker Image\nTo build the Docker image for the MCP server, run the following command:\n\n```bash\ndocker build -t mcp/redis-cloud .\n```\n\n### Running the Docker Container\nTo run the container, use the following command:\n\n```bash\ndocker run -i --rm \\\n  -e API_KEY=<your_redis_cloud_api_key> \\\n  -e SECRET_KEY=<your_redis_cloud_api_secret_key> \\\n  mcp/redis-cloud\n```\n\n### Docker Integration with Claude Desktop\n\nTo integrate the Dockerized MCP server with Claude Desktop, follow these steps:\n\n1. Build the Docker image (if you haven't already):\n   ```bash\n   docker build -t mcp/redis-cloud .\n   ```\n\n2. Add the server to Claude Desktop:\n   - Open Claude Desktop settings\n   - Navigate to the Developer tab (ensure Developer Mode is enabled)\n   - Click on \"Edit config\"\n   - Open the `claude_desktop_config.json` file in your text editor\n   - Add the following configuration:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"redis-cloud\": {\n         \"command\": \"docker\",\n         \"args\": [\n           \"run\",\n           \"-i\",\n           \"--rm\",\n           \"-e\",\n           \"API_KEY=<your_redis_cloud_api_key>\",\n           \"-e\",\n           \"SECRET_KEY=<your_redis_cloud_api_secret_key>\",\n           \"mcp/redis-cloud\"\n         ]\n       }\n     }\n   }\n   ```\n\n3. Replace the placeholder values with your actual API credentials.\n\n4. Save the configuration file and restart Claude Desktop.\n\n\n### Notes\n- Ensure that the required environment variables (`API_KEY`, `SECRET_KEY`) are set correctly.",
+  "category": "Cloud",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-redis-cloud": {
+        "command": "node",
+        "args": ["--experimental-fetch", "<absolute_path_to_project_root>/dist/index.js"],
+        "env": {
+          "API_KEY": "<redis_cloud_api_key>",
+          "SECRET_KEY": "<redis_cloud_api_secret_key>"
+        }
+      },
+      "mcp-redis-cloud-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "API_KEY=<your_redis_cloud_api_key>",
+          "-e",
+          "SECRET_KEY=<your_redis_cloud_api_secret_key>",
+          "mcp/redis-cloud"
+        ],
+        "env": {
+          "API_KEY": "<your_redis_cloud_api_key>",
+          "SECRET_KEY": "<your_redis_cloud_api_secret_key>"
+        },
+        "docker_image": "mcp/redis-cloud"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "redis",
+    "repo": "mcp-redis-cloud",
+    "url": "https://github.com/redis/mcp-redis-cloud",
+    "name": "redis__mcp-redis-cloud",
+    "path": null,
+    "stars": 33,
+    "contributors": 7,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "015aaa6bfeec87198a08eaae00352348d4db4b72"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:17.628Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@hey-api/client-fetch",
+      "importance": 9
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-redis-cloud\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP Server for interacting with Redis Cloud API\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"redis-cloud-api-mcp-tool\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"tsx src/index.ts\",\n    \"lint\": \"eslint src/\",\n    \"test\": \"vitest\",\n    \"prepublishOnly\": \"npm run build\",\n    \"link\": \"npm link\",\n    \"unlink\": \"npm unlink\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@hey-api/client-fetch\": \"^0.8.3\",\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"zod\": \"^3.0.0\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.22.0\",\n    \"@hey-api/openapi-ts\": \"^0.64.13\",\n    \"@types/node\": \"^20.0.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.21.0\",\n    \"@typescript-eslint/parser\": \"^6.21.0\",\n    \"@vitest/coverage-v8\": \"^1.0.0\",\n    \"eslint\": \"^8.57.1\",\n    \"eslint-config-prettier\": \"^10.1.1\",\n    \"eslint-plugin-prettier\": \"^5.2.3\",\n    \"globals\": \"^16.0.0\",\n    \"prettier\": \"^3.5.3\",\n    \"tsx\": \"^4.19.2\",\n    \"typescript\": \"^5.0.0\",\n    \"typescript-eslint\": \"^8.26.1\",\n    \"vite\": \"^5.0.0\",\n    \"vitest\": \"^1.0.0\"\n  }\n}"
+}

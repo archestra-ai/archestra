@@ -1,0 +1,146 @@
+{
+  "name": "kiwamizamurai__mcp-kibela-server",
+  "display_name": "mcp-kibela-server",
+  "description": "MCP server implementation for Kibela API integration",
+  "author": {
+    "name": "kiwamizamurai"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@kiwamizamurai/mcp-kibela-server"],
+    "env": {
+      "KIBELA_TEAM": "${user_config.kibela_team}",
+      "KIBELA_TOKEN": "${user_config.kibela_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "kibela_team": {
+      "type": "string",
+      "title": "Kibela Team Name",
+      "description": "Your Kibela team name",
+      "required": true,
+      "sensitive": false
+    },
+    "kibela_token": {
+      "type": "string",
+      "title": "Kibela API Token",
+      "description": "Your Kibela API token",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "readme": "# Kibela MCP Server\n![NPM Downloads](https://img.shields.io/npm/dm/%40kiwamizamurai%2Fmcp-kibela-server)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/kiwamizamurai/mcp-kibela-server)](https://archestra.ai/mcp-catalog/kiwamizamurai__mcp-kibela-server)\n[![smithery badge](https://smithery.ai/badge/@kiwamizamurai/mcp-kibela-server)](https://smithery.ai/server/@kiwamizamurai/mcp-kibela-server)\n\nMCP server implementation for Kibela API integration, enabling LLMs to interact with Kibela content.\n\n<img width=\"320\" alt=\"Example\" src=\"https://github.com/user-attachments/assets/eeed8f45-eb24-456d-bb70-9e738aa1bfb3\" /><a href=\"https://glama.ai/mcp/servers/m21nkeig1p\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/m21nkeig1p/badge\" alt=\"Kibela Server MCP server\" /></a>\n\n> [!TIP]\n> This extension performs GraphQL schema introspection using the buildClientSchema, getIntrospectionQuery, and printSchema functions from the graphql package to reverse engineer Kibela's API. [For more details, see her](https://github.com/kiwamizamurai/vscode-kibela/blob/main/reverse_engineering/main.ts)\n\n## Features\n\n- Search notes with advanced filters\n- Get your latest notes\n- Get note content and comments\n- Manage groups and folders\n- Like/unlike notes\n- List users\n- View note attachments\n- View recently viewed notes\n- Get notes by path\n\n## Configuration\n\n### Environment Variables\n\n- `KIBELA_TEAM`: Your Kibela team name (required)\n- `KIBELA_TOKEN`: Your Kibela API token (required)\n\n## Cursor Integration\n\nAdd to your `~/.cursor/mcp.json`:\n\n```json\n{\n    \"mcpServers\": {\n        \"kibela\": {\n            \"command\": \"npx\",\n            \"args\": [\"-y\", \"@kiwamizamurai/mcp-kibela-server\"],\n            \"env\": {\n                \"KIBELA_TEAM\": \"YOUR_TEAM_NAME\",\n                \"KIBELA_TOKEN\": \"YOUR_TOKEN\"\n            }\n        }\n    }\n}\n```\n\nIf you want to use docker instead\n\n```json\n{\n    \"mcpServers\": {\n        \"kibela\": {\n            \"command\": \"docker\",\n            \"args\": [\n                \"run\",\n                \"-i\",\n                \"--rm\",\n                \"-e\",\n                \"KIBELA_TEAM\",\n                \"-e\",\n                \"KIBELA_TOKEN\",\n                \"ghcr.io/kiwamizamurai/mcp-kibela-server:latest\"\n            ],\n            \"env\": {\n                \"KIBELA_TEAM\": \"YOUR_TEAM_NAME\",\n                \"KIBELA_TOKEN\": \"YOUR_TOKEN\"\n            }\n        }\n    }\n}\n```\n\n## Tools\n\n### kibela_search_notes\nSearch Kibela notes with given query\n- Input:\n  - `query` (string): Search query\n  - `coediting` (boolean, optional): Filter by co-editing status\n  - `isArchived` (boolean, optional): Filter by archive status\n  - `sortBy` (string, optional): Sort by (RELEVANT, CONTENT_UPDATED_AT)\n  - `userIds` (string[], optional): Filter by user IDs\n  - `folderIds` (string[], optional): Filter by folder IDs\n- Returns: List of matching notes with ID, title, URL, author, groups and more\n\n### kibela_get_my_notes\nGet your latest notes from Kibela\n- Input:\n  - `limit` (number, optional): Number of notes to fetch (default: 15)\n- Returns: List of your latest notes with author information\n\n### kibela_get_note_content\nGet content and comments of a specific note\n- Input:\n  - `id` (string): Note ID\n  - `include_image_data` (boolean, optional): Whether to include image data URLs in the response (default: false)\n- Returns: Full note content including HTML, comments, attachments, groups, folders and more\n\n### kibela_get_groups\nGet list of accessible groups\n- Input: None\n- Returns: List of groups with details like privacy settings and permissions\n\n### kibela_get_group_folders\nGet folders in a group\n- Input:\n  - `groupId` (string): Group ID\n  - `parentFolderId` (string, optional): Parent folder ID for nested folders\n- Returns: List of folders with their notes and metadata\n\n### kibela_get_group_notes\nGet notes in a group that are not attached to any folder\n- Input:\n  - `groupId` (string): Group ID\n- Returns: List of notes with author information, sorted by last update time\n\n### kibela_get_folder_notes\nGet notes in a folder\n- Input:\n  - `folderId` (string): Folder ID\n  - `limit` (number, optional): Number of notes to fetch (default: 100)\n- Returns: List of notes with author information, sorted by last update time\n\n### kibela_get_users\nGet list of users\n- Input: None\n- Returns: List of users with ID, account and real name\n\n### kibela_like_note\nLike a note\n- Input:\n  - `noteId` (string): Note ID\n- Returns: Updated likers list\n\n### kibela_unlike_note\nUnlike a note\n- Input:\n  - `noteId` (string): Note ID\n- Returns: Updated likers list\n\n### kibela_get_recently_viewed_notes\nGet your recently viewed notes\n- Input:\n  - `limit` (number, optional): Number of notes to fetch (max 15)\n- Returns: List of recently viewed notes with author information\n\n### kibela_get_note_from_path\nGet note content by its path or URL\n- Input:\n  - `path` (string): Note path (e.g. '/group/folder/note') or full Kibela URL (e.g. 'https://team.kibe.la/notes/123')\n  - `include_image_data` (boolean, optional): Whether to include image data URLs in the response (default: false)\n- Returns: Full note content including HTML, comments, attachments, groups, folders and more\n\n## Local Development\n\n### Running from Source\n\n1. Clone the repository\n2. Install dependencies: `npm install`\n\n### Environment Setup\n\nFor local development, update your `~/.cursor/mcp.json`:\n\n```json\n{\n    \"mcpServers\": {\n        \"kibela\": {\n            \"command\": \"node\",\n            \"args\": [\"path/to/mcp-kibela-server/dist/src/index.js\"],\n            \"env\": {\n                \"KIBELA_TEAM\": \"YOUR_TEAM_NAME\",\n                \"KIBELA_TOKEN\": \"YOUR_TOKEN\"\n            }\n        }\n    }\n}\n```\n\n### MCP inspector\n\n```bash\nnpx @modelcontextprotocol/inspector node ./dist/src/index.js\n```\n\nand set environemtns\n\n\n### Docker\n\nBuild and run locally:\n\n```bash\ndocker build -t mcp-kibela-server .\n```\n\nThen use this configuration:\n\n```json\n{\n    \"mcpServers\": {\n        \"kibela\": {\n            \"command\": \"docker\",\n            \"args\": [\n                \"run\",\n                \"-i\",\n                \"--rm\",\n                \"-e\",\n                \"KIBELA_TEAM\",\n                \"-e\",\n                \"KIBELA_TOKEN\",\n                \"mcp-kibela-server\"\n            ],\n            \"env\": {\n                \"KIBELA_TEAM\": \"YOUR_TEAM_NAME\",\n                \"KIBELA_TOKEN\": \"YOUR_TOKEN\"\n            }\n        }\n    }\n}\n```\nFor SSE transport, ensure the server URL is set to: `http://localhost:3000/sse`\n\n\n# Other products\n\n- [vscode extension for kibela](https://marketplace.visualstudio.com/items?itemName=kiwamizamurai-vscode.kibela-vscode)\n",
+  "category": "AI Tools",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kiwamizamurai-mcp-kibela-server": {
+        "command": "npx",
+        "args": ["-y", "@kiwamizamurai/mcp-kibela-server"],
+        "env": {
+          "KIBELA_TEAM": "YOUR_TEAM_NAME",
+          "KIBELA_TOKEN": "YOUR_TOKEN"
+        }
+      },
+      "ghcr.io-kiwamizamurai-mcp-kibela-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "KIBELA_TEAM",
+          "-e",
+          "KIBELA_TOKEN",
+          "ghcr.io/kiwamizamurai/mcp-kibela-server:latest"
+        ],
+        "env": {
+          "KIBELA_TEAM": "YOUR_TEAM_NAME",
+          "KIBELA_TOKEN": "YOUR_TOKEN"
+        },
+        "docker_image": "ghcr.io/kiwamizamurai/mcp-kibela-server:latest"
+      },
+      "kiwamizamurai-mcp-kibela-server-local-path": {
+        "command": "node",
+        "args": ["path/to/mcp-kibela-server/dist/src/index.js"],
+        "env": {
+          "KIBELA_TEAM": "YOUR_TEAM_NAME",
+          "KIBELA_TOKEN": "YOUR_TOKEN"
+        }
+      },
+      "kiwamizamurai-mcp-kibela-server-local-dev": {
+        "command": "node",
+        "args": ["./dist/src/index.js"],
+        "env": {
+          "KIBELA_TEAM": "YOUR_TEAM_NAME",
+          "KIBELA_TOKEN": "YOUR_TOKEN"
+        }
+      },
+      "mcp-kibela-server-docker-local-build": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "KIBELA_TEAM", "-e", "KIBELA_TOKEN", "mcp-kibela-server"],
+        "env": {
+          "KIBELA_TEAM": "YOUR_TEAM_NAME",
+          "KIBELA_TOKEN": "YOUR_TOKEN"
+        },
+        "docker_image": "mcp-kibela-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kiwamizamurai",
+    "repo": "mcp-kibela-server",
+    "url": "https://github.com/kiwamizamurai/mcp-kibela-server",
+    "name": "mcp-kibela-server",
+    "path": null,
+    "stars": 6,
+    "contributors": 4,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "eac821c1725cc2ebbb286ec42f41f52416f9787d"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:48.873Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "graphql-request",
+      "importance": 8
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@kiwamizamurai/mcp-kibela-server\",\n  \"version\": \"1.1.1\",\n  \"description\": \"MCP server for Kibela API integration\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"engines\": {\n    \"node\": \">=20.0.0\"\n  },\n  \"bin\": {\n    \"mcp-kibela-server\": \"dist/src/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"keywords\": [\n    \"kibela\",\n    \"documentation\",\n    \"API\",\n    \"server\",\n    \"integration\",\n    \"mcp\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/kiwamizamurai/mcp-kibela-server\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/kiwamizamurai/mcp-kibela-server/issues\"\n  },\n  \"homepage\": \"https://github.com/kiwamizamurai/mcp-kibela-server#readme\",\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/src/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"start\": \"node dist/src/index.js\",\n    \"start:sse\": \"node dist/src/sse.js\",\n    \"lint\": \"biome check .\",\n    \"lint:fix\": \"biome check --apply .\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"graphql-request\": \"^6.1.0\",\n    \"express\": \"^4.18.2\",\n    \"cors\": \"^2.8.5\"\n  },\n  \"devDependencies\": {\n    \"@biomejs/biome\": \"1.5.3\",\n    \"@types/node\": \"^20\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/cors\": \"^2.8.17\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

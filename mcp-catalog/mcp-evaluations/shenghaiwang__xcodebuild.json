@@ -1,0 +1,79 @@
+{
+  "name": "shenghaiwang__xcodebuild",
+  "display_name": "xcodebuild",
+  "description": "MCP tool for building Xcode iOS workspace/project and feeding back error to LLMs.",
+  "author": {
+    "name": "ShenghaiWang"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcpxcodebuild"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# xcodebuild MCP Server\n\nA Model Context Protocol server that builds iOS workspace/project that enables seamless workflow working with iOS projects in Visual Studio Code using extensions like Cline or Roo Code.\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/ShenghaiWang/xcodebuild)](https://archestra.ai/mcp-catalog/shenghaiwang__xcodebuild)\n<a href=\"https://glama.ai/mcp/servers/5ibnbzxmql\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/5ibnbzxmql/badge\" alt=\"mcpxcodebuild MCP server\" />\n</a>\n\n### Available Tools\n\n- `build` - Build iOS Xcode workspace/project\n    - `folder` (string, required): The full path of the current folder that the iOS Xcode workspace/project sits\n- `test` - Run test for iOS Xcode workspace/project\n    - `folder` (string, required): The full path of the current folder that the iOS Xcode workspace/project sits\n\n## Installation\n\n\n### Using uv (recommended)\n\nWhen using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will\nuse [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *mcpxcodebuild*.\n\n### Using PIP\n\nAlternatively you can install `mcpxcodebuild` via pip:\n\n```\npip install mcpxcodebuild\n```\n\nAfter installation, you can run it as a script using:\n\n```\npython -m  mcpxcodebuild\n```\n\n## Configuration\n\n### Configure for Claude.app\n\nAdd to your Claude settings:\n\n<details>\n<summary>Using uvx</summary>\n\n```json\n\"mcpServers\": {\n  \"mcpxcodebuild\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcpxcodebuild\"]\n  }\n}\n```\n</details>\n\n<details>\n<summary>Using pip installation</summary>\n\n```json\n\"mcpServers\": {\n  \"mcpxcodebuild\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"mcpxcodebuild\"]\n  }\n}\n```\n</details>\n\n\n## License\n\nxcodebuild MCP tool is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.",
+  "category": "Development",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcpxcodebuild-uvx": {
+        "command": "uvx",
+        "args": ["mcpxcodebuild"],
+        "env": {}
+      },
+      "mcpxcodebuild-pip": {
+        "command": "python",
+        "args": ["-m", "mcpxcodebuild"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ShenghaiWang",
+    "repo": "xcodebuild",
+    "url": "https://github.com/ShenghaiWang/xcodebuild",
+    "name": "shenghaiwang__xcodebuild",
+    "path": null,
+    "stars": 73,
+    "contributors": 4,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "543536b2e40590cd7a5993b47b1222d6441166cc"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.259Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nrequires-python = \">=3.13\"\nname = \"mcpxcodebuild\"\nversion = \"0.10.0\"\ndescription = \"A MCP tool that builds iOS Xcode workspace/project and send error back. It also helps to run test and feed the error back to llm.\"\nauthors = [{ name = \"Tim Wang\" }]\nmaintainers = [{ name = \"Tim Wang\", email = \"overocean@gmail.com\" }]\nkeywords = [\"http\", \"mcp\", \"llm\", \"automation\", \"iOS\", \"Xcode\"]\nlicense = { text = \"MIT\" }\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n]\nreadme = \"README.md\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.3.0\",\n]\n\n[project.scripts]\nmcpxcodebuild = \"mcpxcodebuild:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.389\", \"ruff>=0.7.3\"]"
+}

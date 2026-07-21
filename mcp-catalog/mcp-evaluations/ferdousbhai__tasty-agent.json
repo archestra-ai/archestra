@@ -1,0 +1,116 @@
+{
+  "name": "ferdousbhai__tasty-agent",
+  "display_name": "tasty-agent",
+  "description": "Let Claude manage your tastytrade portfolio.",
+  "author": {
+    "name": "ferdousbhai"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["tasty-agent"],
+    "env": {
+      "TASTYTRADE_USERNAME": "${user_config.tastytrade_username}",
+      "TASTYTRADE_PASSWORD": "${user_config.tastytrade_password}",
+      "TASTYTRADE_ACCOUNT_ID": "${user_config.tastytrade_account_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "tastytrade_username": {
+      "type": "string",
+      "title": "TastyTrade Username",
+      "description": "Your TastyTrade username for authentication",
+      "sensitive": true,
+      "required": true
+    },
+    "tastytrade_password": {
+      "type": "string",
+      "title": "TastyTrade Password",
+      "description": "Your TastyTrade password for authentication",
+      "sensitive": true,
+      "required": true
+    },
+    "tastytrade_account_id": {
+      "type": "string",
+      "title": "TastyTrade Account ID",
+      "description": "Your TastyTrade account ID (optional)",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# tasty-agent: A TastyTrade MCP Server\n\nA Model Context Protocol server for TastyTrade brokerage accounts. Enables LLMs to monitor portfolios, analyze positions, and execute trades.\n\n## Authentication\n\n**OAuth Setup**:\n1. Create an OAuth app at https://my.tastytrade.com/app.html#/manage/api-access/oauth-applications\n2. Check all scopes, save your client ID and client secret  \n3. Create a \"New Personal OAuth Grant\" in your OAuth app settings (check all scopes)\n4. Copy the generated refresh token\n5. Configure the MCP server with your credentials (see Usage section below)\n\n## MCP Tools\n\n### Account & Portfolio\n- **`get_balances()`** - Account balances and buying power\n- **`get_positions()`** - All open positions with current values\n- **`get_net_liquidating_value_history(time_back='1y')`** - Portfolio value history ('1d', '1m', '3m', '6m', '1y', 'all')\n- **`get_history(start_date=None)`** - Transaction history (format: YYYY-MM-DD, default: last 90 days)\n\n### Market Data & Research\n- **`get_quote(symbol, option_type=None, strike_price=None, expiration_date=None, timeout=10.0)`** - Real-time quotes for stocks and options via DXLink streaming\n- **`get_greeks(symbol, option_type, strike_price, expiration_date, timeout=10.0)`** - Greeks (delta, gamma, theta, vega, rho) for options via DXLink streaming\n- **`get_market_metrics(symbols)`** - IV rank, percentile, beta, liquidity for multiple symbols\n- **`market_status(exchanges=['Equity'])`** - Market hours and status ('Equity', 'CME', 'CFE', 'Smalls')\n- **`search_symbols(symbol)`** - Search for symbols by name/ticker\n- **`get_current_time_nyc()`** - Current time in New York timezone (market time)\n\n### Order Management\n- **`get_live_orders()`** - Currently active orders\n- **`place_order(symbol, order_type, action, quantity, price, strike_price=None, expiration_date=None, time_in_force='Day', dry_run=False)`** - Simplified order placement for stocks and options\n- **`delete_order(order_id)`** - Cancel orders by ID\n\n### Watchlist Management\n- **`get_watchlists(watchlist_type='private', name=None)`** - Get watchlists ('public'/'private', all if name=None)\n- **`manage_private_watchlist(action, symbol, instrument_type, name='main')`** - Add/remove symbols from private watchlists\n- **`delete_private_watchlist(name)`** - Delete private watchlist\n\n### MCP Client Configuration\n\nAdd to your MCP client configuration (e.g., `claude_desktop_config.json`):\n```json\n{\n  \"mcpServers\": {\n    \"tastytrade\": {\n      \"command\": \"uvx\",\n      \"args\": [\"tasty-agent\"],\n      \"env\": {\n        \"TASTYTRADE_CLIENT_SECRET\": \"your_client_secret\",\n        \"TASTYTRADE_REFRESH_TOKEN\": \"your_refresh_token\",\n        \"TASTYTRADE_ACCOUNT_ID\": \"your_account_id\"\n      }\n    }\n  }\n}\n```\n\n## Examples\n\n```\n\"Get my account balances and current positions\"\n\"Get real-time quote for SPY\"\n\"Get quote for TQQQ C option with strike 100 expiring 2026-01-16\"\n\"Get Greeks (delta, gamma, theta, vega, rho) for AAPL P option with strike 150 expiring 2024-12-20\"\n\"Place dry-run order: buy 100 AAPL shares at $150\"\n\"Place order: buy 17 TQQQ C contracts at $8.55, strike 100, expiring 2026-01-16\"\n\"Cancel order 12345\"\n\"Get my private watchlists\"\n\"Add TSLA to my main watchlist\"\n\"Remove AAPL from my tech watchlist\"\n```\n\n## Development\n\n### Testing with client.py\n\nFor interactive testing during development:\n```bash\n# Install dev dependencies\nuv sync --group dev\n\n# Set up environment variables in .env file:\n# TASTYTRADE_CLIENT_SECRET=your_secret\n# TASTYTRADE_REFRESH_TOKEN=your_token  \n# TASTYTRADE_ACCOUNT_ID=your_account_id (optional)\n# OPENAI_API_KEY=your_openai_key\n\n# Run the interactive client\nuv run client.py\n```\n\nThe client provides a chat interface to test MCP tools directly. Example commands:\n- \"Get my account balances\"\n- \"Get quote for SPY\" \n- \"Place dry-run order: buy 100 AAPL at $150\"\n\n### Debug with MCP inspector\n\n```bash\nnpx @modelcontextprotocol/inspector uvx tasty-agent\n```\n\n## License\n\nMIT\n",
+  "category": "Finance",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "tasty-agent": {
+        "command": "uvx",
+        "args": ["tasty-agent"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ferdousbhai",
+    "repo": "tasty-agent",
+    "url": "https://github.com/ferdousbhai/tasty-agent",
+    "name": "tasty-agent",
+    "path": null,
+    "stars": 34,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "52851b3f53bf6eabfbd70d518caaedb9d5097eb3"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:09.318Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "keyring",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "tastytrade",
+      "importance": 9
+    },
+    {
+      "name": "click",
+      "importance": 7
+    },
+    {
+      "name": "rich",
+      "importance": 4
+    },
+    {
+      "name": "humanize",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"tasty-agent\"\ndynamic = [\"version\"]\ndescription = \"A Model Context Protocol server for interacting with TastyTrade brokerage accounts\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"keyring\",\n    \"mcp[cli]>=1.9.4\",\n    \"tastytrade>=10.2.3\",\n    \"click\",\n    \"rich\",\n    \"humanize>=4.12.3\",\n]\nauthors = [{ name = \"Ferdous\", email = \"ferdous@hey.com\" }]\nkeywords = [\"tastytrade\", \"trading\", \"mcp\", \"model context protocol\", \"broker\", \"robinhood\", \"wallstreetbets\"]\nclassifiers = [\n    \"Intended Audience :: Financial and Insurance Industry\",\n    \"Intended Audience :: End Users/Desktop\",\n    \"Topic :: Office/Business :: Financial\",\n    \"Programming Language :: Python :: 3.12\",\n    \"License :: OSI Approved :: MIT License\",\n]\n\n[project.scripts]\ntasty-agent = \"tasty_agent.cli:main\"\n\n[build-system]\nrequires = [\"hatchling\", \"hatch-vcs\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.version]\nsource = \"vcs\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"tasty_agent\"]\n\n[tool.hatch.build.hooks.vcs]\nversion-file = \"tasty_agent/_version.py\"\n\n[dependency-groups]\ndev = [\n    \"ipykernel>=6.29.5\",\n]\n"
+}

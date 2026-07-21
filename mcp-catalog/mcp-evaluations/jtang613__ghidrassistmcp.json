@@ -1,0 +1,112 @@
+{
+  "name": "jtang613__ghidrassistmcp",
+  "display_name": "GhidrAssistMCP",
+  "description": "An MCP extension for Ghidra",
+  "author": {
+    "name": "jtang613"
+  },
+  "server": {
+    "command": "./GhidrAssistMCPServer",
+    "args": [],
+    "env": {
+      "MCP_SERVER_HOST": "${user_config.mcp_server_host}",
+      "MCP_SERVER_PORT": "${user_config.mcp_server_port}",
+      "MCP_SERVER_ENABLED": "${user_config.mcp_server_enabled}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "mcp_server_host": {
+      "type": "string",
+      "title": "MCP Server Host",
+      "description": "The host address for the GhidrAssist MCP server. Default is 'localhost'.",
+      "default": "localhost",
+      "required": false
+    },
+    "mcp_server_port": {
+      "type": "number",
+      "title": "MCP Server Port",
+      "description": "The port number for the GhidrAssist MCP server. Default is '8080'.",
+      "default": 8080,
+      "required": false,
+      "min": 1,
+      "max": 65535
+    },
+    "mcp_server_enabled": {
+      "type": "boolean",
+      "title": "Enable MCP Server",
+      "description": "Toggle the GhidrAssist MCP server on or off.",
+      "default": true,
+      "required": false
+    }
+  },
+  "readme": "# GhidrAssistMCP\n\nA powerful Ghidra extension that provides an MCP (Model Context Protocol) server, enabling AI assistants and other tools to interact with Ghidra's reverse engineering capabilities through a standardized API.\n\n## Overview\n\nGhidrAssistMCP bridges the gap between AI-powered analysis tools and Ghidra's comprehensive reverse engineering platform. By implementing the Model Context Protocol, this extension allows external AI assistants, automated analysis tools, and custom scripts to seamlessly interact with Ghidra's analysis capabilities.\n\n### Key Features\n\n- **MCP Server Integration**: Full Model Context Protocol server implementation using official SDK\n- **31 Built-in Tools**: Comprehensive set of analysis tools covering functions, data, cross-references, and more\n- **Configurable UI**: Easy-to-use interface for managing tools and monitoring activity\n- **Real-time Logging**: Track all MCP requests and responses with detailed logging\n- **Dynamic Tool Management**: Enable/disable tools individually with persistent settings\n- **Current Context Awareness**: Tools that understand Ghidra's current cursor position and active function\n\n## Clients\n\nShameless self-promotion: [GhidrAssist](https://github.com/jtang613/GhidrAssist) supports GhidrAssistMCP right out of the box.\n\n## Screenshots\n\n![Screenshot](https://github.com/jtang613/GhidrAssistMCP/blob/master/res/Screenshot1.png)\n![Screenshot](https://github.com/jtang613/GhidrAssistMCP/blob/master/res/Screenshot2.png)\n\n\n## Installation\n\n### Prerequisites\n\n- **Ghidra 11.4+** (tested with Ghidra 11.4 Public)\n- **An MCP Client (Like GhidrAssist)**\n\n### Binary Release (Recommended)\n\n1. **Download the latest release**:\n   - Go to the [Releases page](https://github.com/jtang613/GhidrAssistMCP/releases)\n   - Download the latest `.zip` file (e.g., `GhidrAssistMCP-v1.0.0.zip`)\n\n2. **Install the extension**:\n   - In Ghidra: **File → Install Extensions → Add Extension**\n   - Select the downloaded ZIP file\n   - Restart Ghidra when prompted\n\n3. **Enable the plugin**:\n   - **File → Configure → Configure Plugins**\n   - Search for \"GhidrAssistMCP\"\n   - Check the box to enable the plugin\n\n### Building from Source\n\n1. **Clone the repository**:\n   ```bash\n   git clone <repository-url>\n   cd GhidrAssistMCP\n   ```\n\n2. **Set Ghidra installation path**:\n   ```bash\n   export GHIDRA_INSTALL_DIR=/path/to/your/ghidra/installation\n   ```\n\n3. **Build the extension**:\n   ```bash\n   gradle buildExtension\n   ```\n\n4. **Install the extension**:\n   - Copy the generated ZIP file from `dist/` directory\n   - In Ghidra: **File → Install Extensions → Add Extension**\n   - Select the ZIP file and restart Ghidra\n\n5. **Enable the plugin**:\n   - **File → Configure → Configure Plugins**\n   - Search for \"GhidrAssistMCP\"\n   - Check the box to enable the plugin\n\n## Configuration\n\n### Initial Setup\n\n1. **Open the Control Panel**:\n   - Window → GhidrAssistMCP (or use the toolbar icon)\n\n2. **Configure Server Settings**:\n   - **Host**: Default is `localhost`\n   - **Port**: Default is `8080`\n   - **Enable/Disable**: Toggle the MCP server on/off\n\n### Tool Management\n\nThe Configuration tab allows you to:\n- **View all available tools** (31 total)\n- **Enable/disable individual tools** using checkboxes\n- **Save configuration** to persist across sessions\n- **Monitor tool status** in real-time\n\n### Available Tools\n\n#### Program Analysis\n- `get_program_info` - Get basic program information\n- `list_functions` - List all functions in the program\n- `list_data` - List data definitions\n- `list_strings` - List string references\n- `list_imports` - List imported functions\n- `list_exports` - List exported functions\n- `list_segments` - List memory segments\n- `list_namespaces` - List namespaces\n- `list_classes` - List class definitions\n- `list_methods` - List method definitions\n\n#### Function Analysis\n- `get_function_info` - Get detailed function information\n- `get_class_info` - Get detailed class information\n- `get_function_by_address` - Find function at specific address\n- `get_current_function` - Get function at cursor position\n- `decompile_function` - Decompile function to C-like code\n- `disassemble_function` - Get assembly disassembly\n- `search_functions` - Search functions by name pattern\n- `search_classes` - Search classes by name pattern\n- `function_xrefs` - Get function cross-references\n\n#### Location & Navigation\n- `get_current_address` - Get current cursor address\n- `xrefs_to` - Find references to an address\n- `xrefs_from` - Find references from an address\n\n#### Modification Tools\n- `rename_function` - Rename functions\n- `rename_function_by_address` - Rename function at specific address\n- `rename_variable` - Rename variables\n- `rename_data` - Rename data definitions\n- `set_function_prototype` - Set function signatures\n- `set_local_variable_type` - Set variable data types\n- `set_disassembly_comment` - Add disassembly comments\n- `set_decompiler_comment` - Add decompiler comments\n\n#### Advanced Analysis\n- `auto_create_struct` - Automatically create structures from variable usage patterns\n\n## Usage Examples\n\n### Basic Program Information\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_program_info\"\n  }\n}\n```\n\n### Function Analysis\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_function_info\",\n    \"arguments\": {\n      \"function_name\": \"main\"\n    }\n  }\n}\n```\n\n### Decompilation\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"decompile_function\",\n    \"arguments\": {\n      \"function_name\": \"encrypt_data\"\n    }\n  }\n}\n```\n\n### Structure Creation\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"auto_create_struct\",\n    \"arguments\": {\n      \"function_identifier\": \"0x00401000\",\n      \"variable_name\": \"ctx\"\n    }\n  }\n}\n```\n\n### Setting Function Prototype\n\n```json\n{\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"set_function_prototype\",\n    \"arguments\": {\n      \"function_address\": \"0x00401000\",\n      \"prototype\": \"int main(int argc, char** argv)\"\n    }\n  }\n}\n```\n\n## Architecture\n\n### Core Components\n\n```\nGhidrAssistMCP/\n├── GhidrAssistMCPPlugin      # Main plugin entry point\n├── GhidrAssistMCPServer      # HTTP/SSE MCP server\n├── GhidrAssistMCPBackend     # Tool management and execution\n├── GhidrAssistMCPProvider    # UI component provider\n└── tools/                    # Individual MCP tools\n    ├── Analysis Tools/\n    ├── Modification Tools/\n    └── Navigation Tools/\n```\n\n### MCP Protocol Implementation\n\n- **Transport**: HTTP with Server-Sent Events (SSE)\n- **Endpoints**:\n  - `GET /sse` - SSE connection for bidirectional communication\n  - `POST /message` - Message exchange endpoint\n- **Tool Registration**: Dynamic tool discovery and registration\n- **Session Management**: Stateful sessions with proper lifecycle management\n\n### Plugin Architecture\n\n1. **Observer Pattern**: Decoupled UI updates using event listeners\n2. **Transaction Management**: Safe database operations with rollback support\n3. **Tool Registry**: Dynamic tool registration with enable/disable capability\n4. **Settings Persistence**: Configuration saved in Ghidra's settings system\n5. **Thread Safety**: Proper Swing EDT handling for UI operations\n\n## Development\n\n### Project Structure\n\n```\nsrc/main/java/ghidrassistmcp/\n├── GhidrAssistMCPPlugin.java      # Main plugin class\n├── GhidrAssistMCPProvider.java    # UI provider with tabs\n├── GhidrAssistMCPServer.java      # MCP server implementation\n├── GhidrAssistMCPBackend.java     # Backend tool management\n├── McpBackend.java                # Backend interface\n├── McpTool.java                   # Tool interface\n├── McpEventListener.java          # Event notification interface\n└── tools/                         # Tool implementations\n    ├── ProgramInfoTool.java\n    ├── ListFunctionsTool.java\n    ├── DecompileFunctionTool.java\n    ├── AutoCreateStructTool.java\n    └── ... (29 total tools)\n```\n\n### Adding New Tools\n\n1. **Implement McpTool interface**:\n   ```java\n   public class MyCustomTool implements McpTool {\n       @Override\n       public String getName() { return \"my_custom_tool\"; }\n       \n       @Override\n       public String getDescription() { return \"Description\"; }\n       \n       @Override\n       public McpSchema.JsonSchema getInputSchema() { /* ... */ }\n       \n       @Override\n       public McpSchema.CallToolResult execute(Map<String, Object> arguments, Program program) {\n           // Implementation\n       }\n   }\n   ```\n\n2. **Register in backend**:\n   ```java\n   // In GhidrAssistMCPBackend constructor\n   registerTool(new MyCustomTool());\n   ```\n\n### Build Commands\n\n```bash\n# Clean build\ngradle clean\n\n# Build extension\ngradle buildExtension\n\n# Build with specific Ghidra path\ngradle -PGHIDRA_INSTALL_DIR=/path/to/ghidra buildExtension\n\n# Debug build\ngradle buildExtension --debug\n```\n\n### Dependencies\n\n- **MCP SDK**: `io.modelcontextprotocol.sdk:mcp:0.10.0`\n- **Jetty Server**: `11.0.20` (HTTP/SSE transport)\n- **Jackson**: `2.17.0` (JSON processing)\n- **Ghidra API**: Bundled with Ghidra installation\n\n## Logging\n\n### UI Logging\n\nThe **Log** tab provides real-time monitoring:\n- **Session Events**: Server start/stop, program changes\n- **Tool Requests**: `REQ: tool_name {parameters...}`\n- **Tool Responses**: `RES: tool_name {response...}`\n- **Error Messages**: Failed operations and diagnostics\n\n### Console Logging\n\nDetailed logging in Ghidra's console:\n- Tool registration and initialization\n- MCP server lifecycle events\n- Database transaction operations\n- Error stack traces and debugging information\n\n## Troubleshooting\n\n### Common Issues\n\n**Server Won't Start**\n- Check if port 8080 is available\n- Verify Ghidra installation path\n- Examine console logs for errors\n\n**Tools Not Appearing**\n- Ensure plugin is enabled\n- Check Configuration tab for tool status\n- Verify backend initialization in logs\n\n**MCP Client Connection Issues**\n- Confirm server is running (check GhidrAssistMCP window)\n- Test connection: `curl http://localhost:8080/sse`\n- Check firewall settings\n\n**Tool Execution Failures**\n- Verify program is loaded in Ghidra\n- Check tool parameters are correct\n- Review error messages in Log tab\n\n### Debug Mode\n\nEnable debug logging by adding to Ghidra startup:\n```bash\n-Dlog4j.logger.ghidrassistmcp=DEBUG\n```\n\n## Contributing\n\n1. **Fork the repository**\n2. **Create a feature branch**: `git checkout -b feature-name`\n3. **Make your changes** with proper tests\n4. **Follow code style**: Use existing patterns and conventions\n5. **Submit a pull request** with detailed description\n\n### Code Standards\n\n- **Java 21+ features** where appropriate\n- **Proper exception handling** with meaningful messages\n- **Transaction safety** for all database operations\n- **Thread safety** for UI operations\n- **Comprehensive documentation** for public APIs\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Acknowledgments\n\n- **NSA/Ghidra Team** for the excellent reverse engineering platform\n- **Anthropic** for the Model Context Protocol specification\n\n---\n\n**Questions or Issues?**\n\nPlease open an issue on the project repository for bug reports, feature requests, or questions about usage and development.\n",
+  "category": "Development",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jtang613",
+    "repo": "GhidrAssistMCP",
+    "url": "https://github.com/jtang613/GhidrAssistMCP",
+    "name": "GhidrAssistMCP",
+    "path": null,
+    "stars": 283,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "6ece5bce1423b2a963fcbf18693085ae48cc72a9"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:34.322Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "io.modelcontextprotocol.sdk:mcp",
+      "importance": 10
+    },
+    {
+      "name": "org.eclipse.jetty:jetty-server",
+      "importance": 9
+    },
+    {
+      "name": "org.eclipse.jetty:jetty-servlet",
+      "importance": 9
+    },
+    {
+      "name": "com.fasterxml.jackson.core:jackson-databind",
+      "importance": 8
+    },
+    {
+      "name": "com.fasterxml.jackson.core:jackson-core",
+      "importance": 8
+    },
+    {
+      "name": "com.fasterxml.jackson.core:jackson-annotations",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== build.gradle ===\n/* \n *\n */\n// Builds a Ghidra Extension for a given Ghidra installation.\n//\n// An absolute path to the Ghidra installation directory must be supplied either by setting the \n// GHIDRA_INSTALL_DIR environment variable or Gradle project property:\n//\n//     > export GHIDRA_INSTALL_DIR=<Absolute path to Ghidra> \n//     > gradle\n//\n//         or\n//\n//     > gradle -PGHIDRA_INSTALL_DIR=<Absolute path to Ghidra>\n//\n// Gradle should be invoked from the directory of the project to build.  Please see the\n// application.gradle.version property in <GHIDRA_INSTALL_DIR>/Ghidra/application.properties\n// for the correction version of Gradle to use for the Ghidra installation you specify.\n\n//----------------------START \"DO NOT MODIFY\" SECTION------------------------------\ndef ghidraInstallDir\n\nif (System.env.GHIDRA_INSTALL_DIR) {\n\tghidraInstallDir = System.env.GHIDRA_INSTALL_DIR\n}\nelse if (project.hasProperty(\"GHIDRA_INSTALL_DIR\")) {\n\tghidraInstallDir = project.getProperty(\"GHIDRA_INSTALL_DIR\")\n}\nelse {\n\tghidraInstallDir = \"<REPLACE>\"\n}\n\ntask distributeExtension {\n\tgroup = \"Ghidra\"\n\n\tapply from: new File(ghidraInstallDir).getCanonicalPath() + \"/support/buildExtension.gradle\"\n\tdependsOn ':buildExtension'\n}\n//----------------------END \"DO NOT MODIFY\" SECTION-------------------------------\n\nrepositories {\n\tmavenCentral()\n}\n\ndependencies {\n\t// MCP SDK core dependency\n\timplementation 'io.modelcontextprotocol.sdk:mcp:0.10.0'\n\t\n\t// Jetty embedded server for servlet container\n\timplementation 'org.eclipse.jetty:jetty-server:11.0.20'\n\timplementation 'org.eclipse.jetty:jetty-servlet:11.0.20'\n\t\n\t// Jackson for JSON processing (required by MCP)\n\timplementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'\n\timplementation 'com.fasterxml.jackson.core:jackson-core:2.17.0'\n\timplementation 'com.fasterxml.jackson.core:jackson-annotations:2.17.0'\n}\n\n// Exclude additional files from the built extension\n// Ex: buildExtension.exclude '.idea/**'\n"
+}

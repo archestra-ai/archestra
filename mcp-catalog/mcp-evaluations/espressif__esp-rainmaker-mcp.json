@@ -1,0 +1,83 @@
+{
+  "name": "espressif__esp-rainmaker-mcp",
+  "display_name": "esp-rainmaker-mcp",
+  "description": "ESP RainMaker MCP server",
+  "author": {
+    "name": "espressif"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--with", "esp-rainmaker-cli", "--with", "mcp[cli]", "mcp", "run", "${__dirname}/server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# ESP RainMaker MCP Server\n\nThis project provides a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server wrapper around the [`esp-rainmaker-cli`](https://github.com/espressif/esp-rainmaker-cli) Python library.\nIt allows MCP-compatible clients (like LLMs or applications such as Cursor, Claude Desktop, and Windsurf) to interact with your [ESP RainMaker](https://rainmaker.espressif.com/) devices using the official CLI.\n\n## Introduction to Model Context Protocol (MCP)\n\nThe **Model Context Protocol (MCP)** is a standardized framework that enables AI systems to interact with external tools, data sources, and services in a unified manner. Introduced by Anthropic and adopted by major AI organizations, MCP acts as a universal interface, much like USB-C for hardware, allowing seamless integration across different platforms.\n\n### Key Benefits of MCP in ESP RainMaker\n\n- **Unified Interaction**: MCP allows AI models to access and control IoT devices using natural language prompts, making interactions more intuitive and accessible.\n- **Real-time Control**: With MCP, users can execute actions such as turning devices on/off, adjusting settings, and managing schedules directly through AI interfaces.\n- **Local Server, Cloud-Backed Control**: The ESP RainMaker MCP server runs locally and stores credentials on your machine. However, device management actions are performed via the official ESP RainMaker cloud APIs through the esp-rainmaker-cli.\n\nBy integrating MCP, the ESP RainMaker platform enhances its capabilities, allowing tools like Claude, Cursor, Windsurf, and Gemini CLI to manage IoT devices efficiently and securely.\n\n## Prerequisites\n\n*   **Python:** Version 3.10 or higher\n*   **uv:** The `uv` Python package manager. Install from [Astral's uv documentation](https://docs.astral.sh/uv/getting-started/installation/).\n*   **ESP RainMaker CLI Login:** You *must* have successfully logged into ESP RainMaker using the standard `esp-rainmaker-cli login` command in your terminal at least once. This server relies on the credentials saved by that process.\n*   **RainMaker Nodes** added into your account since onboarding isn't supported by the MCP server.\n\n## Installation & Setup\n\n1.  **Clone the Repository:**\n    ```bash\n    git clone https://github.com/espressif/esp-rainmaker-mcp.git\n    cd esp-rainmaker-mcp\n    ```\n\n2.  **Install Dependencies using uv:**\n    This command installs `esp-rainmaker-cli`, `mcp[cli]`, and any other dependencies listed in `pyproject.toml` into a virtual environment managed by `uv`.\n\n    ```bash\n    uv sync\n    ```\n    *(This assumes `uv` is installed)*\n\n3. **Login to ESP Rainmaker using `esp-rainmaker-cli`**\n    ```bash\n    uv run esp-rainmaker-cli login\n    ```\n\n> [!NOTE]\n> Direct login via username/password within MCP is not supported for security reasons. Please use the standard CLI login flow first.\n\n\n## Client Configuration\n\nTo add this project as an MCP server in supported MCP clients (Cursor, Claude Desktop, Windsurf, and Gemini CLI), you'll need to add the same JSON configuration to each client's config file. The configuration is identical across all clients:\n\n### MCP Server Configuration (All Clients)\n\nUse the following JSON configuration for all MCP clients:\n\n```json\n{\n   \"mcpServers\": {\n      \"ESP-RainMaker-MCP\": {\n         \"command\": \"uv\",\n         \"args\": [\n            \"run\",\n            \"--with\",\n            \"esp-rainmaker-cli\",\n            \"--with\",\n            \"mcp[cli]\",\n            \"mcp\",\n            \"run\",\n            \"<absolute_path_to_repo>/server.py\"\n         ]\n      }\n   }\n}\n```\n\n> [!IMPORTANT]\n> Replace `<absolute_path_to_repo>/server.py` with the actual **absolute path** to the `server.py` file within the cloned `esp-rainmaker-mcp` directory on your system.\n\n### Cursor MCP Server Setup\n\n1. Open Cursor and click on the settings (gear icon) at the top right.\n\n2. Navigate to \"Tools & Integrations\" from the settings menu.\n\n3. Click on \"MCP Tools\" in the integrations section.\n\n4. Click on \"New MCP Server\" to add a new server.\n\n5. This will open the mcp.json file. Add the JSON configuration shown above.\n\n### Claude Desktop MCP Server Setup\n\n1. Open Claude Desktop and go to Settings -> Developer -> Edit Config.\n\n2. This will open the configuration file (claude_desktop_config.json). Add the JSON configuration shown above.\n\n3. Save the changes and restart Claude Desktop to apply the new settings.\n\n### Windsurf MCP Server Setup\n\n1. Open Windsurf and look for the hammer-type icon under the chat text input area.\n\n2. Click on the hammer icon and select \"Configure\" from the options. This will open the plugins window.\n\n3. Click on \"View raw config\" which will show you the `~/.codium/windsurf/mcp_config.json` file.\n\n4. Add the JSON configuration shown above to the file.\n\n5. Save the changes and click on \"Refresh\" under the chat text window to load the ESP RainMaker MCP tools.\n\n### Gemini CLI MCP Server Setup\n\n1. Locate your Gemini CLI settings file. On macOS, this is typically at `~/.gemini/settings.json`.\n2. Open the `settings.json` file in your preferred text editor.\n3. Add the JSON configuration shown above to the `mcpServers` section of the file. If the section does not exist, create it as shown in the example.\n4. Save the file and restart Gemini CLI if it is running.\n\n> [!NOTE]\n> The configuration for all four applications (Cursor, Claude Desktop, Windsurf, and Gemini CLI) is the same, so you can use the same JSON structure for all of them.\n\n> [!NOTE]\n> The `--with` arguments ensure `uv` includes the necessary dependencies when running the `mcp run` command.\n\n## How it Works\n\nThis server acts as a bridge. It uses the `mcp` library to handle the Model Context Protocol communication. When a tool is called:\n\n1.  It uses functions from the installed `esp-rainmaker-cli` library.\n2.  The library functions read locally stored authentication tokens.\n3.  It makes the necessary API calls to the ESP RainMaker cloud.\n4.  It returns the results (or errors) back through the MCP protocol.\n\n\n## Available Tools\n\nThis MCP server exposes the following tools for interacting with ESP RainMaker:\n\n### Authentication & Configuration\n\n*   `login_instructions()`:\n    *   Provides instructions (formatted with Markdown) on how to log in using the standard `esp-rainmaker-cli login` command in your terminal.\n        This server relies on the external CLI's browser-based login flow to securely store credentials.\n        Rendering as Markdown depends on the MCP client's capabilities.\n*   `check_login_status()`:\n    *   Checks if a valid login session exists based on credentials stored locally by `esp-rainmaker-cli`.\n        Confirms if the server can communicate with the ESP RainMaker backend.\n\n### Node Management\n\n*   `get_nodes()`:\n    *   Lists all node IDs associated with the logged-in user.\n*   `get_node_details(node_id: str = None, fields: str = None, name: str = None, type_: str = None)`:\n    *   Get detailed information for nodes including config, status, and params.\n    *   Supports filtering and field selection:\n        - `fields`: comma-separated list of fields to include (e.g. \"node_id,name,type,config,params,status.connectivity,fw_version,mapping_timestamp\")\n        - `name`: substring match (user-visible name from params)\n        - `type_`: substring match (device type)\n        - `node_id`: single node ID (for one node) or None (for all)\n    *   Returns a dict (single node) or list of dicts (all nodes).\n    *   Example:\n        ```python\n        get_node_details(ctx, fields=\"node_id,name,type\")\n        ```\n*   `get_node_status(node_id: str)`:\n    *   Get the online/offline connectivity status for a specific node ID.\n*   `get_params(node_id: str)`:\n    *   Get current parameter values for a device.\n*   `set_params(node_id: str, params_dict: dict)`:\n    *   Set parameters for one or more devices.\n    *   `node_id`: Single ID or comma-separated list (e.g., \"light1,light2\")\n    *   `params_dict`: Parameters to set, e.g., `{\"Light\": {\"Power\": true}}`\n\n### Schedule Management\n\n*   `get_schedules(node_id: str)`:\n    *   Get schedules for a device.\n*   `set_schedule(node_id: str, operation: str, ...)`:\n    *   Manage device schedules.\n    *   `operation`: \"add\", \"edit\", \"remove\", \"enable\", or \"disable\"\n    *   For add/edit: Provide `name`, `trigger`, and `action`\n    *   Common triggers:\n        *   Daily 8 AM: `{\"m\": 480, \"d\": 127}`\n        *   Weekdays 6:30 PM: `{\"m\": 1110, \"d\": 31}`\n    *   Example action: `{\"Light\": {\"Power\": true}}`\n\n### Group Management (Home/Room Hierarchy)\n\n*   `create_group(name: str, group_type: str = None, ...)`:\n    *   Create a home or room.\n    *   Required: `name`, `group_type` (\"home\" or \"room\")\n    *   For rooms: `parent_group_id` required\n    *   Example: `create_group(\"Living Room\", \"room\", parent_group_id=\"home_id\")`\n\n*   `get_group_details(group_id: str = None, include_nodes: bool = False)`:\n    *   Get group information. For all groups, use `group_id=None`.\n    *   Set `include_nodes=True` to include device details.\n    *   Returns: Group hierarchy, members, and metadata.\n\n*   `update_group(group_id: str, ...)`:\n    *   Update group properties or manage devices.\n    *   Optional: `name`, `description`, `add_nodes`, `remove_nodes`\n    *   Examples:\n        *   Rename: `update_group(\"group_id\", name=\"New Name\")`\n        *   Add devices: `update_group(\"group_id\", add_nodes=\"light1,light2\")`\n\n*   `add_device_to_room(device_node_id: str, room_group_id: str)`:\n    *   Add device to room (handles parent group automatically).\n    *   Example: `add_device_to_room(\"light1\", \"kitchen_id\")`\n\n## License\n\nThis project is licensed under the terms specified in the [LICENSE](LICENSE) file.\n",
+  "category": "IoT",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ESP-RainMaker-MCP": {
+        "command": "uv",
+        "args": [
+          "run",
+          "--with",
+          "esp-rainmaker-cli",
+          "--with",
+          "mcp[cli]",
+          "mcp",
+          "run",
+          "<absolute_path_to_repo>/server.py"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "espressif",
+    "repo": "esp-rainmaker-mcp",
+    "url": "https://github.com/espressif/esp-rainmaker-mcp",
+    "name": "espressif__esp-rainmaker-mcp",
+    "path": null,
+    "stars": 8,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "afb272e20ed69ad8f53616063b75195d16cd0be5"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:15.693Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "esp-rainmaker-cli",
+      "importance": 9
+    },
+    {
+      "name": "mcp[cli]",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"esp-rainmaker-mcp\"\nversion = \"0.2.0\"\ndescription = \"MCP wrapper for ESP-Rainmaker CLI\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"esp-rainmaker-cli>=1.5.3,<2.0.0\",\n    \"mcp[cli]>=1.6.0,<2.0.0\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\ninclude = [\n    \"server.py\",\n    \"README.md\",\n    \"LICENSE\"\n]\n"
+}

@@ -1,0 +1,108 @@
+{
+  "name": "qainsights__locust-mcp-server",
+  "display_name": "locust-mcp-server",
+  "description": "A Model Context Protocol (MCP) server implementation for running Locust load tests. This server enables seamless integration of Locust load testing capabilities with AI-powered development environments.",
+  "author": {
+    "name": "QAInsights"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "locust_server.py"],
+    "env": {
+      "LOCUST_HOST": "${user_config.locust_host}",
+      "LOCUST_USERS": "${user_config.locust_users}",
+      "LOCUST_SPAWN_RATE": "${user_config.locust_spawn_rate}",
+      "LOCUST_RUN_TIME": "${user_config.locust_run_time}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "locust_host": {
+      "type": "string",
+      "title": "Locust Host",
+      "description": "Default host for your tests",
+      "default": "http://localhost:8089",
+      "required": false
+    },
+    "locust_users": {
+      "type": "number",
+      "title": "Locust Users",
+      "description": "Default number of users",
+      "default": 3,
+      "required": false
+    },
+    "locust_spawn_rate": {
+      "type": "number",
+      "title": "Locust Spawn Rate",
+      "description": "Default user spawn rate",
+      "default": 1,
+      "required": false
+    },
+    "locust_run_time": {
+      "type": "string",
+      "title": "Locust Run Time",
+      "description": "Default test duration (e.g., '10s', '1m')",
+      "default": "10s",
+      "required": false
+    }
+  },
+  "readme": "# 🚀 ⚡️ locust-mcp-server\n\nA Model Context Protocol (MCP) server implementation for running Locust load tests. This server enables seamless integration of Locust load testing capabilities with AI-powered development environments.\n\n## ✨ Features\n\n- Simple integration with Model Context Protocol framework\n- Support for headless and UI modes\n- Configurable test parameters (users, spawn rate, runtime)\n- Easy-to-use API for running Locust load tests\n- Real-time test execution output\n- HTTP/HTTPS protocol support out of the box\n- Custom task scenarios support\n\n![Locust-MCP-Server](./images/locust-mcp.png)\n\n## 🔧 Prerequisites\n\nBefore you begin, ensure you have the following installed:\n\n- Python 3.13 or higher\n- uv package manager ([Installation guide](https://github.com/astral-sh/uv))\n\n## 📦 Installation\n\n1. Clone the repository:\n\n```bash\ngit clone https://github.com/qainsights/locust-mcp-server.git\n```\n\n2. Install the required dependencies:\n\n```bash\nuv pip install -r requirements.txt\n```\n\n3. Set up environment variables (optional):\n   Create a `.env` file in the project root:\n\n```bash\nLOCUST_HOST=http://localhost:8089  # Default host for your tests\nLOCUST_USERS=3                     # Default number of users\nLOCUST_SPAWN_RATE=1               # Default user spawn rate\nLOCUST_RUN_TIME=10s               # Default test duration\n```\n\n## 🚀 Getting Started\n\n1. Create a Locust test script (e.g., `hello.py`):\n\n```python\nfrom locust import HttpUser, task, between\n\nclass QuickstartUser(HttpUser):\n    wait_time = between(1, 5)\n\n    @task\n    def hello_world(self):\n        self.client.get(\"/hello\")\n        self.client.get(\"/world\")\n\n    @task(3)\n    def view_items(self):\n        for item_id in range(10):\n            self.client.get(f\"/item?id={item_id}\", name=\"/item\")\n            time.sleep(1)\n\n    def on_start(self):\n        self.client.post(\"/login\", json={\"username\":\"foo\", \"password\":\"bar\"})\n```\n\n2. Configure the MCP server using the below specs in your favorite MCP client (Claude Desktop, Cursor, Windsurf and more):\n\n```json\n{\n  \"mcpServers\": {\n    \"locust\": {\n      \"command\": \"/Users/naveenkumar/.local/bin/uv\",\n      \"args\": [\n        \"--directory\",\n        \"/Users/naveenkumar/Gits/locust-mcp-server\",\n        \"run\",\n        \"locust_server.py\"\n      ]\n    }\n  }\n}\n```\n\n3. Now ask the LLM to run the test e.g. `run locust test for hello.py`. The Locust MCP server will use the following tool to start the test:\n\n- `run_locust`: Run a test with configurable options for headless mode, host, runtime, users, and spawn rate\n\n## 📝 API Reference\n\n### Run Locust Test\n\n```python\nrun_locust(\n    test_file: str,\n    headless: bool = True,\n    host: str = \"http://localhost:8089\",\n    runtime: str = \"10s\",\n    users: int = 3,\n    spawn_rate: int = 1\n)\n```\n\nParameters:\n\n- `test_file`: Path to your Locust test script\n- `headless`: Run in headless mode (True) or with UI (False)\n- `host`: Target host to load test\n- `runtime`: Test duration (e.g., \"30s\", \"1m\", \"5m\")\n- `users`: Number of concurrent users to simulate\n- `spawn_rate`: Rate at which users are spawned\n\n## ✨ Use Cases\n\n- LLM powered results analysis\n- Effective debugging with the help of LLM\n\n## 🤝 Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## 📄 License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n",
+  "category": "Development",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "locust": {
+        "command": "/Users/naveenkumar/.local/bin/uv",
+        "args": ["--directory", "/Users/naveenkumar/Gits/locust-mcp-server", "run", "locust_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "QAInsights",
+    "repo": "locust-mcp-server",
+    "url": "https://github.com/QAInsights/locust-mcp-server",
+    "name": "qainsights__locust-mcp-server",
+    "path": null,
+    "stars": 7,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5be4f5452682ed5ae3e618756d8ff2daf865e527"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:42.726Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "locust",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"locust-mcp-server\"\nversion = \"0.1.0\"\ndescription = \"A Model Context Protocol (MCP) server implementation for running Locust load tests.\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"locust>=2.33.2\",\n    \"mcp[cli]>=1.6.0\",\n]\n"
+}

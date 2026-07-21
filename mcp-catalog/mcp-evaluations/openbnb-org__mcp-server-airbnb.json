@@ -1,0 +1,105 @@
+{
+  "name": "openbnb-org__mcp-server-airbnb",
+  "display_name": "mcp-server-airbnb",
+  "description": "MCP server from openbnb-org/mcp-server-airbnb",
+  "author": {
+    "name": "openbnb-org"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@openbnb/mcp-server-airbnb", "${user_config.ignore_robots_txt}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ignore_robots_txt": {
+      "type": "boolean",
+      "title": "Ignore robots.txt",
+      "description": "Bypass robots.txt restrictions when making requests to Airbnb",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# Airbnb Search & Listings - Desktop Extension (DXT)\n\nA comprehensive Desktop Extension for searching Airbnb listings with advanced filtering capabilities and detailed property information retrieval. Built as a Model Context Protocol (MCP) server packaged in the Desktop Extension (DXT) format for easy installation and use with compatible AI applications.\n\n## Features\n\n### 🔍 Advanced Search Capabilities\n- **Location-based search** with support for cities, states, and regions\n- **Google Maps Place ID** integration for precise location targeting\n- **Date filtering** with check-in and check-out date support\n- **Guest configuration** including adults, children, infants, and pets\n- **Price range filtering** with minimum and maximum price constraints\n- **Pagination support** for browsing through large result sets\n\n### 🏠 Detailed Property Information\n- **Comprehensive listing details** including amenities, policies, and highlights\n- **Location information** with coordinates and neighborhood details\n- **House rules and policies** for informed booking decisions\n- **Property descriptions** and key features\n- **Direct links** to Airbnb listings for easy booking\n\n### 🛡️ Security & Compliance\n- **Robots.txt compliance** with configurable override for testing\n- **Request timeout management** to prevent hanging requests\n- **Enhanced error handling** with detailed logging\n- **Rate limiting awareness** and respectful API usage\n- **Secure configuration** through DXT user settings\n\n## Installation\n\n### For Claude Desktop\nThis extension is packaged as a Desktop Extension (DXT) file. To install:\n\n1. Download the `.dxt` file from the releases page\n2. Open your compatible AI application (e.g., Claude Desktop)\n3. Install the extension through the application's extension manager\n4. Configure the extension settings as needed\n\n### For Cursor, etc.\n\nBefore starting make sure [Node.js](https://nodejs.org/) is installed on your desktop for `npx` to work.\n1. Go to: Cursor Settings > Tools & Integrations > New MCP Server\n\n2. Add one the following to your `mcp.json`:\n    ```json\n    {\n      \"mcpServers\": {\n        \"airbnb\": {\n          \"command\": \"npx\",\n          \"args\": [\n            \"-y\",\n            \"@openbnb/mcp-server-airbnb\"\n          ]\n        }\n      }\n    }\n    ```\n\n    To ignore robots.txt for all requests, use this version with `--ignore-robots-txt` args\n\n    ```json\n    {\n      \"mcpServers\": {\n        \"airbnb\": {\n          \"command\": \"npx\",\n          \"args\": [\n            \"-y\",\n            \"@openbnb/mcp-server-airbnb\",\n            \"--ignore-robots-txt\"\n          ]\n        }\n      }\n    }\n    ```\n3. Restart.\n\n\n## Configuration\n\nThe extension provides the following user-configurable options:\n\n### Ignore robots.txt\n- **Type**: Boolean (checkbox)\n- **Default**: `false`\n- **Description**: Bypass robots.txt restrictions when making requests to Airbnb\n- **Recommendation**: Keep disabled unless needed for testing purposes\n\n## Tools\n\n### `airbnb_search`\n\nSearch for Airbnb listings with comprehensive filtering options.\n\n**Parameters:**\n- `location` (required): Location to search (e.g., \"San Francisco, CA\")\n- `placeId` (optional): Google Maps Place ID (overrides location)\n- `checkin` (optional): Check-in date in YYYY-MM-DD format\n- `checkout` (optional): Check-out date in YYYY-MM-DD format\n- `adults` (optional): Number of adults (default: 1)\n- `children` (optional): Number of children (default: 0)\n- `infants` (optional): Number of infants (default: 0)\n- `pets` (optional): Number of pets (default: 0)\n- `minPrice` (optional): Minimum price per night\n- `maxPrice` (optional): Maximum price per night\n- `cursor` (optional): Pagination cursor for browsing results\n- `ignoreRobotsText` (optional): Override robots.txt for this request\n\n**Returns:**\n- Search results with property details, pricing, and direct links\n- Pagination information for browsing additional results\n- Search URL for reference\n\n### `airbnb_listing_details`\n\nGet detailed information about a specific Airbnb listing.\n\n**Parameters:**\n- `id` (required): Airbnb listing ID\n- `checkin` (optional): Check-in date in YYYY-MM-DD format\n- `checkout` (optional): Check-out date in YYYY-MM-DD format\n- `adults` (optional): Number of adults (default: 1)\n- `children` (optional): Number of children (default: 0)\n- `infants` (optional): Number of infants (default: 0)\n- `pets` (optional): Number of pets (default: 0)\n- `ignoreRobotsText` (optional): Override robots.txt for this request\n\n**Returns:**\n- Detailed property information including:\n  - Location details with coordinates\n  - Amenities and facilities\n  - House rules and policies\n  - Property highlights and descriptions\n  - Direct link to the listing\n\n## Technical Details\n\n### Architecture\n- **Runtime**: Node.js 18+\n- **Protocol**: Model Context Protocol (MCP) via stdio transport\n- **Format**: Desktop Extension (DXT) v0.1\n- **Dependencies**: Minimal external dependencies for security and reliability\n\n### Error Handling\n- Comprehensive error logging with timestamps\n- Graceful degradation when Airbnb's page structure changes\n- Timeout protection for network requests\n- Detailed error messages for troubleshooting\n\n### Security Measures\n- Robots.txt compliance by default\n- Request timeout limits\n- Input validation and sanitization\n- Secure environment variable handling\n- No sensitive data storage\n\n### Performance\n- Efficient HTML parsing with Cheerio\n- Request caching where appropriate\n- Minimal memory footprint\n- Fast startup and response times\n\n## Compatibility\n\n- **Platforms**: macOS, Windows, Linux\n- **Node.js**: 18.0.0 or higher\n- **Claude Desktop**: 0.10.0 or higher\n- **Other MCP clients**: Compatible with any MCP-supporting application\n\n## Development\n\n### Building from Source\n\n```bash\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n\n# Watch for changes during development\nnpm run watch\n```\n\n### Testing\n\nThe extension can be tested by running the MCP server directly:\n\n```bash\n# Run with robots.txt compliance (default)\nnode dist/index.js\n\n# Run with robots.txt ignored (for testing)\nnode dist/index.js --ignore-robots-txt\n```\n\n## Legal and Ethical Considerations\n\n- **Respect Airbnb's Terms of Service**: This extension is for legitimate research and booking assistance\n- **Robots.txt Compliance**: The extension respects robots.txt by default\n- **Rate Limiting**: Be mindful of request frequency to avoid overwhelming Airbnb's servers\n- **Data Usage**: Only extract publicly available information for legitimate purposes\n\n## Support\n\n- **Issues**: Report bugs and feature requests on [GitHub Issues](https://github.com/openbnb-org/mcp-server-airbnb/issues)\n- **Documentation**: Additional documentation available in the repository\n- **Community**: Join discussions about MCP and DXT development\n\n## License\n\nMIT License - see [LICENSE](LICENSE) file for details.\n\n## Contributing\n\nContributions are welcome! Please read the contributing guidelines and submit pull requests for any improvements.\n\n---\n\n**Note**: This extension is not affiliated with Airbnb, Inc. It is an independent tool designed to help users search and analyze publicly available Airbnb listings.\n",
+  "category": "Travel",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "openbnb-mcp-server-airbnb": {
+        "command": "npx",
+        "args": ["-y", "@openbnb/mcp-server-airbnb"],
+        "env": {}
+      },
+      "openbnb-mcp-server-airbnb-ignore-robots-txt": {
+        "command": "npx",
+        "args": ["-y", "@openbnb/mcp-server-airbnb", "--ignore-robots-txt"],
+        "env": {}
+      },
+      "openbnb-mcp-server-airbnb-node-direct": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {}
+      },
+      "openbnb-mcp-server-airbnb-node-direct-ignore-robots-txt": {
+        "command": "node",
+        "args": ["dist/index.js", "--ignore-robots-txt"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "openbnb-org",
+    "repo": "mcp-server-airbnb",
+    "url": "https://github.com/openbnb-org/mcp-server-airbnb",
+    "name": "mcp-server-airbnb",
+    "path": null,
+    "stars": 246,
+    "contributors": 3,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "57d9d6cdabe813c4d4ab57f90481490aaf8b1b0a"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.626Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "cheerio",
+      "importance": 8
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    },
+    {
+      "name": "robots-parser",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@openbnb/mcp-server-airbnb\",\n  \"version\": \"0.1.3\",\n  \"description\": \"MCP server for Airbnb search and listing details\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"author\": \"OpenBnB (https://openbnb.org)\",\n  \"keywords\": [\n    \"airbnb\",\n    \"vacation rental\",\n    \"travel\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"bin\": {\n    \"mcp-server-airbnb\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"sync-version.js\"\n  ],\n  \"scripts\": {\n    \"build\": \"node sync-version.js && tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"sync-version\": \"node sync-version.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.1\",\n    \"cheerio\": \"^1.0.0\",\n    \"node-fetch\": \"^3.3.2\",\n    \"robots-parser\": \"^3.0.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.13.9\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.8.2\"\n  }\n}\n"
+}

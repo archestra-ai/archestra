@@ -1,0 +1,114 @@
+{
+  "name": "adeptus-innovatio__solvitor-mcp",
+  "display_name": "solvitor-mcp",
+  "description": "MCP server from Adeptus-Innovatio/solvitor-mcp",
+  "author": {
+    "name": "Adeptus-Innovatio"
+  },
+  "server": {
+    "command": "solvitor-mcp",
+    "args": [],
+    "env": {
+      "SOLVITOR_API_KEY": "${user_config.solvitor_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "solvitor_api_key": {
+      "type": "string",
+      "title": "Solvitor API Key",
+      "description": "Your Solvitor API key, required to interact with the Solvitor API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 🦾💀 solvitor-mcp: A Solvitor API MCP Server in Rust\n\n## Overview\n\nA Model Context Protocol (MCP) server for interacting with the Solvitor API. This server provides tools to access the AI-powered platform that helps developers extract IDL files from closed-source Solana smart contracts and decompile them.\n\n## Features\n\nThis MCP server exposes the following tools for interacting with the Solvitor API:\n\n1. `decode`\n   - Extract IDL (Interface Definition Language) from any Solana program using reverse engineering techniques\n   - Inputs:\n     - `program_id` (string): Base58-encoded Solana program address (32-44 characters)\n     - `url` (string, optional): Solana RPC endpoint URL (defaults to mainnet-beta)\n   - Returns: IDL structure with program metadata and type (\"anchor\" or \"native\")\n\n## Installation\n\nPrerequisites:\n- Rust toolchain (install via [rustup](https://rustup.rs/)) – for regular usage\n- Solvitor API key. You can obtain one [here](https://solvitor.xyz/developer-settings) for free.\n\n### Regular Usage\n\n```bash\ncargo install solvitor-mcp\n\nwhere solvitor-mcp # -> /Users/$username/.cargo/bin/solvitor-mcp\n```\n\nAdd the following to your `claude_desktop_config.json` or `claude_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"solvitor-mcp\": {\n      \"command\": \"/Users/$username/.cargo/bin/solvitor-mcp\",\n      \"args\": [],\n      \"env\": {\n        \"SOLVITOR_API_KEY\": \"your_solvitor_api_key\"\n      }\n    }\n  }\n}\n```\n\n\n### Remote MCP\n\nNeed remote MCP? Ping us on Twitter, we'll build the feature in a couple of days: [x.com/solvitor_xyz](https://x.com/solvitor_xyz)\n\n\n## License\n\nMIT\n",
+  "category": "Development",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "solvitor-mcp": {
+        "command": "/Users/$username/.cargo/bin/solvitor-mcp",
+        "args": [],
+        "env": {
+          "SOLVITOR_API_KEY": "your_solvitor_api_key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Adeptus-Innovatio",
+    "repo": "solvitor-mcp",
+    "url": "https://github.com/Adeptus-Innovatio/solvitor-mcp",
+    "name": "solvitor-mcp",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a73b7077937170e56f28bef638854210ee0d05ae"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.935Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "reqwest",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 7
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "schemars",
+      "importance": 6
+    },
+    {
+      "name": "tracing",
+      "importance": 5
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 5
+    },
+    {
+      "name": "anyhow",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[package]\nname = \"solvitor-mcp\"\nversion = \"0.1.0\"\nedition = \"2021\"\nauthors = [\"Vlad Dyachenko\"]\ndescription = \"An MCP server for Solvitor API. Solvitor is an AI-powered platform that helps developers extract IDL files from closed-source Solana smart contracts and decompile them.\"\nlicense = \"MIT\"\ndocumentation = \"https://docs.rs/solvitor-mcp\"\nrepository = \"https://github.com/wowinter13/solvitor-mcp\"\nhomepage = \"https://github.com/wowinter13/solvitor-mcp\"\nreadme = \"README.md\"\nkeywords = [\"solana\", \"api\", \"mcp\", \"solvitor\", \"blockchain\"]\ncategories = [\"api-bindings\", \"web-programming\"]\n\n[dependencies]\nanyhow = \"1.0\"\nrmcp = { version = \"0.1.5\", features = [\"server\", \"macros\", \"transport-io\"] }\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\nreqwest = { version = \"0.12\", features = [\"json\"] }\ntokio = { version = \"1\", features = [\"full\"] }\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\"env-filter\"] }\nschemars = \"0.8\"\n"
+}

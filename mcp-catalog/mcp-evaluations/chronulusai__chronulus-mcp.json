@@ -1,0 +1,127 @@
+{
+  "name": "chronulusai__chronulus-mcp",
+  "display_name": "chronulus-mcp",
+  "description": "MCP Server for Chronulus AI Forecasting and Prediction Agents",
+  "author": {
+    "name": "ChronulusAI"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["chronulus-mcp"],
+    "env": {
+      "CHRONULUS_API_KEY": "${user_config.chronulus_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "chronulus_api_key": {
+      "type": "string",
+      "title": "Chronulus API Key",
+      "description": "Your Chronulus API key for authentication",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "<div align=\"center\">\n<img width=\"150px\" src=\"https://www.chronulus.com/brand-assets/chronulus-logo-blue-on-alpha-square.png\" alt=\"Chronulus AI\">\n    <h1 align=\"center\">MCP Server for Chronulus</h1>\n    <h3 align=\"center\">Chat with Chronulus AI Forecasting & Prediction Agents in Claude</h3>\n</div>\n\n\n\n\n### Quickstart: Claude for Desktop\n\n#### Install \n\nClaude for Desktop is currently available on macOS and Windows.\n\nInstall Claude for Desktop [here](https://claude.ai/download)\n\n#### Configuration\n\nFollow the general instructions [here](https://modelcontextprotocol.io/quickstart/user) to configure the Claude desktop client.\n\nYou can find your Claude config at one of the following locations:\n\n- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\nThen choose one of the following methods that best suits your needs and add it to your `claude_desktop_config.json`\n\n\n\n<details>\n<summary>Using pip</summary>\n\n(Option 1) Install release from PyPI\n\n```bash \npip install chronulus-mcp\n```\n\n\n(Option 2) Install from Github\n\n```bash \ngit clone https://github.com/ChronulusAI/chronulus-mcp.git\ncd chronulus-mcp\npip install .\n```\n\n\n\n```json \n{\n  \"mcpServers\": {\n    \"chronulus-agents\": {\n      \"command\": \"python\",\n      \"args\": [\"-m\", \"chronulus_mcp\"],\n      \"env\": {\n        \"CHRONULUS_API_KEY\": \"<YOUR_CHRONULUS_API_KEY>\"\n      }\n    }\n  }\n}\n```\n\nNote, if you get an error like \"MCP chronulus-agents: spawn python ENOENT\", \nthen you most likely need to provide the absolute path to `python`. \nFor example `/Library/Frameworks/Python.framework/Versions/3.11/bin/python3` instead of just `python`\n\n</details>\n\n\n<details>\n<summary>Using docker</summary>\n\nHere we will build a docker image called 'chronulus-mcp' that we can reuse in our Claude config.\n\n```bash \ngit clone https://github.com/ChronulusAI/chronulus-mcp.git\ncd chronulus-mcp\n docker build . -t 'chronulus-mcp'\n```\n\nIn your Claude config, be sure that the final argument matches the name you give to the docker image in the build command.\n\n```json \n{\n  \"mcpServers\": {\n    \"chronulus-agents\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"--rm\", \"-e\", \"CHRONULUS_API_KEY\", \"chronulus-mcp\"],\n      \"env\": {\n        \"CHRONULUS_API_KEY\": \"<YOUR_CHRONULUS_API_KEY>\"\n      }\n    }\n  }\n}\n```\n\n</details>\n\n<details>\n<summary>Using uvx</summary>\n\n`uvx` will pull the latest version of `chronulus-mcp` from the PyPI registry, install it, and then run it.\n\n\n```json \n{\n  \"mcpServers\": {\n    \"chronulus-agents\": {\n      \"command\": \"uvx\",\n      \"args\": [\"chronulus-mcp\"],\n      \"env\": {\n        \"CHRONULUS_API_KEY\": \"<YOUR_CHRONULUS_API_KEY>\"\n      }\n    }\n  }\n}\n```\n\nNote, if you get an error like \"MCP chronulus-agents: spawn uvx ENOENT\", then you most likely need to either:\n1. [install uv](https://docs.astral.sh/uv/getting-started/installation/) or\n2. Provide the absolute path to `uvx`. For example `/Users/username/.local/bin/uvx` instead of just `uvx`\n\n</details>\n\n#### Additional Servers (Filesystem, Fetch, etc)\n\nIn our demo, we use third-party servers like [fetch](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) and [filesystem](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem).\n\nFor details on installing and configure third-party server, please reference the documentation provided by the server maintainer.\n\nBelow is an example of how to configure filesystem and fetch alongside Chronulus in your `claude_desktop_config.json`: \n\n```json \n{\n  \"mcpServers\": {\n    \"chronulus-agents\": {\n      \"command\": \"uvx\",\n      \"args\": [\"chronulus-mcp\"],\n      \"env\": {\n        \"CHRONULUS_API_KEY\": \"<YOUR_CHRONULUS_API_KEY>\"\n      }\n    },\n    \"filesystem\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-filesystem\",\n        \"/path/to/AIWorkspace\"\n      ]\n    },\n    \"fetch\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-fetch\"]\n    }\n  }\n} \n```\n\n\n#### Claude Preferences\n\nTo streamline your experience using Claude across multiple sets of tools, it is best to add your preferences to under Claude Settings. \n\nYou can upgrade your Claude preferences in a couple ways:\n\n* From Claude Desktop: `Settings -> General -> Claude Settings -> Profile (tab)`\n* From [claude.ai/settings](https://claude.ai/settings): `Profile (tab)`\n\nPreferences are shared across both Claude for Desktop and Claude.ai (the web interface). So your instruction need to work across both experiences.\n\nBelow are the preferences we used to achieve the results shown in our demos:\n\n```\n## Tools-Dependent Protocols\nThe following instructions apply only when tools/MCP Servers are accessible.\n\n### Filesystem - Tool Instructions\n- Do not use 'read_file' or 'read_multiple_files' on binary files (e.g., images, pdfs, docx) .\n- When working with binary files (e.g., images, pdfs, docx) use 'get_info' instead of 'read_*' tools to inspect a file.\n\n### Chronulus Agents - Tool Instructions\n- When using Chronulus, prefer to use input field types like TextFromFile, PdfFromFile, and ImageFromFile over scanning the files directly.\n- When plotting forecasts from Chronulus, always include the Chronulus-provided forecast explanation below the plot and label it as Chronulus Explanation.\n```",
+  "category": "AI Tools",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "chronulus-mcp-python-module": {
+        "command": "python",
+        "args": ["-m", "chronulus_mcp"],
+        "env": {
+          "CHRONULUS_API_KEY": "<YOUR_CHRONULUS_API_KEY>"
+        }
+      },
+      "chronulus-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "CHRONULUS_API_KEY", "chronulus-mcp"],
+        "env": {
+          "CHRONULUS_API_KEY": "<YOUR_CHRONULUS_API_KEY>"
+        },
+        "docker_image": "chronulus-mcp"
+      },
+      "chronulus-mcp-uvx": {
+        "command": "uvx",
+        "args": ["chronulus-mcp"],
+        "env": {
+          "CHRONULUS_API_KEY": "<YOUR_CHRONULUS_API_KEY>"
+        }
+      },
+      "modelcontextprotocol-server-filesystem": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/AIWorkspace"],
+        "env": {}
+      },
+      "mcp-server-fetch": {
+        "command": "uvx",
+        "args": ["mcp-server-fetch"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ChronulusAI",
+    "repo": "chronulus-mcp",
+    "url": "https://github.com/ChronulusAI/chronulus-mcp",
+    "name": "chronulusai__chronulus-mcp",
+    "path": null,
+    "stars": 97,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "29114c185f0068f9d1bef16af3949e75dede00da"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:04.950Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "chronulus",
+      "importance": 9
+    },
+    {
+      "name": "chronulus-core",
+      "importance": 9
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "docutils",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"chronulus-mcp\"\nversion = \"0.0.3\"\ndescription = \"An MCP Server for Chronulus AI Forecasting and Prediction Agents\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"Chronulus AI\", email = \"jeremy@chronulus.com\" },\n]\nrequires-python = \">=3.10\"\nkeywords = [\"forecasting\", \"prediction\", \"timeseries\", \"mcp\", \"llm\", \"agents\"]\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"License :: OSI Approved :: MIT License\",\n]\ndependencies = [\n    \"mcp[cli]>=1.3.0\",\n    \"chronulus>=0.0.11\",\n    \"chronulus-core>=0.0.19\",\n    \"pandas\",\n    \"requests\",\n]\n\n[dependency-groups]\ndev = [\n    \"mcp[cli]>=1.3.0\",\n    \"twine>=6.1.0\",\n]\n\n[tool.setuptools]\npackage-dir = { \"\" = \"src\" }\npackages = { find = { where = [\"src\"] } }\ninclude-package-data = false\n\n[tool.setuptools.package-data]\n\"chronulus_mcp\" = [\"_assets/react/*.jsx\", \"_assets/html/*.html\"]\n\n[tool.ruff]\nline-length = 150\ntarget-version = \"py310\"\nselect = [\n    \"E\", # pycodestyle errors\n    \"W\", # pycodestyle warnings\n    \"F\", # pyflakes\n    \"I\", # isort\n    \"B\", # flake8-bugbear\n]\nignore = []\n\n[project.scripts]\nchronulus-mcp = \"chronulus_mcp:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n\n=== requirements.txt ===\nmcp[cli]==1.3.0\nchronulus>=0.0.11\nchronulus-core>=0.0.19\nrequests\ndocutils\npandas"
+}

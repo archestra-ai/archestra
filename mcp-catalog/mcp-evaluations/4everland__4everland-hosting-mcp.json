@@ -1,0 +1,107 @@
+{
+  "name": "4everland__4everland-hosting-mcp",
+  "display_name": "4everland-hosting-mcp",
+  "description": "MCP server from 4everland/4everland-hosting-mcp",
+  "author": {
+    "name": "4everland"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@4everland/hosting-mcp@latest", "serve"],
+    "env": {
+      "TOKEN": "${user_config.token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "token": {
+      "type": "string",
+      "title": "4EVERLAND Hosting Auth Token",
+      "description": "Your authentication token for 4EVERLAND Hosting. Generate it from the 4EVERLAND Dashboard.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 4EVERLAND Hosting MCP Server\n\n[![Version](https://img.shields.io/badge/version-0.1.4-blue.svg)](https://www.npmjs.com/package/@4everland/hosting-mcp)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Node](https://img.shields.io/badge/node-%3E%3D20.12.2-green.svg)](https://nodejs.org/)\n\n---\n\nA Model Context Protocol (MCP) server implementation\nfor [4EVERLAND Hosting](https://docs.4everland.org/hositng/what-is-hosting) enabling instant deployment of AI-generated\ncode to decentralized storage networks like Greenfield, IPFS, and Arweave.\n\n## Overview\n\nThe 4EVERLAND Hosting MCP Server enables users to leverage AI-driven workflows to deploy code instantly to decentralized\nstorage networks such as Greenfield, IPFS, and Arweave. Upon deployment, it provides a directly accessible webpage\ndomain, streamlining the process of deploying and sharing decentralized applications.\n\n## Features\n\n- **Instant Deployment with Domain Generation**: Deploy AI-generated code to decentralized storage networks and receive\n  a unique, immediately accessible webpage domain with a single command.\n- **Multiple Decentralized Storage Networks**: Support for Greenfield, IPFS, and Arweave, enabling flexible and\n  resilient storage options for your applications.\n- **Secure and Loss-Proof Decentralized Storage**: Leverage the robust, tamper-resistant, and highly available nature of\n  decentralized storage to ensure data security and prevent data loss.\n- **Visual Project Management Interface**: Manage your deployed projects, view detailed information, or configure custom\n  domains directly in the [4EVERLAND Dashboard](https://dashboard.4everland.org/).\n\n## MCP Tool\n\n### Tool: deploy_site\n\n**Description**: Deploys code to 4EVERLAND hosting platforms.\n\n| Parameter    | Type                         | Description                                                                   |\n|--------------|------------------------------|-------------------------------------------------------------------------------|\n| code_files   | Record&lt;string, string&gt; | Map of file paths to their content                                            |\n| project_name | string                       | Project name (alphanumeric, underscore, hyphen; cannot start/end with hyphen) |\n| project_id   | string (optional)            | Existing project ID to deploy to (new project created if omitted)             |\n| platform     | \"IPFS\"\\|\"AR\"\\|\"GREENFIELD\"   | Storage platform to deploy to (default: `\"IPFS\"`)                             |\n\n## Get Hosting Auth Token\n\n1. Log in to your [4EVERLAND Dashboard](https://dashboard.4everland.org/) account.\n2. Go to **Hosting** -&gt; **Auth Token**.\n3. Click on **+Create** to generate a new token.\n4. Copy and save the token somewhere safe as it will only be shown once.\n\n## Integration with Cursor\n\nTo connect to the MCP server from Cursor:\n\n1. Open Cursor and go to **Settings** (gear icon in the top right).\n2. Click on **MCP** in the left sidebar.\n3. Click **Add new global MCP server**.\n4. Enter the following details:\n\n```json\n{\n  \"mcpServers\": {\n    \"4ever-mcpserver\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@4everland/hosting-mcp@latest\",\n        \"serve\"\n      ],\n      \"env\": {\n        \"TOKEN\": \"your-hosting-auth-token\"\n      }\n    }\n  }\n}\n```\n\n## Integration with Claude Desktop\n\nTo connect to the MCP server from Claude Desktop:\n\n1. Open Claude Desktop and go to **Settings**.\n2. Click on **Developer** in the left sidebar.\n3. Click the **Edit Config** button.\n4. Add the following configuration to the `claude_desktop_config.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"4ever-mcpserver\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@4everland/hosting-mcp@latest\",\n        \"serve\"\n      ],\n      \"env\": {\n        \"TOKEN\": \"your-hosting-auth-token\"\n      }\n    }\n  }\n}\n```\n\n5. Save the file and restart Claude Desktop.\n\n## Local Development\n\nTo run the server locally for development:\n\n```bash\n# Clone repository\ngit clone https://github.com/4everland/4everland-hosting-mcp.git\ncd 4everland-hosting-mcp\n\n# Install dependencies\nnpm install\n\n# Build the project\nnpm run build\n\n# Run the server locally\nnpm run serve\n```\n\n## License\n\nThis project is licensed under the MIT License.",
+  "category": "Cloud",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "4everland-hosting-mcp": {
+        "command": "npx",
+        "args": ["-y", "@4everland/hosting-mcp@latest", "serve"],
+        "env": {
+          "TOKEN": "your-hosting-auth-token"
+        }
+      },
+      "4everland-hosting-mcp-local": {
+        "command": "npm",
+        "args": ["run", "serve"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "4everland",
+    "repo": "4everland-hosting-mcp",
+    "url": "https://github.com/4everland/4everland-hosting-mcp",
+    "name": "4everland__4everland-hosting-mcp",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "57446db31b746776ba13b40f12377d4390ed7161"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:14.534Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "commander",
+      "importance": 7
+    },
+    {
+      "name": "archiver",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    },
+    {
+      "name": "form-data",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@4everland/hosting-mcp\",\n  \"version\": \"0.1.4\",\n  \"description\": \"4EVERLAND Hosting MCP Server Tool\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"serve\": \"node build/server.js\",\n    \"prepublishOnly\": \"npm run build\"\n  },\n  \"keywords\": [\n    \"4ever\",\n    \"4everhosting\",\n    \"4everland\",\n    \"mcpserver\",\n    \"hosting\"\n  ],\n  \"author\": \"furyGo\",\n  \"license\": \"MIT\",\n  \"engines\": {\n    \"node\": \">=20.12.2\"\n  },\n  \"type\": \"module\",\n  \"bin\": {\n    \"4everhosting-mcpserver\": \"build/server.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/4everland/4everland-hosting-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/4everland/4everland-hosting-mcp/issues\"\n  },\n  \"homepage\": \"https://github.com/4everland/4everland-hosting-mcp#readme\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"archiver\": \"^7.0.1\",\n    \"axios\": \"^1.9.0\",\n    \"commander\": \"^14.0.0\",\n    \"form-data\": \"^4.0.3\",\n    \"zod\": \"^3.25.57\"\n  },\n  \"devDependencies\": {\n    \"@types/archiver\": \"^6.0.3\",\n    \"@types/node\": \"^24.0.0\",\n    \"typescript\": \"^5.2.2\"\n  }\n}\n"
+}

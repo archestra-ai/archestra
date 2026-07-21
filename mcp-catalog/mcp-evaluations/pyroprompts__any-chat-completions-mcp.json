@@ -1,0 +1,161 @@
+{
+  "name": "pyroprompts__any-chat-completions-mcp",
+  "display_name": "any-chat-completions-mcp",
+  "description": "MCP Server for using any LLM as a Tool",
+  "author": {
+    "name": "pyroprompts"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@pyroprompts/any-chat-completions-mcp"],
+    "env": {
+      "AI_CHAT_KEY": "${user_config.ai_chat_key}",
+      "AI_CHAT_NAME": "${user_config.ai_chat_name}",
+      "AI_CHAT_MODEL": "${user_config.ai_chat_model}",
+      "AI_CHAT_BASE_URL": "${user_config.ai_chat_base_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ai_chat_key": {
+      "type": "string",
+      "title": "AI Chat API Key",
+      "description": "Your API key for the AI Chat provider (e.g., OPENAI_KEY, PYROPROMPTS_KEY, PERPLEXITY_KEY).",
+      "sensitive": true,
+      "required": true
+    },
+    "ai_chat_name": {
+      "type": "string",
+      "title": "AI Chat Provider Name",
+      "description": "The name of the AI Chat provider (e.g., OpenAI, PyroPrompts, Perplexity).",
+      "sensitive": false,
+      "required": true,
+      "default": "OpenAI"
+    },
+    "ai_chat_model": {
+      "type": "string",
+      "title": "AI Chat Model",
+      "description": "The specific model to use for the AI Chat provider (e.g., gpt-4o, ash, sonar).",
+      "sensitive": false,
+      "required": true,
+      "default": "gpt-4o"
+    },
+    "ai_chat_base_url": {
+      "type": "string",
+      "title": "AI Chat Base URL",
+      "description": "The base URL for the AI Chat API requests.",
+      "sensitive": false,
+      "required": true,
+      "default": "https://api.openai.com/v1"
+    }
+  },
+  "readme": "# any-chat-completions-mcp MCP Server\n\n\nIntegrate Claude with Any OpenAI SDK Compatible Chat Completion API - OpenAI, Perplexity, Groq, xAI, PyroPrompts and more.\n\nThis implements the Model Context Protocol Server. Learn more: [https://modelcontextprotocol.io](https://modelcontextprotocol.io)\n\nThis is a TypeScript-based MCP server that implements an implementation into any OpenAI SDK Compatible Chat Completions API.\n\nIt has one tool, `chat` which relays a question to a configured AI Chat Provider.\n\n\n<a href=\"https://glama.ai/mcp/servers/nuksdrfb55\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/nuksdrfb55/badge\" /></a>\n\n[![smithery badge](https://smithery.ai/badge/any-chat-completions-mcp-server)](https://smithery.ai/server/any-chat-completions-mcp-server)\n\n## Development\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n## Installation\n\nTo add OpenAI to Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n\nYou can use it via `npx` in your Claude Desktop configuration like this:\n\n```json\n{\n  \"mcpServers\": {\n    \"chat-openai\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@pyroprompts/any-chat-completions-mcp\"\n      ],\n      \"env\": {\n        \"AI_CHAT_KEY\": \"OPENAI_KEY\",\n        \"AI_CHAT_NAME\": \"OpenAI\",\n        \"AI_CHAT_MODEL\": \"gpt-4o\",\n        \"AI_CHAT_BASE_URL\": \"https://api.openai.com/v1\"\n      }\n    }\n  }\n}\n```\n\n\nOr, if you clone the repo, you can build and use in your Claude Desktop configuration like this:\n\n\n```json\n\n{\n  \"mcpServers\": {\n    \"chat-openai\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/any-chat-completions-mcp/build/index.js\"\n      ],\n      \"env\": {\n        \"AI_CHAT_KEY\": \"OPENAI_KEY\",\n        \"AI_CHAT_NAME\": \"OpenAI\",\n        \"AI_CHAT_MODEL\": \"gpt-4o\",\n        \"AI_CHAT_BASE_URL\": \"https://api.openai.com/v1\"\n      }\n    }\n  }\n}\n```\n\nYou can add multiple providers by referencing the same MCP server multiple times, but with different env arguments:\n\n```json\n\n{\n  \"mcpServers\": {\n    \"chat-pyroprompts\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/any-chat-completions-mcp/build/index.js\"\n      ],\n      \"env\": {\n        \"AI_CHAT_KEY\": \"PYROPROMPTS_KEY\",\n        \"AI_CHAT_NAME\": \"PyroPrompts\",\n        \"AI_CHAT_MODEL\": \"ash\",\n        \"AI_CHAT_BASE_URL\": \"https://api.pyroprompts.com/openaiv1\"\n      }\n    },\n    \"chat-perplexity\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/any-chat-completions-mcp/build/index.js\"\n      ],\n      \"env\": {\n        \"AI_CHAT_KEY\": \"PERPLEXITY_KEY\",\n        \"AI_CHAT_NAME\": \"Perplexity\",\n        \"AI_CHAT_MODEL\": \"sonar\",\n        \"AI_CHAT_BASE_URL\": \"https://api.perplexity.ai\"\n      }\n    },\n    \"chat-openai\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/any-chat-completions-mcp/build/index.js\"\n      ],\n      \"env\": {\n        \"AI_CHAT_KEY\": \"OPENAI_KEY\",\n        \"AI_CHAT_NAME\": \"OpenAI\",\n        \"AI_CHAT_MODEL\": \"gpt-4o\",\n        \"AI_CHAT_BASE_URL\": \"https://api.openai.com/v1\"\n      }\n    }\n  }\n}\n```\n\nWith these three, you'll see a tool for each in the Claude Desktop Home:\n\n![Claude Desktop Home with Chat Tools](img/claude_desktop_home.png)\n\nAnd then you can chat with other LLMs and it shows in chat like this:\n\n![Claude Chat with OpenAI](img/claude_chat_openai.png)\n\nOr, configure in [LibreChat](https://www.librechat.ai/) like:\n```yaml\n  chat-perplexity:\n    type: stdio\n    command: npx\n    args:\n      - -y\n      - @pyroprompts/any-chat-completions-mcp\n    env:\n      AI_CHAT_KEY: \"pplx-012345679\"\n      AI_CHAT_NAME: Perplexity\n      AI_CHAT_MODEL: sonar\n      AI_CHAT_BASE_URL: \"https://api.perplexity.ai\"\n      PATH: '/usr/local/bin:/usr/bin:/bin'\n````\n\nAnd it shows in LibreChat:\n\n![LibreChat with Perplexity Chat](img/librechat.png)\n\n\n\n\n### Installing via Smithery\n\nTo install Any OpenAI Compatible API Integrations for Claude Desktop automatically via [Smithery](https://smithery.ai/server/any-chat-completions-mcp-server):\n\n```bash\nnpx -y @smithery/cli install any-chat-completions-mcp-server --client claude\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\n### Acknowledgements\n\n- Obviously the modelcontextprotocol and Anthropic team for the MCP Specification and integration into Claude Desktop. [https://modelcontextprotocol.io/introduction](https://modelcontextprotocol.io/introduction)\n- [PyroPrompts](https://pyroprompts.com?ref=github-any-chat-completions-mcp) for sponsoring this project. Use code `CLAUDEANYCHAT` for 20 free automation credits on Pyroprompts.\n",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pyroprompts-any-chat-completions-mcp-openai-npx": {
+        "command": "npx",
+        "args": ["@pyroprompts/any-chat-completions-mcp"],
+        "env": {
+          "AI_CHAT_KEY": "OPENAI_KEY",
+          "AI_CHAT_NAME": "OpenAI",
+          "AI_CHAT_MODEL": "gpt-4o",
+          "AI_CHAT_BASE_URL": "https://api.openai.com/v1"
+        }
+      },
+      "any-chat-completions-mcp-openai-local": {
+        "command": "node",
+        "args": ["/path/to/any-chat-completions-mcp/build/index.js"],
+        "env": {
+          "AI_CHAT_KEY": "OPENAI_KEY",
+          "AI_CHAT_NAME": "OpenAI",
+          "AI_CHAT_MODEL": "gpt-4o",
+          "AI_CHAT_BASE_URL": "https://api.openai.com/v1"
+        }
+      },
+      "any-chat-completions-mcp-pyroprompts-local": {
+        "command": "node",
+        "args": ["/path/to/any-chat-completions-mcp/build/index.js"],
+        "env": {
+          "AI_CHAT_KEY": "PYROPROMPTS_KEY",
+          "AI_CHAT_NAME": "PyroPrompts",
+          "AI_CHAT_MODEL": "ash",
+          "AI_CHAT_BASE_URL": "https://api.pyroprompts.com/openaiv1"
+        }
+      },
+      "any-chat-completions-mcp-perplexity-local": {
+        "command": "node",
+        "args": ["/path/to/any-chat-completions-mcp/build/index.js"],
+        "env": {
+          "AI_CHAT_KEY": "PERPLEXITY_KEY",
+          "AI_CHAT_NAME": "Perplexity",
+          "AI_CHAT_MODEL": "sonar",
+          "AI_CHAT_BASE_URL": "https://api.perplexity.ai"
+        }
+      },
+      "pyroprompts-any-chat-completions-mcp-perplexity-stdio": {
+        "command": "npx",
+        "args": ["-y", "@pyroprompts/any-chat-completions-mcp"],
+        "env": {
+          "AI_CHAT_KEY": "pplx-012345679",
+          "AI_CHAT_NAME": "Perplexity",
+          "AI_CHAT_MODEL": "sonar",
+          "AI_CHAT_BASE_URL": "https://api.perplexity.ai",
+          "PATH": "/usr/local/bin:/usr/bin:/bin"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pyroprompts",
+    "repo": "any-chat-completions-mcp",
+    "url": "https://github.com/pyroprompts/any-chat-completions-mcp",
+    "name": "any-chat-completions-mcp",
+    "path": null,
+    "stars": 139,
+    "contributors": 4,
+    "issues": 4,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "20f715e85fe19917ff02cd8d7cfcd4667a52a146"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:50.794Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@pyroprompts/any-chat-completions-mcp\",\n  \"version\": \"0.1.1\",\n  \"description\": \"A Model Context Protocol server for integrating with any OpenAI SDK compatible Chat Completion API\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"any-chat-completions-mcp\": \"build/cli.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755'); require('fs').chmodSync('build/cli.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"clean\": \"rm -rf build\",\n    \"npm-publish\": \"npm run clean && npm run build && npm publish --access=public\",\n    \"start\": \"node build/cli.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"dotenv\": \"^16.4.5\",\n    \"openai\": \"^4.73.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/pyroprompts/any-chat-completions-mcp.git\"\n  },\n  \"keywords\": [\n    \"claude\",\n    \"openai\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"ai\",\n    \"chat\",\n    \"llm\"\n  ],\n  \"author\": \"PyroPrompts\",\n  \"license\": \"MIT\",\n  \"engines\": {\n    \"node\": \">=18\"\n  }\n}\n"
+}

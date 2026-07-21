@@ -1,0 +1,95 @@
+{
+  "name": "pythonanywhere__pythonanywhere-mcp-server",
+  "display_name": "pythonanywhere-mcp-server",
+  "description": "MCP server from pythonanywhere/pythonanywhere-mcp-server",
+  "author": {
+    "name": "pythonanywhere"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["pythonanywhere-mcp-server"],
+    "env": {
+      "API_TOKEN": "${user_config.api_token}",
+      "LOGNAME": "${user_config.logname}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_token": {
+      "type": "string",
+      "title": "PythonAnywhere API Token",
+      "description": "Your API token for authentication with PythonAnywhere. You can find or generate it in the API section of your PythonAnywhere account.",
+      "sensitive": true,
+      "required": true
+    },
+    "logname": {
+      "type": "string",
+      "title": "PythonAnywhere Username",
+      "description": "Your PythonAnywhere username, used for API calls and identifying your account.",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# PythonAnywhere Model Context Protocol Server\n\nA [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)\nserver acts as a bridge between AI-powered tools and your\n[PythonAnywhere](https://www.pythonanywhere.com/) account, enabling secure,\nprogrammatic management of files, websites, webapps, and scheduled tasks. By\nexposing a standardized interface, it allows language models and automation\nclients to perform operations—such as editing files, deploying web apps, or\nscheduling jobs -- on your behalf, all while maintaining fine-grained control\nand auditability.\n\n## Features\n- **File management**: Read, upload, delete files and list directory trees.\n  _(also enables debugging with direct access to log files, which are just\n  files on PythonAnywhere)_\n- **ASGI Web app management**: Create, delete, reload, and list.\n  _(as described in the [PythonAnywhere ASGI\n  documentation](https://help.pythonanywhere.com/pages/ASGICommandLine))_\n- **WSGI Web app management**: Reload only _(at the moment)_.\n- **Scheduled task management**: List, create, update, and delete.\n  _(Note that this enables LLMs to execute arbitrary commands if a task is\n  scheduled too soon after creation and deleted after execution. For that we\n  would suggest running it with [mcp-server-time](https://pypi.org/project/mcp-server-time/)\n  as models easily get confused about time.)_\n\n## Installation\nThe MCP protocol is well-defined and supported by various clients, but\ninstallation is different depending on the client you are using. We will\ncover cases that we tried and tested.\n\nIn all cases, you need to have `uv` installed and available in your `PATH`.\n\nHave your PythonAnywhere API token and username ready. You can find (or\ngenerate) your API token in the [API section of your PythonAnywhere\naccount](https://www.pythonanywhere.com/account/#api_token).\n\n### Desktop Extension - works with Claude Desktop\nProbably the most straightforward way to install the MCP server is to use\nthe [desktop extension](https://github.com/anthropics/dxt/) for Claude Desktop.\n\n1. Open Claude Desktop.\n2. **[Download the latest .dxt file](https://github.com/pythonanywhere/pythonanywhere-mcp-server/releases/latest/download/pythonanywhere-mcp-server.dxt)**.\n3. Double-click on the downloaded .dxt file or drag the file into the window.\n4. Configure your PythonAnywhere API token and username.\n5. Restart Claude Desktop.\n\n### Claude Code\nRun:\n   ```bash\n   claude mcp add pythonanywhere-mcp-server \\\n   -e API_TOKEN=yourpythonanywhereapitoken \\\n   -e LOGNAME=yourpythonanywhereusername \\\n   -- uvx pythonanywhere-mcp-server\n   ```\n\n### GitHub Copilot in PyCharm:\nAdd it to your `mcp.json`.\n\n```json\n{\n  \"servers\": {\n    \"pythonanywhere-mcp-server\": {\n      \"type\": \"stdio\",\n      \"command\": \"uvx\",\n      \"args\": [\"pythonanywhere-mcp-server\"],\n      \"env\": {\n        \"API_TOKEN\": \"yourpythonanywhereapitoken\",\n        \"LOGNAME\": \"yourpythonanywhereusername\"\n      }\n    }\n  }\n}\n```\n\n### Claude Desktop (manual setup) and Cursor:\nAdd it to `claude_desktop_config.json` (for Claude Desktop) or (`mcp.json`\nfor Cursor).\n\n```json\n{\n  \"mcpServers\": {\n    \"pythonanywhere-mcp-server\": {\n      \"type\": \"stdio\",\n      \"command\": \"uvx\",\n      \"args\": [\"pythonanywhere-mcp-server\"],\n      \"env\": {\n        \"API_TOKEN\": \"yourpythonanywhereapitoken\",\n        \"LOGNAME\": \"yourpythonanywhereusername\"\n      }\n    }\n  }\n}\n```\n\n## Caveats\n\nDirect integration of an LLM with your PythonAnywhere account offers\nsignificant capabilities, but also introduces risks. We strongly advise\nmaintaining human oversight, especially for sensitive actions such as\nmodifying or deleting files.\n\nIf you are running multiple MCP servers simultaneously, be\ncautious -- particularly if any server can access external resources you do not\ncontrol, such as GitHub issues. These can become attack vectors. For more\ndetails, see [this story](https://simonwillison.net/2025/Jul/6/supabase-mcp-lethal-trifecta/).\n\n## Implementation\n\nThe server uses the [python mcp sdk](https://github.com/modelcontextprotocol/python-sdk)\nin connection with the [pythonanywhere-core](https://github.com/pythonanywhere/pythonanywhere-core)\npackage ([docs](https://core.pythonanywhere.com/)), which wraps a subset of the [PythonAnywhere\nAPI](https://help.pythonanywhere.com/pages/API/) and may be expanded in\nthe future as needed.\n",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pythonanywhere-mcp-server": {
+        "command": "uvx",
+        "args": ["pythonanywhere-mcp-server"],
+        "env": {
+          "API_TOKEN": "yourpythonanywhereapitoken",
+          "LOGNAME": "yourpythonanywhereusername"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pythonanywhere",
+    "repo": "pythonanywhere-mcp-server",
+    "url": "https://github.com/pythonanywhere/pythonanywhere-mcp-server",
+    "name": "pythonanywhere__pythonanywhere-mcp-server",
+    "path": null,
+    "stars": 8,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "596de06d440bcf1eac8b3ce062f5a846993dedda"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:17.701Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pythonanywhere-core",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=77.0.3\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"pythonanywhere-mcp-server\"\nversion = \"0.0.6\"\ndescription = \"PythonAnywhere Model Context Protocol Server\"\nauthors = [\n    {name = \"PythonAnywhere Developers\", email = \"developers@pythonanywhere.com\"}\n]\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"pythonanywhere-core\",\n    \"mcp[cli]\",\n]\nclassifiers = [\n    \"Development Status :: 2 - Pre-Alpha\",\n    \"Intended Audience :: Developers\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Topic :: Scientific/Engineering :: Artificial Intelligence\",\n    \"Topic :: Utilities\",\n]\nlicense = \"MIT\"\n\n[project.optional-dependencies]\ntest = [\n    \"pytest\",\n    \"pytest-mock\",\n]\n\n[project.scripts]\npythonanywhere-mcp-server = \"pythonanywhere_mcp_server.__main__:main\"\n\n[project.urls]\nHomepage = \"https://github.com/pythonanywhere/pythonanywhere-mcp-server\"\nRepository = \"https://github.com/pythonanywhere/pythonanywhere-mcp-server\"\nDocumentation = \"https://github.com/pythonanywhere/pythonanywhere-mcp-server#readme\"\nIssues = \"https://github.com/pythonanywhere/pythonanywhere-mcp-server/issues\"\nChangelog = \"https://github.com/pythonanywhere/pythonanywhere-mcp-server/releases\"\n\n[tool.pytest.ini_options]\npythonpath = [\"src/pythonanywhere_mcp_server\"]\n"
+}

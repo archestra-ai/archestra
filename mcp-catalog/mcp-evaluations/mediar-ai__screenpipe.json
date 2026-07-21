@@ -1,0 +1,706 @@
+{
+  "name": "mediar-ai__screenpipe",
+  "display_name": "screenpipe",
+  "description": "AI app store powered by 24/7 desktop history.  open source | 100% local | dev friendly | 24/7 screen, mic recording",
+  "author": {
+    "name": "mediar-ai"
+  },
+  "server": {
+    "command": "screenpipe",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<img referrerpolicy=\"no-referrer-when-downgrade\" src=\"https://static.scarf.sh/a.png?x-pxid=c3628864-a0cb-47a1-a822-2f936cff50b2\" />\n<p align=\"center\">\n   <a href=\"README.md\">English</a> | <a href=\"README-zh_CN.md\">简体中文</a> | <a href=\"README-ja.md\">日本語</a>\n</p>\n\n<p align=\"center\">\n   <a href =\"https://screenpi.pe\">\n      <img src=\"https://github.com/user-attachments/assets/d3b1de26-c3c0-4c84-b9c4-b03213b97a30\" alt=\"logo\" width=\"200\">\n   </a>\n</p>\n\n<p align=\"center\">\n   <a href=\"https://trendshift.io/repositories/11785\" target=\"_blank\"><img src=\"https://trendshift.io/api/badge/repositories/11785\" alt=\"mediar-ai%2Fscreenpipe | Trendshift\" style=\"width: 250px; height: 55px;\" width=\"250\" height=\"55\"/></a>\n</p>\n\n\n<!-- ScreenPipe Title and Subtitle -->\n<p align=\"center\" style=\"font-family: 'Press Start 2P', monospace;\">\n   <h1 align=\"center\">[ screenpipe ]</h1>\n   <p align=\"center\">AI app store powered by 24/7 desktop history</p>\n   <p align=\"center\">open source | 100% local | dev friendly | 24/7 screen, mic recording</p>\n</p>\n\n<!-- Slogan -->\n<p align=\"center\" style=\"font-family: monospace;\">\n   <code>[ recording reality, one pixel at a time ]</code>\n</p>\n\n<p align=\"center\">\n    <a href=\"https://screenpi.pe\" target=\"_blank\">\n        <img src=\"https://img.shields.io/badge/Download%20The-Desktop%20App-blue?style=for-the-badge\" alt=\"Download the Desktop App\">\n    </a>\n</p>\n\n<p align=\"center\">\n    <a href=\"https://www.youtube.com/@mediar_ai\" target=\"_blank\">\n       <img alt=\"YouTube Channel Subscribers\" src=\"https://img.shields.io/youtube/channel/subscribers/UCwjkpAsb70_mENKvy7hT5bw\">\n    </a>\n</p>\n\n\n<p align=\"center\">\n    <a href=\"https://discord.gg/dU9EBuw7Uq\">\n        <img src=\"https://img.shields.io/discord/823813159592001537?color=5865F2&logo=discord&logoColor=white&style=flat-square\" alt=\"Join us on Discord\">\n    </a>\n   <a href=\"https://twitter.com/screen_pipe\"><img alt=\"X account\" src=\"https://img.shields.io/twitter/url/https/twitter.com/diffuserslib.svg?style=social&label=Follow%20%40screen_pipe\"></a>\n   <a href=\"https://console.algora.io/org/mediar-ai/bounties?status=completed\">\n       <img src=\"https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dcompleted\" alt=\"Rewarded Bounties\">\n   </a>\n   <a href=\"https://console.algora.io/org/mediar-ai/bounties?status=open\">\n       <img src=\"https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dopen\" alt=\"Open Bounties\">\n   </a>\n</p>\n\n<p align=\"center\">\n   \n\n<img width=\"1312\" alt=\"Screenshot 2025-02-15 at 7 51 18 PM\" src=\"https://github.com/user-attachments/assets/5a9f29ce-69ae-463f-b338-186b8cdb2d12\" />\n\n![image](https://github.com/user-attachments/assets/dec2e07c-b3d5-46dd-9f36-c0c26a82c9fb)\n\n\n\nhttps://github.com/user-attachments/assets/628c6c01-a580-4b21-bce9-3e7b186914a4\n\n\n\n\nhttps://github.com/user-attachments/assets/973ee8e5-5240-4d36-83fe-d38c53efe6a9\n\n\n\n\n\n\n---\n\n*news* 🔥\n- [2025/07] [we raised $2.8m to give AI hands to every desktop](https://x.com/louis030195/status/1948745185178914929)\n- [2025/03] introducing [screenpipe terminator](https://github.com/mediar-ai/terminator): playwright but for your desktop. the fastest and most reliable computer use SDK on the internet (100x faster, based on OS APIs instead of vision)\n- [2025/02] we're throwing an [hackathon](https://www.nosu.io/hackathons/screenpipe), $12k in cash prizes, 28 Feb\n- [2025/01] we're partnering with Different AI to bring you [financial automations based on your screen](https://github.com/different-ai/hypr-v0) and [drop-in replacement for granola within obsidian](https://github.com/different-ai/file-organizer-2000)\n- [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Reddit agent, Timeline ...)\n- [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)\n- [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)\n- [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)\n- [2024/08] anyone can now [create, share, install pipes](https://docs.screenpi.pe/plugins) (plugins) from the app interface based on a github repo/dir\n- [2024/08] we're running bounties! contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)\n- [2024/08] we released Apple & Windows Native OCR.\n- [2024/07] **we just launched the desktop app! [Download now!](https://screenpi.pe)**\n\n---\n\n# how it works?\n\n- we record everything 24/7, 100% locally, uses 10% CPU, 4 GB ram, 15 gb/m\n- we index it into an api\n- dev build ai apps w user's full context, desktop native, nextjs, publish, monetize\n\n<img src=\"./content/diagram2.png\" width=\"800\" />\n\n<img src=\"https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91\" width=\"400\" />\n\n\n\n# why?\n\n- ai models are commoditized \n- ai is as good as its context\n- the most valuable context is all contained in your screen\n\n\n## get started\n\nmacos, linux:\n\n```bash\ncurl -fsSL get.screenpi.pe/cli | sh\n```\n\nor on windows\n\n```bash\niwr get.screenpi.pe/cli.ps1 | iex\n```\n\nthen\n\n```bash\nscreenpipe\n```\n\nmake sure to allow permissions on macos (screen, mic)\n\n- [get the desktop app](https://screenpi.pe/)\n- [docs & build from source](https://docs.screenpi.pe/getting-started)\n\n## create plugins\n\n```bash\nbunx --bun @screenpipe/dev@latest pipe create\n```\n\nscreenpipe has a plugin system called \"pipe\" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/plugins)\n\nyou can then publish these to our store and make money:\n\n```bash\ncd foo\nbunx --bun @screenpipe/dev@latest pipe register --name foo [--paid --price 50] # subscription\nbun run build\nbunx --bun @screenpipe/dev@latest pipe publish --name foo\n```\n\n## community \n\n- [template to build screenpipe-powered desktop native app using Tauri](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)\n- [template to build screenpipe-powered desktop native app using Electron](https://github.com/neo773/screenpipe-electron)\n- [community projects](https://www.sprint.dev/hackathons/screenpipe)\n\n## star history\n\n![Star History Nov 24 2024](https://github.com/user-attachments/assets/c7e4de14-0771-4bbb-9a4c-7f2102a1a6cd)\n\n\n## contributing\n\ncontributions are welcome! if you'd like to contribute, please read [CONTRIBUTING.md](CONTRIBUTING.md).\n\n   <a href=\"https://console.algora.io/org/mediar-ai/bounties?status=completed\">\n       <img src=\"https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dcompleted\" alt=\"Rewarded Bounties\">\n   </a>\n   <a href=\"https://console.algora.io/org/mediar-ai/bounties?status=open\">\n       <img src=\"https://img.shields.io/endpoint?url=https%3A%2F%2Fconsole.algora.io%2Fapi%2Fshields%2Fmediar-ai%2Fbounties%3Fstatus%3Dopen\" alt=\"Open Bounties\">\n   </a>\n",
+  "category": "AI Tools",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "screenpipe": {
+        "command": "screenpipe",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mediar-ai",
+    "repo": "screenpipe",
+    "url": "https://github.com/mediar-ai/screenpipe",
+    "name": "screenpipe",
+    "path": null,
+    "stars": 15381,
+    "contributors": 78,
+    "issues": 205,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "c2a5a00107c85569dc383e4f29a4106434688309"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.857Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@patternfly/react-core",
+      "importance": 6
+    },
+    {
+      "name": "@patternfly/react-log-viewer",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-accordion",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-alert-dialog",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-avatar",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-checkbox",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-collapsible",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-dialog",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-dropdown-menu",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-label",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-popover",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-progress",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-scroll-area",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-select",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-separator",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-slider",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-slot",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-switch",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-tabs",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-toast",
+      "importance": 5
+    },
+    {
+      "name": "@radix-ui/react-tooltip",
+      "importance": 5
+    },
+    {
+      "name": "@sentry/react",
+      "importance": 7
+    },
+    {
+      "name": "@supabase/supabase-js",
+      "importance": 7
+    },
+    {
+      "name": "@tanstack/react-virtual",
+      "importance": 6
+    },
+    {
+      "name": "@tauri-apps/api",
+      "importance": 9
+    },
+    {
+      "name": "@tauri-apps/plugin-deep-link",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-dialog",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-fs",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-http",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-notification",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-opener",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-os",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-process",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-shell",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-store",
+      "importance": 7
+    },
+    {
+      "name": "@tauri-apps/plugin-updater",
+      "importance": 7
+    },
+    {
+      "name": "accessibility",
+      "importance": 7
+    },
+    {
+      "name": "accessibility-sys",
+      "importance": 7
+    },
+    {
+      "name": "ansi-to-html",
+      "importance": 3
+    },
+    {
+      "name": "anyhow",
+      "importance": 5
+    },
+    {
+      "name": "atspi",
+      "importance": 7
+    },
+    {
+      "name": "atspi-common",
+      "importance": 5
+    },
+    {
+      "name": "atspi-proxies",
+      "importance": 5
+    },
+    {
+      "name": "axum",
+      "importance": 10
+    },
+    {
+      "name": "base64",
+      "importance": 4
+    },
+    {
+      "name": "bincode",
+      "importance": 5
+    },
+    {
+      "name": "bytes",
+      "importance": 4
+    },
+    {
+      "name": "bytemuck",
+      "importance": 4
+    },
+    {
+      "name": "candle-core",
+      "importance": 9
+    },
+    {
+      "name": "candle-nn",
+      "importance": 9
+    },
+    {
+      "name": "candle-transformers",
+      "importance": 9
+    },
+    {
+      "name": "chrono",
+      "importance": 5
+    },
+    {
+      "name": "cidre",
+      "importance": 7
+    },
+    {
+      "name": "clap",
+      "importance": 5
+    },
+    {
+      "name": "clap_complete",
+      "importance": 3
+    },
+    {
+      "name": "class-variance-authority",
+      "importance": 3
+    },
+    {
+      "name": "clsx",
+      "importance": 3
+    },
+    {
+      "name": "colored",
+      "importance": 3
+    },
+    {
+      "name": "cmdk",
+      "importance": 5
+    },
+    {
+      "name": "core-foundation",
+      "importance": 3
+    },
+    {
+      "name": "core-graphics",
+      "importance": 3
+    },
+    {
+      "name": "cpal",
+      "importance": 8
+    },
+    {
+      "name": "cron",
+      "importance": 5
+    },
+    {
+      "name": "crossbeam",
+      "importance": 6
+    },
+    {
+      "name": "dashmap",
+      "importance": 6
+    },
+    {
+      "name": "date-fns",
+      "importance": 4
+    },
+    {
+      "name": "deepgram",
+      "importance": 7
+    },
+    {
+      "name": "dirs",
+      "importance": 4
+    },
+    {
+      "name": "easy-peasy",
+      "importance": 6
+    },
+    {
+      "name": "enigo",
+      "importance": 6
+    },
+    {
+      "name": "esaxx-rs",
+      "importance": 3
+    },
+    {
+      "name": "fastrand",
+      "importance": 3
+    },
+    {
+      "name": "ffmpeg-sidecar",
+      "importance": 8
+    },
+    {
+      "name": "framer-motion",
+      "importance": 6
+    },
+    {
+      "name": "futures",
+      "importance": 6
+    },
+    {
+      "name": "hf-hub",
+      "importance": 7
+    },
+    {
+      "name": "hotkeys-js",
+      "importance": 5
+    },
+    {
+      "name": "hound",
+      "importance": 6
+    },
+    {
+      "name": "http-cache-reqwest",
+      "importance": 6
+    },
+    {
+      "name": "image",
+      "importance": 7
+    },
+    {
+      "name": "image-compare",
+      "importance": 6
+    },
+    {
+      "name": "killport",
+      "importance": 5
+    },
+    {
+      "name": "knf-rs",
+      "importance": 5
+    },
+    {
+      "name": "lazy_static",
+      "importance": 4
+    },
+    {
+      "name": "libc",
+      "importance": 3
+    },
+    {
+      "name": "libsamplerate-sys",
+      "importance": 5
+    },
+    {
+      "name": "libsqlite3-sys",
+      "importance": 8
+    },
+    {
+      "name": "localforage",
+      "importance": 5
+    },
+    {
+      "name": "log",
+      "importance": 5
+    },
+    {
+      "name": "lodash",
+      "importance": 5
+    },
+    {
+      "name": "lru",
+      "importance": 5
+    },
+    {
+      "name": "lucide-react",
+      "importance": 4
+    },
+    {
+      "name": "mime_guess",
+      "importance": 4
+    },
+    {
+      "name": "ndarray",
+      "importance": 6
+    },
+    {
+      "name": "next",
+      "importance": 10
+    },
+    {
+      "name": "nix",
+      "importance": 6
+    },
+    {
+      "name": "oasgen",
+      "importance": 7
+    },
+    {
+      "name": "objc",
+      "importance": 3
+    },
+    {
+      "name": "objc-foundation",
+      "importance": 3
+    },
+    {
+      "name": "once_cell",
+      "importance": 4
+    },
+    {
+      "name": "ort",
+      "importance": 9
+    },
+    {
+      "name": "ort-sys",
+      "importance": 8
+    },
+    {
+      "name": "parking_lot",
+      "importance": 6
+    },
+    {
+      "name": "port_check",
+      "importance": 3
+    },
+    {
+      "name": "posthog-js",
+      "importance": 6
+    },
+    {
+      "name": "rand",
+      "importance": 4
+    },
+    {
+      "name": "react",
+      "importance": 10
+    },
+    {
+      "name": "react-day-picker",
+      "importance": 5
+    },
+    {
+      "name": "react-markdown",
+      "importance": 5
+    },
+    {
+      "name": "react-resizable-panels",
+      "importance": 5
+    },
+    {
+      "name": "react-syntax-highlighter",
+      "importance": 5
+    },
+    {
+      "name": "realfft",
+      "importance": 6
+    },
+    {
+      "name": "regex",
+      "importance": 5
+    },
+    {
+      "name": "reqwest",
+      "importance": 8
+    },
+    {
+      "name": "reqwest-middleware",
+      "importance": 6
+    },
+    {
+      "name": "remark-gfm",
+      "importance": 4
+    },
+    {
+      "name": "remark-math",
+      "importance": 4
+    },
+    {
+      "name": "rubato",
+      "importance": 6
+    },
+    {
+      "name": "rust-stemmers",
+      "importance": 5
+    },
+    {
+      "name": "rusty-tesseract",
+      "importance": 8
+    },
+    {
+      "name": "samplerate",
+      "importance": 6
+    },
+    {
+      "name": "sentry",
+      "importance": 7
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "sha2",
+      "importance": 4
+    },
+    {
+      "name": "sqlx",
+      "importance": 9
+    },
+    {
+      "name": "sqlite-vec",
+      "importance": 7
+    },
+    {
+      "name": "symphonia",
+      "importance": 7
+    },
+    {
+      "name": "sysinfo",
+      "importance": 6
+    },
+    {
+      "name": "tailwind-merge",
+      "importance": 3
+    },
+    {
+      "name": "tailwindcss-animate",
+      "importance": 3
+    },
+    {
+      "name": "tauri-plugin-sentry-api",
+      "importance": 7
+    },
+    {
+      "name": "tauri-plugin-store-api",
+      "importance": 7
+    },
+    {
+      "name": "tempfile",
+      "importance": 3
+    },
+    {
+      "name": "thiserror",
+      "importance": 4
+    },
+    {
+      "name": "tokio",
+      "importance": 10
+    },
+    {
+      "name": "tokio-stream",
+      "importance": 5
+    },
+    {
+      "name": "tokio-util",
+      "importance": 5
+    },
+    {
+      "name": "tokenizers",
+      "importance": 7
+    },
+    {
+      "name": "tower",
+      "importance": 7
+    },
+    {
+      "name": "tower-http",
+      "importance": 8
+    },
+    {
+      "name": "tracing",
+      "importance": 6
+    },
+    {
+      "name": "tracing-appender",
+      "importance": 5
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 6
+    },
+    {
+      "name": "uiautomation",
+      "importance": 7
+    },
+    {
+      "name": "url",
+      "importance": 4
+    },
+    {
+      "name": "use-debounce",
+      "importance": 4
+    },
+    {
+      "name": "use-immer",
+      "importance": 4
+    },
+    {
+      "name": "uuid",
+      "importance": 4
+    },
+    {
+      "name": "vad-rs",
+      "importance": 7
+    },
+    {
+      "name": "walkdir",
+      "importance": 4
+    },
+    {
+      "name": "webrtc-vad",
+      "importance": 7
+    },
+    {
+      "name": "whisper-rs",
+      "importance": 9
+    },
+    {
+      "name": "which",
+      "importance": 4
+    },
+    {
+      "name": "windows",
+      "importance": 6
+    },
+    {
+      "name": "xcap",
+      "importance": 8
+    },
+    {
+      "name": "zip",
+      "importance": 5
+    },
+    {
+      "name": "zbus",
+      "importance": 6
+    },
+    {
+      "name": "zustand",
+      "importance": 6
+    },
+    {
+      "name": "zerocopy",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[workspace]\nmembers = [\n    \"screenpipe-core\",\n    \"screenpipe-vision\",\n    \"screenpipe-audio\",\n    \"screenpipe-server\",\n    \"screenpipe-integrations\",\n    \"screenpipe-events\",\n    \"screenpipe-db\",\n]\nexclude = [\"screenpipe-app-tauri/src-tauri\"]\nresolver = \"2\"\n\n[workspace.package]\nversion = \"0.2.75\"\nauthors = [\"louis030195 <hi@louis030195.com>\"]\ndescription = \"\"\nrepository = \"https://github.com/mediar-ai/screenpipe\"\nlicense = \"MIT OR Apache-2.0\"\nedition = \"2021\"\n\n[workspace.dependencies]\n# AI\n# candle = { version = \"0.8.3\", package = \"candle-core\" }\n# candle-nn = { version = \"0.8.3\", package = \"candle-nn\" }\n# candle-transformers = { version = \"0.8.3\", package = \"candle-transformers\" }\n\ncandle = { git = \"https://github.com/huggingface/candle.git\", rev = \"c930ab7e1a234f02a0f49350bf38f03f45e53757\", package = \"candle-core\" }\ncandle-nn = { git = \"https://github.com/huggingface/candle.git\", rev = \"c930ab7e1a234f02a0f49350bf38f03f45e53757\", package = \"candle-nn\" }\ncandle-transformers = { git = \"https://github.com/huggingface/candle.git\", rev = \"c930ab7e1a234f02a0f49350bf38f03f45e53757\", package = \"candle-transformers\" }\n\ntokenizers = \"0.21.0\"\nhf-hub = { version = \"0.3.2\", git = \"https://github.com/neo773/hf-hub\", features = [\n    \"native-tls\",\n] }\nlog = \"0.4\"\ntracing = \"0.1.40\"\ntracing-subscriber = { version = \"0.3.19\", features = [\"env-filter\", \"chrono\"] }\ntracing-appender = { version = \"0.2.3\" }\ntokio = { version = \"1.15\", features = [\"full\", \"tracing\"] }\ncrossbeam = \"0.8.4\"\ndashmap = \"6.1.0\"\nimage = \"0.25\"\ncriterion = { version = \"0.5.1\", features = [\"async_tokio\"] }\nvcpkg = \"0.2\"\ncc = \"1.0\"\noasgen = { version = \"0.22.0\", features = [\"axum\", \"chrono\"] }\nonce_cell = \"1.20.2\"\nsentry = { version = \"0.36.0\", features = [\"tracing\"] }\n\nhttp-cache-reqwest = \"0.15.0\"\nreqwest = { version = \"=0.12.12\", features = [\"blocking\", \"multipart\", \"json\"] }\nreqwest-middleware = \"0.4.1\"\n\n\n[patch.crates-io]\n# enables chinese mirror (hf is banned in china) and native-tls\nhf-hub = { git = \"https://github.com/neo773/hf-hub\", features = [\"native-tls\"] }\n# Patch half to use a version compatible with both candle and ort\nhalf = { git = \"https://github.com/starkat99/half-rs.git\", tag = \"v2.5.0\" }\n\n[workspace.metadata.vcpkg]\ngit = \"https://github.com/microsoft/vcpkg\"\nrev = \"2023.04.15\"\ndynamic = true\n\n[profile.release]\ncodegen-units = 1\nlto = true\nopt-level = \"s\"\nstrip = true\n\n\n=== screenpipe-app-tauri/package.json ===\n{\n  \"name\": \"screenpipe-app\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"next dev\",\n    \"test:e2e\": \"wdio run wdio.conf.js\",\n    \"test:e2e:terminator\": \"mocha\",\n    \"build\": \"next build\",\n    \"predev\": \"bun scripts/pre_build.js\",\n    \"prebuild\": \"bun scripts/pre_build.js\",\n    \"tauri\": \"tauri\",\n    \"clean\": \"rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg*,bun*,ollama*,ui_monitor*} node_modules\"\n  },\n  \"dependencies\": {\n    \"@patternfly/react-core\": \"^6.1.0\",\n    \"@patternfly/react-log-viewer\": \"^6.1.0\",\n    \"@radix-ui/react-accordion\": \"^1.2.0\",\n    \"@radix-ui/react-alert-dialog\": \"^1.1.6\",\n    \"@radix-ui/react-avatar\": \"^1.1.0\",\n    \"@radix-ui/react-checkbox\": \"^1.1.1\",\n    \"@radix-ui/react-collapsible\": \"^1.1.0\",\n    \"@radix-ui/react-dialog\": \"^1.1.2\",\n    \"@radix-ui/react-dropdown-menu\": \"^2.1.1\",\n    \"@radix-ui/react-label\": \"^2.1.0\",\n    \"@radix-ui/react-popover\": \"^1.1.2\",\n    \"@radix-ui/react-progress\": \"^1.1.0\",\n    \"@radix-ui/react-scroll-area\": \"^1.1.0\",\n    \"@radix-ui/react-select\": \"^2.1.1\",\n    \"@radix-ui/react-separator\": \"^1.1.0\",\n    \"@radix-ui/react-slider\": \"^1.2.0\",\n    \"@radix-ui/react-slot\": \"^1.1.0\",\n    \"@radix-ui/react-switch\": \"^1.1.0\",\n    \"@radix-ui/react-tabs\": \"^1.1.0\",\n    \"@radix-ui/react-toast\": \"^1.2.1\",\n    \"@radix-ui/react-tooltip\": \"^1.1.3\",\n    \"@screenpipe/browser\": \"^0.1.34\",\n    \"@sentry/react\": \"^8.52.0\",\n    \"@supabase/supabase-js\": \"^2.47.3\",\n    \"@tanstack/react-virtual\": \"^3.11.0\",\n    \"@tauri-apps/api\": \"^2.1.1\",\n    \"@tauri-apps/plugin-deep-link\": \"~2\",\n    \"@tauri-apps/plugin-dialog\": \"2.0.0\",\n    \"@tauri-apps/plugin-fs\": \"2.0.0\",\n    \"@tauri-apps/plugin-http\": \"~2\",\n    \"@tauri-apps/plugin-notification\": \"2.0.0\",\n    \"@tauri-apps/plugin-opener\": \"^2.2.5\",\n    \"@tauri-apps/plugin-os\": \"2.0.0\",\n    \"@tauri-apps/plugin-process\": \"2.0.0\",\n    \"@tauri-apps/plugin-shell\": \"2.0.0\",\n    \"@tauri-apps/plugin-store\": \"^2.2.0\",\n    \"@tauri-apps/plugin-updater\": \"2.0.0\",\n    \"ansi-to-html\": \"^0.7.2\",\n    \"class-variance-authority\": \"^0.7.0\",\n    \"clsx\": \"^2.1.1\",\n    \"cmdk\": \"0.2.1\",\n    \"date-fns\": \"^3.6.0\",\n    \"easy-peasy\": \"^6.0.5\",\n    \"framer-motion\": \"^11.5.4\",\n    \"hotkeys-js\": \"^3.13.9\",\n    \"localforage\": \"^1.10.0\",\n    \"lodash\": \"^4.17.21\",\n    \"lucide-react\": \"^0.414.0\",\n    \"next\": \"15.1.4\",\n    \"posthog-js\": \"^1.154.6\",\n    \"react\": \"^18\",\n    \"react-day-picker\": \"8.10.1\",\n    \"react-markdown\": \"^9.0.1\",\n    \"react-resizable-panels\": \"^2.1.6\",\n    \"react-syntax-highlighter\": \"^15.5.0\",\n    \"remark-gfm\": \"^4.0.0\",\n    \"remark-math\": \"^6.0.0\",\n    \"tailwind-merge\": \"^2.4.0\",\n    \"tailwindcss-animate\": \"^1.0.7\",\n    \"tauri-plugin-sentry-api\": \"^0.4.1\",\n    \"tauri-plugin-store-api\": \"^0.0.0\",\n    \"use-debounce\": \"^10.0.4\",\n    \"use-immer\": \"^0.11.0\",\n    \"zustand\": \"^5.0.3\"\n  },\n  \"devDependencies\": {\n    \"@tailwindcss/typography\": \"^0.5.13\",\n    \"@tauri-apps/cli\": \"^2.4.1\",\n    \"@types/lodash\": \"^4.17.7\",\n    \"@types/node\": \"^20\",\n    \"@types/react\": \"^18\",\n    \"@types/react-syntax-highlighter\": \"^15.5.13\",\n    \"eslint\": \"^8\",\n    \"eslint-config-next\": \"14.2.4\",\n    \"postcss\": \"^8\",\n    \"tailwindcss\": \"^3.4.1\",\n    \"typescript\": \"^5\",\n    \"ts-node\": \"^10.9.2\",\n    \"@wdio/cli\": \"^8.39.1\",\n    \"@wdio/globals\": \"^8.39.1\",\n    \"@wdio/local-runner\": \"^8.39.1\",\n    \"@wdio/mocha-framework\": \"^8.39.0\",\n    \"@wdio/spec-reporter\": \"^8.39.0\",\n    \"@wdio/types\": \"^8.39.0\",\n    \"mocha\": \"^10.7.0\",\n    \"desktop-use\": \"1.0.6\"\n  },\n  \"packageManager\": \"pnpm@8.15.8+sha512.d1a029e1a447ad90bc96cd58b0fad486d2993d531856396f7babf2d83eb1823bb83c5a3d0fc18f675b2d10321d49eb161fece36fe8134aa5823ecd215feed392\",\n  \"trustedDependencies\": [\n    \"@sentry/cli\"\n  ]\n}\n\n\n=== screenpipe-audio/Cargo.toml ===\n[package]\nname = \"screenpipe-audio\"\nversion = { workspace = true }\nauthors = { workspace = true }\ndescription = { workspace = true }\nrepository = { workspace = true }\nlicense = { workspace = true }\nedition = { workspace = true }\n\n\n# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html\n[build-dependencies]\nreqwest = { workspace = true }\nwhich = \"7.0.0\"\n\n[dependencies]\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\noasgen = { workspace = true }\n\n# Cross-platform audio capture\ncpal = { git = \"https://github.com/Kree0/cpal.git\", branch = \"master\" }\n\n# Wav encoding\nhound = \"3.5\"\n\n# Cli ! shouldn't be required if using as lib\nclap = { version = \"4.3\", features = [\"derive\"] }\n\n# Dates\nchrono = { version = \"0.4.31\", features = [\"serde\"] }\n\n# Local Embeddings + STT\nvad-rs = \"0.1.4\"\nanyhow = \"1.0.86\"\nhf-hub = \"0.3.2\"\n# https://github.com/pdeljanov/Symphonia/tree/master?tab=readme-ov-file#optimizations\nsymphonia = { version = \"0.5.4\", features = [\"aac\", \"isomp4\", \"opt-simd\"] }\nrubato = \"0.15.0\"\nwhisper-rs = { git = \"https://github.com/tazz4843/whisper-rs.git\", rev = \"e0597486400ec436669e6ee3d8cc94b3859355f5\", features = [\n  \"tracing_backend\",\n] } # pin revision to avoid breaking changes\n\n# Log\nlog = { workspace = true }\ntracing = { workspace = true }\nenv_logger = \"0.10\"\n\n# Bytes\nbytemuck = \"1.16.1\"\n\n# Async\ntokio = { workspace = true }\n\n# Detect speech/silence\nwebrtc-vad = \"0.4.0\"\n\n# Deepgram\nreqwest = { workspace = true }\n\nscreenpipe-core = { path = \"../screenpipe-core\" }\nscreenpipe-events = { path = \"../screenpipe-events\" }\nscreenpipe-db = { path = \"../screenpipe-db\" }\n\n# crossbeam\ncrossbeam = { workspace = true }\ndashmap = { workspace = true }\n\n# Directories\ndirs = \"5.0.1\"\n\nlazy_static = { version = \"1.4.0\" }\nrealfft = \"3.4.0\"\nndarray = \"0.16\"\nort = \"=2.0.0-rc.6\"\nknf-rs = { git = \"https://github.com/Neptune650/knf-rs.git\" }\nort-sys = \"=2.0.0-rc.8\"\nfutures = \"0.3.31\"\ndeepgram = \"0.6.4\"\nbytes = { version = \"1.9.0\", features = [\"serde\"] }\nrand = \"0.9.0\"\n\n[target.'cfg(target_os = \"windows\")'.dependencies]\nort = { version = \"=2.0.0-rc.6\", features = [\n  \"download-binaries\",\n  \"copy-dylibs\",\n  \"directml\",\n  \"cuda\",\n] }\nesaxx-rs = \"0.1.10\"\nsamplerate = { version = \"0.2.4\" }\nlibsamplerate-sys = \"0.1.10\"\n\n[target.'cfg(target_os = \"macos\")'.dependencies]\nonce_cell = \"1.17.1\"\nobjc = \"0.2.7\"\n\n[dev-dependencies]\ntempfile = \"3.3.0\"\ninfer = \"0.15\"\ncriterion = { workspace = true }\nstrsim = \"0.10.0\"\nfutures = \"0.3.31\"\ntracing-subscriber = \"0.3.16\"\n\n\n[features]\nmetal = [\"whisper-rs/metal\"]\ncuda = [\"whisper-rs/cuda\"]\n\n[[example]]\nname = \"screenpipe-audio\"\npath = \"examples/screenpipe-audio.rs\"\n\n[package.metadata.cargo-machete]\nignored = [\"ort-sys\"]\n\n\n=== screenpipe-core/Cargo.toml ===\n[package]\nname = \"screenpipe-core\"\nversion = { workspace = true }\nauthors = { workspace = true }\ndescription = { workspace = true }\nrepository = { workspace = true }\nlicense = { workspace = true }\nedition = { workspace = true }\n\n[dependencies]\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\nwhich = \"6.0.1\"\nffmpeg-sidecar = { git = \"https://github.com/nathanbabcock/ffmpeg-sidecar\", branch = \"main\" }\nlog = \"0.4.17\"\nanyhow = \"1.0.86\"\ncandle = { workspace = true }\ncandle-nn = { workspace = true }\ncandle-transformers = { workspace = true }\ntokenizers = { workspace = true }\nhf-hub = { workspace = true, features = [\n    \"tokio\",\n    \"native-tls\",\n] }\nhttp-cache-reqwest = { workspace = true }\nreqwest-middleware = { workspace = true }\ntokio = { workspace = true }\n\n# Security\nregex = { version = \"1.10.6\", features = [\"std\"], optional = true }\nlazy_static = { version = \"1.4.0\", optional = true }\ntempfile = \"3.3.0\"\nurl = \"2.4.0\"\n\ntracing = { workspace = true }\ntracing-subscriber = { workspace = true }\n\ndirs = \"5.0.0\"\nclap = { version = \"4.5.20\", features = [\"derive\"] }\n\n# random\nrand = \"0.8.5\"\n\nonce_cell = \"1.19.0\"\n\ncron = \"0.13.0\"\nchrono = \"0.4.38\"\nsentry = { workspace = true }\nzip = \"0.6.2\"\nthiserror = \"2.0.12\"\n\n[dev-dependencies]\nreqwest = { workspace = true }\n\n[features]\ndefault = [\"security\"]\nsecurity = [\"dep:regex\", \"dep:lazy_static\"]\nmetal = [\"candle/metal\", \"candle-nn/metal\", \"candle-transformers/metal\"]\ncuda = [\"candle/cuda\", \"candle-nn/cuda\", \"candle-transformers/cuda\"]\nmkl = [\"candle/mkl\", \"candle-nn/mkl\", \"candle-transformers/mkl\"]\nllm = []\n\n[target.'cfg(target_os = \"macos\")'.dependencies]\n# accessibility-sys = \"0.1.3\"\naccessibility-sys = { git = \"https://github.com/eiz/accessibility.git\", branch = \"master\" }\n# accessibility = \"0.1.6\"\naccessibility = { git = \"https://github.com/eiz/accessibility.git\", branch = \"master\" }\nobjc = \"0.2.7\"\nobjc-foundation = \"0.1.1\"\n\ncore-foundation = \"=0.10.0\"\ncore-graphics = { version = \"0.24.0\", features = [\"highsierra\"] }\n\n[target.'cfg(target_os = \"windows\")'.dependencies]\nuiautomation = { version = \"0.16.1\" }\n\n\n\n=== screenpipe-db/Cargo.toml ===\n[package]\nname = \"screenpipe-db\"\nversion.workspace = true\nauthors.workspace = true\ndescription.workspace = true\nrepository.workspace = true\nlicense.workspace = true\nedition.workspace = true\n\n[dependencies]\nchrono = { version = \"0.4.31\", features = [\"serde\"] }\nimage = { workspace = true }\nsqlx = { version = \"0.7\", features = [\n  \"sqlite\",\n  \"runtime-tokio-native-tls\",\n  \"chrono\",\n  \"migrate\",\n] }\nsqlite-vec = \"0.1.3\"\nlibsqlite3-sys = { version = \"0.26\", features = [\"bundled\"] }\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\nfutures = { version = \"0.3.31\", features = [\"std\"] }\n\nzerocopy = { version = \"0.7.32\" }\n\ntokio = { version = \"1.15\", features = [\"full\", \"tracing\"] }\n\ntracing = { workspace = true }\nanyhow = \"1.0.86\"\nrand = \"0.8.5\"\ncriterion = { workspace = true }\noasgen = { workspace = true }\ntracing-subscriber = { workspace = true }\n\n[[bench]]\nname = \"db_benchmarks\"\nharness = false\n\n[[bench]]\nname = \"new_db_benchmark\"\nharness = false\n\n\n=== screenpipe-events/Cargo.toml ===\n[package]\nname = \"screenpipe-events\"\nversion.workspace = true\nauthors.workspace = true\ndescription.workspace = true\nrepository.workspace = true\nlicense.workspace = true\nedition.workspace = true\n\n[dependencies]\nanyhow = \"1.0.95\"\nfutures = \"0.3.31\"\nserde = { version = \"1.0.217\", features = [\"derive\"] }\nserde_json = \"1.0.137\"\ntokio.workspace = true\ntokio-stream = { version = \"0.1.17\", features = [\"sync\"] }\nonce_cell = { version = \"1.18\" }\ntracing.workspace = true\nparking_lot = \"0.12.3\"\nchrono = { version = \"0.4.39\", features = [\"serde\"] }\n\n[dev-dependencies]\nserde = { version = \"1.0\", features = [\"derive\"] }\ncriterion = { version = \"0.5\", features = [\"async_tokio\"] }\nserial_test = \"3.2.0\"\n\n[[bench]]\nname = \"events\"\nharness = false\n\n\n=== screenpipe-integrations/Cargo.toml ===\n[package]\nname = \"screenpipe-integrations\"\nversion = { workspace = true }\nauthors = { workspace = true }\ndescription = { workspace = true }\nrepository = { workspace = true }\nlicense = { workspace = true }\nedition = { workspace = true }\n\n[dependencies]\nimage = { workspace = true }\nreqwest = { workspace = true }\nserde_json = \"1.0\"\ntokio = { version = \"1.0\", features = [\"full\"] }\nlog = \"0.4\"\ntempfile = \"3.2\"\nanyhow = \"1.0\"\nmime_guess = \"2.0.5\"\nscreenpipe-core = { path = \"../screenpipe-core\" }\n\n\n=== screenpipe-server/Cargo.toml ===\n[package]\nname = \"screenpipe-server\"\nversion = { workspace = true }\nauthors = { workspace = true }\ndescription = { workspace = true }\nrepository = { workspace = true }\nlicense = { workspace = true }\nedition = { workspace = true }\n\n# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html\n\n[dependencies]\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\noasgen = { workspace = true }\n\nscreenpipe-events = { path = \"../screenpipe-events\" }\nscreenpipe-vision = { path = \"../screenpipe-vision\" }\nscreenpipe-audio = { path = \"../screenpipe-audio\" }\nscreenpipe-core = { path = \"../screenpipe-core\", features = [\"security\"] }\nscreenpipe-db = { path = \"../screenpipe-db\" }\nkillport = { version = \"1.1.0\" }\n\n# Image processing\nimage = { workspace = true }\n\n# Dates\nchrono = { version = \"0.4.31\", features = [\"serde\"] }\n\n# Database\nsqlx = { version = \"0.7\", features = [\n    \"sqlite\",\n    \"runtime-tokio-native-tls\",\n    \"chrono\",\n    \"migrate\",\n] }\n\n# Local Embeddings + STT\ncandle = { workspace = true }\ncandle-nn = { workspace = true }\ncandle-transformers = { workspace = true }\ntokenizers = { workspace = true }\n\nanyhow = \"1.0.86\"\nhf-hub = { workspace = true }\n\n#opentelemetry\nsentry = { workspace = true }\n\n# Server\naxum = { version = \"0.7.5\", features = [\"ws\"] }\ntokio = { version = \"1.15\", features = [\"full\", \"tracing\"] }\ntower-http = { version = \"0.5.2\", features = [\"cors\", \"trace\"] }\n\n# Log\ntracing = { workspace = true }\ntracing-subscriber = { workspace = true }\ntracing-appender = { workspace = true }\nconsole-subscriber = { version = \"0.4.1\", optional = true }\n# Cli ! shouldn't be required if using as lib\nclap = { version = \"4.3\", features = [\"derive\", \"env\"] }\n\n# Memory watchdog\nsysinfo = \"0.29.0\"\n\n# Color\ncolored = \"2.0\"\n\n# Completions\nclap_complete = \"4.2\"\n\n# Plugins\ntower = { version = \"0.5\", features = [\"util\"] }\nfutures = { version = \"0.3.31\", features = [\"std\"] }\n\n# Directory management\ndirs = \"5.0\"\n\n# Client http\nreqwest = { workspace = true }\n\n# Concurrency\ncrossbeam = { workspace = true }\n\n# filtering\nndarray = \"0.15.6\"\nrust-stemmers = \"1.2.0\"\n\n# base64\nbase64 = \"0.22.1\"\n\nuuid = { version = \"1.5.0\", features = [\"v4\"] }\n\ntempfile = \"3.3.0\"\n\n\nurl = { version = \"2.2.0\", optional = true }\n\n\nenigo = \"0.3\"\n\n# Bincode for serializing hot cache\nbincode = \"1.3.3\"\n\n# SHA256 for hashing\nsha2 = \"0.10.6\"\n\n# Fast random number generator\nfastrand = \"2.1.1\"\nport_check = \"0.2.1\"\n\nwalkdir = \"2.3.4\"\n\nregex = \"1.10.0\"\n\nlru = \"0.13.0\"\ntokio-util = { version = \"0.7\", features = [\"io\"] }\n\nonce_cell = { workspace = true }\n[dev-dependencies]\nenv_logger = \"0.10\"\ntempfile = \"3.3.0\"\ntokio-tungstenite = \"0.19.0\"\n\n# Benches\ncriterion = { workspace = true }\n\n[features]\ndefault = []\nmetal = [\"candle/metal\", \"candle-nn/metal\", \"candle-transformers/metal\"]\ncuda = [\"candle/cuda\", \"candle-nn/cuda\", \"candle-transformers/cuda\"]\nmkl = [\"candle/mkl\", \"candle-nn/mkl\", \"candle-transformers/mkl\"]\nllm = []\nexperimental = []\ndebug-console = [\"console-subscriber\"]\n\n[[bin]]\nname = \"screenpipe\"\npath = \"src/bin/screenpipe-server.rs\"\n\n\n[package.metadata.cargo-machete]\nignored = [\"url\", \"console-subscriber\"]\n\n[target.'cfg(unix)'.dependencies]\nnix = { version = \"0.29\", features = [\"signal\"] }\n\n[target.'cfg(windows)'.dependencies]\nwindows = { version = \"0.58\", features = [\n    \"Win32_System_Threading\",\n    \"Win32_Foundation\",\n] }\n\n\n=== screenpipe-vision/Cargo.toml ===\n[package]\nname = \"screenpipe-vision\"\nversion = { workspace = true }\nauthors = { workspace = true }\ndescription = { workspace = true }\nrepository = { workspace = true }\nlicense = { workspace = true }\nedition = { workspace = true }\n\n\n# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html\n\n[dependencies]\nserde_json = \"1.0\"\n\n# async\ntokio = { workspace = true }\n\n# Image processing\nimage = { workspace = true }\n\n# OCR\nrusty-tesseract = { git = \"https://github.com/louis030195/rusty-tesseract.git\", branch = \"main\" }\n\nanyhow = \"1.0.86\"\n\nimage-compare = \"0.4.1\"\nclap = { version = \"4.0\", features = [\"derive\"] }\n\n# Integrations\nscreenpipe-integrations = { path = \"../screenpipe-integrations\" }\nscreenpipe-events = { path = \"../screenpipe-events\" }\n\n# Lanuage specification\nscreenpipe-core = { path = \"../screenpipe-core\" }\nscreenpipe-db = { path = \"../screenpipe-db\" }\n\ntracing-subscriber = { workspace = true }\ntracing = { workspace = true }\nwhich = \"6.0\"\nserde = \"1.0.200\"\n\nxcap = \"0.4.1\"\n\nonce_cell = { workspace = true }\nbase64 = \"0.22.1\"\n\nreqwest = { workspace = true }\n\n[dev-dependencies]\ntempfile = \"3.3.0\"\ncriterion = { workspace = true }\nstrsim = \"0.10.0\"\nmemory-stats = \"1.2.0\"\n\n# websocket example\nfutures-util = \"0.3\"\ntokio-tungstenite = \"0.20\"\nserde = \"1.0.200\"\n\n[package.metadata.osx]\nframework = [\"Vision\", \"AppKit\"]\n\n[[bench]]\nname = \"vision_benchmark\"\nharness = false\n\n[[bench]]\nname = \"ocr_benchmark\"\nharness = false\n\n[[bench]]\nname = \"apple_leak_bench\"\nharness = false\n\n[[example]]\nname = \"screenpipe-vision-websocket\"\npath = \"examples/websocket.rs\"\n\n[target.'cfg(target_os = \"windows\")'.dependencies]\nuiautomation = { version = \"0.16.1\" }\nwindows = { version = \"0.58\", features = [\n  \"Graphics_Imaging\",\n  \"Media_Ocr\",\n  \"Storage\",\n  \"Storage_Streams\",\n] }\n\n[target.'cfg(target_os = \"macos\")'.dependencies]\nlibc = \"=0.2.164\"\ncidre = { git = \"https://github.com/mediar-ai/cidre.git\" }\naccessibility-sys = \"0.1.3\"\ncore-foundation = \"=0.10.0\"\nurl = \"2.5.0\"\n\n[target.'cfg(target_os = \"linux\")'.dependencies]\nlibc = \"=0.2.164\"\natspi = { version = \"0.25.0\", features = [\"tokio\",\"proxies-tokio\",\"zbus\"] }\nzbus       = { version = \"5.5\", default-features = false }\natspi-common     = { version = \"0.9.0\", default-features = false }\natspi-proxies    = { version = \"0.9.0\", default-features = false }\n"
+}

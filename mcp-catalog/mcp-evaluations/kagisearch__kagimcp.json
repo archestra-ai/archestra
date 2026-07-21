@@ -1,0 +1,116 @@
+{
+  "name": "kagisearch__kagimcp",
+  "display_name": "kagimcp",
+  "description": "The Official Model Context Protocol (MCP) server for Kagi search & other tools.",
+  "author": {
+    "name": "kagisearch"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["kagimcp"],
+    "env": {
+      "KAGI_API_KEY": "${user_config.kagi_api_key}",
+      "KAGI_SUMMARIZER_ENGINE": "${user_config.kagi_summarizer_engine}",
+      "FASTMCP_LOG_LEVEL": "${user_config.fastmcp_log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "kagi_api_key": {
+      "type": "string",
+      "title": "Kagi API Key",
+      "description": "Your API key for Kagi search and summarizer. Access to the search API is currently in closed beta and available upon request; please reach out to support@kagi.com for an invite.",
+      "sensitive": true,
+      "required": true
+    },
+    "kagi_summarizer_engine": {
+      "type": "string",
+      "title": "Kagi Summarizer Engine",
+      "description": "The summarizer engine to use (e.g., 'cecil', 'daphne'). Defaults to 'cecil' if not specified. Learn about the different summarization engines here: https://help.kagi.com/kagi/api/summarizer.html#summarization-engines",
+      "sensitive": false,
+      "required": false,
+      "default": "cecil"
+    },
+    "fastmcp_log_level": {
+      "type": "string",
+      "title": "FastMCP Log Level",
+      "description": "Adjust the level of logging for the FastMCP server (e.g., 'ERROR', 'WARNING', 'INFO', 'DEBUG', 'TRACE').",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "# Kagi MCP server\n\n[![smithery badge](https://smithery.ai/badge/kagimcp)](https://smithery.ai/server/kagimcp)\n\n<a href=\"https://glama.ai/mcp/servers/xabrrs4bka\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/xabrrs4bka/badge\" alt=\"Kagi Server MCP server\" />\n</a>\n\n## Setup Intructions\n> Before anything, unless you are just using non-search tools, ensure you have access to the search API. It is currently in closed beta and available upon request. Please reach out to support@kagi.com for an invite.\n\nInstall uv first.\n\nMacOS/Linux:\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\nWindows:\n```\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n### Installing via Smithery\n\nAlternatively, you can install Kagi for Claude Desktop via [Smithery](https://smithery.ai/server/kagimcp):\n\n```bash\nnpx -y @smithery/cli install kagimcp --client claude\n```\n\n### Setup with Claude\n#### Claude Desktop\n```json\n// claude_desktop_config.json\n// Can find location through:\n// Hamburger Menu -> File -> Settings -> Developer -> Edit Config\n{\n  \"mcpServers\": {\n    \"kagi\": {\n      \"command\": \"uvx\",\n      \"args\": [\"kagimcp\"],\n      \"env\": {\n        \"KAGI_API_KEY\": \"YOUR_API_KEY_HERE\",\n        \"KAGI_SUMMARIZER_ENGINE\": \"YOUR_ENGINE_CHOICE_HERE\" // Defaults to \"cecil\" engine if env var not present\n      }\n    }\n  }\n}\n```\n#### Claude Code\nAdd the Kagi mcp server with the following command (setting summarizer engine optional):\n\n```bash\nclaude mcp add kagi -e KAGI_API_KEY=\"YOUR_API_KEY_HERE\" KAGI_SUMMARIZER_ENGINE=\"YOUR_ENGINE_CHOICE_HERE\" -- uvx kagimcp\n```\n\nNow claude code can use the Kagi mcp server. However, claude code comes with its own web search functionality by default, which may conflict with Kagi. You can disable claude's web search functionality with the following in your claude code settings file (`~/.claude/settings.json`):\n\n```json\n{\n  \"permissions\": {\n    \"deny\": [\n      \"WebSearch\"\n    ]\n  }\n}\n```\n\n### Pose query that requires use of a tool\ne.g. \"Who was time's 2024 person of the year?\" for search, or \"summarize this video: https://www.youtube.com/watch?v=jNQXAC9IVRw\" for summarizer.\n\n### Debugging\nRun:\n```bash\nnpx @modelcontextprotocol/inspector uvx kagimcp\n```\n\n## Local/Dev Setup Instructions\n\n### Clone repo\n`git clone https://github.com/kagisearch/kagimcp.git`\n\n### Install dependencies\nInstall uv first.\n\nMacOS/Linux:\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\nWindows:\n```\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n\nThen install MCP server dependencies:\n```bash\ncd kagimcp\n\n# Create virtual environment and activate it\nuv venv\n\nsource .venv/bin/activate # MacOS/Linux\n# OR\n.venv/Scripts/activate # Windows\n\n# Install dependencies\nuv sync\n```\n### Setup with Claude Desktop\n\n#### Using MCP CLI SDK\n```bash\n# `pip install mcp[cli]` if you haven't\nmcp install /ABSOLUTE/PATH/TO/PARENT/FOLDER/kagimcp/src/kagimcp/server.py -v \"KAGI_API_KEY=API_KEY_HERE\"\n```\n\n#### Manually\n```json\n# claude_desktop_config.json\n# Can find location through:\n# Hamburger Menu -> File -> Settings -> Developer -> Edit Config\n{\n  \"mcpServers\": {\n    \"kagi\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/ABSOLUTE/PATH/TO/PARENT/FOLDER/kagimcp\",\n        \"run\",\n        \"kagimcp\"\n      ],\n      \"env\": {\n        \"KAGI_API_KEY\": \"YOUR_API_KEY_HERE\",\n        \"KAGI_SUMMARIZER_ENGINE\": \"YOUR_ENGINE_CHOICE_HERE\" // Defaults to \"cecil\" engine if env var not present\n      }\n    }\n  }\n}\n```\n\n### Pose query that requires use of a tool\ne.g. \"Who was time's 2024 person of the year?\" for search, or \"summarize this video: https://www.youtube.com/watch?v=jNQXAC9IVRw\" for summarizer.\n\n### Debugging\nRun:\n```bash\n# If mcp cli installed (`pip install mcp[cli]`)\nmcp dev /ABSOLUTE/PATH/TO/PARENT/FOLDER/kagimcp/src/kagimcp/server.py\n\n# If not\nnpx @modelcontextprotocol/inspector \\\n      uv \\\n      --directory /ABSOLUTE/PATH/TO/PARENT/FOLDER/kagimcp \\\n      run \\\n      kagimcp\n```\nThen access MCP Inspector at `http://localhost:5173`. You may need to add your Kagi API key in the environment variables in the inspector under `KAGI_API_KEY`.\n\n# Advanced Configuration\n- Level of logging is adjustable through the `FASTMCP_LOG_LEVEL` environment variable (e.g. `FASTMCP_LOG_LEVEL=\"ERROR\"`)\n  - Relevant issue: https://github.com/kagisearch/kagimcp/issues/4\n- Summarizer engine can be customized using the `KAGI_SUMMARIZER_ENGINE` environment variable (e.g. `KAGI_SUMMARIZER_ENGINE=\"daphne\"`)\n  - Learn about the different summarization engines [here](https://help.kagi.com/kagi/api/summarizer.html#summarization-engines)\n",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kagimcp-uvx": {
+        "command": "uvx",
+        "args": ["kagimcp"],
+        "env": {
+          "KAGI_API_KEY": "YOUR_API_KEY_HERE",
+          "KAGI_SUMMARIZER_ENGINE": "YOUR_ENGINE_CHOICE_HERE"
+        }
+      },
+      "kagimcp-uv-local": {
+        "command": "uv",
+        "args": ["--directory", "YOUR_KAGIMCP_PATH", "run", "kagimcp"],
+        "env": {
+          "KAGI_API_KEY": "YOUR_API_KEY_HERE",
+          "KAGI_SUMMARIZER_ENGINE": "YOUR_ENGINE_CHOICE_HERE"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kagisearch",
+    "repo": "kagimcp",
+    "url": "https://github.com/kagisearch/kagimcp",
+    "name": "kagimcp",
+    "path": null,
+    "stars": 150,
+    "contributors": 4,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "f2c2157cd520f37c2a926c6434bc03a29a9f5ceb"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.906Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "kagiapi",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"kagimcp\"\nversion = \"0.1.3\"\nauthors = [\n    {name=\"Rehan Ali Rana\", email=\"rehan@kagi.com\"},\n]\ndescription = \"Kagi MCP server\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"kagiapi~=0.2.1\",\n    \"mcp[cli]~=1.6.0\",\n    \"pydantic~=2.10.3\",\n]\n\n[project.urls]\nHomepage = \"https://github.com/kagisearch/kagi-mcp\"\nIssues = \"https://github.com/kagisearch/kagi-mcp/issues\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nkagimcp = \"kagimcp:main\"\n"
+}

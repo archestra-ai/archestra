@@ -1,0 +1,207 @@
+{
+  "name": "runekaagaard__mcp-alchemy",
+  "display_name": "mcp-alchemy",
+  "description": "A MCP (model context protocol) server that gives the LLM access to and knowledge about relational databases like SQLite, Postgresql, MySQL & MariaDB, Oracle, and MS-SQL.",
+  "author": {
+    "name": "runekaagaard"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "mcp-alchemy==2025.7.9.172934", "--refresh-package", "mcp-alchemy", "mcp-alchemy"],
+    "env": {
+      "DB_URL": "${user_config.db_url}",
+      "CLAUDE_LOCAL_FILES_PATH": "${user_config.claude_local_files_path}",
+      "EXECUTE_QUERY_MAX_CHARS": "${user_config.execute_query_max_chars}",
+      "DB_ENGINE_OPTIONS": "${user_config.db_engine_options}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "db_url": {
+      "type": "string",
+      "title": "Database URL",
+      "description": "SQLAlchemy database URL (e.g., postgresql://user:password@localhost/dbname). Required.",
+      "sensitive": true,
+      "required": true
+    },
+    "claude_local_files_path": {
+      "type": "directory",
+      "title": "Claude Local Files Path",
+      "description": "Directory for full result sets when using claude-local-files (optional).",
+      "required": false
+    },
+    "execute_query_max_chars": {
+      "type": "number",
+      "title": "Execute Query Max Chars",
+      "description": "Maximum output length for query results (optional, default 4000).",
+      "required": false,
+      "default": 4000,
+      "min": 1
+    },
+    "db_engine_options": {
+      "type": "string",
+      "title": "Database Engine Options",
+      "description": "JSON string containing additional SQLAlchemy engine options (e.g., {\"pool_size\": 5}) (optional).",
+      "required": false
+    }
+  },
+  "readme": "# MCP Alchemy\n\n<a href=\"https://www.pulsemcp.com/servers/runekaagaard-alchemy\"><img src=\"https://www.pulsemcp.com/badge/top-pick/runekaagaard-alchemy\" width=\"400\" alt=\"PulseMCP Badge\"></a>\n\n**Status: Works great and is in daily use without any known bugs.**\n\n**Status2: I just added the package to PyPI and updated the usage instructions. Please report any issues :)**\n\nLet Claude be your database expert! MCP Alchemy connects Claude Desktop directly to your databases, allowing it to:\n\n- Help you explore and understand your database structure\n- Assist in writing and validating SQL queries\n- Displays relationships between tables\n- Analyze large datasets and create reports\n- Claude Desktop Can analyse and create artifacts for very large datasets using [claude-local-files](https://github.com/runekaagaard/claude-local-files).\n\nWorks with PostgreSQL, MySQL, MariaDB, SQLite, Oracle, MS SQL Server, CrateDB, Vertica,\nand a host of other [SQLAlchemy-compatible](https://docs.sqlalchemy.org/en/20/dialects/) databases.\n\n![MCP Alchemy in action](https://raw.githubusercontent.com/runekaagaard/mcp-alchemy/refs/heads/main/screenshot.png)\n\n## Installation\n\nEnsure you have uv installed:\n```bash\n# Install uv if you haven't already\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n## Usage with Claude Desktop\n\nAdd to your `claude_desktop_config.json`. You need to add the appropriate database driver in the ``--with`` parameter.\n\n_Note: After a new version release there might be a period of up to 600 seconds while the cache clears locally \ncached causing uv to raise a versioning error. Restarting the MCP client once again solves the error._\n\n### SQLite (built into Python)\n```json\n{\n  \"mcpServers\": {\n    \"my_sqlite_db\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"mcp-alchemy==2025.8.15.91819\",\n               \"--refresh-package\", \"mcp-alchemy\", \"mcp-alchemy\"],\n      \"env\": {\n        \"DB_URL\": \"sqlite:////absolute/path/to/database.db\"\n      }\n    }\n  }\n}\n```\n\n### PostgreSQL\n```json\n{\n  \"mcpServers\": {\n    \"my_postgres_db\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"mcp-alchemy==2025.8.15.91819\", \"--with\", \"psycopg2-binary\",\n               \"--refresh-package\", \"mcp-alchemy\", \"mcp-alchemy\"],\n      \"env\": {\n        \"DB_URL\": \"postgresql://user:password@localhost/dbname\"\n      }\n    }\n  }\n}\n```\n\n### MySQL/MariaDB\n```json\n{\n  \"mcpServers\": {\n    \"my_mysql_db\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"mcp-alchemy==2025.8.15.91819\", \"--with\", \"pymysql\",\n               \"--refresh-package\", \"mcp-alchemy\", \"mcp-alchemy\"],\n      \"env\": {\n        \"DB_URL\": \"mysql+pymysql://user:password@localhost/dbname\"\n      }\n    }\n  }\n}\n```\n\n### Microsoft SQL Server\n```json\n{\n  \"mcpServers\": {\n    \"my_mssql_db\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"mcp-alchemy==2025.8.15.91819\", \"--with\", \"pymssql\",\n               \"--refresh-package\", \"mcp-alchemy\", \"mcp-alchemy\"],\n      \"env\": {\n        \"DB_URL\": \"mssql+pymssql://user:password@localhost/dbname\"\n      }\n    }\n  }\n}\n```\n\n### Oracle\n```json\n{\n  \"mcpServers\": {\n    \"my_oracle_db\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"mcp-alchemy==2025.8.15.91819\", \"--with\", \"oracledb\",\n               \"--refresh-package\", \"mcp-alchemy\", \"mcp-alchemy\"],\n      \"env\": {\n        \"DB_URL\": \"oracle+oracledb://user:password@localhost/dbname\"\n      }\n    }\n  }\n}\n```\n\n### CrateDB\n```json\n{\n  \"mcpServers\": {\n    \"my_cratedb\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"mcp-alchemy==2025.8.15.91819\", \"--with\", \"sqlalchemy-cratedb>=0.42.0.dev1\",\n               \"--refresh-package\", \"mcp-alchemy\", \"mcp-alchemy\"],\n      \"env\": {\n        \"DB_URL\": \"crate://user:password@localhost:4200/?schema=testdrive\"\n      }\n    }\n  }\n}\n```\nFor connecting to CrateDB Cloud, use a URL like\n`crate://user:password@example.aks1.westeurope.azure.cratedb.net:4200?ssl=true`.\n\n### Vertica\n```json\n{\n  \"mcpServers\": {\n    \"my_vertica_db\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"mcp-alchemy==2025.8.15.91819\", \"--with\", \"vertica-python\",\n               \"--refresh-package\", \"mcp-alchemy\", \"mcp-alchemy\"],\n      \"env\": {\n        \"DB_URL\": \"vertica+vertica_python://user:password@localhost:5433/dbname\",\n        \"DB_ENGINE_OPTIONS\": \"{\\\"connect_args\\\": {\\\"ssl\\\": false}}\"\n      }\n    }\n  }\n}\n```\n\n## Environment Variables\n\n- `DB_URL`: SQLAlchemy [database URL](https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls) (required)\n- `CLAUDE_LOCAL_FILES_PATH`: Directory for full result sets (optional)\n- `EXECUTE_QUERY_MAX_CHARS`: Maximum output length (optional, default 4000)\n- `DB_ENGINE_OPTIONS`: JSON string containing additional SQLAlchemy engine options (optional)\n\n## Connection Pooling\n\nMCP Alchemy uses connection pooling optimized for long-running MCP servers. The default settings are:\n\n- `pool_pre_ping=True`: Tests connections before use to handle database timeouts and network issues\n- `pool_size=1`: Maintains 1 persistent connection (MCP servers typically handle one request at a time)\n- `max_overflow=2`: Allows up to 2 additional connections for burst capacity\n- `pool_recycle=3600`: Refreshes connections older than 1 hour (prevents timeout issues)\n- `isolation_level='AUTOCOMMIT'`: Ensures each query commits automatically\n\nThese defaults work well for most databases, but you can override them via `DB_ENGINE_OPTIONS`:\n\n```json\n{\n  \"DB_ENGINE_OPTIONS\": \"{\\\"pool_size\\\": 5, \\\"max_overflow\\\": 10, \\\"pool_recycle\\\": 1800}\"\n}\n```\n\nFor databases with aggressive timeout settings (like MySQL's 8-hour default), the combination of `pool_pre_ping` and `pool_recycle` ensures reliable connections.\n\n## API\n\n### Tools\n\n- **all_table_names**\n  - Return all table names in the database\n  - No input required\n  - Returns comma-separated list of tables\n  ```\n  users, orders, products, categories\n  ```\n\n- **filter_table_names**\n  - Find tables matching a substring\n  - Input: `q` (string)\n  - Returns matching table names\n  ```\n  Input: \"user\"\n  Returns: \"users, user_roles, user_permissions\"\n  ```\n\n- **schema_definitions**\n  - Get detailed schema for specified tables\n  - Input: `table_names` (string[])\n  - Returns table definitions including:\n    - Column names and types\n    - Primary keys\n    - Foreign key relationships\n    - Nullable flags\n  ```\n  users:\n      id: INTEGER, primary key, autoincrement\n      email: VARCHAR(255), nullable\n      created_at: DATETIME\n      \n      Relationships:\n        id -> orders.user_id\n  ```\n\n- **execute_query**\n  - Execute SQL query with vertical output format\n  - Inputs:\n    - `query` (string): SQL query\n    - `params` (object, optional): Query parameters\n  - Returns results in clean vertical format:\n  ```\n  1. row\n  id: 123\n  name: John Doe\n  created_at: 2024-03-15T14:30:00\n  email: NULL\n\n  Result: 1 rows\n  ```\n  - Features:\n    - Smart truncation of large results\n    - Full result set access via [claude-local-files](https://github.com/runekaagaard/claude-local-files) integration\n    - Clean NULL value display\n    - ISO formatted dates\n    - Clear row separation\n\n## Claude Local Files\n\nWhen [claude-local-files](https://github.com/runekaagaard/claude-local-files) is configured:\n\n- Access complete result sets beyond Claude's context window\n- Generate detailed reports and visualizations\n- Perform deep analysis on large datasets\n- Export results for further processing\n\nThe integration automatically activates when `CLAUDE_LOCAL_FILES_PATH` is set.\n\n## Developing\n\nFirst clone the github repository, install the dependencies and your database driver(s) of choice:\n\n```\ngit clone git@github.com:runekaagaard/mcp-alchemy.git\ncd mcp-alchemy\nuv sync\nuv pip install psycopg2-binary\n```\n\nThen set this in claude_desktop_config.json:\n\n```\n...\n\"command\": \"uv\",\n\"args\": [\"run\", \"--directory\", \"/path/to/mcp-alchemy\", \"-m\", \"mcp_alchemy.server\", \"main\"],\n...\n```\n\n## My Other LLM Projects\n\n- **[MCP Redmine](https://github.com/runekaagaard/mcp-redmine)** - Let Claude Desktop manage your Redmine projects and issues.\n- **[MCP Notmuch Sendmail](https://github.com/runekaagaard/mcp-notmuch-sendmail)** - Email assistant for Claude Desktop using notmuch.\n- **[Diffpilot](https://github.com/runekaagaard/diffpilot)** - Multi-column git diff viewer with file grouping and tagging.\n- **[Claude Local Files](https://github.com/runekaagaard/claude-local-files)** - Access local files in Claude Desktop artifacts.\n\n## MCP Directory Listings\n\nMCP Alchemy is listed in the following MCP directory sites and repositories:\n\n- [PulseMCP](https://www.pulsemcp.com/servers/runekaagaard-alchemy)\n- [Glama](https://glama.ai/mcp/servers/@runekaagaard/mcp-alchemy)\n- [MCP.so](https://mcp.so/server/mcp-alchemy)\n- [MCP Archive](https://mcp-archive.com/server/mcp-alchemy)\n- [Playbooks MCP](https://playbooks.com/mcp/runekaagaard-alchemy)\n- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)\n\n## Contributing\n\nContributions are warmly welcomed! Whether it's bug reports, feature requests, documentation improvements, or code contributions - all input is valuable. Feel free to:\n\n- Open an issue to report bugs or suggest features\n- Submit pull requests with improvements\n- Enhance documentation or share your usage examples\n- Ask questions and share your experiences\n\nThe goal is to make database interaction with Claude even better, and your insights and contributions help achieve that.\n\n## License\n\nMozilla Public License Version 2.0\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-alchemy-sqlite": {
+        "command": "uvx",
+        "args": ["--from", "mcp-alchemy==2025.7.9.172934", "--refresh-package", "mcp-alchemy", "mcp-alchemy"],
+        "env": {
+          "DB_URL": "sqlite:////absolute/path/to/database.db"
+        }
+      },
+      "mcp-alchemy-postgresql": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "mcp-alchemy==2025.7.9.172934",
+          "--with",
+          "psycopg2-binary",
+          "--refresh-package",
+          "mcp-alchemy",
+          "mcp-alchemy"
+        ],
+        "env": {
+          "DB_URL": "postgresql://user:password@localhost/dbname"
+        }
+      },
+      "mcp-alchemy-mysql-mariadb": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "mcp-alchemy==2025.7.9.172934",
+          "--with",
+          "pymysql",
+          "--refresh-package",
+          "mcp-alchemy",
+          "mcp-alchemy"
+        ],
+        "env": {
+          "DB_URL": "mysql+pymysql://user:password@localhost/dbname"
+        }
+      },
+      "mcp-alchemy-mssql": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "mcp-alchemy==2025.7.9.172934",
+          "--with",
+          "pymssql",
+          "--refresh-package",
+          "mcp-alchemy",
+          "mcp-alchemy"
+        ],
+        "env": {
+          "DB_URL": "mssql+pymssql://user:password@localhost/dbname"
+        }
+      },
+      "mcp-alchemy-oracle": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "mcp-alchemy==2025.7.9.172934",
+          "--with",
+          "oracledb",
+          "--refresh-package",
+          "mcp-alchemy",
+          "mcp-alchemy"
+        ],
+        "env": {
+          "DB_URL": "oracle+oracledb://user:password@localhost/dbname"
+        }
+      },
+      "mcp-alchemy-cratedb": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "mcp-alchemy==2025.7.9.172934",
+          "--with",
+          "sqlalchemy-cratedb>=0.42.0.dev1",
+          "--refresh-package",
+          "mcp-alchemy",
+          "mcp-alchemy"
+        ],
+        "env": {
+          "DB_URL": "crate://user:password@localhost:4200/?schema=testdrive"
+        }
+      },
+      "mcp-alchemy-vertica": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "mcp-alchemy==2025.7.9.172934",
+          "--with",
+          "vertica-python",
+          "--refresh-package",
+          "mcp-alchemy",
+          "mcp-alchemy"
+        ],
+        "env": {
+          "DB_URL": "vertica+vertica_python://user:password@localhost:5433/dbname",
+          "DB_ENGINE_OPTIONS": "{\"connect_args\": {\"ssl\": false}}"
+        }
+      },
+      "mcp-alchemy-dev": {
+        "command": "uv",
+        "args": ["run", "--directory", "/path/to/mcp-alchemy", "-m", "mcp_alchemy.server", "main"],
+        "env": {
+          "DB_URL": "sqlite:////absolute/path/to/database.db"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "runekaagaard",
+    "repo": "mcp-alchemy",
+    "url": "https://github.com/runekaagaard/mcp-alchemy",
+    "name": "runekaagaard__mcp-alchemy",
+    "path": null,
+    "stars": 314,
+    "contributors": 6,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f9d984ef2c15e3fd8808f88bedb3b31843548937"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.952Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "sqlalchemy",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-alchemy\"\nversion = \"2025.8.15.91819\"\ndescription = \"A MCP server that connects to your database\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.2.0rc1\",\n    \"sqlalchemy>=2.0.36\",\n]\nauthors = [\n  { name=\"Rune Kaagaard\" },\n]\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"Operating System :: OS Independent\",\n]\nlicense-files = [\"LICENSE\"]\npackages = [\n    {include = \"mcp_alchemy\"}\n]\n\n[project.scripts]\nmcp-alchemy = \"mcp_alchemy.server:main\"\n\n[project.urls]\nHomepage = \"https://github.com/runekaagaard/mcp-alchemy\"\nIssues = \"https://github.com/runekaagaard/mcp-alchemy/issues\"\nDisussions = \"https://github.com/runekaagaard/mcp-alchemy/discussions\"\n\n[build-system]\nrequires = [\"hatchling>=1.27\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\npackage = true\n\n[dependency-groups]\ndev = [\n    \"build>=1.2.2.post1\",\n    \"hatchling>=1.27.0\",\n]\n"
+}

@@ -1,0 +1,123 @@
+{
+  "name": "mpeirone__zabbix-mcp-server",
+  "display_name": "zabbix-mcp-server",
+  "description": "🔌 Complete MCP server for Zabbix integration - Connect AI assistants to Zabbix monitoring with 40+ tools for hosts, items, triggers, templates, problems, and more. Features read-only mode and comprehensive API coverage.",
+  "author": {
+    "name": "mpeirone"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/src/zabbix_mcp_server.py"],
+    "env": {
+      "ZABBIX_URL": "${user_config.zabbix_url}",
+      "ZABBIX_TOKEN": "${user_config.zabbix_token}",
+      "ZABBIX_USER": "${user_config.zabbix_user}",
+      "ZABBIX_PASSWORD": "${user_config.zabbix_password}",
+      "READ_ONLY": "${user_config.read_only}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "zabbix_url": {
+      "type": "string",
+      "title": "Zabbix Server URL",
+      "description": "Your Zabbix server API endpoint (e.g., https://zabbix.example.com)",
+      "required": true
+    },
+    "zabbix_token": {
+      "type": "string",
+      "title": "Zabbix API Token",
+      "description": "Your Zabbix API token (Recommended authentication method)",
+      "sensitive": true,
+      "required": false
+    },
+    "zabbix_user": {
+      "type": "string",
+      "title": "Zabbix Username",
+      "description": "Your Zabbix username (Alternative authentication method)",
+      "required": false
+    },
+    "zabbix_password": {
+      "type": "string",
+      "title": "Zabbix Password",
+      "description": "Your Zabbix password (Alternative authentication method)",
+      "sensitive": true,
+      "required": false
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-Only Mode",
+      "description": "Set to true to enable read-only mode (only GET operations allowed)",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# Zabbix MCP Server\n\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)\n\nA comprehensive Model Context Protocol (MCP) server for Zabbix integration using FastMCP and python-zabbix-utils. This server provides complete access to Zabbix API functionality through MCP-compatible tools.\n\n<a href=\"https://glama.ai/mcp/servers/@mpeirone/zabbix-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@mpeirone/zabbix-mcp-server/badge\" alt=\"zabbix-mcp-server MCP server\" />\n</a>\n\n## Features\n\n### 🏠 Host Management\n- `host_get` - Retrieve hosts with advanced filtering\n- `host_create` - Create new hosts with interfaces and templates\n- `host_update` - Update existing host configurations\n- `host_delete` - Remove hosts from monitoring\n\n### 👥 Host Group Management\n- `hostgroup_get` - Retrieve host groups\n- `hostgroup_create` - Create new host groups\n- `hostgroup_update` - Modify existing host groups\n- `hostgroup_delete` - Remove host groups\n\n### 📊 Item Management\n- `item_get` - Retrieve monitoring items with filtering\n- `item_create` - Create new monitoring items\n- `item_update` - Update existing items\n- `item_delete` - Remove monitoring items\n\n### ⚠️ Trigger Management\n- `trigger_get` - Retrieve triggers and alerts\n- `trigger_create` - Create new triggers\n- `trigger_update` - Modify existing triggers\n- `trigger_delete` - Remove triggers\n\n### 📋 Template Management\n- `template_get` - Retrieve monitoring templates\n- `template_create` - Create new templates\n- `template_update` - Update existing templates\n- `template_delete` - Remove templates\n\n### 🚨 Problem & Event Management\n- `problem_get` - Retrieve current problems and issues\n- `event_get` - Get historical events\n- `event_acknowledge` - Acknowledge events and problems\n\n### 📈 Data Retrieval\n- `history_get` - Access historical monitoring data\n- `trend_get` - Retrieve trend data and statistics\n\n### 👤 User Management\n- `user_get` - Retrieve user accounts\n- `user_create` - Create new users\n- `user_update` - Update user information\n- `user_delete` - Remove user accounts\n\n### 🔧 Maintenance Management\n- `maintenance_get` - Retrieve maintenance periods\n- `maintenance_create` - Schedule maintenance windows\n- `maintenance_update` - Modify maintenance periods\n- `maintenance_delete` - Remove maintenance schedules\n\n### 📊 Additional Features\n- `graph_get` - Retrieve graph configurations\n- `discoveryrule_get` - Get discovery rules\n- `itemprototype_get` - Retrieve item prototypes\n- `configuration_export` - Export Zabbix configurations\n- `configuration_import` - Import configurations\n- `apiinfo_version` - Get API version information\n\n## Installation\n\n### Prerequisites\n\n- Python 3.10 or higher\n- [uv](https://docs.astral.sh/uv/) package manager\n- Access to a Zabbix server with API enabled\n\n### Quick Start\n\n1. **Clone the repository:**\n   ```bash\n   git clone https://github.com/mpeirone/zabbix-mcp-server.git\n   cd zabbix-mcp-server\n   ```\n\n2. **Install dependencies:**\n   ```bash\n   uv sync\n   ```\n\n3. **Configure environment variables:**\n   ```bash\n   cp config/.env.example .env\n   # Edit .env with your Zabbix server details\n   ```\n\n4. **Test the installation:**\n   ```bash\n   uv run python scripts/test_server.py\n   ```\n\n## Configuration\n\n### Required Environment Variables\n\n- `ZABBIX_URL` - Your Zabbix server API endpoint (e.g., `https://zabbix.example.com`)\n\n### Authentication (choose one method)\n\n**Method 1: API Token (Recommended)**\n- `ZABBIX_TOKEN` - Your Zabbix API token\n\n**Method 2: Username/Password**\n- `ZABBIX_USER` - Your Zabbix username\n- `ZABBIX_PASSWORD` - Your Zabbix password\n\n### Optional Configuration\n\n- `READ_ONLY` - Set to `true`, `1`, or `yes` to enable read-only mode (only GET operations allowed)\n\n## Usage\n\n### Running the Server\n\n**With startup script (recommended):**\n```bash\nuv run python scripts/start_server.py\n```\n\n**Direct execution:**\n```bash\nuv run python src/zabbix_mcp_server.py\n```\n\n### Testing\n\n**Run test suite:**\n```bash\nuv run python scripts/test_server.py\n```\n\n### Read-Only Mode\n\nWhen `READ_ONLY=true`, the server will only expose GET operations (retrieve data) and block all create, update, and delete operations. This is useful for:\n\n- 📊 Monitoring dashboards\n- 🔍 Read-only integrations\n- 🔒 Security-conscious environments\n- 🛡️ Preventing accidental modifications\n\n### Example Tool Calls\n\n**Get all hosts:**\n```python\nhost_get()\n```\n\n**Get hosts in specific group:**\n```python\nhost_get(groupids=[\"1\"])\n```\n\n**Create a new host:**\n```python\nhost_create(\n    host=\"server-01\",\n    groups=[{\"groupid\": \"1\"}],\n    interfaces=[{\n        \"type\": 1,\n        \"main\": 1,\n        \"useip\": 1,\n        \"ip\": \"192.168.1.100\",\n        \"dns\": \"\",\n        \"port\": \"10050\"\n    }]\n)\n```\n\n**Get recent problems:**\n```python\nproblem_get(recent=True, limit=10)\n```\n\n**Get history data:**\n```python\nhistory_get(\n    itemids=[\"12345\"],\n    time_from=1640995200,\n    limit=100\n)\n```\n\n## MCP Integration\n\nThis server is designed to work with MCP-compatible clients like Claude Desktop. See [MCP_SETUP.md](MCP_SETUP.md) for detailed integration instructions.\n\n## Docker Support\n\n### Using Docker Compose\n\n1. **Configure environment:**\n   ```bash\n   cp config/.env.example .env\n   # Edit .env with your settings\n   ```\n\n2. **Run with Docker Compose:**\n   ```bash\n   docker compose up -d\n   ```\n\n### Building Docker Image\n\n```bash\ndocker build -t zabbix-mcp-server .\n```\n\n## Development\n\n### Project Structure\n\n```\nzabbix-mcp-server/\n├── src/\n│   └── zabbix_mcp_server.py    # Main server implementation\n├── scripts/\n│   ├── start_server.py         # Startup script with validation\n│   └── test_server.py          # Test script\n├── config/\n│   ├── .env.example           # Environment configuration template\n│   └── mcp.json               # MCP client configuration example\n├── pyproject.toml             # Python project configuration\n├── requirements.txt           # Dependencies\n├── Dockerfile                 # Docker configuration\n├── docker-compose.yml         # Docker Compose setup\n├── README.md                  # This file\n├── MCP_SETUP.md              # MCP integration guide\n├── CONTRIBUTING.md           # Contribution guidelines\n├── CHANGELOG.md              # Version history\n└── LICENSE                   # MIT license\n```\n\n### Contributing\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n### Running Tests\n\n```bash\n# Test server functionality\nuv run python scripts/test_server.py\n\n# Test with Docker\ndocker-compose exec zabbix-mcp python scripts/test_server.py\n```\n\n## Error Handling\n\nThe server includes comprehensive error handling:\n\n- ✅ Authentication errors are clearly reported\n- 🔒 Read-only mode violations are blocked with descriptive messages\n- ✔️ Invalid parameters are validated\n- 🌐 Network and API errors are properly formatted\n- 📝 Detailed logging for troubleshooting\n\n## Security Considerations\n\n- 🔑 Use API tokens instead of username/password when possible\n- 🔒 Enable read-only mode for monitoring-only use cases\n- 🛡️ Secure your environment variables\n- 🔐 Use HTTPS for Zabbix server connections\n- 🔄 Regularly rotate API tokens\n- 📁 Store configuration files securely\n\n## Troubleshooting\n\n### Common Issues\n\n**Connection Failed:**\n- Verify `ZABBIX_URL` is correct and accessible\n- Check authentication credentials\n- Ensure Zabbix API is enabled\n\n**Permission Denied:**\n- Verify user has sufficient Zabbix permissions\n- Check if read-only mode is enabled when trying to modify data\n\n**Tool Not Found:**\n- Ensure all dependencies are installed: `uv sync`\n- Verify Python version compatibility (3.10+)\n\n### Debug Mode\n\nSet environment variable for detailed logging:\n```bash\nexport DEBUG=1\nuv run python scripts/start_server.py\n```\n\n## Dependencies\n\n- [FastMCP](https://github.com/jlowin/fastmcp) - MCP server framework\n- [python-zabbix-utils](https://github.com/zabbix/python-zabbix-utils) - Official Zabbix Python library\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Acknowledgments\n\n- [Zabbix](https://www.zabbix.com/) for the monitoring platform\n- [Model Context Protocol](https://modelcontextprotocol.io/) for the integration standard\n- [FastMCP](https://github.com/jlowin/fastmcp) for the server framework\n\n## Support\n\n- 📖 [Documentation](README.md)\n- 🐛 [Issue Tracker](https://github.com/mpeirone/zabbix-mcp-server/issues)\n- 💬 [Discussions](https://github.com/mpeirone/zabbix-mcp-server/discussions)\n\n---\n\n**Made with ❤️ for the Zabbix and MCP communities**",
+  "category": "Monitoring",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "zabbix-mcp-server-startup": {
+        "command": "uv",
+        "args": ["run", "python", "scripts/start_server.py"],
+        "env": {}
+      },
+      "zabbix-mcp-server": {
+        "command": "uv",
+        "args": ["run", "python", "src/zabbix_mcp_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mpeirone",
+    "repo": "zabbix-mcp-server",
+    "url": "https://github.com/mpeirone/zabbix-mcp-server",
+    "name": "zabbix-mcp-server",
+    "path": null,
+    "stars": 33,
+    "contributors": 3,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "56a21e3382370897a74c09ddfd1d472403afd1ed"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:23.610Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "zabbix_utils",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"zabbix-mcp-server\"\nversion = \"1.0.0\"\ndescription = \"A comprehensive MCP server for Zabbix integration\"\nreadme = \"README.md\"\nlicense = {text = \"MIT\"}\nauthors = [\n    {name = \"Zabbix MCP Server Contributors\"}\n]\nkeywords = [\"zabbix\", \"mcp\", \"monitoring\", \"api\", \"server\"]\nclassifiers = [\n    \"Development Status :: 5 - Production/Stable\",\n    \"Intended Audience :: Developers\",\n    \"Intended Audience :: System Administrators\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Topic :: System :: Monitoring\",\n    \"Topic :: System :: Systems Administration\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n]\ndependencies = [\n\"fastmcp>=2.8.1\",\n\"zabbix_utils>=2.0.2\",\n\"python-dotenv>=1.1.0\"\n]\nrequires-python = \">=3.10\"\n\n[project.urls]\nHomepage = \"https://github.com/mpeirone/zabbix-mcp-server\"\nRepository = \"https://github.com/mpeirone/zabbix-mcp-server\"\nIssues = \"https://github.com/mpeirone/zabbix-mcp-server/issues\"\nDocumentation = \"https://github.com/mpeirone/zabbix-mcp-server#readme\"\n\n[project.scripts]\nzabbix-mcp = \"src.zabbix_mcp_server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src\"]\n\n=== requirements.txt ===\nfastmcp>=2.8.1\nzabbix_utils>=2.0.2\npython-dotenv>=1.1.0"
+}

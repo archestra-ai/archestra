@@ -1,0 +1,82 @@
+{
+  "name": "jamesanz__medical-mcp",
+  "display_name": "medical-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides comprehensive medical information by querying multiple authoritative medical APIs including FDA, WHO, PubMed, Google Scholar, and RxNorm",
+  "author": {
+    "name": "JamesANZ"
+  },
+  "server": {
+    "command": "npm",
+    "args": ["start"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Medical MCP Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/JamesANZ/medical-mcp)](https://archestra.ai/mcp-catalog/jamesanz__medical-mcp)\n\nA Model Context Protocol (MCP) server that provides comprehensive medical information by querying multiple authoritative medical APIs including FDA, WHO, PubMed, and RxNorm.\n\n## Features\n\nThis MCP server offers five specialized tools for querying medical information from reliable sources:\n\n### 💊 Drug Information Tools\n\n#### `search-drugs`\n\nSearch for drug information using the FDA database.\n\n**Input:**\n\n- `query` (string): Drug name to search for (brand name or generic name)\n- `limit` (optional, number): Number of results to return (1-50, default: 10)\n\n**Output:**\n\n- Drug information including brand name, generic name, manufacturer, route, dosage form, and purpose\n\n**Example:**\n\n```\nDrug Search Results for \"Advil\"\n\nFound 1 drug(s)\n\n1. **ADVIL**\n   Generic Name: IBUPROFEN\n   Manufacturer: PFIZER CONSUMER HEALTHCARE\n   Route: ORAL\n   Dosage Form: TABLET\n   Purpose: For temporary relief of minor aches and pains...\n   Last Updated: 20210902\n```\n\n#### `get-drug-details`\n\nGet detailed information about a specific drug by NDC (National Drug Code).\n\n**Input:**\n\n- `ndc` (string): National Drug Code (NDC) of the drug\n\n**Output:**\n\n- Comprehensive drug information including warnings, drug interactions, and clinical pharmacology\n\n### 📊 Health Statistics Tools\n\n#### `get-health-statistics`\n\nGet health statistics and indicators from WHO Global Health Observatory.\n\n**Input:**\n\n- `indicator` (string): Health indicator to search for (e.g., 'Life expectancy', 'Mortality rate')\n- `country` (optional, string): Country code (e.g., 'USA', 'GBR')\n- `limit` (optional, number): Number of results to return (1-20, default: 10)\n\n**Output:**\n\n- Health statistics with values, ranges, and temporal data\n\n**Example:**\n\n```\nHealth Statistics: Life expectancy at birth (years)\n\nCountry: USA\nFound 10 data points\n\n1. **USA** (2019)\n   Value: 78.5 years\n   Numeric Value: 78.5\n   Date: 2019-12-31\n```\n\n### 🔬 Medical Literature Tools\n\n#### `search-medical-literature`\n\nSearch for medical research articles in PubMed.\n\n**Input:**\n\n- `query` (string): Medical topic or condition to search for\n- `max_results` (optional, number): Maximum number of articles to return (1-20, default: 10)\n\n**Output:**\n\n- Medical research articles with titles, PMIDs, journals, and publication dates\n\n**Example:**\n\n```\nMedical Literature Search: \"diabetes treatment\"\n\nFound 10 article(s)\n\n1. **Novel Approaches to Diabetes Management**\n   PMID: 12345678\n   Journal: New England Journal of Medicine\n   Publication Date: 2024-01-15\n```\n\n#### `search-google-scholar`\n\nSearch for academic research articles using Google Scholar.\n\n**Input:**\n\n- `query` (string): Academic topic or research query to search for\n\n**Output:**\n\n- Academic research articles with titles, authors, abstracts, journals, years, citations, and URLs\n\n**Example:**\n\n```\nGoogle Scholar Search: \"machine learning healthcare\"\n\nFound 10 article(s)\n\n1. **Machine Learning in Healthcare: A Systematic Review**\n   Authors: Smith J, Johnson A - Journal of Medical AI\n   Year: 2023\n   Citations: Cited by 45\n   URL: https://scholar.google.com/...\n   Abstract: This systematic review examines the application of machine learning...\n```\n\n**Note:** This tool uses web scraping to access Google Scholar since it doesn't provide a public API. It includes rate limiting protection and stealth measures to avoid detection.\n\n### 🏥 Drug Nomenclature Tools\n\n#### `search-drug-nomenclature`\n\nSearch for drug information using RxNorm (standardized drug nomenclature).\n\n**Input:**\n\n- `query` (string): Drug name to search for in RxNorm database\n\n**Output:**\n\n- Standardized drug information with RxCUI codes, synonyms, and term types\n\n## Installation\n\n1. Clone this repository:\n\n```bash\ngit clone <repository-url>\ncd medical-mcp\n```\n\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Build the project:\n\n```bash\nnpm run build\n```\n\n## Usage\n\n### Running the Server\n\nStart the MCP server:\n\n```bash\nnpm start\n```\n\nThe server runs on stdio and can be connected to any MCP-compatible client.\n\n### Example Queries\n\nHere are some example queries you can make with this MCP server:\n\n#### Search for Drug Information\n\n```json\n{\n  \"tool\": \"search-drugs\",\n  \"arguments\": {\n    \"query\": \"Tylenol\",\n    \"limit\": 5\n  }\n}\n```\n\n#### Get Drug Details by NDC\n\n```json\n{\n  \"tool\": \"get-drug-details\",\n  \"arguments\": {\n    \"ndc\": \"00071015527\"\n  }\n}\n```\n\n#### Get Health Statistics\n\n```json\n{\n  \"tool\": \"get-health-statistics\",\n  \"arguments\": {\n    \"indicator\": \"Life expectancy at birth (years)\",\n    \"country\": \"USA\",\n    \"limit\": 5\n  }\n}\n```\n\n#### Search Medical Literature\n\n```json\n{\n  \"tool\": \"search-medical-literature\",\n  \"arguments\": {\n    \"query\": \"COVID-19 treatment\",\n    \"max_results\": 10\n  }\n}\n```\n\n#### Search Drug Nomenclature\n\n```json\n{\n  \"tool\": \"search-drug-nomenclature\",\n  \"arguments\": {\n    \"query\": \"aspirin\"\n  }\n}\n```\n\n## API Endpoints\n\nThis MCP server integrates with the following medical APIs:\n\n### FDA API\n\n- `GET /drug/label.json` - Drug labeling information\n- Search by brand name, generic name, or NDC\n- Provides safety information, warnings, and clinical data\n\n### WHO Global Health Observatory API\n\n- `GET /api/Indicator` - Health statistics and indicators\n- Global health data with country-specific information\n- Temporal data for trend analysis\n\n### PubMed API\n\n- `GET /esearch.fcgi` - Search for medical articles\n- `GET /efetch.fcgi` - Retrieve article details\n- Access to millions of medical research papers\n\n### RxNorm API\n\n- `GET /REST/drugs.json` - Standardized drug nomenclature\n- Drug name standardization and relationships\n- Clinical drug information\n\n### Google Scholar (Web Scraping)\n\n- Web scraping of Google Scholar search results\n- Academic research article discovery\n- Citation and publication information\n- **Note**: Uses Puppeteer for browser automation with anti-detection measures\n\n## Data Sources\n\n### FDA (Food and Drug Administration)\n\n- **Source**: Official FDA drug labeling database\n- **Coverage**: All FDA-approved drugs in the United States\n- **Data**: Drug safety, efficacy, dosage, warnings, and interactions\n- **Update Frequency**: Real-time as drugs are approved or labeling changes\n\n### WHO (World Health Organization)\n\n- **Source**: Global Health Observatory database\n- **Coverage**: Global health statistics from 194 countries\n- **Data**: Life expectancy, mortality rates, disease prevalence, and health indicators\n- **Update Frequency**: Annual updates with historical data\n\n### PubMed (National Library of Medicine)\n\n- **Source**: MEDLINE database of medical literature\n- **Coverage**: Over 30 million citations from medical journals\n- **Data**: Research articles, clinical studies, and medical reviews\n- **Update Frequency**: Daily updates as new articles are published\n\n### RxNorm (National Library of Medicine)\n\n- **Source**: Standardized drug nomenclature system\n- **Coverage**: Clinical drugs available in the United States\n- **Data**: Drug names, codes, relationships, and clinical information\n- **Update Frequency**: Weekly updates\n\n### Google Scholar (Web Scraping)\n\n- **Source**: Google Scholar academic search engine\n- **Coverage**: Academic papers, theses, books, and abstracts across all disciplines\n- **Data**: Research articles, citations, authors, journals, and publication dates\n- **Update Frequency**: Real-time as new papers are indexed\n- **Note**: Access via web scraping with rate limiting protection\n\n## Error Handling\n\nThe server includes comprehensive error handling:\n\n- Network errors are caught and reported with descriptive messages\n- Invalid queries return appropriate error messages\n- Rate limiting and API errors are handled gracefully\n- Fallback responses when specific APIs are unavailable\n\n## Web Scraping Implementation\n\nThe Google Scholar integration uses Puppeteer for web scraping with the following features:\n\n### Anti-Detection Measures\n\n- **Stealth Mode**: Browser launched with multiple flags to avoid detection\n- **User Agent Spoofing**: Realistic browser user agent strings\n- **Random Delays**: Built-in delays between requests to avoid rate limiting\n- **Header Spoofing**: Realistic HTTP headers to appear as a regular browser\n- **Viewport Settings**: Standard desktop viewport dimensions\n\n### Robust Parsing\n\n- **Multiple Selectors**: Uses various CSS selectors to handle different Google Scholar layouts\n- **Fallback Strategies**: Multiple parsing approaches for different page structures\n- **Error Recovery**: Graceful handling of missing elements or changed page structures\n- **Data Validation**: Filters out incomplete or invalid results\n\n### Rate Limiting Protection\n\n- **Random Delays**: 1-3 second random delays between requests\n- **Browser Management**: Proper browser cleanup to prevent resource leaks\n- **Timeout Handling**: Configurable timeouts for network requests\n- **Error Recovery**: Automatic retry logic for failed requests\n\n## Medical Disclaimer\n\n**Important**: This MCP server provides information from authoritative medical sources but should not be used as a substitute for professional medical advice, diagnosis, or treatment. Always consult with qualified healthcare professionals for medical decisions.\n\n- The information provided is for educational and informational purposes only\n- Drug information may not be complete or up-to-date for all medications\n- Health statistics are aggregated data and may not reflect individual circumstances\n- Medical literature should be interpreted by qualified healthcare professionals\n\n## Dependencies\n\n- `@modelcontextprotocol/sdk` - MCP SDK for server implementation\n- `superagent` - HTTP client for API requests\n- `puppeteer` - Browser automation for web scraping Google Scholar\n- `zod` - Schema validation for tool parameters\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.\n",
+  "category": "Healthcare",
+  "quality_score": 46,
+  "archestra_config": {
+    "client_config_permutations": {
+      "medical-mcp-stdio": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JamesANZ",
+    "repo": "medical-mcp",
+    "url": "https://github.com/JamesANZ/medical-mcp",
+    "name": "jamesanz__medical-mcp",
+    "path": null,
+    "stars": 16,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "29a5a4ea9c621bebbe6898df03089b76ed7de7ae"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.003Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "puppeteer",
+      "importance": 8
+    },
+    {
+      "name": "superagent",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"medical-mcp\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"medical-mcp\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"main\": \"index.js\",\n  \"keywords\": [\n    \"medical\",\n    \"healthcare\",\n    \"drugs\",\n    \"fda\",\n    \"who\",\n    \"pubmed\",\n    \"mcp\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"A Model Context Protocol (MCP) server that provides comprehensive medical information by querying multiple authoritative medical APIs including FDA, WHO, PubMed, and RxNorm.\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.15.0\",\n    \"puppeteer\": \"^24.12.1\",\n    \"superagent\": \"^10.2.2\",\n    \"zod\": \"^3.25.75\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^24.0.10\",\n    \"@types/superagent\": \"^8.1.9\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

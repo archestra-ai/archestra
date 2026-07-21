@@ -1,0 +1,98 @@
+{
+  "name": "cyberchitta__llm-context-py",
+  "display_name": "llm-context.py",
+  "description": "Share code with LLMs via Model Context Protocol or clipboard. Rule-based customization enables easy switching between different tasks (like code review and documentation). Includes smart code outlining.",
+  "author": {
+    "name": "cyberchitta"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# LLM Context\n\n[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)\n[![PyPI version](https://img.shields.io/pypi/v/llm-context.svg)](https://pypi.org/project/llm-context/)\n[![Downloads](https://static.pepy.tech/badge/llm-context/week)](https://pepy.tech/project/llm-context)\n\nLLM Context is a tool that helps developers quickly inject relevant content from code/text projects into Large Language Model chat interfaces. It leverages `.gitignore` patterns for smart file selection and provides both a streamlined clipboard workflow using the command line and direct LLM integration through the Model Context Protocol (MCP).\n\n> **Note**: This project was developed in collaboration with several Claude Sonnets - 3.5, 3.6 and 3.7 (and more recently Grok-3 as well), using LLM Context itself to share code during development. All code in the repository is human-curated (by me 😇, @restlessronin).\n\n## Why LLM Context?\n\nFor an in-depth exploration of the reasoning behind LLM Context and its approach to AI-assisted development, check out our article: [LLM Context: Harnessing Vanilla AI Chats for Development](https://www.cyberchitta.cc/articles/llm-ctx-why.html)\n\nTo see LLM Context in action with real-world examples and workflows, read: [Full Context Magic - When AI Finally Understands Your Entire Project](https://www.cyberchitta.cc/articles/full-context-magic.html)\n\n## Current Usage Patterns\n\n- **Direct LLM Integration**: Native integration with Claude Desktop via MCP protocol\n- **Chat Interface Support**: Works with any LLM chat interface via CLI/clipboard\n  - Optimized for interfaces with persistent context like Claude Projects and Custom GPTs\n  - Works equally well with standard chat interfaces\n- **Project Types**: Suitable for code repositories and collections of text/markdown/html documents\n- **Project Size**: Optimized for projects that fit within an LLM's context window. Large project support is in development\n\n## Installation\n\nInstall LLM Context using [uv](https://github.com/astral-sh/uv):\n\n```bash\nuv tool install \"llm-context>=0.3.0\"\n```\n\nTo upgrade to the latest version:\n\n```bash\nuv tool upgrade llm-context\n```\n\n> **Warning**: LLM Context is under active development. Updates may overwrite configuration files prefixed with `lc-`. We recommend all configuration files be version controlled for this reason.\n\n## Quickstart\n\n### MCP with Claude Desktop\n\nAdd to 'claude_desktop_config.json':\n\n```jsonc\n{\n  \"mcpServers\": {\n    \"CyberChitta\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"llm-context\", \"lc-mcp\"]\n    }\n  }\n}\n```\n\nOnce configured, you can start working with your project in two simple ways:\n\n1. Say: \"I would like to work with my project\"\n   Claude will ask you for the project root path.\n\n2. Or directly specify: \"I would like to work with my project /path/to/your/project\"\n   Claude will automatically load the project context.\n\n#### Preferred Workflow: Combining Project UI with MCP\n\nFor optimal results, combine initial context through Claude's Project Knowledge UI with dynamic code access via MCP. This provides both comprehensive understanding and access to latest changes. See [Full Context Magic](https://www.cyberchitta.cc/articles/full-context-magic.html) for details and examples.\n\n### CLI Quick Start and Typical Workflow\n\n1. Navigate to your project's root directory\n2. Initialize repository: `lc-init` (only needed once)\n3. Select files: `lc-sel-files`\n4. (Optional) Review selected files in `.llm-context/curr_ctx.yaml`\n5. Generate context: `lc-context` (with optional flags: `-p` for prompt, `-u` for user notes)\n6. Use with your preferred interface:\n\n- Project Knowledge (Claude Pro): Paste into knowledge section\n- GPT Knowledge (Custom GPTs): Paste into knowledge section\n- Regular chats: Use `lc-context -p` to include instructions\n\n7. When the LLM requests additional files:\n   - Copy the file list from the LLM\n   - Run `lc-clip-files`\n   - Paste the contents back to the LLM\n\n## Core Commands\n\n- `lc-init`: Initialize project configuration\n- `lc-set-rule <n>`: Switch rules (system rules are prefixed with \"lc-\")\n- `lc-sel-files`: Select files for inclusion\n- `lc-sel-outlines`: Select files for outline generation\n- `lc-context [-p] [-u] [-f FILE]`: Generate and copy context\n  - `-p`: Include prompt instructions\n  - `-u`: Include user notes\n  - `-f FILE`: Write to output file\n- `lc-prompt`: Generate project instructions for LLMs\n- `lc-clip-files`: Process LLM file requests\n- `lc-changed`: List files modified since last context generation\n- `lc-outlines`: Generate outlines for code files\n- `lc-clip-implementations`: Extract code implementations requested by LLMs (doesn't support C/C++)\n\n## Features & Advanced Usage\n\nLLM Context provides advanced features for customizing how project content is captured and presented:\n\n- Smart file selection using `.gitignore` patterns\n- Multiple rule-based profiles for different use cases\n  - System rules (prefixed with \"lc-\") provide default functionality\n  - User-defined rules can be created independently or extend existing rules\n- Code Navigation Features:\n  1. **Smart Code Outlines**: Allows LLMs to view the high-level structure of your codebase with automatically generated outlines highlighting important definitions\n  2. **Definition Implementation Extraction**: Paste full implementations of specific definitions that are requested by LLMs after they review the code outlines, using the `lc-clip-implementations` command\n- Customizable templates and prompts\n\nSee our [User Guide](docs/user-guide.md) for detailed documentation of these features.\n\n## Similar Tools\n\nCheck out our [comprehensive list of alternatives](https://www.cyberchitta.cc/articles/lc-alternatives.html) - the sheer number of tools tackling this problem demonstrates its importance to the developer community.\n\n## Acknowledgments\n\nLLM Context evolves from a lineage of AI-assisted development tools:\n\n- This project succeeds [LLM Code Highlighter](https://github.com/restlessronin/llm-code-highlighter), a TypeScript library I developed for IDE integration.\n- The concept originated from my work on [RubberDuck](https://github.com/rubberduck-ai/rubberduck-vscode) and continued with later contributions to [Continue](https://github.com/continuedev/continuedev).\n- LLM Code Highlighter was heavily inspired by [Aider Chat](https://github.com/paul-gauthier/aider). I worked with GPT-4 to translate several Aider Chat Python modules into TypeScript, maintaining functionality while restructuring the code.\n- This project uses tree-sitter [tag query files](src/llm_context/highlighter/tag-qry/) from Aider Chat.\n- LLM Context exemplifies the power of AI-assisted development, transitioning from Python to TypeScript and back to Python with the help of GPT-4 and Claude-3.5-Sonnet.\n\nI am grateful for the open-source community's innovations and the AI assistance that have shaped this project's evolution.\n\nI am grateful for the help of Claude-3.5-Sonnet in the development of this project.\n\n## License\n\nThis project is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "Development",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "llm-context": {
+        "command": "uvx",
+        "args": ["--from", "llm-context", "lc-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cyberchitta",
+    "repo": "llm-context.py",
+    "url": "https://github.com/cyberchitta/llm-context.py",
+    "name": "llm-context.py",
+    "path": null,
+    "stars": 253,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "56c88787839c35884a5bd22a0f65f645bf4c6069"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:36:49.735Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "jinja2",
+      "importance": 5
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "packaging",
+      "importance": 3
+    },
+    {
+      "name": "pathspec",
+      "importance": 5
+    },
+    {
+      "name": "pyperclip",
+      "importance": 6
+    },
+    {
+      "name": "pyyaml",
+      "importance": 4
+    },
+    {
+      "name": "tree-sitter",
+      "importance": 8
+    },
+    {
+      "name": "tree-sitter-language-pack",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"llm-context\"\nversion = \"0.3.4\"\ndescription = \"Share code with LLMs via Model Context Protocol or clipboard. Rule-based customization enables easy switching between different tasks (like code review and documentation). Code outlining support is included as a standard feature.\"\nauthors = [\n  { name = \"restlessronin\", email = \"88921269+restlessronin@users.noreply.github.com\" },\n]\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = \"Apache-2.0\"\nkeywords = [\"llm\", \"ai\", \"context\", \"code\", \"clipboard\", \"chat\"]\nclassifiers = [\n  \"Development Status :: 4 - Beta\",\n  \"Environment :: Console\",\n  \"Intended Audience :: Developers\",\n  \"Intended Audience :: Information Technology\",\n  \"Intended Audience :: Science/Research\",\n  \"Topic :: Software Development :: Code Generators\",\n  \"Topic :: Utilities\",\n  \"Topic :: Communications :: Chat\",\n  \"Topic :: Scientific/Engineering :: Artificial Intelligence\",\n]\n\ndependencies = [\n  \"jinja2>=3.1.6, <4.0\",\n  \"mcp>=1.11.0\",\n  \"packaging>=24.1, <25.0\",\n  \"pathspec>=0.12.1, <0.13.0\",\n  \"pyperclip>=1.9.0, <2.0.0\",\n  \"pyyaml>=6.0.2\",\n  \"tree-sitter>=0.24\",\n  \"tree-sitter-language-pack>=0.9.0\",\n]\n\n[project.urls]\nRepository = \"https://github.com/cyberchitta/llm-context.py\"\n\"User Guide\" = \"https://github.com/cyberchitta/llm-context.py/blob/main/docs/user-guide.md\"\n\n[project.scripts]\nlc-context = \"llm_context.cli:context\"\nlc-changed = \"llm_context.cli:changed_files\"\nlc-init = \"llm_context.cli:init_project\"\nlc-clip-files = \"llm_context.cli:files_from_clip\"\nlc-clip-implementations = \"llm_context.cli:implementations_from_clip\"\nlc-focus-help = \"llm_context.cli:focus_help\"\nlc-mcp = \"llm_context.mcp:run_server\"\nlc-outlines = \"llm_context.cli:outlines\"\nlc-prompt = \"llm_context.cli:prompt\"\nlc-sel-files = \"llm_context.cli:select_full_files\"\nlc-sel-outlines = \"llm_context.cli:select_outline_files\"\nlc-set-rule = \"llm_context.cli:set_rule_with_args\"\nlc-version = \"llm_context.cli:show_version\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npythonpath = [\"src\"]\nfilterwarnings = [\"ignore::FutureWarning\"]\n\n[tool.mypy]\npython_version = \"3.10\"\nwarn_return_any = true\nwarn_unused_configs = true\nignore_missing_imports = true\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py313\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\"]\nignore = [\"E203\", \"E266\", \"E501\", \"F403\", \"F401\"]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n  \"git-cliff>=2.6.1, <3.0\",\n  \"isort>=6.0.1, <7.0\",\n  \"mypy>=1.11.2, <2.0\",\n  \"pytest>=8.3.5, <9.0\",\n  \"types-pyyaml>=6.0.12.20241230\",\n  \"ruff>=0.9.10, <1.0\",\n  \"taplo>=0.9.3, <1.0\",\n]\n\n[tool.hatch.build]\ninclude=[\"src/**\"]\n\n[tool.hatch.build.targets.wheel]\nsources = [\"src\"]\n"
+}

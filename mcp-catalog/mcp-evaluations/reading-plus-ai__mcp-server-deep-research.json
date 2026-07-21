@@ -1,0 +1,80 @@
+{
+  "name": "reading-plus-ai__mcp-server-deep-research",
+  "display_name": "mcp-server-deep-research",
+  "description": "MCP server from reading-plus-ai/mcp-server-deep-research",
+  "author": {
+    "name": "reading-plus-ai"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-deep-research"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Server for Deep Research\n\nMCP Server for Deep Research is a tool designed for conducting comprehensive research on complex topics. It helps you explore questions in depth, find relevant sources, and generate structured research reports.\n\nYour personal Research Assistant, turning research questions into comprehensive, well-cited reports.\n\n## 🚀 Try it Out\n\n[![Watch the demo](https://img.youtube.com/vi/_a7sfo5yxoI/maxresdefault.jpg)]([VIDEO_URL](https://youtu.be/_a7sfo5yxoI))\nYoutube: https://youtu.be/_a7sfo5yxoI\n\n1. **Download Claude Desktop**\n   - Get it [here](https://claude.ai/download)\n\n2. **Install and Set Up**\n   - On macOS, run the following command in your terminal:\n   ```bash\n   python setup.py\n   ```\n\n3. **Start Researching**\n   - Select the deep-research prompt template from MCP\n   - Begin your research by providing a research question\n\n## Features\n\nThe Deep Research MCP Server offers a complete research workflow:\n\n1. **Question Elaboration**\n   - Expands and clarifies your research question\n   - Identifies key terms and concepts\n   - Defines scope and parameters\n\n2. **Subquestion Generation**\n   - Creates focused subquestions that address different aspects\n   - Ensures comprehensive coverage of the main topic\n   - Provides structure for systematic research\n\n3. **Web Search Integration**\n   - Uses Claude's built-in web search capabilities\n   - Performs targeted searches for each subquestion\n   - Identifies relevant and authoritative sources\n   - Collects diverse perspectives on the topic\n\n4. **Content Analysis**\n   - Evaluates information quality and relevance\n   - Synthesizes findings from multiple sources\n   - Provides proper citations for all sources\n\n5. **Report Generation**\n   - Creates well-structured, comprehensive reports as artifacts\n   - Properly cites all sources used\n   - Presents a balanced view with evidence-based conclusions\n   - Uses appropriate formatting for clarity and readability\n\n## 📦 Components\n\n### Prompts\n- **deep-research**: Tailored for comprehensive research tasks with a structured approach\n\n## ⚙️ Modifying the Server\n\n### Claude Desktop Configurations\n- macOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n- Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n### Development (Unpublished Servers)\n```json\n\"mcpServers\": {\n  \"mcp-server-deep-research\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"/Users/username/repos/mcp-server-application/mcp-server-deep-research\",\n      \"run\",\n      \"mcp-server-deep-research\"\n    ]\n  }\n}\n```\n\n### Published Servers\n```json\n\"mcpServers\": {\n  \"mcp-server-deep-research\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"mcp-server-deep-research\"\n    ]\n  }\n}\n```\n\n## 🛠️ Development\n\n### Building and Publishing\n1. **Sync Dependencies**\n   ```bash\n   uv sync\n   ```\n\n2. **Build Distributions**\n   ```bash\n   uv build\n   ```\n   Generates source and wheel distributions in the dist/ directory.\n\n3. **Publish to PyPI**\n   ```bash\n   uv publish\n   ```\n\n## 🤝 Contributing\n\nContributions are welcome! Whether you're fixing bugs, adding features, or improving documentation, your help makes this project better.\n\n## 📜 License\n\nThis project is licensed under the MIT License.\nSee the LICENSE file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-deep-research": {
+        "command": "uvx",
+        "args": ["mcp-server-deep-research"],
+        "env": {}
+      },
+      "mcp-server-deep-research-configured": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "/Users/username/repos/mcp-server-application/mcp-server-deep-research",
+          "run",
+          "mcp-server-deep-research"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "reading-plus-ai",
+    "repo": "mcp-server-deep-research",
+    "url": "https://github.com/reading-plus-ai/mcp-server-deep-research",
+    "name": "mcp-server-deep-research",
+    "path": null,
+    "stars": 154,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "640129a84d09543338f725cdc6b5a7ed204d140b"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:30.874Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-deep-research\"\nversion = \"0.1.1\"\ndescription = \"A MCP server for deep research and report generation\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp>=1.0.0\",\n]\n\n[[project.authors]]\nname = \"Xing Xing\"\nemail = \"xing@readingplus.ai\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-deep-research = \"mcp_server_deep_research:main\"\n\n\n=== setup.py ===\n#!/usr/bin/env python3\n\"\"\"Setup script for MCP server deep research environment.\"\"\"\n\nimport json\nimport subprocess\nimport sys\nfrom pathlib import Path\nimport re\nimport time\n\n\ndef run_command(cmd, check=True):\n    \"\"\"Run a shell command and return output.\"\"\"\n    try:\n        result = subprocess.run(\n            cmd, shell=True, check=check, capture_output=True, text=True\n        )\n        return result.stdout.strip()\n    except subprocess.CalledProcessError as e:\n        print(f\"Error running command '{cmd}': {e}\")\n        return None\n\n\ndef ask_permission(question):\n    \"\"\"Ask user for permission.\"\"\"\n    while True:\n        response = input(f\"{question} (y/n): \").lower()\n        if response in [\"y\", \"yes\"]:\n            return True\n        if response in [\"n\", \"no\"]:\n            return False\n        print(\"Please answer 'y' or 'n'\")\n\n\ndef check_uv():\n    \"\"\"Check if uv is installed and install if needed.\"\"\"\n    if not run_command(\"which uv\", check=False):\n        if ask_permission(\"uv is not installed. Would you like to install it?\"):\n            print(\"Installing uv...\")\n            run_command(\"curl -LsSf https://astral.sh/uv/install.sh | sh\")\n            print(\"uv installed successfully\")\n        else:\n            sys.exit(\"uv is required to continue\")\n\n\ndef setup_venv():\n    \"\"\"Create virtual environment if it doesn't exist.\"\"\"\n    if not Path(\".venv\").exists():\n        if ask_permission(\"Virtual environment not found. Create one?\"):\n            print(\"Creating virtual environment...\")\n            run_command(\"uv venv\")\n            print(\"Virtual environment created successfully\")\n        else:\n            sys.exit(\"Virtual environment is required to continue\")\n\n\ndef sync_dependencies():\n    \"\"\"Sync project dependencies.\"\"\"\n    print(\"Syncing dependencies...\")\n    run_command(\"uv sync\")\n    print(\"Dependencies synced successfully\")\n\n\ndef check_claude_desktop():\n    \"\"\"Check if Claude desktop app is installed.\"\"\"\n    app_path = \"/Applications/Claude.app\"\n    if not Path(app_path).exists():\n        print(\"Claude desktop app not found.\")\n        print(\"Please download and install from: https://claude.ai/download\")\n        if not ask_permission(\"Continue after installing Claude?\"):\n            sys.exit(\"Claude desktop app is required to continue\")\n\n\ndef setup_claude_config():\n    \"\"\"Setup Claude desktop config file.\"\"\"\n    config_path = Path(\n        \"~/Library/Application Support/Claude/claude_desktop_config.json\"\n    ).expanduser()\n    config_dir = config_path.parent\n\n    if not config_dir.exists():\n        config_dir.mkdir(parents=True)\n\n    config = (\n        {\"mcpServers\": {}}\n        if not config_path.exists()\n        else json.loads(config_path.read_text())\n    )\n    return config_path, config\n\n\ndef build_package():\n    \"\"\"Build package and get wheel path.\"\"\"\n    print(\"Building package...\")\n    try:\n        # Use Popen for real-time and complete output capture\n        process = subprocess.Popen(\n            \"uv build\",\n            shell=True,\n            stdout=subprocess.PIPE,\n            stderr=subprocess.PIPE,\n            text=True,\n        )\n        stdout, stderr = process.communicate()  # Capture output\n        output = stdout + stderr  # Combine both streams\n        print(f\"Raw output: {output}\")  # Debug: check output\n    except Exception as e:\n        sys.exit(f\"Error running build: {str(e)}\")\n\n    # Check if the command was successful\n    if process.returncode != 0:\n        sys.exit(f\"Build failed with error code {process.returncode}\")\n\n    # Extract wheel file path from the combined output\n    match = re.findall(r\"dist/[^\\s]+\\.whl\", output.strip())\n    whl_file = match[-1] if match else None\n    if not whl_file:\n        sys.exit(\"Failed to find wheel file in build output\")\n\n    # Convert to absolute path\n    path = Path(whl_file).absolute()\n    return str(path)\n\n\ndef update_config(config_path, config, wheel_path):\n    \"\"\"Update Claude config with MCP server settings.\"\"\"\n    config.setdefault(\"mcpServers\", {})\n    config[\"mcpServers\"][\"mcp-server-deep-research\"] = {\n        \"command\": \"uvx\",\n        \"args\": [\"--from\", wheel_path, \"mcp-server-deep-research\"],\n    }\n\n    config_path.write_text(json.dumps(config, indent=2))\n    print(f\"Updated config at {config_path}\")\n\n\ndef restart_claude():\n    \"\"\"Restart Claude desktop app if running.\"\"\"\n    if run_command(\"pgrep -x Claude\", check=False):\n        if ask_permission(\"Claude is running. Restart it?\"):\n            print(\"Restarting Claude...\")\n            run_command(\"pkill -x Claude\")\n            time.sleep(2)\n            run_command(\"open -a Claude\")\n            print(\"Claude restarted successfully\")\n    else:\n        print(\"Starting Claude...\")\n        run_command(\"open -a Claude\")\n\n\ndef main():\n    \"\"\"Main setup function.\"\"\"\n    print(\"Starting setup...\")\n    check_uv()\n    setup_venv()\n    sync_dependencies()\n    check_claude_desktop()\n    config_path, config = setup_claude_config()\n    wheel_path = build_package()\n    update_config(config_path, config, wheel_path)\n    restart_claude()\n    print(\"Setup completed successfully!\")\n\n\nif __name__ == \"__main__\":\n    main()\n"
+}

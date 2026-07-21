@@ -1,0 +1,99 @@
+{
+  "name": "joelio__stocky",
+  "display_name": "stocky",
+  "description": "An MCP server for searching and downloading stock photography.",
+  "author": {
+    "name": "joelio"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/stocky_mcp.py"],
+    "env": {
+      "PEXELS_API_KEY": "${user_config.pexels_api_key}",
+      "UNSPLASH_ACCESS_KEY": "${user_config.unsplash_access_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pexels_api_key": {
+      "type": "string",
+      "title": "Pexels API Key",
+      "description": "Your API key for authenticating with Pexels. Get your key at pexels.com/api.",
+      "sensitive": true,
+      "required": true
+    },
+    "unsplash_access_key": {
+      "type": "string",
+      "title": "Unsplash Access Key",
+      "description": "Your access key for authenticating with Unsplash. Sign up at unsplash.com/developers.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# <div align=\"center\">![Stocky Logo](STOCKY.png)<br/>Stocky<br/>*Find beautiful royalty-free stock images* 📸</div>\n\n<div align=\"center\">\n\n[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)\n[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://github.com/modelcontextprotocol)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\n</div>\n\n## ✨ Features\n\n- 🔍 **Multi-Provider Search** - Search across Pexels and Unsplash simultaneously\n- 📊 **Rich Metadata** - Get comprehensive image details including dimensions, photographer info, and licensing\n- 📄 **Pagination Support** - Browse through large result sets with ease\n- 🛡️ **Graceful Error Handling** - Robust error handling for API failures\n- ⚡ **Async Performance** - Lightning-fast concurrent API calls\n- 🎯 **Provider Flexibility** - Search specific providers or all at once\n\n![Photography Example](images/photography-example1.jpg)\n\n**Beautiful stock photography at your fingertips**  \nExample image used for demonstration purposes\n\n![Mountain Landscape](images/landscape-mountains.jpg)\n*Stunning landscapes available through multiple providers*\n\nPhoto by [Simon Berger](https://unsplash.com/@simon_berger) on [Unsplash](https://unsplash.com/photos/twukN12EN7c)\n\n## 🚀 Quick Start\n\n### Installation\n\n1. Clone the repository:\n```bash\ngit clone https://github.com/yourusername/stocky-mcp.git\ncd stocky-mcp\n```\n\n2. Install dependencies:\n```bash\npip install -r requirements.txt\n```\n\n### API Key Setup\n\nYou'll need free API keys from each provider:\n\n1. **Pexels** 📷 - Get your key at [pexels.com/api](https://www.pexels.com/api/)\n2. **Unsplash** 🌅 - Sign up at [unsplash.com/developers](https://unsplash.com/developers)\n\n\n### API Key Configuration\n\nYou'll need to configure your API keys when setting up the MCP server. These keys are used to authenticate with the stock image providers.\n\n### Running as an MCP Server\n\nStocky is designed to be run as an MCP (Model Context Protocol) server, not as a standalone application. It should be configured in your MCP client configuration.\n\n## 🔧 MCP Client Configuration\n\nAdd Stocky to your MCP client configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"stocky\": {\n      \"command\": \"python\",\n      \"args\": [\"/path/to/stocky_mcp.py\"],\n      \"env\": {\n        \"PEXELS_API_KEY\": \"your_pexels_key\",\n        \"UNSPLASH_ACCESS_KEY\": \"your_unsplash_key\",\n\n      }\n    }\n  }\n}\n```\n\n## 📖 Usage Examples\n\n<div align=\"center\">\n<img src=\"images/photography-example2.jpg\" alt=\"Stock Photography Example\" width=\"600\">\n<p><em>Find the perfect image for your project</em></p>\n</div>\n\n### Searching for Images\n\nSearch across all providers:\n```python\nresults = await search_stock_images(\"sunset beach\")\n```\n\nSearch specific providers:\n```python\nresults = await search_stock_images(\n    query=\"mountain landscape\",\n    providers=[\"pexels\", \"unsplash\"],\n    per_page=30,\n    page=1\n)\n```\n\n### Getting Image Details\n\n```python\ndetails = await get_image_details(\"unsplash_abc123xyz\")\n```\n\n### Downloading Images\n\n```python\n# Download and save to disk\nresult = await download_image(\n    image_id=\"pexels_123456\", \n    size=\"medium\", \n    output_path=\"/path/to/save.jpg\"\n)\n\n# Get base64-encoded image data\nresult = await download_image(\n    image_id=\"unsplash_abc123\", \n    size=\"original\"\n)\n```\n\n## 🛠️ Tools Documentation\n\n### `search_stock_images`\n\nSearch for royalty-free stock images across multiple providers.\n\n**Parameters:**\n- `query` (str, required) - Search terms for finding images\n- `providers` (list, optional) - List of providers to search: `[\"pexels\", \"unsplash\"]`\n- `per_page` (int, optional) - Results per page, max 50 (default: 20)\n- `page` (int, optional) - Page number for pagination (default: 1)\n- `sort_by` (str, optional) - Sort results by \"relevance\" or \"newest\"\n\n**Returns:** List of image results with metadata\n\n### `get_image_details`\n\nGet detailed information about a specific image.\n\n**Parameters:**\n- `image_id` (str, required) - Image ID in format `provider_id` (e.g., `pexels_123456`)\n\n**Returns:** Detailed image information including full metadata\n\n### `download_image`\n\nDownload an image to local storage or get base64 encoded data.\n\n**Parameters:**\n- `image_id` (str, required) - Image ID in format `provider_id` (e.g., `pexels_123456`)\n- `size` (str, optional) - Image size variant to download (default: \"original\")\n  - Options: thumbnail, small, medium, large, original\n- `output_path` (str, optional) - Path to save the image locally\n  - If not provided, returns base64 encoded image data\n\n**Returns:** Dictionary with download information or error\n\n## 📄 License Information\n\n<div align=\"center\">\n<img src=\"images/photography-example3.jpg\" alt=\"License Information\" width=\"600\">\n<p><em>Royalty-free images for your creative projects</em></p>\n</div>\n\nAll images returned by Stocky are free to use:\n\n- **Pexels** ✅ - Free for commercial and personal use, no attribution required\n- **Unsplash** ✅ - Free under the Unsplash License\n\n\nAlways check the specific license for each image before use in production.\n\n## 🤝 Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.\n\n1. Fork the Project\n2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)\n3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)\n4. Push to the Branch (`git push origin feature/AmazingFeature`)\n5. Open a Pull Request\n\n## 🙏 Acknowledgments\n\n- Thanks to [Pexels](https://www.pexels.com) and [Unsplash](https://unsplash.com) for providing free APIs\n- Built with the [Model Context Protocol](https://github.com/modelcontextprotocol)\n- Created with ❤️ for the developer community\n\n## 🐛 Troubleshooting\n\n### Common Issues\n\n**\"API key not found\" error**\n- Ensure your `.env` file exists and contains valid API keys\n- Check that environment variables are properly loaded\n- Verify API key names match exactly (case-sensitive)\n\n**No results returned**\n- Try different search terms\n- Check your internet connection\n- Verify API keys are active and have not exceeded rate limits\n\n**Installation issues**\n- Ensure Python 3.8+ is installed\n- Try creating a virtual environment: `python -m venv venv`\n- Update pip: `pip install --upgrade pip`\n\n### Rate Limiting\n\nEach provider has different rate limits:\n- **Pexels**: 200 requests per hour\n- **Unsplash**: 50 requests per hour (demo), 5000 per hour (production)\n\n\n---\n\n<div align=\"center\">\nMade with 💜 by the Stocky Team\n</div>\n",
+  "category": "Media",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "stocky": {
+        "command": "python",
+        "args": ["/path/to/stocky_mcp.py"],
+        "env": {
+          "PEXELS_API_KEY": "your_pexels_key",
+          "UNSPLASH_ACCESS_KEY": "your_unsplash_key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "joelio",
+    "repo": "stocky",
+    "url": "https://github.com/joelio/stocky",
+    "name": "stocky",
+    "path": null,
+    "stars": 5,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "66415a5cff1bf280ce364641541501742e0c540e"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.818Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=1.0.0\npycurl>=7.45.0\n\n\n=== setup.py ===\n\"\"\"Setup configuration for stocky-mcp package.\"\"\"\n\nfrom setuptools import setup, find_packages\n\nwith open(\"README.md\", \"r\", encoding=\"utf-8\") as fh:\n    long_description = fh.read()\n\nsetup(\n    name=\"stocky-mcp\",\n    version=\"1.0.0\",\n    author=\"Your Name\",  # TODO: Customize this\n    author_email=\"your.email@example.com\",  # TODO: Customize this\n    description=\"A friendly MCP server for searching royalty-free stock images\",\n    long_description=long_description,\n    long_description_content_type=\"text/markdown\",\n    url=\"https://github.com/yourusername/stocky-mcp\",  # TODO: Customize this\n    packages=find_packages(),\n    classifiers=[\n        \"Development Status :: 4 - Beta\",\n        \"Intended Audience :: Developers\",\n        \"Topic :: Software Development :: Libraries :: Python Modules\",\n        \"License :: OSI Approved :: MIT License\",\n        \"Programming Language :: Python :: 3\",\n        \"Programming Language :: Python :: 3.8\",\n        \"Programming Language :: Python :: 3.9\",\n        \"Programming Language :: Python :: 3.10\",\n        \"Programming Language :: Python :: 3.11\",\n        \"Operating System :: OS Independent\",\n    ],\n    python_requires=\">=3.8\",\n    install_requires=[\n        \"mcp>=1.0.0\",\n        \"aiohttp>=3.8.0\",\n        \"python-dotenv>=1.0.0\",\n    ],\n    entry_points={\n        \"console_scripts\": [\n            \"stocky=stocky_mcp:main\",\n        ],\n    },\n    keywords=\"mcp stock-images pexels unsplash royalty-free\",\n    project_urls={\n        \"Bug Reports\": \"https://github.com/yourusername/stocky-mcp/issues\",  # TODO: Customize this\n        \"Source\": \"https://github.com/yourusername/stocky-mcp\",  # TODO: Customize this\n    },\n)\n"
+}

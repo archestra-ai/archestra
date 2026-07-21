@@ -1,0 +1,148 @@
+{
+  "name": "klavis-ai__klavis__mcp_servers__youtube",
+  "display_name": "youtube",
+  "description": "Klavis AI (YC X25):  Open Source MCP integration for AI applications",
+  "author": {
+    "name": "Klavis-AI"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server.py"],
+    "env": {
+      "YOUTUBE_API_KEY": "${user_config.youtube_api_key}",
+      "YOUTUBE_MCP_SERVER_PORT": "${user_config.youtube_mcp_server_port}",
+      "WEBSHARE_PROXY_USERNAME": "${user_config.webshare_proxy_username}",
+      "WEBSHARE_PROXY_PASSWORD": "${user_config.webshare_proxy_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "youtube_api_key": {
+      "type": "string",
+      "title": "YouTube API Key",
+      "description": "Your YouTube Data API key (required for fetching video details).",
+      "sensitive": true,
+      "required": true
+    },
+    "youtube_mcp_server_port": {
+      "type": "number",
+      "title": "MCP Server Port",
+      "description": "Port for the MCP server.",
+      "default": 5000,
+      "required": false
+    },
+    "webshare_proxy_username": {
+      "type": "string",
+      "title": "Webshare Proxy Username",
+      "description": "Username for Webshare proxy (optional, for circumventing regional restrictions).",
+      "sensitive": true,
+      "required": false
+    },
+    "webshare_proxy_password": {
+      "type": "string",
+      "title": "Webshare Proxy Password",
+      "description": "Password for Webshare proxy (optional, for circumventing regional restrictions).",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# YouTube MCP Server\n\nA Model Context Protocol (MCP) server for YouTube integration. Retrieve video transcripts, details, and metadata using YouTube's Data API.\n\n## 🚀 Quick Start - Run in 30 Seconds\n\n### 🌐 Using Hosted Service (Recommended for Production)\n\nGet instant access to YouTube with our managed infrastructure - **no setup required**:\n\n**🔗 [Get Free API Key →](https://www.klavis.ai/home/api-keys)**\n\n```bash\npip install klavis\n# or\nnpm install klavis\n```\n\n```python\nfrom klavis import Klavis\n\nklavis = Klavis(api_key=\"your-free-key\")\nserver = klavis.mcp_server.create_server_instance(\"YOUTUBE\", \"user123\")\n```\n\n### 🐳 Using Docker (For Self-Hosting)\n\n```bash\n# Pull latest image\ndocker pull ghcr.io/klavis-ai/youtube-mcp-server:latest\n\n\n# Run YouTube MCP Server\ndocker run -p 5000:5000 -e API_KEY=$API_KEY \\\n  ghcr.io/klavis-ai/youtube-mcp-server:latest\n```\n\n**API Key Setup:** Get your YouTube Data API key from the [Google Cloud Console](https://console.cloud.google.com/apis/credentials) and enable the YouTube Data API v3.\n\n## 🛠️ Available Tools\n\n- **Video Transcripts**: Retrieve full video transcripts with timestamps\n- **Video Details**: Get video metadata including title, description, statistics\n- **Video Search**: Search for videos by keywords and filters\n- **Channel Information**: Get channel details and video listings\n- **Playlist Management**: Access playlist contents and metadata\n\n## 📚 Documentation & Support\n\n| Resource | Link |\n|----------|------|\n| **📖 Documentation** | [docs.klavis.ai](https://docs.klavis.ai) |\n| **💬 Discord** | [Join Community](https://discord.gg/p7TuTEcssn) |\n| **🐛 Issues** | [GitHub Issues](https://github.com/klavis-ai/klavis/issues) |\n\n## 🤝 Contributing\n\nWe welcome contributions! Please see our [Contributing Guide](../../CONTRIBUTING.md) for details.\n\n## 📜 License\n\nMIT License - see [LICENSE](../../LICENSE) for details.\n\n---\n\n<div align=\"center\">\n  <p><strong>🚀 Supercharge AI Applications </strong></p>\n  <p>\n    <a href=\"https://www.klavis.ai\">Get Free API Key</a> •\n    <a href=\"https://docs.klavis.ai\">Documentation</a> •\n    <a href=\"https://discord.gg/p7TuTEcssn\">Discord</a>\n  </p>\n</div>\n",
+  "category": "Social Media",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "youtube-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "5000:5000", "--env-file", ".env", "youtube-mcp-server"],
+        "env": {
+          "YOUTUBE_API_KEY": "your_youtube_api_key_here",
+          "YOUTUBE_MCP_SERVER_PORT": "5000",
+          "WEBSHARE_PROXY_USERNAME": "your_proxy_username",
+          "WEBSHARE_PROXY_PASSWORD": "your_proxy_password"
+        },
+        "docker_image": ".env"
+      },
+      "youtube-mcp-server-python": {
+        "command": "python",
+        "args": ["mcp_servers/youtube/server.py"],
+        "env": {
+          "YOUTUBE_API_KEY": "your_youtube_api_key_here",
+          "YOUTUBE_MCP_SERVER_PORT": "5000",
+          "WEBSHARE_PROXY_USERNAME": "your_proxy_username",
+          "WEBSHARE_PROXY_PASSWORD": "your_proxy_password"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Klavis-AI",
+    "repo": "klavis",
+    "url": "https://github.com/Klavis-AI/klavis/tree/main/mcp_servers/youtube",
+    "name": "klavis",
+    "path": "mcp_servers/youtube",
+    "stars": 3703,
+    "contributors": 13,
+    "issues": 18,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "7be98c8beeb60f3b0280ed87d14f21ad905e16da"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:49.242Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "youtube-transcript-api",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "aiohttp",
+      "importance": 6
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "typing-extensions",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nmcp>=1.12.0\npydantic\nfastapi\nuvicorn[standard]\naiohttp\npython-dotenv\ntyping-extensions\nyoutube-transcript-api>=1.0.3"
+}

@@ -1,0 +1,134 @@
+{
+  "name": "longevity-genie__biothings-mcp",
+  "display_name": "biothings-mcp",
+  "description": "MCP (Model Context Protocol) server for biothings",
+  "author": {
+    "name": "longevity-genie"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["biothings-mcp", "--output-dir", "${user_config.output_dir}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "output_dir": {
+      "type": "directory",
+      "title": "Output Directory",
+      "description": "Specify a custom output directory for saving files. If not set, files are saved to a 'biothings_output/' directory in the current working directory.",
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/longevity-genie-biothings-mcp-badge.png)](https://mseep.ai/app/longevity-genie-biothings-mcp)\n\n# biothings-mcp\n[![Tests](https://github.com/longevity-genie/biothings-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/longevity-genie/biothings-mcp/actions/workflows/tests.yml)\n[![PyPI version](https://badge.fury.io/py/biothings-mcp.svg)](https://badge.fury.io/py/biothings-mcp)\n\nMCP (Model Context Protocol) server for Biothings.io\n\nThis server implements the Model Context Protocol (MCP) for BioThings, providing a standardized interface for accessing and manipulating biomedical data. MCP enables AI assistants and agents to access specialized biomedical knowledge through structured interfaces to authoritative data sources. Supported BioThings data sources include:\n\n- [mygene.info](https://mygene.info) — Gene annotation and query service\n- [myvariant.info](https://myvariant.info) — Variant annotation and query service\n- [mychem.info](https://mychem.info) — Chemical compound annotation and query service\n\nIf you want to understand more what is Model Context Protocol and how to use it more efficiently you can take [DeepLearning AI Course](https://www.deeplearning.ai/short-courses/mcp-build-rich-context-ai-apps-with-anthropic/) or just search for MCP videos on YouTube.\n\n\n## About MCP (Model Context Protocol)\n\nMCP is a protocol that bridges the gap between AI systems and specialized domain knowledge. It enables:\n\n- **Structured Access**: Direct connection to authoritative biomedical data sources\n- **Natural Language Queries**: Simplified interaction with specialized databases\n- **Type Safety**: Strong typing and validation through biothings-typed-client\n- **AI Integration**: Seamless integration with AI assistants and agents\n\n## Available API Interfaces\n\nThis server provides dedicated API interfaces for different BioThings data types, leveraging the `biothings-typed-client` library. These interfaces are implemented using the following tool handlers:\n\n- **Gene Interface**: `GeneTools` (wraps `GeneClientAsync`)\n- **Variant Interface**: `VariantTools` (wraps `VariantClientAsync`)\n- **Chemical Interface**: `ChemTools` (wraps `ChemClientAsync`)\n- **Taxon Interface**: `TaxonTools` (wraps `TaxonClientAsync`)\n- **Download Interface**: `DownloadTools` (provides file download and sequence analysis capabilities)\n\n## Local File Saving Features\n\nThe server includes local file saving capabilities through the `DownloadTools` interface, which provides:\n\n### Download Tools\n- **`download_entrez_data`**: Download data from NCBI Entrez databases (returns content as string)\n- **`download_entrez_data_local`**: Download data from NCBI Entrez databases and save to local file\n\n### Output Directory Management\n- **Default Location**: Files are saved to `biothings_output/` directory in the current working directory\n- **Custom Location**: Use `--output-dir` parameter to specify a custom output directory\n- **Automatic Creation**: Output directories are created automatically if they don't exist\n- **Unique Filenames**: Auto-generated filenames include UUID prefixes to avoid conflicts\n\n### Supported File Formats\n- **FASTA**: `.fasta` extension for sequence data\n- **GenBank**: `.gb` extension for GenBank format data\n- **Alignment**: `.aln` extension for alignment results\n- **JSON**: `.json` extension for structured data\n- **Text**: `.txt` extension for general text data\n\n## Quick Start\n\n### Installing uv\n\n```bash\n# Download and install uv\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n\n# Verify installation\nuv --version\nuvx --version\n```\n\nuvx is a very nice tool that can run a python package installing it if needed.\n\n### Running with uvx\n\nYou can run the biothings-mcp server directly using uvx without cloning the repository:\n\n#### STDIO Mode (for MCP clients that require stdio, can be useful when you want to save files)\n```bash\n# Run the server in STDIO mode (default mode)\nuvx biothings-mcp\n\n# Or explicitly specify stdio mode\nuvx --from biothings-mcp stdio\n```\n\n#### HTTP Mode (Web Server)\n```bash\n# Run the server in streamable HTTP mode on default ( 3001 ) port\nuvx biothings-mcp\n\n# Run on a specific port\nuvx biothings-mcp server --port 8000\n```\n\n#### SSE Mode (Server-Sent Events)\n```bash\n# Run the server in SSE mode\nuvx biothings-mcp sse\n```\n\nThe HTTP mode will start a web server that you can access at `http://localhost:3001/mcp` (with documentation at `http://localhost:3001/docs`). The STDIO mode is designed for MCP clients that communicate via standard input/output, while SSE mode uses Server-Sent Events for real-time communication.\n\n\n## Configuring your (Anthropic Claude Desktop, Cursor, Windsurf, etc.)\n\nWe provide stdio configuration using the proxy (might need npx to run):\n* mcp-config-remote.json - for remote configuration\n* mcp-config-stdio.json - stdio configuration for localhost for MCP clients which do not support \n\n\n### Inspecting Biothings MCP server\n\nIf you want to inspect the methods provided by the MCP use npx (you may need to install nodejs and npm)\n\nTest your MCP setup with the MCP Inspector.\n\nIf you want to inspect local streamable-http server you use:\n\n```bash\nnpx @modelcontextprotocol/inspector --config mcp-config.json --server biothings-mcp\n```\n\nAdd -remote suffix for the remote server.\n\n\nIf you want to inspect stdio local server you should use\n\n```bash\nnpx @modelcontextprotocol/inspector --config mcp-config-stdio.json --server biothings-mcp\n```\n\nYou can also run inspector manually and put server parameters in the interface:\n```\nnpx @modelcontextprotocol/inspector\n```\n\nAfter that you can explore its methods with MCP Inspector at http://127.0.0.1:6274\n\n\n## Repository setup\n\n```bash\n# Clone the repository\ngit clone git@github.com:longevity-genie/biothings-mcp.git\ncd biothings-mcp\nuv sync\n```\n\n### Running the MCP Server\n\nIf you already cloned the repo you can run the server with uv\n\n```bash\n# Start the MCP server locally\nuv run server\n```\n\n\n### Integration with AI Systems\n\nTo integrate this server with your MCP-compatible AI client, you can use one of the preconfigured JSON files provided in this repository:\n\n*   **For connecting to a locally running server:** Use `mcp-config.json`. Ensure the server is running first, either via `uv run server` (see [Running the MCP Server](#running-the-mcp-server)) or `docker-compose up` (see [Docker Deployment](#docker-deployment)).\n*   **For connecting to the publicly hosted server:** Use `mcp-config-remote.json`. This connects to `https://biothings.longevity-genie.info/mcp` and doesn't require you to run anything locally.\n\nSimply point your AI client (like Cursor, Windserve, ClaudeDesktop, VS Code with Copilot, or [others](https://github.com/punkpeye/awesome-mcp-clients)) to use the appropriate configuration file.\n\nHere's an example of how the tools might appear in an MCP client like Cursor after configuration:\n\n![Cursor Usage Example](images/cursor_usage_example.jpg)\n\n## KNOWN ISSUES\n\nThe library is beta-quality. The major problem right now is that LLM-s are often stupid and do not know how to put valid gene and gene variant symbols. We plan to mitigrate it by extending comments and providing additional method for entity resolution.\n\n## Testing & Verification\n\nRun tests for the API endpoint:\n```bash\nuv run pytest -vvv -s\n```\n\nYou can use MCP inspector with locally build MCP server same way as with uvx\n\n*Note: Using the MCP Inspector is optional. Most MCP clients (like Cursor, Windsurv, etc.) will automatically display the available tools from this server once configured. However, the Inspector can be useful for detailed testing and exploration.* \n\n*If you choose to use the Inspector via `npx`, ensure you have Node.js and npm installed. Using [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager) is recommended for managing Node.js versions.*\n\nThis opens a web interface where you can explore and test all available tools.\n\n\n## Documentation\n\nFor detailed documentation about the MCP protocol and its implementation, refer to:\n- [MCP Protocol Documentation](https://modelcontextprotocol.org)\n- [biothings-typed-client Documentation](https://github.com/longevity-genie/biothings-typed-client)\n- [FastAPI-MCP Documentation](https://github.com/tadata-org/fastapi_mcp)\n\n## License\n\nThis project is licensed under the MIT License.\n\n## Acknowledgments\n\n- [BioThings](https://biothings.io/) for the REST API and original [client library](https://github.com/biothings/biothings_client.py)\n- [MCP Protocol](https://modelcontextprotocol.org) for the protocol specification\n- [Pydantic](https://pydantic-docs.helpmanual.io/) for the data validation framework\n- [FastAPI-MCP](https://github.com/tadata-org/fastapi_mcp) for the MCP server implementation\n\n- This project is part of the [Longevity Genie](https://github.com/longevity-genie) organization, which develops open-source AI assistants and libraries for health, genetics, and longevity research.\n\nWe are supported by:\n\n[![HEALES](images/heales.jpg)](https://heales.org/)\n\n*HEALES - Healthy Life Extension Society*\n\nand\n\n[![IBIMA](images/IBIMA.jpg)](https://ibima.med.uni-rostock.de/)\n\n[IBIMA - Institute for Biostatistics and Informatics in Medicine and Ageing Research](https://ibima.med.uni-rostock.de/)\n",
+  "category": "AI Tools",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": {
+      "biothings-mcp-stdio": {
+        "command": "uvx",
+        "args": ["biothings-mcp"],
+        "env": {}
+      },
+      "biothings-mcp-stdio-explicit": {
+        "command": "uvx",
+        "args": ["--from", "biothings-mcp", "stdio"],
+        "env": {}
+      },
+      "biothings-mcp-server": {
+        "command": "uvx",
+        "args": ["biothings-mcp", "server"],
+        "env": {}
+      },
+      "biothings-mcp-server-port-8000": {
+        "command": "uvx",
+        "args": ["biothings-mcp", "server", "--port", "8000"],
+        "env": {}
+      },
+      "biothings-mcp-sse": {
+        "command": "uvx",
+        "args": ["biothings-mcp", "sse"],
+        "env": {}
+      },
+      "biothings-mcp-repo": {
+        "command": "uv",
+        "args": ["run", "server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "longevity-genie",
+    "repo": "biothings-mcp",
+    "url": "https://github.com/longevity-genie/biothings-mcp",
+    "name": "longevity-genie__biothings-mcp",
+    "path": null,
+    "stars": 23,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "7d9fdc8a871a2c084242d67ed88a5781ddd460fa"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.050Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "typer",
+      "importance": 9
+    },
+    {
+      "name": "biothings-typed-client",
+      "importance": 8
+    },
+    {
+      "name": "biopython",
+      "importance": 7
+    },
+    {
+      "name": "aiosqlite",
+      "importance": 6
+    },
+    {
+      "name": "sqlite-utils",
+      "importance": 6
+    },
+    {
+      "name": "huggingface-hub",
+      "importance": 5
+    },
+    {
+      "name": "eliot",
+      "importance": 4
+    },
+    {
+      "name": "pycomfort",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"biothings-mcp\"\nversion = \"0.1.3\"\ndescription = \"MCP for Biothings\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"antonkulaga\", email = \"antonkulaga@gmail.com\" }\n]\nrequires-python = \">=3.10\"\ndependencies = [\n    \"biopython>=1.85\",\n    \"biothings-typed-client>=0.0.7\",\n    \"eliot>=1.17.5\",\n    \"pycomfort>=0.0.18\",\n    \"fastmcp>=2.10.2\",\n    \"aiosqlite>=0.21.0\",\n    \"sqlite-utils>=3.38\",\n    \"huggingface-hub>=0.33.2\",\n    \"typer>=0.16.0\",\n]\n\n[project.scripts]\nbiothings-mcp = \"biothings_mcp.server:cli_app_stdio\"\nserver = \"biothings_mcp.server:cli_app\"\nstdio = \"biothings_mcp.server:cli_app_stdio\"\nsse = \"biothings_mcp.server:cli_app_sse\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build]\nexclude = [\n    \"*.log\",\n    \"logs/\",\n    \"images/\"\n]\n\n[dependency-groups]\ndev = [\n    \"pytest>=8.4.1\",\n    \"pytest-asyncio>=1.0.0\",\n]\n"
+}

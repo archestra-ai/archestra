@@ -1,0 +1,160 @@
+{
+  "name": "inditextech__mcp-teams-server",
+  "display_name": "mcp-teams-server",
+  "description": "An MCP (Model Context Protocol) server implementation for Microsoft Teams integration, providing capabilities to read messages, create messages, reply to messages, mention members.",
+  "author": {
+    "name": "InditexTech"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "mcp-teams-server"],
+    "env": {
+      "TEAMS_APP_ID": "${user_config.teams_app_id}",
+      "TEAMS_APP_PASSWORD": "${user_config.teams_app_password}",
+      "TEAMS_APP_TYPE": "${user_config.teams_app_type}",
+      "TEAMS_APP_TENANT_ID": "${user_config.teams_app_tenant_id}",
+      "TEAM_ID": "${user_config.team_id}",
+      "TEAMS_CHANNEL_ID": "${user_config.teams_channel_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "teams_app_id": {
+      "type": "string",
+      "title": "Teams App ID",
+      "description": "UUID for your MS Entra ID application ID",
+      "required": true,
+      "sensitive": false
+    },
+    "teams_app_password": {
+      "type": "string",
+      "title": "Teams App Password",
+      "description": "Client secret",
+      "required": true,
+      "sensitive": true
+    },
+    "teams_app_type": {
+      "type": "string",
+      "title": "Teams App Type",
+      "description": "SingleTenant or MultiTenant",
+      "required": true,
+      "sensitive": false
+    },
+    "teams_app_tenant_id": {
+      "type": "string",
+      "title": "Teams App Tenant ID",
+      "description": "Tenant uuid in case of SingleTenant",
+      "required": true,
+      "sensitive": false
+    },
+    "team_id": {
+      "type": "string",
+      "title": "Team ID",
+      "description": "MS Teams Group Id or Team Id",
+      "required": true,
+      "sensitive": false
+    },
+    "teams_channel_id": {
+      "type": "string",
+      "title": "Teams Channel ID",
+      "description": "MS Teams Channel ID with url escaped chars",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=InditexTech_mcp-teams-server&metric=bugs)](https://sonarcloud.io/summary/new_code?id=InditexTech_mcp-teams-server)\n[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=InditexTech_mcp-teams-server&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=InditexTech_mcp-teams-server)\n[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=InditexTech_mcp-teams-server&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=InditexTech_mcp-teams-server)\n![GitHub License](https://img.shields.io/github/license/InditexTech/mcp-teams-server)\n![GitHub Release](https://img.shields.io/github/v/release/InditexTech/mcp-teams-server)\n[![Scorecard](https://api.scorecard.dev/projects/github.com/InditexTech/mcp-teams-server/badge)](https://scorecard.dev/viewer/?uri=github.com/InditexTech/mcp-teams-server)\n<!-- [![Best Practices](https://www.bestpractices.dev/projects/10400/badge)](https://www.bestpractices.dev/projects/10400) -->\n\n\n# MCP Teams Server\n\nAn MCP ([Model Context Protocol](https://modelcontextprotocol.io/introduction)) server implementation for \n[Microsoft Teams](https://www.microsoft.com/en-us/microsoft-teams/group-chat-software/) integration, providing capabilities to \nread messages, create messages, reply to messages, mention members.\n\n## Features\n\nhttps://github.com/user-attachments/assets/548a9768-1119-4a2d-bd5c-6b41069fc522\n\n- Start thread in channel with title and contents, mentioning users\n- Update existing threads with message replies, mentioning users\n- Read thread replies\n- List channel team members\n- Read channel messages\n\n## Prerequisites\n\n- [uv](https://github.com/astral-sh/uv) package manager\n- [Python 3.10](https://www.python.org/)\n- Microsoft Teams account with [proper set-up](./doc/MS-Teams-setup.md)\n\n## Installation\n\n1. Clone the repository:\n\n```bash\ngit clone [repository-url]\ncd mcp-teams-server\n```\n\n2. Create a virtual environment and install dependencies:\n\n```bash\nuv venv\nuv sync --frozen --all-extras --dev\n```\n\n## Teams configuration\n\nPlease read [this document](./doc/MS-Teams-setup.md) to help you to configure Microsoft Teams and required \nAzure resources. It is not a step-by-step guide but can help you figure out what you will need.\n\n## Usage\n\nSet up the following environment variables in your shell or in an .env file. You can use [sample file](./sample.env) \nas a template:\n\n| Key                     | Description                                |\n|-------------------------|--------------------------------------------|\n| **TEAMS_APP_ID**        | UUID for your MS Entra ID application ID   |\n| **TEAMS_APP_PASSWORD**  | Client secret                              |\n| **TEAMS_APP_TYPE**      | SingleTenant or MultiTenant                |\n| **TEAMS_APP_TENANT_ID** | Tenant uuid in case of SingleTenant        |\n| **TEAM_ID**             | MS Teams Group Id or Team Id               |\n| **TEAMS_CHANNEL_ID**    | MS Teams Channel ID with url escaped chars |\n\nStart the server:\n\n```bash\nuv run mcp-teams-server\n```\n\n## Development\n\nIntegration tests require the set-up the following environment variables:\n\n| Key                    | Description                    |\n|------------------------|--------------------------------|\n| **TEST_THREAD_ID**     | timestamp of the thread id     |\n| **TEST_MESSAGE_ID**    | timestamp of the message id    |\n| **TEST_USER_NAME**     | test user name                 |\n\n\n```bash\nuv run pytest -m integration\n```\n\n### Pre-built docker image\n\nThere is a [pre-built image](https://github.com/InditexTech/mcp-teams-server/pkgs/container/mcp-teams-server) hosted in ghcr.io.\nYou can install this image by running the following command\n\n```commandline\ndocker pull ghcr.io/inditextech/mcp-teams-server:latest\n```\n\n### Build docker image\n\nA docker image is available to run MCP server. You can build it with the following command:\n\n```bash\ndocker build . -t inditextech/mcp-teams-server\n```\n\n### Run docker image\n\nBasic run configuration:\n\n```bash\ndocker run -it inditextech/mcp-teams-server\n```\n\nRun with environment variables from .env file:\n\n```bash\ndocker run --env-file .env -it inditextech/mcp-teams-server\n```\n\n### Setup LLM to use MCP Teams Server\n\nPlease follow instructions on the [following document](./llms-install.md)\n\n## Changelog\n\nSee [CHANGELOG.md](CHANGELOG.md) for a list of changes and version history.\n\n## Contributing\n\nPlease read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull\nrequests.\n\n## Security\n\nFor security concerns, please see our [Security Policy](SECURITY.md).\n\n## License\n\nThis project is licensed under the [Apache-2.0](LICENSE.txt) file for details.\n\n© 2025 INDUSTRIA DE DISEÑO TEXTIL S.A. (INDITEX S.A.)\n",
+  "category": "Messengers",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-teams-server": {
+        "command": "uv",
+        "args": ["run", "mcp-teams-server"],
+        "env": {}
+      },
+      "inditextech-mcp-teams-server-docker": {
+        "command": "docker",
+        "args": ["run", "-it", "inditextech/mcp-teams-server"],
+        "env": {},
+        "docker_image": "inditextech/mcp-teams-server"
+      },
+      "inditextech-mcp-teams-server-docker-configured": {
+        "command": "docker",
+        "args": ["run", "--env-file", ".env", "-it", "inditextech/mcp-teams-server"],
+        "env": {},
+        "docker_image": ".env"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "InditexTech",
+    "repo": "mcp-teams-server",
+    "url": "https://github.com/InditexTech/mcp-teams-server",
+    "name": "inditextech__mcp-teams-server",
+    "path": null,
+    "stars": 309,
+    "contributors": 3,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "9d1ac472632f0c803f13a72357a03db1f08a8ddc"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:22.809Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "aiohttp",
+      "importance": 8
+    },
+    {
+      "name": "asyncio",
+      "importance": 8
+    },
+    {
+      "name": "botbuilder-core",
+      "importance": 9
+    },
+    {
+      "name": "botbuilder-integration-aiohttp",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "msgraph-sdk",
+      "importance": 9
+    },
+    {
+      "name": "multidict",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-teams-server\"\nversion = \"1.0.6\"\ndescription = \"An MCP server implementation for Microsoft Teams integration\"\nreadme = \"README.md\"\nkeywords = [\"mcp\", \"llm\", \"automation\", \"Microsoft Teams\"]\nauthors = [{ name = \"Industria de Diseño Textil S.A.\" }]\nmaintainers = [\n    { name = \"Mariano Alonso Ortiz\", email = \"marianoao@inditex.com\" },\n]\nlicense = { text = \"Apache-2.0\" }\nrequires-python = \">=3.10\"\ndependencies = [\n    \"aiohttp==3.10.11\",\n    \"asyncio>=3.4.3\",\n    \"botbuilder-core>=4.17.0\",\n    \"botbuilder-integration-aiohttp>=4.17.0\",\n    \"dotenv>=0.9.9\",\n    \"mcp[cli]>=1.12.0\",\n    \"msgraph-sdk>=1.37.0\",\n    \"multidict>=6.6.3\",\n]\n\n[project.urls]\nRepository = \"https://github.com/InditexTech/mcp-teams-server\"\nIssues = \"https://github.com/InditexTech/mcp-teams-server/issues\"\n\n[project.scripts]\nmcp-teams-server = \"mcp_teams_server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[dependency-groups]\ndev = [\n    \"mock>=5.2.0\",\n    \"pyproject-parser[cli]>=0.13.0\",\n    \"pyright>=1.1.398\",\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=0.25.3\",\n    \"pytest-cov>=6.0.0\",\n    \"reuse>=5.0.2\",\n    \"ruff>=0.11.2\",\n]\n\n[tool.ruff]\nline-length = 88\ntarget-version = \"py310\"\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\", \"UP\"]\nignore = []\n\n[tool.ruff.lint.per-file-ignores]\n\"src/mcp_teams_server/teams.py\" = [\"E501\"]\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\ntestpaths = [\"tests\"]\npython_files = [\"test_*.py\"]\naddopts = \"-v --tb=short --import-mode=importlib --strict-markers -m \\\"not integration\\\"\"\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"session\"\nmarkers = [\n    \"integration: integration tests\",\n]\nfilterwarnings = [\n    \"ignore::DeprecationWarning\"\n]\n"
+}

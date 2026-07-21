@@ -1,0 +1,44 @@
+{
+  "name": "stytch__remote-mcp",
+  "display_name": "Stytch",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1LjM0ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgNTEyIDk2Ij48cGF0aCBmaWxsPSIjMTAzMDNlIiBkPSJNMzAuNzI0IDc4LjEzOWEzMC40IDMwLjQgMCAwIDAgNy4yMTQtLjcyMmExMy4zIDEzLjMgMCAwIDAgNC41MDgtMS45OTVhNi42IDYuNiAwIDAgMCAyLjM5LTIuOTc1Yy40OC0xLjI0LjcyNC0yLjU1OS43Mi0zLjg4OGE4LjkgOC45IDAgMCAwLTQuMjM3LTcuNDg0cS00LjIzOC0yLjkzLTE0LjU3My02LjM2OGExMDggMTA4IDAgMCAxLTkuMDE3LTMuNjUyYTMzLjEgMzMuMSAwIDAgMS04LjA5Mi01LjE2MmEyNC44IDI0LjggMCAwIDEtNS44MTYtNy41NTFhMjMuNyAyMy43IDAgMCAxLTIuMjU0LTEwLjc4N2EyNi43IDI2LjcgMCAwIDEgMi4zNzgtMTEuNDVhMjQuNjYgMjQuNjYgMCAwIDEgNi43NjItOC42OGEzMC45IDMwLjkgMCAwIDEgMTAuNjA2LTUuNDg4QTQ3LjMgNDcuMyAwIDAgMSAzNS4zNTcuMDA5YTU3LjQgNTcuNCAwIDAgMSAxNi4wMjcgMS45ODRhNTggNTggMCAwIDEgMTEuMTI0IDQuMzczbC01Ljk2MiAxNi4yODdhNTYuNCA1Ni40IDAgMCAwLTguNTQzLTMuNTA2YTM3IDM3IDAgMCAwLTExLjI3MS0xLjUyMXEtNy40MjggMC0xMC42NjMgMi4wNTFhNi45MSA2LjkxIDAgMCAwLTMuMjQ2IDYuMjlhNy4yMiA3LjIyIDAgMCAwIDEuMTUgNC4yN2ExMS40IDExLjQgMCAwIDAgMy4zODEgMy4xMTFhMjkuNyAyOS43IDAgMCAwIDUuMDI3IDIuNTI1cTIuODUyIDEuMTI3IDYuMyAyLjMxcTcuMTU3IDIuNjUgMTIuNDU1IDUuMjNhMzMuMSAzMy4xIDAgMCAxIDguNzc5IDUuOTg1YTIxLjggMjEuOCAwIDAgMSA1LjI0IDguMDdhMzIuNyAzMi43IDAgMCAxIDEuNzI2IDExLjI3cTAgMTIuODUtOS4wMTcgMTkuOTI3cS05LjAxNSA3LjA4LTI3LjE0IDcuMDlhNzUgNzUgMCAwIDEtMTAuOTg5LS43MzNhNzAgNzAgMCAwIDEtOC42NzgtMS43OTJhNTAgNTAgMCAwIDEtNi40OTItMi4yNTRjLTEuODA0LS44LTMuMzgyLTEuNTQ0LTQuNTY1LTIuMjU0TDUuODI3IDcyLjNhNTIuNCA1Mi40IDAgMCAwIDEwLjE0NCA0LjA0N2E1MyA1MyAwIDAgMCAxNC43NTMgMS43OTJNMTUxLjYwNCAxLjM2djE4LjE1N2gtMjcuODRWOTQuNTZoLTIwLjU4VjE5LjUySDc0LjEzOVYxLjM2em05Ni4wNS0uMDA1Yy0yLjI1NSA0LjUwOS0yNi40ODcgNDguMDI1LTMyLjQ4NCA1Ny40N3YzNS42MzloLTIwLjQ5VjU4LjgyNmwuMDMtLjA2bC4wOS0uMTc4YzEuODgtMy43NjEgMjUuNDU2LTUwLjkwMiAyOS4wMjYtNTcuMjMyWm0tNjEuNTI4LS4wNjRMMjAwIDI4LjM5OEwxODguNzMgNDguODFhMzU3NiAzNTc2IDAgMCAxLTEzLjAzLTIyLjkyMmwtLjc5NC0xLjQxMmMtNS4xNTctOS4xNzctMTAuMTk2LTE4LjI4OS0xMi42NzUtMjMuMTg0em0xNTAuMTcyLjA3djE4LjE1NmgtMjcuNzgzVjk0LjU2aC0yMC42MzdWMTkuNTJoLTI5LjA0NVYxLjM2em01Mi44NzIgOTQuNDZxLTIxLjY3NCAwLTMzLjAxMi0xMi4zOTlxLTExLjMzOC0xMi4zOTctMTEuMzUtMzUuMzIyYTU1LjcgNTUuNyAwIDAgMSAzLjQ2LTIwLjI4OGE0My45NSA0My45NSAwIDAgMSA5LjQ5LTE1LjA2OWEzOS40NSAzOS40NSAwIDAgMSAxNC4zNTktOS4zMUE1MC4zIDUwLjMgMCAwIDEgMzkwLjE1LjI1N2E1NyA1NyAwIDAgMSAxMC4yNTcuODU3YzIuNzMyLjQ5NyA1LjQzIDEuMTYgOC4wODEgMS45ODRhMzkgMzkgMCAwIDEgNS44MDUgMi4zNDRhNTggNTggMCAwIDEgMy4zOCAxLjg0OGwtNS43NyAxNi42NDdhNDguNCA0OC40IDAgMCAwLTkuNTQ2LTMuODMyYTQ0LjIgNDQuMiAwIDAgMC0xMi4zOTgtMS41ODlhMjYuNiAyNi42IDAgMCAwLTkuMDE3IDEuNTlhMjAuNiAyMC42IDAgMCAwLTcuODIgNS4wOTRhMjUuNCAyNS40IDAgMCAwLTUuNDQ1IDkuMDE2YTM5LjIgMzkuMiAwIDAgMC0yLjA1MiAxMy41MjVhNTAgNTAgMCAwIDAgMS4yOTcgMTEuOGEyNS41IDI1LjUgMCAwIDAgNC4zNjIgOS40NDZhMjEgMjEgMCAwIDAgNy44ODkgNi4yNzhhMjcuMiAyNy4yIDAgMCAwIDExLjc5IDIuMzFhNTIuNiA1Mi42IDAgMCAwIDEzLjk3NS0xLjc5MmMxLjYyLS40MDkgMy4yMDUtLjk0IDQuNzQ2LTEuNTlhMjkzIDI5MyAwIDAgMCAzLjcxOS0xLjcyNGw1LjU2NyAxNi40NzhhNDYgNDYgMCAwIDEtMTEuOTI1IDQuNzU3YTY3LjUgNjcuNSAwIDAgMS0xNy44NzUgMi4xMThNNDkwLjIxMiAxLjQ5NEg1MTJ2OTMuMjMzaC0yMS43ODhWNTQuNzcyaC0zNS4xMDd2MzkuOTU2aC0yMC41OTJWMS40OTVoMjAuNTkydjM1LjEwOWgzNS4xMDd6Ii8+PC9zdmc+",
+  "description": "Remote MCP server for Stytch - authentication and identity platform",
+  "oauth_config": {
+    "name": "Stytch MCP",
+    "server_url": "http://mcp.stytch.dev/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Stytch MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Security",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "stytch"
+  },
+  "server": {
+    "type": "remote",
+    "url": "http://mcp.stytch.dev/mcp",
+    "docs_url": "https://stytch.com/docs/workspace-management/stytch-mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

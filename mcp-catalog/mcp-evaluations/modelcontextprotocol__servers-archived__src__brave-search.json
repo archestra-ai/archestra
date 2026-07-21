@@ -1,0 +1,95 @@
+{
+  "name": "modelcontextprotocol__servers-archived__src__brave-search",
+  "display_name": "brave-search",
+  "description": "Reference MCP servers that are no longer maintained",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Brave Search MCP Server\n\nAn MCP server implementation that integrates the Brave Search API, providing both web and local search capabilities.\n\n## Features\n\n- **Web Search**: General queries, news, articles, with pagination and freshness controls\n- **Local Search**: Find businesses, restaurants, and services with detailed information\n- **Flexible Filtering**: Control result types, safety levels, and content freshness\n- **Smart Fallbacks**: Local search automatically falls back to web when no results are found\n\n## Tools\n\n- **brave_web_search**\n\n  - Execute web searches with pagination and filtering\n  - Inputs:\n    - `query` (string): Search terms\n    - `count` (number, optional): Results per page (max 20)\n    - `offset` (number, optional): Pagination offset (max 9)\n\n- **brave_local_search**\n  - Search for local businesses and services\n  - Inputs:\n    - `query` (string): Local search terms\n    - `count` (number, optional): Number of results (max 20)\n  - Automatically falls back to web search if no local results found\n\n## Configuration\n\n### Getting an API Key\n\n1. Sign up for a [Brave Search API account](https://brave.com/search/api/)\n2. Choose a plan (Free tier available with 2,000 queries/month)\n3. Generate your API key [from the developer dashboard](https://api-dashboard.search.brave.com/app/keys)\n\n### Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n### Docker\n\n```json\n{\n  \"mcpServers\": {\n    \"brave-search\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"BRAVE_API_KEY\",\n        \"mcp/brave-search\"\n      ],\n      \"env\": {\n        \"BRAVE_API_KEY\": \"YOUR_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n\n### NPX\n\n```json\n{\n  \"mcpServers\": {\n    \"brave-search\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-brave-search\"\n      ],\n      \"env\": {\n        \"BRAVE_API_KEY\": \"YOUR_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n\n### Usage with VS Code\n\nFor quick installation, use the one-click installation buttons below...\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=brave&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-brave-search%22%5D%2C%22env%22%3A%7B%22BRAVE_API_KEY%22%3A%22%24%7Binput%3Abrave_api_key%7D%22%7D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=brave&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-brave-search%22%5D%2C%22env%22%3A%7B%22BRAVE_API_KEY%22%3A%22%24%7Binput%3Abrave_api_key%7D%22%7D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=brave&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22BRAVE_API_KEY%22%2C%22mcp%2Fbrave-search%22%5D%2C%22env%22%3A%7B%22BRAVE_API_KEY%22%3A%22%24%7Binput%3Abrave_api_key%7D%22%7D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=brave&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22BRAVE_API_KEY%22%2C%22mcp%2Fbrave-search%22%5D%2C%22env%22%3A%7B%22BRAVE_API_KEY%22%3A%22%24%7Binput%3Abrave_api_key%7D%22%7D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> Note that the `mcp` key is not needed in the `.vscode/mcp.json` file.\n\n#### Docker\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"brave_api_key\",\n        \"description\": \"Brave Search API Key\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"brave-search\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"-i\",\n          \"--rm\",\n          \"-e\",\n          \"BRAVE_API_KEY\",\n          \"mcp/brave-search\"\n        ],\n        \"env\": {\n          \"BRAVE_API_KEY\": \"${input:brave_api_key}\"\n        }\n      }\n    }\n  }\n}\n```\n\n#### NPX\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"brave_api_key\",\n        \"description\": \"Brave Search API Key\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"brave-search\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"@modelcontextprotocol/server-brave-search\"],\n        \"env\": {\n          \"BRAVE_API_KEY\": \"${input:brave_api_key}\"\n        }\n      }\n    }\n  }\n}\n```\n\n## Build\n\nDocker build:\n\n```bash\ndocker build -t mcp/brave-search:latest -f src/brave-search/Dockerfile .\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Search",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "brave-search-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "BRAVE_API_KEY", "mcp/brave-search"],
+        "env": {
+          "BRAVE_API_KEY": "YOUR_API_KEY_HERE"
+        },
+        "docker_image": "mcp/brave-search"
+      },
+      "modelcontextprotocol-server-brave-search": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+        "env": {
+          "BRAVE_API_KEY": "YOUR_API_KEY_HERE"
+        }
+      },
+      "brave-search-docker-configured": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "BRAVE_API_KEY", "mcp/brave-search"],
+        "env": {
+          "BRAVE_API_KEY": "${input:brave_api_key}"
+        },
+        "docker_image": "mcp/brave-search"
+      },
+      "modelcontextprotocol-server-brave-search-configured": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+        "env": {
+          "BRAVE_API_KEY": "${input:brave_api_key}"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers-archived",
+    "url": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/brave-search",
+    "name": "servers-archived",
+    "path": "src/brave-search",
+    "stars": 123,
+    "contributors": 595,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9be4674d1ddf8c469e6461a27a337eeb65f76c2e"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:26:56.241Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@modelcontextprotocol/server-brave-search\",\n  \"version\": \"0.6.2\",\n  \"description\": \"MCP server for Brave Search API integration\",\n  \"license\": \"MIT\",\n  \"author\": \"Anthropic, PBC (https://anthropic.com)\",\n  \"homepage\": \"https://modelcontextprotocol.io\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-brave-search\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22\",\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

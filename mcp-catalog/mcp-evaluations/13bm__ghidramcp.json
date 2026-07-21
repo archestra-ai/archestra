@@ -1,0 +1,82 @@
+{
+  "name": "13bm__ghidramcp",
+  "display_name": "GhidraMCP",
+  "description": "Socket based MCP Server for Ghidra",
+  "author": {
+    "name": "13bm"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${user_config.ghidra_mcp_path}/GhidraMCP/ghidra_server.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ghidra_mcp_path": {
+      "type": "directory",
+      "title": "GhidraMCP Repository Root",
+      "description": "The absolute path to the root directory where the GhidraMCP repository was cloned (e.g., 'PATH-TO-REPO').",
+      "required": true,
+      "default": "${HOME}/GhidraMCP"
+    }
+  },
+  "readme": "# GhidraMCP\n\nA Ghidra plugin that implements the Model Context Protocol (MCP) for AI-assisted binary analysis.\n\n## Overview\n\nGhidraMCP bridges the gap between Ghidra's powerful reverse engineering capabilities and AI assistants through the Model Context Protocol (MCP). This plugin enables AI models to connect to Ghidra and assist with binary analysis tasks, making reverse engineering more efficient and accessible.\n\n## Features\n\n- **AI-Powered Binary Analysis**: Connect AI assistants to Ghidra via the Model Context Protocol\n- **Natural Language Interface**: Ask questions about binaries in plain English\n- **Deep Code Insights**: Retrieve detailed function information and decompiled code\n- **Binary Structure Analysis**: Explore imports, exports, and memory layouts\n- **Automated Security Analysis**: Get AI-assisted insights about potential security vulnerabilities\n- **Socket-Based Architecture**: High-performance communication between Ghidra and AI assistants\n- **Cross-Platform Compatibility**: Works on all platforms supported by Ghidra\n\n## Installation\n\n### Prerequisites\n\n- Ghidra 11.2.1+\n- Java 17 or newer\n- Python 3.8+ (for the bridge script)\n\n### Steps\n\n1. Download the latest release ZIP file from the [Releases](https://github.com/yourusername/GhidraMCP/releases) page\n2. Open Ghidra\n3. Navigate to `File > Install Extensions`\n4. Click the \"+\" button and select the downloaded ZIP file\n5. Restart Ghidra to complete the installation\n6. Enable the extension by going to `File > Configure > Miscellaneous` and checking the box next to \"MCPServerPlugin\"\n\n## Usage\n\n### Starting the MCP Server\n\nThe server automatically starts when you open a Ghidra project after enabling the plugin. By default, it runs on:\n- Host: `localhost`\n- Port: `8765`\n\nYou can verify the server is running by checking the Ghidra console for messages like:\n```\nMCP Server started on port 8765\n```\n\n### Connecting with AI Assistants\n\n#### Connecting with Claude\n\nTo connect Claude to the GhidraMCP plugin:\n\n1. Install the MCP bridge script:\n   ```bash\n   pip install FastMCP\n   ```\n\n2. Add the following configuration to your Claude MCP setup:\n   ```json\n   {\n     \"mcpServers\": {\n       \"ghidra\": {\n         \"command\": \"python\",\n         \"args\": [\"PATH-TO-REPO/GhidraMCP/ghidra_server.py\"]\n       }\n     }\n   }\n   ```\n\nThe bridge script creates a connection between Ghidra and Claude, enabling real-time binary analysis through natural language.\n\n### Available Tools\n\nThe plugin exposes several powerful functions through the MCP interface:\n\n| Tool | Description |\n|------|-------------|\n| `get_function(address, decompile=False)` | Retrieve detailed information about a function at a specific address |\n| `analyze_binary(question)` | Ask natural language questions about the loaded binary |\n| `get_imports()` | List all imported functions in the binary |\n| `get_exports()` | List all exported functions in the binary |\n| `get_memory_map()` | Get the memory layout of the binary |\n| `connect_to_ghidra(host, port)` | Connect to a specific Ghidra instance |\n| `rename_function(current_name, new_name)` | Rename a function by its current name |\n| `rename_data(address, new_name)` | Rename a data label at a specific address |\n| `extract_api_call_sequences(address)` | Extract API calls from a function for security analysis |\n| `identify_user_input_sources()` | Find potential sources of user input in the binary |\n| `generate_call_graph(address, max_depth=3)` | Generate a hierarchical representation of function calls |\n| `identify_crypto_patterns()` | Detect cryptographic implementations in the binary |\n| `find_obfuscated_strings()` | Locate potentially obfuscated strings |\n\n### Example Queries\n\nHere are examples of questions you can ask through an MCP-compatible AI client:\n\n- \"What encryption algorithms are used in this binary?\"\n- \"Can you show me the decompiled code for the function at 0x401000?\"\n- \"What suspicious API calls does this malware make?\"\n- \"Explain the purpose of this binary based on its imports and exports.\"\n- \"How does the authentication mechanism in this program work?\"\n- \"Are there any potential buffer overflow vulnerabilities in this code?\"\n- \"What network connections does this binary establish?\"\n- \"Can you rename this function to something more descriptive?\"\n- \"Show me all potential user input sources that could be exploited.\"\n- \"Generate a call graph for the main function.\"\n\n## Advanced Usage\n\n### Security Analysis Capabilities\n\nGhidraMCP provides specialized tools for security-focused analysis:\n\n#### API Call Sequence Analysis\nExtract and categorize external API calls from a function for security analysis. This helps identify potentially dangerous functions and understand their interactions.\n\n#### User Input Sources\nIdentify entry points where external data enters the program, crucial for vulnerability assessment and understanding attack surfaces.\n\n#### Call Graph Generation\nCreate structured call graphs to understand execution flow, track data propagation, and identify potential attack paths.\n\n#### Cryptographic Pattern Detection\nIdentify cryptographic implementations including standard algorithms (AES, RSA, etc.) and custom implementations based on code patterns.\n\n#### Obfuscated String Detection\nFind strings that may be obfuscated through techniques like XOR encoding or character-by-character construction.\n\n### Custom Configurations\n\nYou can modify the server port by editing the `MCPServerPlugin.java` file:\n\n```java\nserver.setPort(YOUR_CUSTOM_PORT);\n```\n\n### Integration with Analysis Workflows\n\nGhidraMCP can be integrated into your existing analysis workflows:\n\n1. Use Ghidra's standard analysis features to identify areas of interest\n2. Leverage AI assistance through GhidraMCP for deeper understanding\n3. Combine the AI insights with your manual analysis\n4. Rename functions and data based on AI insights for better readability\n\n## Building from Source\n\nTo build the plugin from source:\n\n1. Clone this repository\n   ```bash\n   git clone https://github.com/yourusername/GhidraMCP.git\n   ```\n\n2. Set up a Ghidra development environment as described in the [Ghidra Developer Guide](https://github.com/NationalSecurityAgency/ghidra/blob/master/DevGuide.md)\n\n3. Set the `GHIDRA_INSTALL_DIR` environment variable:\n   ```bash\n   export GHIDRA_INSTALL_DIR=/path/to/ghidra\n   ```\n\n4. Build with Gradle:\n   ```bash\n   ./gradlew buildExtension\n   ```\n\n5. The extension ZIP will be created in the `dist` directory\n\n## Troubleshooting\n\n### Common Issues\n\n- **Connection Issues**: Make sure the Ghidra instance is running and the plugin is enabled\n- **Port Conflicts**: If port 8765 is already in use, modify the port in the plugin configuration\n- **Bridge Script Errors**: Check if all required Python packages are installed with `pip install FastMCP`\n- **Null Results for Analysis Functions**: Some security analysis functions may return null results if the binary doesn't contain relevant patterns\n\n### Logs\n\nCheck the following logs for troubleshooting:\n- Ghidra console for server-side messages\n- `ghidra_mcp_bridge.log` for bridge script issues\n\n## Contributing\n\nContributions are welcome! Please feel free to submit issues or pull requests.\n\n1. Fork the repository\n2. Create your feature branch: `git checkout -b feature/amazing-feature`\n3. Commit your changes: `git commit -m 'Add some amazing feature'`\n4. Push to the branch: `git push origin feature/amazing-feature`\n5. Open a Pull Request\n\n\n## Acknowledgments\n\n- [National Security Agency (NSA)](https://github.com/NationalSecurityAgency/ghidra) for developing Ghidra\n- [Model Context Protocol](https://modelcontextprotocol.io/) community\n- All contributors to this project\n\n---\n\n*GhidraMCP is not affiliated with or endorsed by the NSA or the Ghidra project.*",
+  "category": "Security",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ghidra": {
+        "command": "python",
+        "args": ["PATH-TO-REPO/GhidraMCP/ghidra_server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "13bm",
+    "repo": "GhidraMCP",
+    "url": "https://github.com/13bm/GhidraMCP",
+    "name": "GhidraMCP",
+    "path": null,
+    "stars": 59,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "2a9f58f652242ab64ac20b31f9f7bed767fac04a"
+  },
+  "programming_language": "Java",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.978Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "gson",
+      "importance": 7
+    },
+    {
+      "name": "FastMCP",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== build.gradle ===\n// Builds a Ghidra Extension for a given Ghidra installation.\n//\n// An absolute path to the Ghidra installation directory must be supplied either by setting the\n// GHIDRA_INSTALL_DIR environment variable or Gradle project property:\n//\n//     > export GHIDRA_INSTALL_DIR=<Absolute path to Ghidra>\n//     > gradle\n//\n//         or\n//\n//     > gradle -PGHIDRA_INSTALL_DIR=<Absolute path to Ghidra>\n//\n// Gradle should be invoked from the directory of the project to build.\n\n//----------------------START \"DO NOT MODIFY\" SECTION------------------------------\napply plugin: 'java'\napply plugin: 'eclipse'\n\ndef ghidraInstallDir\nif (System.env.GHIDRA_INSTALL_DIR) {\n    ghidraInstallDir = System.env.GHIDRA_INSTALL_DIR\n}\nelse if (project.hasProperty(\"GHIDRA_INSTALL_DIR\")) {\n    ghidraInstallDir = project.getProperty(\"GHIDRA_INSTALL_DIR\")\n}\nif (ghidraInstallDir) {\n    apply from: new File(ghidraInstallDir).getCanonicalPath() + \"/support/buildExtension.gradle\"\n}\nelse {\n    throw new GradleException(\"GHIDRA_INSTALL_DIR is not defined!\")\n}\n//----------------------END \"DO NOT MODIFY\" SECTION-------------------------------\n\n// Add dependencies\nrepositories {\n    mavenCentral()\n}\n\ndependencies {\n    implementation 'com.google.code.gson:gson:2.10.1'\n}\n\n// Configure the extension build\nbuildExtension {\n    // Exclude unnecessary files\n    exclude '.vscode'\n    exclude 'gradle*'\n    exclude '.git*'\n    exclude 'build'\n    exclude '.editorconfig'\n    exclude '*.zip'\n    exclude '.gradle'\n    exclude '*.py'\n}\n\n// Add Javadoc for extension\njavadoc {\n    options.addStringOption('Xdoclint:none', '-quiet')\n}\n\n// Make sure Javadoc is generated before building the extension\n// buildExtension.dependsOn javadoc\n\nbuildExtension"
+}

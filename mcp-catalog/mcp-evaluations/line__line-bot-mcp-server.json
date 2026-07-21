@@ -1,0 +1,117 @@
+{
+  "name": "line__line-bot-mcp-server",
+  "display_name": "line-bot-mcp-server",
+  "description": "MCP server that integrates the LINE Messaging API to connect an AI Agent to the LINE Official Account.",
+  "author": {
+    "name": "line"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["@line/line-bot-mcp-server"],
+    "env": {
+      "CHANNEL_ACCESS_TOKEN": "${user_config.channel_access_token}",
+      "DESTINATION_USER_ID": "${user_config.destination_user_id}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "channel_access_token": {
+      "type": "string",
+      "title": "LINE Channel Access Token",
+      "description": "Your LINE Messaging API Channel Access Token.",
+      "sensitive": true,
+      "required": true
+    },
+    "destination_user_id": {
+      "type": "string",
+      "title": "Default Destination User ID",
+      "description": "The default LINE user ID for sending messages when not specified by a tool.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "readme": "[日本語版 READMEはこちら](README.ja.md)\n\n# LINE Bot MCP Server\n\n[![npmjs](https://badge.fury.io/js/%40line%2Fline-bot-mcp-server.svg)](https://www.npmjs.com/package/@line/line-bot-mcp-server)\n\n[Model Context Protocol (MCP)](https://github.com/modelcontextprotocol) server implementation that integrates the LINE Messaging API to connect an AI Agent to the LINE Official Account.\n\n![](/assets/demo.png)\n\n> [!NOTE]\n> This repository is provided as a preview version. While we offer it for experimental purposes, please be aware that it may not include complete functionality or comprehensive support.\n\n## Tools\n\n1. **push_text_message**\n   - Push a simple text message to a user via LINE.\n   - **Inputs:**\n     - `user_id` (string?): The user ID to receive a message. Defaults to DESTINATION_USER_ID. Either `user_id` or `DESTINATION_USER_ID` must be set.\n     - `message.text` (string): The plain text content to send to the user.\n2. **push_flex_message**\n   - Push a highly customizable flex message to a user via LINE.\n   - **Inputs:**\n     - `user_id` (string?): The user ID to receive a message. Defaults to DESTINATION_USER_ID. Either `user_id` or `DESTINATION_USER_ID` must be set.\n     - `message.altText` (string): Alternative text shown when flex message cannot be displayed.\n     - `message.content` (any): The content of the flex message. This is a JSON object that defines the layout and components of the message.\n     - `message.contents.type` (enum): Type of the container. 'bubble' for single container, 'carousel' for multiple swipeable bubbles.\n3. **broadcast_text_message**\n   - Broadcast a simple text message via LINE to all users who have followed your LINE Official Account.\n   - **Inputs:**\n     - `message.text` (string): The plain text content to send to the users.\n4. **broadcast_flex_message**\n   - Broadcast a highly customizable flex message via LINE to all users who have added your LINE Official Account.\n   - **Inputs:**\n     - `message.altText` (string): Alternative text shown when flex message cannot be displayed.\n     - `message.content` (any): The content of the flex message. This is a JSON object that defines the layout and components of the message.\n     - `message.contents.type` (enum): Type of the container. 'bubble' for single container, 'carousel' for multiple swipeable bubbles.\n5. **get_profile**\n   - Get detailed profile information of a LINE user including display name, profile picture URL, status message and language.\n   - **Inputs:**\n     - `user_id` (string?): The ID of the user whose profile you want to retrieve. Defaults to DESTINATION_USER_ID.\n6. **get_message_quota**\n   - Get the message quota and consumption of the LINE Official Account. This shows the monthly message limit and current usage.\n   - **Inputs:**\n     - None\n7. **get_rich_menu_list**\n   - Get the list of rich menus associated with your LINE Official Account.\n   - **Inputs:**\n     - None\n8. **delete_rich_menu**\n   - Delete a rich menu from your LINE Official Account.\n   - **Inputs:**\n     - `richMenuId` (string): The ID of the rich menu to delete.\n9. **set_rich_menu_default**\n    - Set a rich menu as the default rich menu.\n    - **Inputs:**\n      - `richMenuId` (string): The ID of the rich menu to set as default.\n10. **cancel_rich_menu_default**\n    - Cancel the default rich menu.\n    - **Inputs:**\n      - None\n\n## Installation (Using npx)\n\nrequirements:\n- Node.js v20 or later\n\n### Step 1: Create LINE Official Account\n\nThis MCP server utilizes a LINE Official Account. If you do not have one, please create it by following [this instructions](https://developers.line.biz/en/docs/messaging-api/getting-started/#create-oa). \n\nIf you have a LINE Official Account, enable the Messaging API for your LINE Official Account by following [this instructions](https://developers.line.biz/en/docs/messaging-api/getting-started/#using-oa-manager).\n\n### Step 2: Configure AI Agent\n\nPlease add the following configuration for an AI Agent like Claude Desktop or Cline. \n\nSet the environment variables or arguments as follows:\n\n- `CHANNEL_ACCESS_TOKEN`: (required) Channel Access Token. You can confirm this by following [this instructions](https://developers.line.biz/en/docs/basics/channel-access-token/#long-lived-channel-access-token).\n- `DESTINATION_USER_ID`: (optional) The default user ID of the recipient. If the Tool's input does not include `user_id`, `DESTINATION_USER_ID` is required. You can confirm this by following [this instructions](https://developers.line.biz/en/docs/messaging-api/getting-user-ids/#get-own-user-id).\n\n```json\n{\n  \"mcpServers\": {\n    \"line-bot\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@line/line-bot-mcp-server\"\n      ],\n      \"env\": {\n        \"CHANNEL_ACCESS_TOKEN\" : \"FILL_HERE\",\n        \"DESTINATION_USER_ID\" : \"FILL_HERE\"\n      }\n    }\n  }\n}\n```\n\n## Installation (Using Docker)\n\n### Step 1: Create LINE Official Account\n\nThis MCP server utilizes a LINE Official Account. If you do not have one, please create it by following [this instructions](https://developers.line.biz/en/docs/messaging-api/getting-started/#create-oa).\n\nIf you have a LINE Official Account, enable the Messaging API for your LINE Official Account by following [this instructions](https://developers.line.biz/en/docs/messaging-api/getting-started/#using-oa-manager).\n\n\n### Step 2: Build line-bot-mcp-server image\n\nClone this repository:\n\n```\ngit clone git@github.com:line/line-bot-mcp-server.git\n```\n\nBuild the Docker image:\n\n```\ndocker build -t line/line-bot-mcp-server .\n```\n\n### Step 3: Configure AI Agent\n\nPlease add the following configuration for an AI Agent like Claude Desktop or Cline.\n\nSet the environment variables or arguments as follows:\n\n- `mcpServers.args`: (required) The path to `line-bot-mcp-server`.\n- `CHANNEL_ACCESS_TOKEN`: (required) Channel Access Token. You can confirm this by following [this instructions](https://developers.line.biz/en/docs/basics/channel-access-token/#long-lived-channel-access-token).\n- `DESTINATION_USER_ID`: (optional) The default user ID of the recipient. If the Tool's input does not include `user_id`, `DESTINATION_USER_ID` is required.\nYou can confirm this by following [this instructions](https://developers.line.biz/en/docs/messaging-api/getting-user-ids/#get-own-user-id).\n\n\n```json\n{\n  \"mcpServers\": {\n    \"line-bot\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"CHANNEL_ACCESS_TOKEN\",\n        \"-e\",\n        \"DESTINATION_USER_ID\",\n        \"line/line-bot-mcp-server\"\n      ],\n      \"env\": {\n        \"CHANNEL_ACCESS_TOKEN\" : \"FILL_HERE\",\n        \"DESTINATION_USER_ID\" : \"FILL_HERE\"\n      }\n    }\n  }\n}\n```\n\n## Local Development with Inspector\n\nYou can use the MCP Inspector to test and debug the server locally.\n\n### Prerequisites\n\n1. Clone the repository:\n```bash\ngit clone git@github.com:line/line-bot-mcp-server.git\ncd line-bot-mcp-server\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Build the project:\n```bash\nnpm run build\n```\n\n### Run the Inspector\n\nAfter building the project, you can start the MCP Inspector:\n\n```bash\nnpx @modelcontextprotocol/inspector node dist/index.js\n```\n\nThis will start the MCP Inspector interface where you can interact with the LINE Bot MCP Server tools and test their functionality.\n\n## Versioning\n\nThis project respects semantic versioning\n\nSee http://semver.org/\n\n## Contributing\n\nPlease check [CONTRIBUTING](./CONTRIBUTING.md) before making a contribution.\n",
+  "category": "AI Tools",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "line-line-bot-mcp-server": {
+        "command": "npx",
+        "args": ["@line/line-bot-mcp-server"],
+        "env": {
+          "CHANNEL_ACCESS_TOKEN": "FILL_HERE",
+          "DESTINATION_USER_ID": "FILL_HERE"
+        }
+      },
+      "line-line-bot-mcp-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-e",
+          "CHANNEL_ACCESS_TOKEN",
+          "-e",
+          "DESTINATION_USER_ID",
+          "line/line-bot-mcp-server"
+        ],
+        "env": {
+          "CHANNEL_ACCESS_TOKEN": "FILL_HERE",
+          "DESTINATION_USER_ID": "FILL_HERE"
+        },
+        "docker_image": "line/line-bot-mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "line",
+    "repo": "line-bot-mcp-server",
+    "url": "https://github.com/line/line-bot-mcp-server",
+    "name": "line__line-bot-mcp-server",
+    "path": null,
+    "stars": 445,
+    "contributors": 11,
+    "issues": 27,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "6069e0067284d3b5264f251f9a376e5a59538e1f"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:23.833Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@line/bot-sdk",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@line/line-bot-mcp-server\",\n  \"version\": \"0.0.1-local\",\n  \"description\": \"MCP server for interacting with your LINE Official Account\",\n  \"type\": \"module\",\n  \"engines\": {\n    \"node\": \">=20\"\n  },\n  \"module\": \"./dist/index.js\",\n  \"bin\": {\n    \"line-bot-mcp-server\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prettier\": \"prettier \\\"src/**/*.ts\\\"\",\n    \"format\": \"npm run prettier -- --write\",\n    \"format:check\": \"npm run prettier -- -l\",\n    \"clean\": \"rm -rf dist/*\",\n    \"prebuild\": \"npm run format:check && npm run clean\",\n    \"release\": \"npm run build && npm publish --provenance --access public\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git@github.com:line/line-bot-mcp-server.git\"\n  },\n  \"keywords\": [\n    \"line\",\n    \"bot\",\n    \"mcp\"\n  ],\n  \"homepage\": \"https://github.com/line/line-bot-mcp-server\",\n  \"bugs\": \"https://github.com/line/line-bot-mcp-server/issues\",\n  \"dependencies\": {\n    \"@line/bot-sdk\": \"^10.0.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"zod\": \"^3.25.76\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22\",\n    \"prettier\": \"3.6.2\",\n    \"shx\": \"^0.4.0\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.6.2\"\n  },\n  \"license\": \"Apache-2.0\",\n  \"packageManager\": \"pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67\"\n}\n"
+}

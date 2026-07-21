@@ -1,0 +1,86 @@
+{
+  "name": "tomekkorbak__oura-mcp-server",
+  "display_name": "oura-mcp-server",
+  "description": "MCP server for Oura API integration",
+  "author": {
+    "name": "tomekkorbak"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["oura-mcp-server"],
+    "env": {
+      "OURA_API_TOKEN": "${user_config.oura_api_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "oura_api_token": {
+      "type": "string",
+      "title": "Oura API Token",
+      "description": "Your Oura API token for authentication",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Oura MCP Server\n\n![Python Package](https://github.com/tomekkorbak/oura-mcp-server/workflows/Python%20Package/badge.svg)\n[![PyPI version](https://badge.fury.io/py/oura-mcp-server.svg)](https://badge.fury.io/py/oura-mcp-server)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)\n\nA [Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) server that provides access to the Oura API. It allows language models to query sleep, readiness, and resilience data from Oura API.\n\n## Available Tools\n\nThe server exposes the following tools:\n\n### Date Range Queries\n\n- `get_sleep_data(start_date: str, end_date: str)`: Get sleep data for a specific date range\n- `get_readiness_data(start_date: str, end_date: str)`: Get readiness data for a specific date range\n- `get_resilience_data(start_date: str, end_date: str)`: Get resilience data for a specific date range\n\nDates should be provided in ISO format (`YYYY-MM-DD`).\n\n### Today's Data Queries\n\n- `get_today_sleep_data()`: Get sleep data for today\n- `get_today_readiness_data()`: Get readiness data for today\n- `get_today_resilience_data()`: Get resilience data for today\n\n## Usage\n\nYou'll need an Oura API token to use this server. You can obtain one by:\n\n1. Going to the [Oura Developer Portal](https://cloud.ouraring.com/v2/docs)\n2. Creating a Personal Access Token\n\n### Claude for Desktop\n\nUpdate your `claude_desktop_config.json` (located in `~/Library/Application\\ Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%/Claude/claude_desktop_config.json` on Windows) to include the following:\n\n```json\n{\n    \"mcpServers\": {\n        \"oura\": {\n            \"command\": \"uvx\",\n            \"args\": [\n                \"oura-mcp-server\"\n            ],\n            \"env\": {\n                \"OURA_API_TOKEN\": \"YOUR_OURA_API_TOKEN\"\n            }\n        }\n    }\n}\n```\n\n\n## Example Queries\n\nOnce connected, you can ask Claude questions like:\n\n- \"What's my sleep score for today?\"\n- \"Show me my readiness data for the past week\"\n- \"How was my sleep from January 1st to January 7th?\"\n- \"What's my resilience score today?\"\n\n## Error Handling\n\nThe server provides human-readable error messages for common issues:\n\n- Invalid date formats\n- API authentication errors\n- Network connectivity problems\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n",
+  "category": "Healthcare",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "oura-mcp-server": {
+        "command": "uvx",
+        "args": ["oura-mcp-server"],
+        "env": {
+          "OURA_API_TOKEN": "YOUR_OURA_API_TOKEN"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "tomekkorbak",
+    "repo": "oura-mcp-server",
+    "url": "https://github.com/tomekkorbak/oura-mcp-server",
+    "name": "oura-mcp-server",
+    "path": null,
+    "stars": 22,
+    "contributors": 1,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "72416a947547fb6a3aa4c1f18a8838cbceaefc04"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:52.627Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"oura-mcp-server\"\nversion = \"0.1.3\"\ndescription = \"MCP server for Oura API integration\"\nlicense = {text = \"MIT\"}\nreadme = \"README.md\"\nauthors = [\n    { name = \"Tomek Korbak\", email = \"tomasz.korbak@gmail.com\" }\n]\nrequires-python = \">=3.12\"\ndependencies = [\n    \"mcp[cli]>=1.3.0\",\n    \"httpx>=0.24.0\",\n]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Topic :: Software Development :: Libraries :: Python Modules\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"ruff>=0.1.0\",\n    \"mypy>=1.0.0\",\n]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/tomek-korbak/oura-mcp-server\"\n\"Bug Tracker\" = \"https://github.com/tomek-korbak/oura-mcp-server/issues\"\n\n[project.scripts]\noura-mcp-server = \"oura_mcp_server.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/oura_mcp_server\"]\n\n[tool.hatch.build]\nonly-packages = true\n\n[tool.ruff]\nline-length = 100\ntarget-version = \"py312\"\nselect = [\"E\", \"F\", \"I\", \"B\", \"W\"]\n\n[tool.mypy]\npython_version = \"3.12\"\nwarn_return_any = true\nwarn_unused_configs = true\ndisallow_untyped_defs = true\ndisallow_incomplete_defs = true"
+}

@@ -1,0 +1,113 @@
+{
+  "name": "r-huijts__rijksmuseum-mcp",
+  "display_name": "rijksmuseum-mcp",
+  "description": "Rijksmuseum MCP integration for artwork exploration and analysis",
+  "author": {
+    "name": "r-huijts"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-server-rijksmuseum"],
+    "env": {
+      "RIJKSMUSEUM_API_KEY": "${user_config.rijksmuseum_api_key}",
+      "PORT": "${user_config.port}",
+      "LOG_LEVEL": "${user_config.log_level}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "rijksmuseum_api_key": {
+      "type": "string",
+      "title": "Rijksmuseum API Key",
+      "description": "Your API key from the Rijksmuseum API Portal.",
+      "required": true,
+      "sensitive": true
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port for the MCP server to run on.",
+      "required": false,
+      "default": 3000
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "The logging level for the server (e.g., 'info', 'debug').",
+      "required": false,
+      "default": "info"
+    }
+  },
+  "readme": "![rijksmuseum logo](https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Logo_Rijksmuseum.svg/799px-Logo_Rijksmuseum.svg.png)\n\n# Rijksmuseum MCP Server\n\nA Model Context Protocol (MCP) server that provides access to the Rijksmuseum's collection through natural language interactions. This server enables AI models to explore, analyze, and interact with artworks and collections from the Rijksmuseum.\n\n<a href=\"https://glama.ai/mcp/servers/4rmiexp64y\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/4rmiexp64y/badge\" alt=\"Rijksmuseum Server MCP server\" /></a>\n\n## Features\n\nThe server provides several tools for interacting with the Rijksmuseum's collection:\n\n### 1. Search Artworks (`search_artwork`)\nSearch and filter artworks using various criteria including:\n- Text-based search\n- Artist name\n- Artwork type\n- Materials and techniques\n- Time periods\n- Colors\n- And more\n\n### 2. Artwork Details (`get_artwork_details`)\nRetrieve comprehensive information about specific artworks, including:\n- Basic details (title, artist, dates)\n- Physical properties\n- Historical context\n- Visual information\n- Curatorial information\n- Exhibition history\n\n### 3. High-Resolution Images (`get_artwork_image`)\nAccess high-resolution image data with deep zoom capabilities:\n- Multiple zoom levels\n- Tile-based image loading\n- Full resolution support\n- Position information\n\n### 4. User Collections (`get_user_sets` & `get_user_set_details`)\nExplore user-created collections:\n- Browse curated sets\n- View thematic groupings\n- Analyze collection patterns\n- Access detailed set information\n\n### 5. Image Viewing (`open_image_in_browser`)\nOpen artwork images directly in your browser for detailed viewing.\n\n### 6. Artist Timeline (`get_artist_timeline`)\nGenerate chronological timelines of artists' works:\n- Track artistic development\n- Analyze periods and styles\n- Study career progression\n\n## Example Use Cases\n\nHere are some example queries you can ask the AI when using this server:\n\n### Artwork Discovery\n```\n\"Show me all paintings by Rembrandt from the 1640s\"\n\"Find artworks that prominently feature the color blue\"\n\"What are the most famous masterpieces in the collection?\"\n\"Search for still life paintings from the Dutch Golden Age\"\n```\n\n### Artwork Analysis\n```\n\"Tell me everything about The Night Watch\"\n\"What are the dimensions and materials used in Van Gogh's Self Portrait?\"\n\"Show me high-resolution details of the brushwork in Vermeer's The Milkmaid\"\n\"Compare the colors used in different versions of The Potato Eaters\"\n```\n\n### Artist Research\n```\n\"Create a timeline of Rembrandt's self-portraits\"\n\"How did Van Gogh's use of color evolve throughout his career?\"\n\"Show me all works by Frans Hals in chronological order\"\n\"What techniques did Jan Steen use in his paintings?\"\n```\n\n### Thematic Exploration\n```\n\"Find all artworks depicting biblical scenes\"\n\"Show me paintings of Amsterdam in the 17th century\"\n\"What artworks feature flowers or still life arrangements?\"\n\"Find portraits that include musical instruments\"\n```\n\n### Collection Analysis\n```\n\"Show me the most popular user-curated collections\"\n\"Find sets that focus on landscape paintings\"\n\"What are the recent additions to the museum's collection?\"\n\"Show me collections featuring works from multiple artists\"\n```\n\n### Visual Details\n```\n\"Let me examine the details in the background of The Night Watch\"\n\"Show me a close-up of the jewelry in Girl with a Pearl Earring\"\n\"Can you display the highest resolution version of The Jewish Bride?\"\n\"I want to study the facial expressions in The Syndics\"\n```\n\n## Getting Started\n\nYou can install this server in two ways:\n\n### 1. Using Claude Desktop with NPM Package\nUpdate your Claude configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"rijksmuseum-server\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"mcp-server-rijksmuseum\"\n      ],\n      \"env\": {\n        \"RIJKSMUSEUM_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\nYou can get an API key from the [Rijksmuseum API Portal](https://data.rijksmuseum.nl/docs/api/).\n\n### 2. From Source\n1. Clone this repository\n2. Install dependencies:\n   ```bash\n   npm install\n   ```\n3. Copy the example environment file:\n   ```bash\n   cp .env.example .env\n   ```\n4. Add your Rijksmuseum API key to the `.env` file:\n   ```\n   RIJKSMUSEUM_API_KEY=your_api_key_here\n   ```\n5. Then update your Claude configuration file:\n   ```json\n   {\n     \"mcpServers\": {\n       \"rijksmuseum-server\": {\n         \"command\": \"node\",\n         \"args\": [\n           \"/path/to/rijksmuseum-server/build/index.js\"\n         ],\n         \"env\": {\n           \"RIJKSMUSEUM_API_KEY\": \"your_api_key_here\"\n         }\n       }\n     }\n   }\n   ```\n\nMake sure to:\n- Replace `/path/to/rijksmuseum-server` with the actual path to your installation\n- Add your Rijksmuseum API key in the `env` section\n\nAfter updating the configuration, restart Claude Desktop for the changes to take effect.\n\n## Configuration\n\nThe server can be configured through environment variables:\n- `RIJKSMUSEUM_API_KEY`: Your Rijksmuseum API key (required)\n- `PORT`: Server port (default: 3000)\n- `LOG_LEVEL`: Logging level (default: 'info')\n\n## API Documentation\n\nFor detailed information about the Rijksmuseum API endpoints used by this server, visit:\n[Rijksmuseum API Documentation](https://data.rijksmuseum.nl/object-metadata/api/)\n\n## Contributing\n\nContributions are welcome! Please feel free to submit pull requests or create issues for bugs and feature requests.\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n",
+  "category": "Art & Culture",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-rijksmuseum": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-rijksmuseum"],
+        "env": {
+          "RIJKSMUSEUM_API_KEY": "your_api_key_here"
+        }
+      },
+      "mcp-server-rijksmuseum-configured": {
+        "command": "node",
+        "args": ["/path/to/rijksmuseum-server/build/index.js"],
+        "env": {
+          "RIJKSMUSEUM_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "r-huijts",
+    "repo": "rijksmuseum-mcp",
+    "url": "https://github.com/r-huijts/rijksmuseum-mcp",
+    "name": "r-huijts__rijksmuseum-mcp",
+    "path": null,
+    "stars": 57,
+    "contributors": 2,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "af9c2a2dba1e709f2193a59bb3fee3a3b66380b5"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.240Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-rijksmuseum\",\n  \"version\": \"1.0.4\",\n  \"type\": \"module\",\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"mcp-server-rijksmuseum\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.4\",\n    \"axios\": \"^1.7.9\",\n    \"dotenv\": \"^16.4.7\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^18.0.0\",\n    \"typescript\": \"^5.0.0\"\n  }\n}\n"
+}

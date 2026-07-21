@@ -1,0 +1,97 @@
+{
+  "name": "angheljf__nyt",
+  "display_name": "nyt",
+  "description": "MCP server from angheljf/nyt",
+  "author": {
+    "name": "angheljf"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "NYTIMES_API_KEY": "${user_config.nytimes_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "nytimes_api_key": {
+      "type": "string",
+      "title": "New York Times API Key",
+      "description": "Your API key for accessing the New York Times Article Search API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# NYTimes Article Search MCP Server\n\n[![smithery badge](https://smithery.ai/badge/nyt)](https://smithery.ai/server/nyt)\n\nThis is a TypeScript-based MCP server that allows searching for New York Times articles from the last 30 days based on a keyword. It demonstrates core MCP concepts by providing:\n\n- Tools for searching articles\n- Integration with the New York Times API\n\n![NYTimes Article Search](img/example.png)\n\n<a href=\"https://glama.ai/mcp/servers/ylg4ai4vin\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/ylg4ai4vin/badge\" alt=\"NYTimes Article Search Server MCP server\" /></a>\n\n## Features\n\n### Tools\n- `search_articles` - Search NYTimes articles from the last 30 days based on a keyword\n  - Takes `keyword` as a required parameter\n  - Returns a list of articles with title, abstract, URL, published date, and author\n\n## Development\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\n## Installation\n\n### Installing via Smithery\n\nTo install NYTimes Article Search for Claude Desktop automatically via [Smithery](https://smithery.ai/server/nyt):\n\n```bash\nnpx -y @smithery/cli install nyt --client claude\n```\n\n### Manual Installation\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"nyt\": {\n      \"command\": \"node\",\n      \"args\": [\"path/to/your/build/index.js\"],\n      \"env\": {\n        \"NYTIMES_API_KEY\": \"your_api_key_here\"\n      }\n    }\n  }\n}\n```\n\n## Environment Variables\n\nCreate a `.env` file in the root of your project and add your New York Times API key:\n\n```\nNYTIMES_API_KEY=your_api_key_here\n```\n\n## Running the Server\n\nAfter building the project, you can run the server with:\n\n```bash\nnode build/index.js\n```\n\nThe server will start and listen for MCP requests over stdio.\n\n## License\n\nThis project is licensed under the MIT License.\n",
+  "category": "Search",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "nyt": {
+        "command": "node",
+        "args": ["path/to/your/build/index.js"],
+        "env": {
+          "NYTIMES_API_KEY": "your_api_key_here"
+        }
+      },
+      "nyt-stdio": {
+        "command": "node",
+        "args": ["build/index.js"],
+        "env": {
+          "NYTIMES_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "angheljf",
+    "repo": "nyt",
+    "url": "https://github.com/angheljf/nyt",
+    "name": "nyt",
+    "path": null,
+    "stars": 14,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "1cff0d9dc0b48cc4c145846b6e68ed249dbe1a33"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:25.403Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"nyt\",\n  \"version\": \"0.1.0\",\n  \"description\": \"A MCP Server\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"nyt\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"axios\": \"^1.7.8\",\n    \"dotenv\": \"^16.4.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

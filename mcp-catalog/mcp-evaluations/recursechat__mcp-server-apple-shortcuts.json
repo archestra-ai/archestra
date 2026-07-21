@@ -1,0 +1,111 @@
+{
+  "name": "recursechat__mcp-server-apple-shortcuts",
+  "display_name": "mcp-server-apple-shortcuts",
+  "description": "MCP server from recursechat/mcp-server-apple-shortcuts",
+  "author": {
+    "name": "recursechat"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server/main.py"],
+    "env": {
+      "APPLE_SHORTCUTS_API_KEY": "${user_config.apple_shortcuts_api_key}",
+      "MCP_SERVER_PORT": "${user_config.mcp_server_port}",
+      "SHORTCUTS_DATA_DIR": "${user_config.shortcuts_data_dir}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "apple_shortcuts_api_key": {
+      "type": "string",
+      "title": "Apple Shortcuts API Key",
+      "description": "API key required for authenticating with Apple Shortcuts services.",
+      "sensitive": true,
+      "required": true
+    },
+    "mcp_server_port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The network port on which the MCP server will listen for incoming connections.",
+      "default": 8080,
+      "required": false,
+      "min": 1024,
+      "max": 65535
+    },
+    "shortcuts_data_dir": {
+      "type": "directory",
+      "title": "Shortcuts Data Directory",
+      "description": "The directory where the server will store configuration and data related to Apple Shortcuts.",
+      "default": "${HOME}/.mcp-apple-shortcuts",
+      "required": false
+    }
+  },
+  "readme": "# Apple Shortcuts MCP Server 🤖\n\nA Model Context Protocol (MCP) server that lets AI assistants like Claude control Apple Shortcuts automations. This enables AI models to trigger shortcuts and automate tasks on macOS in a safe and controlled way.\n\n<a href=\"https://www.npmjs.com/package/mcp-server-apple-shortcuts\"><img src=\"https://img.shields.io/npm/v/mcp-server-apple-shortcuts\"/></a>\n\n<a href=\"https://glama.ai/mcp/servers/15z6abk6p2\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/15z6abk6p2/badge\" /></a>\n\n## What is MCP? 🤔\n\nThe Model Context Protocol (MCP) is a system that lets AI apps, like Claude Desktop, connect to external tools and data sources. It gives a clear and safe way for AI assistants to work with local services and APIs while keeping the user in control.\n\n## What does this server do? 🚀\n\nThe Apple Shortcuts MCP server:\n- Enables AI assistants to list available shortcuts\n- Allows running shortcuts by name with optional input parameters \n- Provides a simple interface for automation control\n\n## Prerequisites 📋\n\nBefore you begin, ensure you have:\n\n- [Node.js](https://nodejs.org/) (v18 or higher)\n- [Claude Desktop](https://claude.ai/download) installed\n- macOS with Shortcuts app configured\n\n## Configuration to use Apple Shortcuts Server ⚙️\n\nHere's the Claude Desktop configuration to use the Apple Shortcuts server:\n```json\n{\n  \"mcpServers\": {\n    \"apple-shortcuts\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-server-apple-shortcuts\"]\n    }\n  }\n}\n```\n\n## Build Apple Shortcuts Server and run locally 🛠️\n\n1. Clone this repository:\n\n```sh\ngit clone git@github.com:recursechat/mcp-server-apple-shortcuts.git\n```\n\n2. Install dependencies:\n```sh\nnpm install\n```\n\n3. Build project\n```sh\nnpm run build\n```\n\nHere's the Claude Desktop configuration to use the Apple Shortcuts server with a local build:\n```json\n{\n  \"mcpServers\": {\n    \"apple-shortcuts\": {\n      \"command\": \"npx\",\n      \"args\": [\"/path/to/mcp-server-apple-shortcuts/build/index.js\"],\n    }\n  }\n}\n```\n\n<!--\n```json\n{\n  \"mcpServers\": {\n    \"apple-shortcuts\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-server-apple-shortcuts\"]\n    }\n  }\n}\n```\n-->\n\n## Usage 🎯\n\nYou can ask Claude \"list shortcuts\" or run a specific shortcut with the shortcut name, for example \"get word of the day\" or \"play a song\".\n\n## License ⚖️\n\nApache-2.0\n",
+  "category": "AI Tools",
+  "quality_score": 48,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-apple-shortcuts": {
+        "command": "npx",
+        "args": ["-y", "mcp-server-apple-shortcuts"],
+        "env": {}
+      },
+      "mcp-server-apple-shortcuts-local-build": {
+        "command": "npx",
+        "args": ["/path/to/mcp-server-apple-shortcuts/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "recursechat",
+    "repo": "mcp-server-apple-shortcuts",
+    "url": "https://github.com/recursechat/mcp-server-apple-shortcuts",
+    "name": "recursechat__mcp-server-apple-shortcuts",
+    "path": null,
+    "stars": 240,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "910a56d4965c1a39d4afb9890f21580f02f3f71d"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:14.516Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "shx",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-apple-shortcuts\",\n  \"version\": \"1.0.1\",\n  \"description\": \"MCP server for automation using Apple Shortcuts\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"keywords\": [],\n  \"author\": \"Recurse Chat (https://recurse.chat)\",\n  \"homepage\": \"https://recurse.chat\",\n  \"license\": \"Apache-2.0\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.4\",\n    \"shx\": \"^0.3.4\",\n    \"zod\": \"^3.24.1\"\n  },\n  \"bin\": {\n    \"mcp-server-apple-shortcuts\": \"./build/index.js\"\n  },\n  \"workspaces\": [\n    \"src/*\"\n  ],\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x build/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.10.1\",\n    \"typescript\": \"^5.7.2\"\n  }\n}\n"
+}

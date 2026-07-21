@@ -1,0 +1,83 @@
+{
+  "name": "zhsama__duckduckgo-mpc-server",
+  "display_name": "duckduckgo-mpc-server",
+  "description": "MCP server from zhsama/duckduckgo-mpc-server",
+  "author": {
+    "name": "zhsama"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "duckduckgo-mcp-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# duckduckgo-search MCP Server\n\nEnglish | [中文](README_zh.md)\n\nA Model Context Protocol server for DuckDuckGo Search\n\nThis is a TypeScript-based MCP server that provides DuckDuckGo search functionality. It demonstrates core MCP concepts through:\n\n- Integration with DuckDuckGo Search\n- Easy-to-use search tool interface\n- Rate limiting and error handling support\n\n<a href=\"https://glama.ai/mcp/servers/34fhy9xb9w\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/34fhy9xb9w/badge\" alt=\"DuckDuckGo Server MCP server\" />\n</a>\n\n## Features\n\n### Search Tool\n\n- `duckduckgo_search` - Perform web searches using DuckDuckGo API\n  - Required parameter: `query` (search query, max 400 characters)\n  - Optional parameter: `count` (number of results, 1-20, default 10)\n  - Optional parameter: `safeSearch` (safety level: strict/moderate/off, default moderate)\n  - Returns formatted Markdown search results\n\n### Rate Limits\n\n- Maximum 1 request per second\n- Maximum 15000 requests per month\n\n## Development\n\n### Prerequisites\n\n- Node.js >= 18\n- pnpm >= 8.0.0\n\n### Installation\n\n```bash\n# Install pnpm if not already installed\nnpm install -g pnpm\n\n# Install project dependencies\npnpm install\n```\n\n### Build and Run\n\nBuild the server:\n\n```bash\npnpm run build\n```\n\nFor development with auto-rebuild:\n\n```bash\npnpm run watch\n```\n\n## Setup in Claude Desktop\n\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n# online\n{\n  \"mcpServers\": {\n    \"duckduckgo-search\": {\n        \"command\": \"npx\",\n        \"args\": [\n          \"-y\",\n          \"duckduckgo-mcp-server\"\n        ]\n    }\n  }\n}\n\n# local\n{\n  \"mcpServers\": {\n    \"duckduckgo-search\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/duckduckgo-search/build/index.js\"\n      ]\n    }\n  }\n}\n```\n![image](https://github.com/user-attachments/assets/6906e280-9dbb-4bb5-a537-d9e45e666084)\n![image](https://github.com/user-attachments/assets/867a70ae-082f-45ab-a623-869bfd6c31eb)\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\npnpm run inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.",
+  "category": "Search",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "duckduckgo-search-online": {
+        "command": "npx",
+        "args": ["-y", "duckduckgo-mcp-server"],
+        "env": {}
+      },
+      "duckduckgo-search-local": {
+        "command": "node",
+        "args": ["/path/to/duckduckgo-search/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "zhsama",
+    "repo": "duckduckgo-mpc-server",
+    "url": "https://github.com/zhsama/duckduckgo-mpc-server",
+    "name": "duckduckgo-mpc-server",
+    "path": null,
+    "stars": 53,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "329907e90b6706d68e9dc8e6c7f6f5c05057a08a"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.378Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "duck-duck-scrape",
+      "importance": 9
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"duckduckgo-mcp-server\",\n  \"version\": \"0.1.2\",\n  \"description\": \"A TypeScript-based MCP server that provides DuckDuckGo search functionality.\",\n  \"type\": \"module\",\n  \"author\": {\n    \"name\": \"zhsama\",\n    \"email\": \"torvalds@linux.do\",\n    \"url\": \"https://github.com/zhsama/duckduckgo-mcp-server\"\n  },\n  \"homepage\": \"https://github.com/zhsama/duckduckgo-mcp-server\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/zhsama/duckduckgo-mcp-server.git\"\n  },\n  \"license\": \"MIT\",\n  \"bin\": {\n    \"duckduckgo-mcp-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && echo '#!/usr/bin/env node\\n' | cat - build/index.js > temp && mv temp build/index.js && chmod +x build/index.js\",\n    \"prepare\": \"pnpm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"duck-duck-scrape\": \"2.2.7\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"ts-node\": \"^10.9.1\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"engines\": {\n    \"node\": \">=18\",\n    \"pnpm\": \">=8.0.0\"\n  }\n}"
+}

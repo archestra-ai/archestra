@@ -1,0 +1,152 @@
+{
+  "name": "qiniu__qiniu-mcp-server",
+  "display_name": "qiniu-mcp-server",
+  "description": "MCP server from qiniu/qiniu-mcp-server",
+  "author": {
+    "name": "qiniu"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["qiniu-mcp-server"],
+    "env": {
+      "QINIU_ACCESS_KEY": "${user_config.qiniu_access_key}",
+      "QINIU_SECRET_KEY": "${user_config.qiniu_secret_key}",
+      "QINIU_REGION_NAME": "${user_config.qiniu_region_name}",
+      "QINIU_ENDPOINT_URL": "${user_config.qiniu_endpoint_url}",
+      "QINIU_BUCKETS": "${user_config.qiniu_buckets}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "qiniu_access_key": {
+      "type": "string",
+      "title": "Qiniu Access Key",
+      "description": "Your Qiniu Access Key for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "qiniu_secret_key": {
+      "type": "string",
+      "title": "Qiniu Secret Key",
+      "description": "Your Qiniu Secret Key for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "qiniu_region_name": {
+      "type": "string",
+      "title": "Qiniu Region Name",
+      "description": "The name of your Qiniu cloud region (e.g., 'huadong', 'huabei').",
+      "sensitive": false,
+      "required": true
+    },
+    "qiniu_endpoint_url": {
+      "type": "string",
+      "title": "Qiniu Endpoint URL",
+      "description": "The endpoint URL for Qiniu services (e.g., 'https://s3.your_region.qiniucs.com').",
+      "sensitive": false,
+      "required": true
+    },
+    "qiniu_buckets": {
+      "type": "string",
+      "title": "Qiniu Buckets",
+      "description": "Comma-separated list of Qiniu buckets to access (e.g., 'bucket1,bucket2').",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "# Qiniu MCP Server\n\n## 概述\n\n基于七牛云产品构建的 Model Context Protocol (MCP) Server，支持用户在 AI 大模型客户端的上下文中通过该 MCP\nServer 来访问七牛云存储、智能多媒体服务等。\n\n关于访问七牛云存储详细情况请参考 [基于 MCP 使用大模型访问七牛云存储](https://developer.qiniu.com/kodo/12914/mcp-aimodel-kodo)。\n\n能力集：\n- 存储\n  - 获取 Bucket 列表\n  - 获取 Bucket 中的文件列表\n  - 上传本地文件，以及给出文件内容进行上传\n  - 读取文件内容\n  - 获取文件下载链接\n- 智能多媒体\n  - 图片缩放\n  - 图片切圆角\n- CDN\n  - 根据链接刷新文件\n  - 根据链接预取文件\n\n## 环境要求\n\n- Python 3.12 或更高版本\n- uv 包管理器\n\n如果还没有安装 uv，可以使用以下命令安装：\n```bash\n# Mac，推荐使用 brew 安装\nbrew install uv\n\n\n# Linux & Mac\n# 1. 安装\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n# 2. 安装完成后，请确保将软件包安装路径（包含 uv 和 uvx 可执行文件的目录）添加到系统的 PATH 环境变量中。\n# 假设安装包路径为 /Users/xxx/.local/bin（见安装执行输出）\n### 临时生效（当前会话），在当前终端中执行以下命令：\nexport PATH=\"/Users/xxx/.local/bin:$PATH\"\n### 永久生效（推荐），在当前终端中执行以下命令：\necho 'export PATH=\"/Users/xxx/.local/bin:$PATH\"' >> ~/.bash_profile\nsource ~/.bash_profile\n\n\n# Windows\npowershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"\n```\n\n具体安装方式参考 [uv 安装](https://docs.astral.sh/uv/getting-started/installation/#pypi)\n\n## 在 Cline 中使用：\n\n步骤：\n\n1. 在 vscode 下载 Cline 插件（下载后 Cline 插件后在侧边栏会增加 Cline 的图标）\n2. 配置大模型\n3. 配置 qiniu MCP\n    1. 点击 Cline 图标进入 Cline 插件，选择 MCP Server 模块\n    2. 选择 installed，点击 Advanced MCP Settings 配置 MCP Server，参考下面配置信息\n   ```\n   {\n     \"mcpServers\": {\n       \"qiniu\": {\n         \"command\": \"uvx\",\n         \"args\": [\n           \"qiniu-mcp-server\"\n         ],\n         \"env\": {\n           \"QINIU_ACCESS_KEY\": \"YOUR_ACCESS_KEY\",\n           \"QINIU_SECRET_KEY\": \"YOUR_SECRET_KEY\",\n           \"QINIU_REGION_NAME\": \"YOUR_REGION_NAME\",\n           \"QINIU_ENDPOINT_URL\": \"YOUR_ENDPOINT_URL\",\n           \"QINIU_BUCKETS\": \"YOUR_BUCKET_A,YOUR_BUCKET_B\"\n        },\n         \"disabled\": false\n       }\n     }\n   }\n   ```\n    3. 点击 qiniu MCP Server 的链接开关进行连接\n4. 在 Cline 中创建一个聊天窗口，此时我们可以和 AI 进行交互来使用 qiniu-mcp-server ，下面给出几个示例：\n    - 列举 qiniu 的资源信息\n    - 列举 qiniu 中所有的 Bucket\n    - 列举 qiniu 中 xxx Bucket 的文件\n    - 读取 qiniu xxx Bucket 中 yyy 的文件内容\n    - 对 qiniu xxx Bucket 中 yyy 的图片切个宽200像素的圆角\n    - 刷新下 qiniu 的这个 CDN 链接：https://developer.qiniu.com/test.txt\n\n注：\ncursor 中创建 MCP Server 可直接使用上述配置。\nclaude 中使用时可能会遇到：Error: spawn uvx ENOENT 错误，解决方案：command 中 参数填写 uvx 的绝对路径，eg: /usr/local/bin/uvx\n\n## 开发\n1. 克隆仓库：\n\n```bash\n# 克隆项目并进入目录\ngit clone git@github.com:qiniu/qiniu-mcp-server.git\ncd qiniu-mcp-server\n```\n\n2. 创建并激活虚拟环境：\n\n```bash\nuv venv\nsource .venv/bin/activate  # Linux/macOS\n# 或\n.venv\\Scripts\\activate  # Windows\n```\n\n3. 安装依赖：\n\n```bash\nuv pip install -e .\n```\n\n4. 配置\n\n复制环境变量模板：\n```bash\ncp .env.example .env\n```\n\n编辑 `.env` 文件，配置以下参数：\n```bash\n# S3/Kodo 认证信息\nQINIU_ACCESS_KEY=your_access_key\nQINIU_SECRET_KEY=your_secret_key\n\n# 区域信息\nQINIU_REGION_NAME=your_region\nQINIU_ENDPOINT_URL=endpoint_url # eg:https://s3.your_region.qiniucs.com\n\n# 配置 bucket，多个 bucket 使用逗号隔开，建议最多配置 20 个 bucket\nQINIU_BUCKETS=bucket1,bucket2,bucket3\n```\n\n扩展功能，首先在 core 目录下新增一个业务包目录（eg: 存储 -> storage），在此业务包目录下完成功能拓展。\n在业务包目录下的 `__init__.py` 文件中定义 load 函数用于注册业务工具或者资源，最后在 `core` 目录下的 `__init__.py`\n中调用此 load 函数完成工具或资源的注册。\n\n```shell\ncore\n├── __init__.py # 各个业务工具或者资源加载\n└── storage # 存储业务目录\n    ├── __init__.py # 加载存储工具或者资源\n    ├── resource.py # 存储资源扩展\n    ├── storage.py # 存储工具类\n    └── tools.py # 存储工具扩展\n```\n\n## 测试\n\n### 使用 Model Control Protocol Inspector 测试\n\n强烈推荐使用 [Model Control Protocol Inspector](https://github.com/modelcontextprotocol/inspector) 进行测试。\n\n```shell\n# node 版本为：v22.4.0\nnpx @modelcontextprotocol/inspector uv --directory . run qiniu-mcp-server\n```\n\n### 本地启动 MCP Server 示例\n\n1. 使用标准输入输出（stdio）模式启动（默认）：\n\n```bash\nuv --directory . run qiniu-mcp-server\n```\n\n2. 使用 SSE 模式启动（用于 Web 应用）：\n\n```bash\nuv --directory . run qiniu-mcp-server --transport sse --port 8000\n```\n\n\n\n\n",
+  "category": "AI Tools",
+  "quality_score": 64,
+  "archestra_config": {
+    "client_config_permutations": {
+      "qiniu-mcp-server": {
+        "command": "uvx",
+        "args": ["qiniu-mcp-server"],
+        "env": {
+          "QINIU_ACCESS_KEY": "YOUR_ACCESS_KEY",
+          "QINIU_SECRET_KEY": "YOUR_SECRET_KEY",
+          "QINIU_REGION_NAME": "YOUR_REGION_NAME",
+          "QINIU_ENDPOINT_URL": "YOUR_ENDPOINT_URL",
+          "QINIU_BUCKETS": "YOUR_BUCKET_A,YOUR_BUCKET_B"
+        }
+      },
+      "qiniu-mcp-server-stdio": {
+        "command": "uv",
+        "args": ["--directory", ".", "run", "qiniu-mcp-server"],
+        "env": {}
+      },
+      "qiniu-mcp-server-sse": {
+        "command": "uv",
+        "args": ["--directory", ".", "run", "qiniu-mcp-server", "--transport", "sse", "--port", "8000"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "qiniu",
+    "repo": "qiniu-mcp-server",
+    "url": "https://github.com/qiniu/qiniu-mcp-server",
+    "name": "qiniu__qiniu-mcp-server",
+    "path": null,
+    "stars": 26,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8ff3741d2b7751253d6dd2c01345b045ac665b53"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:17.537Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "qiniu",
+      "importance": 9
+    },
+    {
+      "name": "aioboto3",
+      "importance": 8
+    },
+    {
+      "name": "openai",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "fastjsonschema",
+      "importance": 4
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"qiniu-mcp-server\"\nversion = \"1.2.3\"\ndescription = \"A MCP server project of Qiniu.\"\nrequires-python = \">=3.12\"\nauthors = [\n    { name = \"Qiniu\", email = \"sdk@qiniu.com\" },\n]\nkeywords = [\"qiniu\", \"mcp\", \"llm\"]\ndependencies = [\n    \"aioboto3>=13.2.0\",\n    \"fastjsonschema>=2.21.1\",\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.0.0\",\n    \"openai>=1.66.3\",\n    \"pip>=25.0.1\",\n    \"python-dotenv>=1.0.1\",\n    \"qiniu>=7.16.0\",\n]\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nqiniu-mcp-server = \"mcp_server:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mcp_server\"]"
+}

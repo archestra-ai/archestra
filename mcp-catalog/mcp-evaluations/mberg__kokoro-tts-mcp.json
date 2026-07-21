@@ -1,0 +1,255 @@
+{
+  "name": "mberg__kokoro-tts-mcp",
+  "display_name": "kokoro-tts-mcp",
+  "description": "Kokoro Text to Speech (TTS) MCP Server",
+  "author": {
+    "name": "mberg"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "mcp-tts.py"],
+    "env": {
+      "TTS_VOICE": "${user_config.tts_voice}",
+      "TTS_SPEED": "${user_config.tts_speed}",
+      "TTS_LANGUAGE": "${user_config.tts_language}",
+      "AWS_ACCESS_KEY_ID": "${user_config.aws_access_key_id}",
+      "AWS_SECRET_ACCESS_KEY": "${user_config.aws_secret_access_key}",
+      "AWS_REGION": "${user_config.aws_region}",
+      "AWS_S3_FOLDER": "${user_config.aws_s3_folder}",
+      "S3_ENABLED": "${user_config.s3_enabled}",
+      "MP3_FOLDER": "${user_config.mp3_folder}",
+      "AWS_S3_BUCKET_NAME": "${user_config.aws_s3_bucket_name}",
+      "AWS_S3_ENDPOINT_URL": "${user_config.aws_s3_endpoint_url}",
+      "MCP_HOST": "${user_config.mcp_host}",
+      "MCP_PORT": "${user_config.mcp_port}",
+      "MCP_CLIENT_HOST": "${user_config.mcp_client_host}",
+      "DEBUG": "${user_config.debug}",
+      "MP3_RETENTION_DAYS": "${user_config.mp3_retention_days}",
+      "DELETE_LOCAL_AFTER_S3_UPLOAD": "${user_config.delete_local_after_s3_upload}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "aws_access_key_id": {
+      "type": "string",
+      "title": "AWS Access Key ID",
+      "description": "Your AWS access key ID",
+      "sensitive": true,
+      "required": true,
+      "default": ""
+    },
+    "aws_secret_access_key": {
+      "type": "string",
+      "title": "AWS Secret Access Key",
+      "description": "Your AWS secret access key",
+      "sensitive": true,
+      "required": true,
+      "default": ""
+    },
+    "aws_s3_bucket_name": {
+      "type": "string",
+      "title": "AWS S3 Bucket Name",
+      "description": "S3 bucket name",
+      "required": true
+    },
+    "aws_region": {
+      "type": "string",
+      "title": "AWS Region",
+      "description": "AWS region (e.g., us-east-1)",
+      "default": "us-east-1",
+      "required": false
+    },
+    "aws_s3_folder": {
+      "type": "string",
+      "title": "AWS S3 Folder",
+      "description": "Folder path within the S3 bucket",
+      "default": "mp3",
+      "required": false
+    },
+    "aws_s3_endpoint_url": {
+      "type": "string",
+      "title": "AWS S3 Endpoint URL",
+      "description": "Optional custom endpoint URL for S3-compatible storage",
+      "required": false
+    },
+    "mcp_host": {
+      "type": "string",
+      "title": "MCP Host",
+      "description": "Host to bind the server to (default: 0.0.0.0)",
+      "default": "0.0.0.0",
+      "required": false
+    },
+    "mcp_port": {
+      "type": "number",
+      "title": "MCP Port",
+      "description": "Port to listen on (default: 9876)",
+      "default": 9876,
+      "required": false
+    },
+    "mcp_client_host": {
+      "type": "string",
+      "title": "MCP Client Host",
+      "description": "Hostname for client connections to the server (default: localhost)",
+      "default": "localhost",
+      "required": false
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Debug Mode",
+      "description": "Enable debug mode",
+      "default": false,
+      "required": false
+    },
+    "s3_enabled": {
+      "type": "boolean",
+      "title": "S3 Enabled",
+      "description": "Enable S3 uploads",
+      "default": true,
+      "required": false
+    },
+    "mp3_folder": {
+      "type": "directory",
+      "title": "MP3 Folder",
+      "description": "Path to store MP3 files",
+      "default": "${__dirname}/mp3",
+      "required": true
+    },
+    "mp3_retention_days": {
+      "type": "number",
+      "title": "MP3 Retention Days",
+      "description": "Number of days to keep MP3 files before automatic deletion",
+      "default": 30,
+      "required": false
+    },
+    "delete_local_after_s3_upload": {
+      "type": "boolean",
+      "title": "Delete Local After S3 Upload",
+      "description": "Whether to delete local MP3 files after successful S3 upload",
+      "default": false,
+      "required": false
+    },
+    "tts_voice": {
+      "type": "string",
+      "title": "TTS Voice",
+      "description": "Default voice for the TTS client",
+      "default": "af_heart",
+      "required": false
+    },
+    "tts_speed": {
+      "type": "number",
+      "title": "TTS Speed",
+      "description": "Default speed for the TTS client",
+      "default": 1,
+      "required": false
+    },
+    "tts_language": {
+      "type": "string",
+      "title": "TTS Language",
+      "description": "Default language for the TTS client",
+      "default": "en-us",
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mberg-kokoro-tts-mcp-badge.png)](https://mseep.ai/app/mberg-kokoro-tts-mcp)\n\n## Kokoro Text to Speech (TTS) MCP Server\n\nKokoro Text to Speech MCP server that generates .mp3 files with option to upload to S3.\n\nUses: https://huggingface.co/spaces/hexgrad/Kokoro-TTS\n\n## Configuration\n\n* Clone to a local repo.\n* Download the [Kokoro Onnx Weights](https://github.com/thewh1teagle/kokoro-onnx) for [kokoro-v1.0.onnx](https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx) and [voices-v1.0.bin](https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin) and store in the same repo.\n\nAdd the following to your MCP configs. Update with your own values.\n\n```\n  \"kokoro-tts-mcp\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/toyourlocal/kokoro-tts-mcp\",\n        \"run\",\n        \"mcp-tts.py\"\n      ],\n      \"env\": {\n        \"TTS_VOICE\": \"af_heart\",\n        \"TTS_SPEED\": \"1.0\",\n        \"TTS_LANGUAGE\": \"en-us\",\n        \"AWS_ACCESS_KEY_ID\": \"\",\n        \"AWS_SECRET_ACCESS_KEY\": \"\",\n        \"AWS_REGION\": \"us-east-1\",\n        \"AWS_S3_FOLDER\": \"mp3\",\n        \"S3_ENABLED\": \"true\",\n        \"MP3_FOLDER\": \"/path/to/mp3\"\n      } \n    }\n```\n\n### Install ffmmeg\n\nThis is needed to convert .wav to .mp3 files\n\nFor mac:\n\n``` \nbrew install ffmpeg\n```\n\nTo run locally add these to your .env file.  See env.example and copy to .env and modify with your own values.\n\n### Supported Environment Variables\n\n- `AWS_ACCESS_KEY_ID`: Your AWS access key ID\n- `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key\n- `AWS_S3_BUCKET_NAME`: S3 bucket name\n- `AWS_S3_REGION`: S3 region (e.g., us-east-1)\n- `AWS_S3_FOLDER`: Folder path within the S3 bucket\n- `AWS_S3_ENDPOINT_URL`: Optional custom endpoint URL for S3-compatible storage\n- `MCP_HOST`: Host to bind the server to (default: 0.0.0.0)\n- `MCP_PORT`: Port to listen on (default: 9876)\n- `MCP_CLIENT_HOST`: Hostname for client connections to the server (default: localhost)\n- `DEBUG`: Enable debug mode (set to \"true\" or \"1\")\n- `S3_ENABLED`: Enable S3 uploads (set to \"true\" or \"1\")\n- `MP3_FOLDER`: Path to store MP3 files (default is 'mp3' folder in script directory)\n- `MP3_RETENTION_DAYS`: Number of days to keep MP3 files before automatic deletion\n- `DELETE_LOCAL_AFTER_S3_UPLOAD`: Whether to delete local MP3 files after successful S3 upload (set to \"true\" or \"1\")\n- `TTS_VOICE`: Default voice for the TTS client (default: af_heart)\n- `TTS_SPEED`: Default speed for the TTS client (default: 1.0)\n- `TTS_LANGUAGE`: Default language for the TTS client (default: en-us)\n\n## Running the Server Locally\n\nPreferred method use UV \n```\nuv run mcp-tts.py\n```\n\n\n## Using the TTS Client\n\nThe `mcp_client.py` script allows you to send TTS requests to the server. It can be used as follows:\n\n### Connection Settings\n\nWhen running the server and client on the same machine:\n- Server should bind to `0.0.0.0` (all interfaces) or `127.0.0.1` (localhost only)\n- Client should connect to `localhost` or `127.0.0.1`\n\n\n### Basic Usage\n\n```bash\npython mcp_client.py --text \"Hello, world!\"\n```\n\n### Reading Text from a File\n\n```bash\npython mcp_client.py --file my_text.txt\n```\n\n### Customizing Voice and Speed\n\n```bash\npython mcp_client.py --text \"Hello, world!\" --voice \"en_female\" --speed 1.2\n```\n\n### Disabling S3 Upload\n\n```bash\npython mcp_client.py --text \"Hello, world!\" --no-s3\n```\n\n### Command-line Options\n\n```bash\npython mcp_client.py --help\n```\n\n## MP3 File Management\n\nThe TTS server generates MP3 files that are stored locally and optionally uploaded to S3. You can configure how these files are managed:\n\n### Local Storage\n\n- Set `MP3_FOLDER` in your `.env` file to specify where MP3 files are stored\n- Files are kept in this folder unless automatically deleted\n\n### Automatic Cleanup\n\n- Set `MP3_RETENTION_DAYS=30` (or any number) to automatically delete files older than that number of days\n- Set `DELETE_LOCAL_AFTER_S3_UPLOAD=true` to delete local files immediately after successful S3 upload\n\n### S3 Integration\n\n- Enable/disable S3 uploads with `S3_ENABLED=true` or `DISABLE_S3=true`\n- Configure AWS credentials and bucket settings in the `.env` file\n- S3 uploads can be disabled per-request using the client's `--no-s3` option\n\n",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kokoro-tts-mcp-configured": {
+        "command": "uv",
+        "args": ["--directory", "/path/toyourlocal/kokoro-tts-mcp", "run", "mcp-tts.py"],
+        "env": {
+          "TTS_VOICE": "af_heart",
+          "TTS_SPEED": "1.0",
+          "TTS_LANGUAGE": "en-us",
+          "AWS_ACCESS_KEY_ID": "",
+          "AWS_SECRET_ACCESS_KEY": "",
+          "AWS_REGION": "us-east-1",
+          "AWS_S3_FOLDER": "mp3",
+          "S3_ENABLED": "true",
+          "MP3_FOLDER": "/path/to/mp3"
+        }
+      },
+      "kokoro-tts-mcp-local": {
+        "command": "uv",
+        "args": ["run", "mcp-tts.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mberg",
+    "repo": "kokoro-tts-mcp",
+    "url": "https://github.com/mberg/kokoro-tts-mcp",
+    "name": "kokoro-tts-mcp",
+    "path": null,
+    "stars": 53,
+    "contributors": 2,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "83a7679e71a4b2e59ef0352edf7c5865960f327b"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:37.303Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "flask",
+      "importance": 10
+    },
+    {
+      "name": "fastMCP",
+      "importance": 10
+    },
+    {
+      "name": "kokoro-onnx",
+      "importance": 9
+    },
+    {
+      "name": "boto3",
+      "importance": 8
+    },
+    {
+      "name": "soundfile",
+      "importance": 8
+    },
+    {
+      "name": "numpy",
+      "importance": 7
+    },
+    {
+      "name": "flask-cors",
+      "importance": 7
+    },
+    {
+      "name": "werkzeug",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"kokoro-tts-mcp\"\nversion = \"0.1.0\"\ndescription = \"Kokoro Text to Speech (TTS) MCP Server\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"kokoro-onnx>=0.4.5\",\n    \"soundfile>=0.13.1\",\n    \"boto3>=1.37.18\",\n    \"fastMCP==0.1.0\",\n    \"python-dotenv==0.21.0\",\n    \"flask==2.2.3\",\n    \"flask-cors==3.0.10\",\n    \"werkzeug==3.1.3\",\n    \"numpy>=1.26.0\",\n]\n\n\n=== requirements.txt ===\nflask==2.2.3\nflask-cors==3.0.10\nwerkzeug==3.1.3\nsoundfile==0.12.1\nnumpy>=1.26.0\nkokoro_onnx \nboto3==1.37.18\nfastMCP==0.1.0\npython-dotenv==0.21.0"
+}

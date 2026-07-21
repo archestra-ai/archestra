@@ -1,0 +1,74 @@
+{
+  "name": "wegotdocs__open-mcp",
+  "display_name": "open-mcp",
+  "description": "MCP server from wegotdocs/open-mcp",
+  "author": {
+    "name": "wegotdocs"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@open-mcp/{server-id}"],
+    "env": {
+      "ENV_VAR": "${user_config.env_var}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "env_var": {
+      "type": "string",
+      "title": "Environment Variable",
+      "description": "A generic environment variable for server configuration, e.g., an API key.",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "readme": "# OpenMCP\n\nhttps://www.open-mcp.org\n\nOpenMCP is both:\n\n1. a standard for converting web APIs into MCP servers\n2. an open source registry of servers which follow the standard\n\nEach OpenMCP server gives MCP clients the ability to make requests to a particular web API in a token-efficient way. Together the servers in the registry represent a broad range of services, empowering the underlying client LLMs to fetch data and perform actions on behalf of their users across many domains.\n\n## Contents\n\n- [Creating a server](#creating-a-server)\n- [Adding OpenMCP servers to MCP clients](#adding-openmcp-servers-to-mcp-clients)\n- [Converting web API -> OpenMCP](#converting-web-api---openmcp)\n\n## Creating a server\n\nhttps://www.open-mcp.org/servers/creating-a-server\n\n## Adding OpenMCP servers to MCP clients\n\n### Remote hosting\n\n...\n\n### Local hosting\n\n<div>\n  <a href=\"https://www.loom.com/share/aa26fed41f084ff1bd115436f9d799dd\">\n    <p>Local hosting demo - watch video</p>\n  </a>\n  <a href=\"https://www.loom.com/share/aa26fed41f084ff1bd115436f9d799dd\">\n    <img style=\"max-width:300px;\" src=\"https://cdn.loom.com/sessions/thumbnails/aa26fed41f084ff1bd115436f9d799dd-9815ccb91b155b9d-full-play.gif\">\n  </a>\n</div>\n\n#### Requirements:\n\n- Node.js v18 or later (includes npx and npm)\n\n#### Claude desktop\n\n```bash\nnpx @open-mcp/config add {server-id} \\\n  ~/Library/Application\\ Support/Claude/claude_desktop_config.json \\\n  --ENV_VAR=abc123\n```\n\nNow restart Claude desktop to load the tools.\n\n#### Cursor\n\nRun this from the root of your project directory or, to add to all cursor projects, run it from your home directory `~`.\n\n```bash\nnpx @open-mcp/config add {server-id} \\\n  .cursor/mcp.json \\\n  --ENV_VAR=abc123\n```\n\nNow go to `Cursor > Settings > Cursor Settings` then click `MCP` to ensure the server is enabled.\n\n#### Other clients\n\n```bash\nnpx @open-mcp/config add {server-id} \\\n  /path/to/config.json \\\n  --ENV_VAR=abc123\n```\n\n#### Alternatives\n\nIf you don't want to use the CLI you can use `npm` to install the package manually, then add a `node` command to your client config with an absolute path to `dist/index.js`. See the individual server READMEs for more details.\n\n## Converting web API -> OpenMCP\n\n### REST `openapi.yaml` / `openapi.json`\n\n...\n\n### gRPC `service.proto`\n\n...\n\n### JSON-RPC `openrpc.json`\n\n...\n\n### GraphQL `schema.gql`\n\n...\n\n### SOAP `service.wsdl`\n\n...\n\n### PostgREST `schema.sql`\n\n...\n",
+  "category": "AI Tools",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "wegotdocs",
+    "repo": "open-mcp",
+    "url": "https://github.com/wegotdocs/open-mcp",
+    "name": "wegotdocs__open-mcp",
+    "path": null,
+    "stars": 257,
+    "contributors": 2,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "4f0660f691bfee551326f896a09da3bdfa0d3a7e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.180Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@open-mcp/config",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": null
+}

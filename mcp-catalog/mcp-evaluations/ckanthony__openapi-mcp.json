@@ -1,0 +1,183 @@
+{
+  "name": "ckanthony__openapi-mcp",
+  "display_name": "openapi-mcp",
+  "description": "Dockerized MCP Server to allow your AI agent to access any API with existing api docs",
+  "author": {
+    "name": "ckanthony"
+  },
+  "server": {
+    "command": "docker",
+    "args": [
+      "run",
+      "--rm",
+      "-p",
+      "8080:8080",
+      "ckanthony/openapi-mcp:latest",
+      "--spec",
+      "https://petstore.swagger.io/v2/swagger.json",
+      "--api-key-env",
+      "SOME_API_KEY",
+      "--api-key-name",
+      "api_key",
+      "--api-key-loc",
+      "header"
+    ],
+    "env": {
+      "API_KEY": "${user_config.api_key}",
+      "SOME_API_KEY": "${user_config.some_api_key}",
+      "WEATHERBIT_API_KEY": "${user_config.weatherbit_api_key}",
+      "REQUEST_HEADERS": "${user_config.request_headers}"
+    },
+    "type": "local",
+    "docker_image": "ckanthony/openapi-mcp:latest"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Generic API Key",
+      "description": "A generic API key for the target API, often loaded from a .env file or passed via --api-key-env.",
+      "sensitive": true,
+      "required": false
+    },
+    "some_api_key": {
+      "type": "string",
+      "title": "Example API Key",
+      "description": "An example API key used in the documentation's direct environment variable passing example, and in the canonical server arguments.",
+      "sensitive": true,
+      "required": true
+    },
+    "weatherbit_api_key": {
+      "type": "string",
+      "title": "Weatherbit API Key",
+      "description": "The API key specifically for the Weatherbit API example.",
+      "sensitive": true,
+      "required": false
+    },
+    "request_headers": {
+      "type": "string",
+      "title": "Additional Request Headers",
+      "description": "Comma-separated list of additional headers to inject into requests (e.g., 'X-Trace-ID: abc,Authorization: Bearer xyz').",
+      "sensitive": false,
+      "required": false,
+      "default": ""
+    }
+  },
+  "readme": "# OpenAPI-MCP: Dockerized MCP Server to allow your AI agent to access any API with existing api docs\n\n[![Go Reference](https://pkg.go.dev/badge/github.com/ckanthony/openapi-mcp.svg)](https://pkg.go.dev/github.com/ckanthony/openapi-mcp)\n[![CI](https://github.com/ckanthony/openapi-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ckanthony/openapi-mcp/actions/workflows/ci.yml)\n[![codecov](https://codecov.io/gh/ckanthony/openapi-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/ckanthony/openapi-mcp)\n![](https://badge.mcpx.dev?type=dev 'MCP Dev')\n\n![openapi-mcp logo](openapi-mcp.png)\n\n**Generate MCP tool definitions directly from a Swagger/OpenAPI specification file.**\n\nOpenAPI-MCP is a dockerized MCP server that reads a `swagger.json` or `openapi.yaml` file and generates a corresponding [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) toolset. This allows MCP-compatible clients like [Cursor](https://cursor.sh/) to interact with APIs described by standard OpenAPI specifications. Now you can enable your AI agent to access any API by simply providing its OpenAPI/Swagger specification - no additional coding required.\n\n## Table of Contents\n\n-   [Why OpenAPI-MCP?](#why-openapi-mcp)\n-   [Features](#features)\n-   [Installation](#installation)\n    -   [Using the Pre-built Docker Hub Image (Recommended)](#using-the-pre-built-docker-hub-image-recommended)\n    -   [Building Locally (Optional)](#building-locally-optional)\n-   [Running the Weatherbit Example (Step-by-Step)](#running-the-weatherbit-example-step-by-step)\n-   [Command-Line Options](#command-line-options)\n    -   [Environment Variables](#environment-variables)\n\n## Demo\n\nRun the demo yourself: [Running the Weatherbit Example (Step-by-Step)](#running-the-weatherbit-example-step-by-step)\n\n![demo](https://github.com/user-attachments/assets/4d457137-5da4-422a-b323-afd4b175bd56)\n\n## Why OpenAPI-MCP?\n\n-   **Standard Compliance:** Leverage your existing OpenAPI/Swagger documentation.\n-   **Automatic Tool Generation:** Create MCP tools without manual configuration for each endpoint.\n-   **Flexible API Key Handling:** Securely manage API key authentication for the proxied API without exposing keys to the MCP client.\n-   **Local & Remote Specs:** Works with local specification files or remote URLs.\n-   **Dockerized Tool:** Easily deploy and run as a containerized service with Docker.\n\n## Features\n\n-   **OpenAPI v2 (Swagger) & v3 Support:** Parses standard specification formats.\n-   **Schema Generation:** Creates MCP tool schemas from OpenAPI operation parameters and request/response definitions.\n-   **Secure API Key Management:**\n    -   Injects API keys into requests (`header`, `query`, `path`, `cookie`) based on command-line configuration.\n        -   Loads API keys directly from flags (`--api-key`), environment variables (`--api-key-env`), or `.env` files located alongside local specs.\n        -   Keeps API keys hidden from the end MCP client (e.g., the AI assistant).\n-   **Server URL Detection:** Uses server URLs from the spec as the base for tool interactions (can be overridden).\n-   **Filtering:** Options to include/exclude specific operations or tags (`--include-tag`, `--exclude-tag`, `--include-op`, `--exclude-op`).\n-   **Request Header Injection:** Pass custom headers (e.g., for additional auth, tracing) via the `REQUEST_HEADERS` environment variable.\n\n## Installation\n\n### Docker\n\nThe recommended way to run this tool is via [Docker](https://hub.docker.com/r/ckanthony/openapi-mcp).\n\n#### Using the Pre-built Docker Hub Image (Recommended)\n\nAlternatively, you can use the pre-built image available on [Docker Hub](https://hub.docker.com/r/ckanthony/openapi-mcp).\n\n1.  **Pull the Image:**\n    ```bash\n    docker pull ckanthony/openapi-mcp:latest\n    ```\n2.  **Run the Container:**\n    Follow the `docker run` examples above, but replace `openapi-mcp:latest` with `ckanthony/openapi-mcp:latest`.\n\n#### Building Locally (Optional)\n\n1.  **Build the Docker Image Locally:**\n    ```bash\n    # Navigate to the repository root\n    cd openapi-mcp\n    # Build the Docker image (tag it as you like, e.g., openapi-mcp:latest)\n    docker build -t openapi-mcp:latest .\n    ```\n\n2.  **Run the Container:**\n    You need to provide the OpenAPI specification and any necessary API key configuration when running the container.\n\n    *   **Example 1: Using a local spec file and `.env` file:**\n        -   Create a directory (e.g., `./my-api`) containing your `openapi.json` or `swagger.yaml`.\n        -   If the API requires a key, create a `.env` file in the *same directory* (e.g., `./my-api/.env`) with `API_KEY=your_actual_key` (replace `API_KEY` if your `--api-key-env` flag is different).\n        ```bash\n        docker run -p 8080:8080 --rm \\\\\n            -v $(pwd)/my-api:/app/spec \\\\\n            --env-file $(pwd)/my-api/.env \\\\\n            openapi-mcp:latest \\\\\n            --spec /app/spec/openapi.json \\\\\n            --api-key-env API_KEY \\\\\n            --api-key-name X-API-Key \\\\\n            --api-key-loc header\n        ```\n        *(Adjust `--spec`, `--api-key-env`, `--api-key-name`, `--api-key-loc`, and `-p` as needed.)*\n\n    *   **Example 2: Using a remote spec URL and direct environment variable:**\n        ```bash\n        docker run -p 8080:8080 --rm \\\\\n            -e SOME_API_KEY=\"your_actual_key\" \\\\\n            openapi-mcp:latest \\\\\n            --spec https://petstore.swagger.io/v2/swagger.json \\\\\n            --api-key-env SOME_API_KEY \\\\\n            --api-key-name api_key \\\\\n            --api-key-loc header\n        ```\n\n    *   **Key Docker Run Options:**\n        *   `-p <host_port>:8080`: Map a port on your host to the container's default port 8080.\n        *   `--rm`: Automatically remove the container when it exits.\n        *   `-v <host_path>:<container_path>`: Mount a local directory containing your spec into the container. Use absolute paths or `$(pwd)/...`. Common container path: `/app/spec`.\n        *   `--env-file <path_to_host_env_file>`: Load environment variables from a local file (for API keys, etc.). Path is on the host.\n        *   `-e <VAR_NAME>=\"<value>\"`: Pass a single environment variable directly.\n        *   `openapi-mcp:latest`: The name of the image you built locally.\n        *   `--spec ...`: **Required.** Path to the spec file *inside the container* (e.g., `/app/spec/openapi.json`) or a public URL.\n        *   `--port 8080`: (Optional) Change the internal port the server listens on (must match the container port in `-p`).\n        *   `--api-key-env`, `--api-key-name`, `--api-key-loc`: Required if the target API needs an API key.\n        *   (See `--help` for all command-line options by running `docker run --rm openapi-mcp:latest --help`)\n\n\n## Running the Weatherbit Example (Step-by-Step)\n\nThis repository includes an example using the [Weatherbit API](https://www.weatherbit.io/). Here's how to run it using the public Docker image:\n\n1.  **Find OpenAPI Specs (Optional Knowledge):**\n    Many public APIs have their OpenAPI/Swagger specifications available online. A great resource for discovering them is [APIs.guru](https://apis.guru/). The Weatherbit specification used in this example (`weatherbitio-swagger.json`) was sourced from there.\n\n2.  **Get a Weatherbit API Key:**\n    *   Go to [Weatherbit.io](https://www.weatherbit.io/) and sign up for an account (they offer a free tier).\n    *   Find your API key in your Weatherbit account dashboard.\n\n3.  **Clone this Repository:**\n    You need the example files from this repository.\n    ```bash\n    git clone https://github.com/ckanthony/openapi-mcp.git\n    cd openapi-mcp\n    ```\n\n4.  **Prepare Environment File:**\n    *   Navigate to the example directory: `cd example/weather`\n    *   Copy the example environment file: `cp .env.example .env`\n    *   Edit the new `.env` file and replace `YOUR_WEATHERBIT_API_KEY_HERE` with the actual API key you obtained from Weatherbit.\n\n5.  **Run the Docker Container:**\n    From the `openapi-mcp` **root directory** (the one containing the `example` folder), run the following command:\n    ```bash\n    docker run -p 8080:8080 --rm \\\\\n        -v $(pwd)/example/weather:/app/spec \\\\\n        --env-file $(pwd)/example/weather/.env \\\\\n        ckanthony/openapi-mcp:latest \\\\\n        --spec /app/spec/weatherbitio-swagger.json \\\\\n        --api-key-env API_KEY \\\\\n        --api-key-name key \\\\\n        --api-key-loc query\n    ```\n    *   `-v $(pwd)/example/weather:/app/spec`: Mounts the local `example/weather` directory (containing the spec and `.env` file) to `/app/spec` inside the container.\n    *   `--env-file $(pwd)/example/weather/.env`: Tells Docker to load environment variables (specifically `API_KEY`) from your `.env` file.\n    *   `ckanthony/openapi-mcp:latest`: Uses the public Docker image.\n    *   `--spec /app/spec/weatherbitio-swagger.json`: Points to the spec file inside the container.\n    *   The `--api-key-*` flags configure how the tool should inject the API key (read from the `API_KEY` env var, named `key`, placed in the `query` string).\n\n6.  **Access the MCP Server:**\n    The MCP server should now be running and accessible at `http://localhost:8080` for compatible clients.\n\n**Using Docker Compose (Example):**\n\nA `docker-compose.yml` file is provided in the `example/` directory to demonstrate running the Weatherbit API example using the *locally built* image.\n\n1.  **Prepare Environment File:** Copy `example/weather/.env.example` to `example/weather/.env` and add your actual Weatherbit API key:\n    ```dotenv\n    # example/weather/.env\n    API_KEY=YOUR_ACTUAL_WEATHERBIT_KEY\n    ```\n\n2.  **Run with Docker Compose:** Navigate to the `example` directory and run:\n    ```bash\n    cd example\n    # This builds the image locally based on ../Dockerfile\n    # It does NOT use the public Docker Hub image\n    docker-compose up --build\n    ```\n    *   `--build`: Forces Docker Compose to build the image using the `Dockerfile` in the project root before starting the service.\n    *   Compose will read `example/docker-compose.yml`, build the image, mount `./weather`, read `./weather/.env`, and start the `openapi-mcp` container with the specified command-line arguments.\n    *   The MCP server will be available at `http://localhost:8080`.\n\n3.  **Stop the service:** Press `Ctrl+C` in the terminal where Compose is running, or run `docker-compose down` from the `example` directory in another terminal.\n\n## Command-Line Options\n\nThe `openapi-mcp` command accepts the following flags:\n\n| Flag                 | Description                                                                                                         | Type          | Default                          |\n|----------------------|---------------------------------------------------------------------------------------------------------------------|---------------|----------------------------------|\n| `--spec`             | **Required.** Path or URL to the OpenAPI specification file.                                                          | `string`      | (none)                           |\n| `--port`             | Port to run the MCP server on.                                                                                      | `int`         | `8080`                           |\n| `--api-key`          | Direct API key value (use `--api-key-env` or `.env` file instead for security).                                       | `string`      | (none)                           |\n| `--api-key-env`      | Environment variable name containing the API key. If spec is local, also checks `.env` file in the spec's directory. | `string`      | (none)                           |\n| `--api-key-name`     | **Required if key used.** Name of the API key parameter (header, query, path, or cookie name).                       | `string`      | (none)                           |\n| `--api-key-loc`      | **Required if key used.** Location of API key: `header`, `query`, `path`, or `cookie`.                              | `string`      | (none)                           |\n| `--include-tag`      | Tag to include (can be repeated). If include flags are used, only included items are exposed.                       | `string slice`| (none)                           |\n| `--exclude-tag`      | Tag to exclude (can be repeated). Exclusions apply after inclusions.                                                | `string slice`| (none)                           |\n| `--include-op`       | Operation ID to include (can be repeated).                                                                          | `string slice`| (none)                           |\n| `--exclude-op`       | Operation ID to exclude (can be repeated).                                                                          | `string slice`| (none)                           |\n| `--base-url`         | Manually override the target API server base URL detected from the spec.                                              | `string`      | (none)                           |\n| `--name`             | Default name for the generated MCP toolset (used if spec has no title).                                             | `string`      | \"OpenAPI-MCP Tools\"            |\n| `--desc`             | Default description for the generated MCP toolset (used if spec has no description).                                | `string`      | \"Tools generated from OpenAPI spec\" |\n\n**Note:** You can get this list by running the tool with the `--help` flag (e.g., `docker run --rm ckanthony/openapi-mcp:latest --help`).\n\n### Environment Variables\n\n*   `REQUEST_HEADERS`: Set this environment variable to a JSON string (e.g., `'{\"X-Custom\": \"Value\"}'`) to add custom headers to *all* outgoing requests to the target API.\n",
+  "category": "AI Tools",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ckanthony-openapi-mcp-docker-local": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-p",
+          "8080:8080",
+          "--rm",
+          "-v",
+          "$(pwd)/my-api:/app/spec",
+          "--env-file",
+          "$(pwd)/my-api/.env",
+          "ckanthony/openapi-mcp:latest",
+          "--spec",
+          "/app/spec/openapi.json",
+          "--api-key-env",
+          "API_KEY",
+          "--api-key-name",
+          "X-API-Key",
+          "--api-key-loc",
+          "header"
+        ],
+        "env": {},
+        "docker_image": "$(pwd)/my-api/.env"
+      },
+      "ckanthony-openapi-mcp-docker-remote": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-p",
+          "8080:8080",
+          "--rm",
+          "-e",
+          "SOME_API_KEY=your_actual_key",
+          "ckanthony/openapi-mcp:latest",
+          "--spec",
+          "https://petstore.swagger.io/v2/swagger.json",
+          "--api-key-env",
+          "SOME_API_KEY",
+          "--api-key-name",
+          "api_key",
+          "--api-key-loc",
+          "header"
+        ],
+        "env": {
+          "SOME_API_KEY": "your_actual_key"
+        },
+        "docker_image": "ckanthony/openapi-mcp:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ckanthony",
+    "repo": "openapi-mcp",
+    "url": "https://github.com/ckanthony/openapi-mcp",
+    "name": "ckanthony__openapi-mcp",
+    "path": null,
+    "stars": 132,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "93303275cecaf94a0fc807d07a81c454ff6c1d4e"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:18.327Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "getkin/kin-openapi",
+      "importance": 9
+    },
+    {
+      "name": "go-openapi/loads",
+      "importance": 8
+    },
+    {
+      "name": "go-openapi/spec",
+      "importance": 8
+    },
+    {
+      "name": "google/uuid",
+      "importance": 4
+    },
+    {
+      "name": "joho/godotenv",
+      "importance": 4
+    },
+    {
+      "name": "stretchr/testify",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/ckanthony/openapi-mcp\n\ngo 1.22.5\n\ntoolchain go1.23.8\n\nrequire (\n\tgithub.com/getkin/kin-openapi v0.131.0\n\tgithub.com/go-openapi/loads v0.22.0\n\tgithub.com/go-openapi/spec v0.21.0\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/joho/godotenv v1.5.1\n\tgithub.com/stretchr/testify v1.9.0\n)\n\nrequire (\n\tgithub.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/go-openapi/analysis v0.23.0 // indirect\n\tgithub.com/go-openapi/errors v0.22.0 // indirect\n\tgithub.com/go-openapi/jsonpointer v0.21.0 // indirect\n\tgithub.com/go-openapi/jsonreference v0.21.0 // indirect\n\tgithub.com/go-openapi/strfmt v0.23.0 // indirect\n\tgithub.com/go-openapi/swag v0.23.0 // indirect\n\tgithub.com/josharian/intern v1.0.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mitchellh/mapstructure v1.5.0 // indirect\n\tgithub.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect\n\tgithub.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect\n\tgithub.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect\n\tgithub.com/oklog/ulid v1.3.1 // indirect\n\tgithub.com/perimeterx/marshmallow v1.1.5 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgo.mongodb.org/mongo-driver v1.14.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

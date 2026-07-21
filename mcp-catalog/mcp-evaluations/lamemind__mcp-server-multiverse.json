@@ -1,0 +1,133 @@
+{
+  "name": "lamemind__mcp-server-multiverse",
+  "display_name": "mcp-server-multiverse",
+  "description": "A middleware server that enables multiple isolated instances of the same MCP servers to coexist independently with unique namespaces and configurations.",
+  "author": {
+    "name": "lamemind"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@lamemind/mcp-server-multiverse@latest", "${user_config.multiverse_config_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "multiverse_config_path": {
+      "type": "file",
+      "title": "Multiverse Configuration File",
+      "description": "Path to the JSON configuration file that defines the multiverse setup for this server instance.",
+      "required": true
+    }
+  },
+  "readme": "# Multiverse MCP Server\n\nA middleware server that enables multiple isolated instances of the same MCP servers to coexist independently with unique namespaces and configurations.\n\nThe Multiverse MCP Server creates isolated operational spaces where identical MCP servers can run simultaneously without conflicts. Each \"universe\" maintains its own configuration, filesystem access, and function naming, enabling developers to run multiple instances of the same server type while maintaining complete separation between different contexts or projects.\n\n## Key Features\n\n### Run Multiple Instances\nRun multiple instances of the same MCP server type independently and simultaneously. Each instance operates in its own isolated universe with separate configurations. This enables scenarios like:\n- Multiple MySQL servers `mcp-server-mysql` pointing to different databases\n- Multiple Git servers `mcp-server-git` with different Personal Access Tokens\n- Multiple filesystem servers `mcp-server-filesystem` accessing different root paths\n\n### Automatic Server Restart\nRegister your MCP server with file watching capability during development. When enabled, the server automatically detects changes in the specified directory and performs a graceful restart, making development and testing seamless.\n\n### JSON-based Configuration System\nDefine your multiverse setup using a simple and flexible JSON configuration format. Each server instance can be configured with its own:\n- Command and arguments\n- Environment variables\n- Path resolution rules\n- File watching settings\n\n## Installation\n\nFirst, ensure you've downloaded and installed the [Claude Desktop app](https://claude.ai/download) and you have npm installed.\n\nNext, add this entry to your `claude_desktop_config.json` \n- on Mac, found at `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n- on Windows, found at `C:\\Users\\<username>\\AppData\\Roaming\\Claude\\claude_desktop_config.json`\n\nNow add how many multiverse servers you want to run. For example, if you want to run two instances of `mcp-server-multiverse`, one for your job and one for your side project, you can add the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"job-multiverse\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@lamemind/mcp-server-multiverse@latest\",\n        \"/path/to/your/job-multiverse.json\"\n      ]\n    },\n    \"side-project-multiverse\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@lamemind/mcp-server-multiverse@latest\",\n        \"/path/to/your/side-project-multiverse.json\"\n      ]\n    }\n  }\n}\n```\n\nThis config allows Claude Desktop to automatically start the `mcp-server-multiverse` instances when you start the app.\n\n![demo.png](assets/demo.png)\n\n## Configuration Examples\n\n### Create two isolated instances of `mcp-server-mysql` with different databases\n\nYour `job-multiverse.json` file\n~~~JSON\n{\n  \"serverName\": \"JobMultiverse\",\n  \"functionsPrefix\": \"job\",\n  \"servers\": [\n    {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@benborla29/mcp-server-mysql\"\n      ],\n      \"env\": {\n        \"MYSQL_HOST\": \"127.0.0.1\",\n        \"MYSQL_PORT\": \"3306\",\n        \"MYSQL_USER\": \"root\",\n        \"MYSQL_PASS\": \"\",\n        \"MYSQL_DB\": \"my-job-db\"\n      }\n    }\n  ]\n}\n~~~\n\nYour `side-project-multiverse.json` file\n~~~JSON\n{\n  \"serverName\": \"SideProjectMultiverse\",\n  \"functionsPrefix\": \"side-project\",\n  \"servers\": [\n    {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@benborla29/mcp-server-mysql\"\n      ],\n      \"env\": {\n        \"MYSQL_HOST\": \"127.0.0.1\",\n        \"MYSQL_PORT\": \"3306\",\n        \"MYSQL_USER\": \"root\",\n        \"MYSQL_PASS\": \"\",\n        \"MYSQL_DB\": \"side-project-db\"\n      }\n    }\n  ]\n}\n~~~\n\n\n### Create an isolated instance of `mcp-server-filesystem`\n\n- The `mcp-server-filesystem`'s functions will be exposed with `side-project` prefix, e.g. `side-project_read_file`, `side-project_write_file`.\n- The root path can be hidden from the client (e.g. Claude Desktop) by using the `pathResolution` configuration.\n\nNote that `pathResolution` is optional and is only needed if you want to hide the root path from the client.\n\nYour `multiverse.json` file\n~~~JSON\n{\n  \"serverName\": \"MySideProject\",\n  \"functionsPrefix\": \"side-project\",\n  \"servers\": [\n    {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-filesystem@latest\",\n        \"/full/path/to/side-project\"\n      ],\n      \"pathResolution\": {\n        \"root\": \"/full/path/to/side-project\",\n        \"applyTo\": [\n          \"path\",\n          \"paths\"\n        ]\n      }\n    }\n  ]\n}\n~~~\n\n\n### Automatic server restart on file changes with `fileWatch`\n\nYour `multiverse.json` file\n~~~JSON\n{\n  \"serverName\": \"MySideProject\",\n  \"functionsPrefix\": \"side-project\",\n  \"servers\": [\n    {\n      \"command\": \"node\",\n      \"args\": [\n        \"/my-own/mcp-server/i-m-working-on/build/index.js\"\n      ],\n      \"fileWatch\": {\n        \"enabled\": true,\n        \"path\": \"/my-own/mcp-server/i-m-working-on/build/\"\n      }\n    }\n  ]\n}\n~~~\n\n### Hiding specific functions with the `hideFunctions` option\n\nYou can selectively hide specific functions from wrapped servers using the `hideFunctions` array. This is useful when you want to use a server but restrict access to certain potentially dangerous or unnecessary functions.\n\nThe `hideFunctions` array accepts a list of function names that should be hidden from the wrapped server. When a function is hidden:\n- It won't be registered with the main MCP server\n- It won't be available to the client (e.g., Claude Desktop)\n- It won't appear in the list of available functions\n\nThis feature is particularly useful for:\n- Restricting access to potentially dangerous functions (e.g., `delete_repository` in GitHub)\n- Simplifying the interface by hiding rarely used functions\n- Creating different permission levels for different server instances\n\n~~~JSON\n{\n  \"serverName\": \"GitHubWithRestrictions\",\n  \"functionsPrefix\": \"github\",\n  \"servers\": [\n    {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-github@latest\"\n      ],\n      \"env\": {\n        \"GITHUB_PERSONAL_ACCESS_TOKEN\": \"<your-personal-access-token>\"\n      },\n      \"hideFunctions\": [\n        \"create_repository\",\n        \"delete_repository\",\n        \"create_issue\"\n      ]\n    }\n  ]\n}\n~~~\n\nIn this example, the GitHub server will start normally, but the functions `create_repository`, `delete_repository`, and `create_issue` will be hidden and unavailable to the client.\n\n\n### Disabling specific servers with the `enabled` flag\n\nYou can selectively disable specific servers in your configuration without removing them from the JSON file by setting the `enabled` flag to `false`. This is useful for temporarily disabling servers during development or testing.\n~~~JSON\n{\n  \"serverName\": \"MySideProject\",\n  \"functionsPrefix\": \"side-project\",\n  \"servers\": [\n    {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-filesystem@latest\",\n        \"/full/path/to/side-project\"\n      ],\n      \"hideFunctions\": [ \"write_file\" ]\n    },\n    {\n      \"enabled\": false,\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-github@latest\"\n      ]\n    }\n  ]\n}\n~~~\n\nIn this example, the first server (filesystem) will start but the function `write_file` has been hidden, the second server (GitHub) is disabled and won't be started.\n\n### Full example of a `multiverse.json` file\n\nThis example demonstrates how to create a multiverse server with multiple instances of different server types.\n\nNote that `pathResolution` is optional and is only needed if you want to hide the root path from the client.\n\n~~~JSON\n{\n  \"serverName\": \"HugeProjectWithALotOfResources\",\n  \"functionsPrefix\": \"huge-project\",\n  \"servers\": [\n    {\n      \"command\": \"node\",\n      \"args\": [\n        \"/my-own/mcp-server/i-m-working-on/build/index.js\"\n      ],\n      \"fileWatch\": {\n        \"enabled\": true,\n        \"path\": \"/my-own/mcp-server/i-m-working-on/build/\"\n      }\n    },\n    {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-filesystem@latest\",\n        \"/full/path/to/huge-project\"\n      ],\n      \"pathResolution\": {\n        \"root\": \"/full/path/to/huge-project\",\n        \"applyTo\": [\n          \"path\",\n          \"paths\"\n        ]\n      }\n    },\n    {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@modelcontextprotocol/server-github@latest\"\n      ],\n      \"env\": {\n        \"GITHUB_PERSONAL_ACCESS_TOKEN\": \"<your-personal-access-token>\"\n      }\n    },\n    {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-server-git\",\n        \"--repository\",\n        \"/full/path/to/huge-project\"\n      ],\n      \"pathResolution\": {\n        \"root\": \"/full/path/to/huge-project\",\n        \"applyTo\": [\n          \"repo_path\"\n        ]\n      }\n    }\n  ]\n}\n~~~\n\n## To Do\n\n- [ ] Add support for `Prompts`\n- [ ] Add support for `Resources`\n- [ ] Add a GUI for managing multiverse servers\n\n## Verified Platforms\n\n- [x] Windows\n- [ ] macOS\n- [ ] Linux\n\n## License\n\nMIT\n",
+  "category": "Development",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "lamemind-mcp-server-multiverse-job-config": {
+        "command": "npx",
+        "args": ["-y", "@lamemind/mcp-server-multiverse@latest", "/path/to/your/job-multiverse.json"],
+        "env": {}
+      },
+      "lamemind-mcp-server-multiverse-side-project-config": {
+        "command": "npx",
+        "args": ["-y", "@lamemind/mcp-server-multiverse@latest", "/path/to/your/side-project-multiverse.json"],
+        "env": {}
+      },
+      "benborla29-mcp-server-mysql-job-db": {
+        "command": "npx",
+        "args": ["-y", "@benborla29/mcp-server-mysql"],
+        "env": {
+          "MYSQL_HOST": "127.0.0.1",
+          "MYSQL_PORT": "3306",
+          "MYSQL_USER": "root",
+          "MYSQL_PASS": "",
+          "MYSQL_DB": "my-job-db"
+        }
+      },
+      "benborla29-mcp-server-mysql-side-project-db": {
+        "command": "npx",
+        "args": ["-y", "@benborla29/mcp-server-mysql"],
+        "env": {
+          "MYSQL_HOST": "127.0.0.1",
+          "MYSQL_PORT": "3306",
+          "MYSQL_USER": "root",
+          "MYSQL_PASS": "",
+          "MYSQL_DB": "side-project-db"
+        }
+      },
+      "modelcontextprotocol-server-filesystem-with-path": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "/full/path/to/side-project"],
+        "env": {}
+      },
+      "my-own-mcp-server-local-script": {
+        "command": "node",
+        "args": ["/my-own/mcp-server/i-m-working-on/build/index.js"],
+        "env": {}
+      },
+      "modelcontextprotocol-server-github-with-token": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github@latest"],
+        "env": {
+          "GITHUB_PERSONAL_ACCESS_TOKEN": "<your-personal-access-token>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "lamemind",
+    "repo": "mcp-server-multiverse",
+    "url": "https://github.com/lamemind/mcp-server-multiverse",
+    "name": "lamemind__mcp-server-multiverse",
+    "path": null,
+    "stars": 71,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "b471a46dc18a8668578ff30910899d136ac6d8b6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:39.859Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "chokidar",
+      "importance": 7
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@lamemind/mcp-server-multiverse\",\n  \"version\": \"1.1.4\",\n  \"homepage\": \"https://github.com/lamemind/mcp-server-multiverse#readme\",\n  \"description\": \"A middleware server that enables multiple isolated instances of the same MCP servers to coexist independently with unique namespaces and configurations.\",\n  \"author\": \"lamemind\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"main\": \"./dist/index.js\",\n  \"bin\": {\n    \"mcp-server-multiverse\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"dev\": \"tsx watch src/index.ts\",\n    \"watch\": \"tsc --watch\",\n    \"start\": \"node dist/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\"\n  ],\n  \"devDependencies\": {\n    \"@types/express\": \"^5.0.0\",\n    \"@types/node\": \"^22.13.5\",\n    \"shx\": \"^0.3.4\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.7.3\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.0\",\n    \"chokidar\": \"^4.0.3\",\n    \"commander\": \"^13.1.0\",\n    \"zod-to-json-schema\": \"^3.24.3\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/lamemind/mcp-server-multiverse.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/lamemind/mcp-server-multiverse/issues\"\n  }\n}\n"
+}

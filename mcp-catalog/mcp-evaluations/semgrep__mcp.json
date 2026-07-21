@@ -1,0 +1,130 @@
+{
+  "name": "semgrep__mcp",
+  "display_name": "mcp",
+  "description": "A MCP server for using Semgrep to scan code for security vulnerabilities.",
+  "author": {
+    "name": "semgrep"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["semgrep-mcp"],
+    "env": {
+      "SEMGREP_APP_TOKEN": "${user_config.semgrep_app_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "semgrep_app_token": {
+      "type": "string",
+      "title": "Semgrep App Token",
+      "description": "Your Semgrep App Token for accessing Semgrep AppSec Platform features.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "<p align=\"center\">\n  <a href=\"https://semgrep.dev\">\n    <picture>\n      <source media=\"(prefers-color-scheme: light)\" srcset=\"images/semgrep-logo-light.svg\">\n      <source media=\"(prefers-color-scheme: dark)\" srcset=\"images/semgrep-logo-dark.svg\">\n      <img src=\"https://raw.githubusercontent.com/semgrep/mcp/main/images/semgrep-logo-light.svg\" height=\"60\" alt=\"Semgrep logo\"/>\n    </picture>\n  </a>\n</p>\n<p align=\"center\">\n  <a href=\"https://semgrep.dev/docs/\">\n      <img src=\"https://img.shields.io/badge/Semgrep-docs-2acfa6?style=flat-square\" alt=\"Documentation\" />\n  </a>\n  <a href=\"https://go.semgrep.dev/slack\">\n    <img src=\"https://img.shields.io/badge/Slack-4.5k%20-4A154B?style=flat-square&logo=slack&logoColor=white\" alt=\"Join Semgrep community Slack\" />\n  </a>\n  <a href=\"https://www.linkedin.com/company/semgrep/\">\n    <img src=\"https://img.shields.io/badge/LinkedIn-follow-0a66c2?style=flat-square\" alt=\"Follow on LinkedIn\" />\n  </a>\n  <a href=\"https://x.com/intent/follow?screen_name=semgrep\">\n    <img src=\"https://img.shields.io/badge/semgrep-000000?style=flat-square&logo=x&logoColor=white?style=flat-square\" alt=\"Follow @semgrep on X\" />\n  </a>\n</p>\n\n# Semgrep MCP Server\n[![Add MCP Server semgrep to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-light.svg)](https://lmstudio.ai/install-mcp?name=semgrep&config=eyJ1cmwiOiJodHRwczovL21jcC5zZW1ncmVwLmFpL21jcCIsImhlYWRlcnMiOnsiQXV0aG9yaXphdGlvbiI6IkJlYXJlciA8WU9VUl9IRl9UT0tFTj4ifX0%3D)\n[![Install in Cursor](https://img.shields.io/badge/Cursor-uv-0098FF?style=flat-square)](cursor://anysphere.cursor-deeplink/mcp/install?name=semgrep&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJzZW1ncmVwLW1jcCJdfQ==)\n[![Install in VS Code UV](https://img.shields.io/badge/VS_Code-uv-0098FF?style=flat-square&logo=githubcopilot&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=semgrep&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22semgrep-mcp%22%5D%7D)\n[![Install in VS Code Docker](https://img.shields.io/badge/VS_Code-docker-0098FF?style=flat-square&logo=githubcopilot&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=semgrep&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%20%22-i%22%2C%20%22--rm%22%2C%20%22ghcr.io%2Fsemgrep%2Fmcp%22%2C%20%22-t%22%2C%20%22stdio%22%5D%7D)\n[![Install in VS Code semgrep.ai](https://img.shields.io/badge/VS_Code-semgrep.ai-0098FF?style=flat-square&logo=githubcopilot&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=semgrep.ai&config=%7B%22type%22%3A%20%22sse%22%2C%20%22url%22%3A%22https%3A%2F%2Fmcp.semgrep.ai%2Fsse%22%7D)\n[![PyPI](https://img.shields.io/pypi/v/semgrep-mcp?style=flat-square&color=blue&logo=python&logoColor=white)](https://pypi.org/project/semgrep-mcp/)\n[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fsemgrep%2Fmcp-0098FF?style=flat-square&logo=docker&logoColor=white)](https://ghcr.io/semgrep/mcp)\n[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-uv-24bfa5?style=flat-square&logo=githubcopilot&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=semgrep&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22semgrep-mcp%22%5D%7D&quality=insiders)\n[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-docker-24bfa5?style=flat-square&logo=githubcopilot&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=semgrep&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%20%22-i%22%2C%20%22--rm%22%2C%20%22ghcr.io%2Fsemgrep%2Fmcp%22%2C%20%22-t%22%2C%20%22stdio%22%5D%7D&quality=insiders)\n\nA Model Context Protocol (MCP) server for using [Semgrep](https://semgrep.dev) to scan code for security vulnerabilities. Secure your [vibe coding](https://semgrep.dev/blog/2025/giving-appsec-a-seat-at-the-vibe-coding-table/)! 😅\n\n[Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is a standardized API for LLMs, Agents, and IDEs like Cursor, VS Code, Windsurf, or anything that supports MCP, to get specialized help, get context, and harness the power of tools. Semgrep is a fast, deterministic static analysis tool that semantically understands many [languages](https://semgrep.dev/docs/supported-languages) and comes with over [5,000 rules](https://semgrep.dev/registry). 🛠️\n\n> [!NOTE]\n> This beta project is under active development. We would love your feedback, bug reports, feature requests, and code. Join the `#mcp` [community Slack](https://go.semgrep.dev/slack) channel!\n\n## Contents\n\n- [Semgrep MCP Server](#semgrep-mcp-server)\n  - [Contents](#contents)\n  - [Getting started](#getting-started)\n    - [Cursor](#cursor)\n    - [ChatGPT](#chatgpt)\n    - [Hosted Server](#hosted-server)\n      - [Cursor](#cursor-1)\n  - [Demo](#demo)\n  - [API](#api)\n    - [Tools](#tools)\n      - [Scan Code](#scan-code)\n      - [Understand Code](#understand-code)\n      - [Cloud Platform (login and Semgrep token required)](#cloud-platform-login-and-semgrep-token-required)\n      - [Meta](#meta)\n    - [Prompts](#prompts)\n    - [Resources](#resources)\n  - [Usage](#usage)\n    - [Standard Input/Output (stdio)](#standard-inputoutput-stdio)\n      - [Python](#python)\n      - [Docker](#docker)\n    - [Streamable HTTP](#streamable-http)\n      - [Python](#python-1)\n      - [Docker](#docker-1)\n    - [Server-sent events (SSE)](#server-sent-events-sse)\n      - [Python](#python-2)\n      - [Docker](#docker-2)\n  - [Semgrep AppSec Platform](#semgrep-appsec-platform)\n  - [Integrations](#integrations)\n    - [Cursor IDE](#cursor-ide)\n    - [VS Code / Copilot](#vs-code--copilot)\n      - [Manual Configuration](#manual-configuration)\n      - [Using Docker](#using-docker)\n    - [Windsurf](#windsurf)\n    - [Claude Desktop](#claude-desktop)\n    - [Claude Code](#claude-code)\n    - [OpenAI](#openai)\n      - [Agents SDK](#agents-sdk)\n    - [Custom clients](#custom-clients)\n      - [Example Python SSE client](#example-python-sse-client)\n  - [Contributing, community, and running from source](#contributing-community-and-running-from-source)\n    - [Similar tools 🔍](#similar-tools-)\n    - [Community projects 🌟](#community-projects-)\n    - [MCP server registries](#mcp-server-registries)\n\n## Getting started\n\nRun the [Python package](https://pypi.org/p/semgrep-mcp) as a CLI command using [`uv`](https://docs.astral.sh/uv/guides/tools/):\n\n```bash\nuvx semgrep-mcp # see --help for more options\n```\n\nOr, run as a [Docker container](https://ghcr.io/semgrep/mcp):\n\n```bash\ndocker run -i --rm ghcr.io/semgrep/mcp -t stdio \n```\n\n### Cursor\n\nExample [`mcp.json`](https://docs.cursor.com/context/model-context-protocol)\n\n```json\n{\n  \"mcpServers\": {\n    \"semgrep\": {\n      \"command\": \"uvx\",\n      \"args\": [\"semgrep-mcp\"],\n      \"env\": {\n        \"SEMGREP_APP_TOKEN\": \"<token>\"\n      }\n    }\n  }\n}\n\n```\n\nAdd an instruction to your [`.cursor/rules`](https://docs.cursor.com/context/rules-for-ai) to use automatically:\n\n```text\nAlways scan code generated using Semgrep for security vulnerabilities\n```\n\n### ChatGPT\n\n1. Go to the **Connector Settings** page ([direct link](https://chatgpt.com/admin/ca#settings/ConnectorSettings?create-connector=true))\n1. **Name** the connection `Semgrep`\n1. Set **MCP Server URL** to `https://mcp.semgrep.ai/sse`\n1. Set **Authentication** to `No authentication`\n1. Check the **I trust this application** checkbox\n1. Click **Create**\n\nSee more details at the [official docs](https://platform.openai.com/docs/mcp).\n\n\n### Hosted Server\n\n> [!WARNING]\n> [mcp.semgrep.ai](https://mcp.semgrep.ai) is an experimental server that may break unexpectedly. It will rapidly gain new functionality.🚀\n\n#### Cursor\n\n1. **Cmd + Shift + J** to open Cursor Settings\n1. Select **MCP Tools**\n1. Click **New MCP Server**.\n1.\n\n```json\n{\n  \"mcpServers\": {\n    \"semgrep\": {\n      \"type\": \"streamable-http\",\n      \"url\": \"https://mcp.semgrep.ai/mcp\"\n    }\n  }\n}\n```\n\n## Demo\n\n<a href=\"https://www.loom.com/share/8535d72e4cfc4e1eb1e03ea223a702df\"> <img style=\"max-width:300px;\" src=\"https://cdn.loom.com/sessions/thumbnails/8535d72e4cfc4e1eb1e03ea223a702df-1047fabea7261abb-full-play.gif\"> </a>\n\n## API\n\n### Tools\n\nEnable LLMs to perform actions, make deterministic computations, and interact with external services.\n\n#### Scan Code\n\n- `security_check`: Scan code for security vulnerabilities\n- `semgrep_scan`: Scan code files for security vulnerabilities with a given config string\n- `semgrep_scan_with_custom_rule`: Scan code files using a custom Semgrep rule\n\n#### Understand Code\n\n- `get_abstract_syntax_tree`: Output the Abstract Syntax Tree (AST) of code\n\n#### Cloud Platform (login and Semgrep token required)\n- `semgrep_findings`: Fetch Semgrep findings from the Semgrep AppSec Platform API\n\n#### Meta\n\n- `supported_languages`: Return the list of languages Semgrep supports\n- `semgrep_rule_schema`: Fetches the latest semgrep rule JSON Schema\n\n### Prompts\n\nReusable prompts to standardize common LLM interactions.\n\n- `write_custom_semgrep_rule`: Return a prompt to help write a Semgrep rule\n\n### Resources\n\nExpose data and content to LLMs\n\n- `semgrep://rule/schema`: Specification of the Semgrep rule YAML syntax using JSON schema\n- `semgrep://rule/{rule_id}/yaml`: Full Semgrep rule in YAML format from the Semgrep registry\n\n## Usage\n\nThis Python package is published to PyPI as [semgrep-mcp](https://pypi.org/p/semgrep-mcp) and can be installed and run with [pip](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/#install-a-package), [pipx](https://pipx.pypa.io/), [uv](https://docs.astral.sh/uv/), [poetry](https://python-poetry.org/), or any Python package manager.\n\n```text\n$ pipx install semgrep-mcp\n$ semgrep-mcp --help\n\nUsage: semgrep-mcp [OPTIONS]\n\n  Entry point for the MCP server\n\n  Supports both stdio and sse transports. For stdio, it will read from stdin\n  and write to stdout. For sse, it will start an HTTP server on port 8000.\n\nOptions:\n  -v, --version                Show version and exit.\n  -t, --transport [stdio|sse]  Transport protocol to use (stdio or sse)\n  -h, --help                   Show this message and exit.\n```\n\n### Standard Input/Output (stdio)\n\nThe stdio transport enables communication through standard input and output streams. This is particularly useful for local integrations and command-line tools. See the [spec](https://modelcontextprotocol.io/docs/concepts/transports#built-in-transport-types) for more details.\n\n#### Python\n\n```bash\nsemgrep-mcp\n```\n\nBy default, the Python package will run in `stdio` mode. Because it's using the standard input and output streams, it will look like the tool is hanging without any output, but this is expected.\n\n#### Docker\n\nThis server is published to Github's Container Registry ([ghcr.io/semgrep/mcp](http://ghcr.io/semgrep/mcp))\n\n```\ndocker run -i --rm ghcr.io/semgrep/mcp -t stdio\n```\n\nBy default, the Docker container is in `SSE` mode, so you will have to include `-t stdio` after the image name and run with `-i` to run in [interactive](https://docs.docker.com/reference/cli/docker/container/run/#interactive) mode.\n\n### Streamable HTTP\n\nStreamable HTTP enables streaming responses over JSON RPC via HTTP POST requests. See the [spec](https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http) for more details.\n\nBy default, the server listens on [127.0.0.1:8000/mcp](https://127.0.0.1/mcp) for client connections. To change any of this, set [FASTMCP\\_\\*](https://github.com/modelcontextprotocol/python-sdk/blob/main/src/mcp/server/fastmcp/server.py#L78) environment variables. _The server must be running for clients to connect to it._\n\n#### Python\n\n```bash\nsemgrep-mcp -t streamable-http\n```\n\nBy default, the Python package will run in `stdio` mode, so you will have to include `-t streamable-http`.\n\n#### Docker\n\n```\ndocker run -p 8000:0000 ghcr.io/semgrep/mcp\n```\n\n\n### Server-sent events (SSE)\n\n> [!WARNING]\n> The MCP communiity considers this a legacy transport portcol and is really intended for backwards compatibility. [Streamable HTTP](#streamable-http) is the recommended replacement.\n\nSSE transport enables server-to-client streaming with Server-Send Events for client-to-server and server-to-client communication. See the [spec](https://modelcontextprotocol.io/docs/concepts/transports#server-sent-events-sse) for more details.\n\nBy default, the server listens on [127.0.0.1:8000/sse](https://127.0.0.1/sse) for client connections. To change any of this, set [FASTMCP\\_\\*](https://github.com/modelcontextprotocol/python-sdk/blob/main/src/mcp/server/fastmcp/server.py#L78) environment variables. _The server must be running for clients to connect to it._\n\n#### Python\n\n```bash\nsemgrep-mcp -t sse\n```\n\nBy default, the Python package will run in `stdio` mode, so you will have to include `-t sse`.\n\n#### Docker\n\n```\ndocker run -p 8000:0000 ghcr.io/semgrep/mcp -t sse\n```\n\n## Semgrep AppSec Platform\n\nOptionally, to connect to Semgrep AppSec Platform:\n\n1. [Login](https://semgrep.dev/login/) or sign up\n1. Generate a token from [Settings](https://semgrep.dev/orgs/-/settings/tokens/api)\n1. Add the token to your environment variables:\n   - CLI (`export SEMGREP_APP_TOKEN=<token>`)\n\n   - Docker (`docker run -e SEMGREP_APP_TOKEN=<token>`)\n\n   - MCP config JSON\n\n```json\n    \"env\": {\n      \"SEMGREP_APP_TOKEN\": \"<token>\"\n    }\n```\n\n> [!TIP]\n> Please [reach out for support](https://semgrep.dev/docs/support) if needed. ☎️\n\n## Integrations\n\n### Cursor IDE\n\nAdd the following JSON block to your `~/.cursor/mcp.json` global or `.cursor/mcp.json` project-specific configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"semgrep\": {\n      \"command\": \"uvx\",\n      \"args\": [\"semgrep-mcp\"]\n    }\n  }\n}\n```\n\n![cursor MCP settings](/images/cursor.png)\n\nSee [cursor docs](https://docs.cursor.com/context/model-context-protocol) for more info.\n\n### VS Code / Copilot\n\nClick the install buttons at the top of this README for the quickest installation.\n\n#### Manual Configuration\n\nAdd the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"semgrep\": {\n        \"command\": \"uvx\",\n        \"args\": [\"semgrep-mcp\"]\n      }\n    }\n  }\n}\n```\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace:\n\n```json\n{\n  \"servers\": {\n    \"semgrep\": {\n      \"command\": \"uvx\",\n        \"args\": [\"semgrep-mcp\"]\n    }\n  }\n}\n```\n\n#### Using Docker\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"semgrep\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"-i\",\n          \"--rm\",\n          \"ghcr.io/semgrep/mcp\",\n          \"-t\",\n          \"stdio\"\n        ]\n      }\n    }\n  }\n}\n```\n\nSee [VS Code docs](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) for more info.\n\n### Windsurf\n\nAdd the following JSON block to your `~/.codeium/windsurf/mcp_config.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"semgrep\": {\n      \"command\": \"uvx\",\n      \"args\": [\"semgrep-mcp\"]\n    }\n  }\n}\n```\n\nSee [Windsurf docs](https://docs.windsurf.com/windsurf/mcp) for more info.\n\n### Claude Desktop\n\nHere is a [short video](https://www.loom.com/share/f4440cbbb5a24149ac17cc7ddcd95cfa) showing Claude Desktop using this server to write a custom rule.\n\nAdd the following JSON block to your `claude_desktop_config.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"semgrep\": {\n      \"command\": \"uvx\",\n      \"args\": [\"semgrep-mcp\"]\n    }\n  }\n}\n```\n\nSee [Anthropic docs](https://docs.anthropic.com/en/docs/agents-and-tools/mcp) for more info.\n\n### Claude Code\n\n```bash\nclaude mcp add semgrep uvx semgrep-mcp\n```\n\nSee [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code/tutorials#set-up-model-context-protocol-mcp) for more info.\n\n### OpenAI\n\nSee the offical docs:\n- https://platform.openai.com/docs/mcp\n- https://platform.openai.com/docs/guides/tools-remote-mcp\n\n#### Agents SDK\n\n```python\nasync with MCPServerStdio(\n    params={\n        \"command\": \"uvx\",\n        \"args\": [\"semgrep-mcp\"],\n    }\n) as server:\n    tools = await server.list_tools()\n```\n\nSee [OpenAI Agents SDK docs](https://openai.github.io/openai-agents-python/mcp/) for more info.\n\n### Custom clients\n\n#### Example Python SSE client\n\nSee a full example in [examples/sse_client.py](examples/sse_client.py)\n\n```python\nfrom mcp.client.session import ClientSession\nfrom mcp.client.sse import sse_client\n\n\nasync def main():\n    async with sse_client(\"http://localhost:8000/sse\") as (read_stream, write_stream):\n        async with ClientSession(read_stream, write_stream) as session:\n            await session.initialize()\n            results = await session.call_tool(\n                \"semgrep_scan\",\n                {\n                    \"code_files\": [\n                        {\n                            \"filename\": \"hello_world.py\",\n                            \"content\": \"def hello(): print('Hello, World!')\",\n                        }\n                    ]\n                },\n            )\n            print(results)\n```\n\n> [!TIP]\n> Some client libraries want the `URL`: [http://localhost:8000/sse](http://localhost:8000/sse)\n> and others only want the `HOST`: `localhost:8000`.\n> Try out the `URL` in a web browser to confirm the server is running, and there are no network issues.\n\nSee [official SDK docs](https://modelcontextprotocol.io/clients#adding-mcp-support-to-your-application) for more info.\n\n## Contributing, community, and running from source\n\n> [!NOTE]\n> We love your feedback, bug reports, feature requests, and code. Join the `#mcp` [community Slack](https://go.semgrep.dev/slack) channel!\n\nSee [CONTRIBUTING.md](CONTRIBUTING.md) for more info and details on how to run from the MCP server from source code.\n\n### Similar tools 🔍\n\n- [semgrep-vscode](https://github.com/semgrep/semgrep-vscode) - Official VS Code extension\n- [semgrep-intellij](https://github.com/semgrep/semgrep-intellij) - IntelliJ plugin\n\n### Community projects 🌟\n\n- [semgrep-rules](https://github.com/semgrep/semgrep-rules) - The official collection of Semgrep rules\n- [mcp-server-semgrep](https://github.com/Szowesgad/mcp-server-semgrep) - Original inspiration written by [Szowesgad](https://github.com/Szowesgad) and [stefanskiasan](https://github.com/stefanskiasan)\n\n### MCP server registries\n\n- [Glama](https://glama.ai/mcp/servers/@semgrep/mcp)\n\n<a href=\"https://glama.ai/mcp/servers/@semgrep/mcp\">\n <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/4iqti5mgde/badge\" alt=\"Semgrep Server MCP server\" />\n </a>\n\n- [MCP.so](https://mcp.so/server/mcp/semgrep)\n\n______________________________________________________________________\n\nMade with ❤️ by the [Semgrep Team](https://semgrep.dev/about/)\n",
+  "category": "Security",
+  "quality_score": 83,
+  "archestra_config": {
+    "client_config_permutations": {
+      "semgrep-mcp-uvx-stdio": {
+        "command": "uvx",
+        "args": ["semgrep-mcp", "-t", "stdio"],
+        "env": {}
+      },
+      "semgrep-mcp-docker-stdio": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "ghcr.io/semgrep/mcp", "-t", "stdio"],
+        "env": {},
+        "docker_image": "ghcr.io/semgrep/mcp"
+      },
+      "semgrep-mcp-uvx-configured": {
+        "command": "uvx",
+        "args": ["semgrep-mcp"],
+        "env": {
+          "SEMGREP_APP_TOKEN": "<token>"
+        }
+      },
+      "semgrep-mcp-uvx-streamable-http": {
+        "command": "uvx",
+        "args": ["semgrep-mcp", "-t", "streamable-http", "--port", "8080"],
+        "env": {}
+      },
+      "semgrep-mcp-docker-streamable-http": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-p",
+          "8080:8080",
+          "ghcr.io/semgrep/mcp",
+          "-t",
+          "streamable-http",
+          "--port",
+          "8080"
+        ],
+        "env": {},
+        "docker_image": "ghcr.io/semgrep/mcp"
+      },
+      "semgrep-mcp-uvx-sse": {
+        "command": "uvx",
+        "args": ["semgrep-mcp", "-t", "sse", "--port", "8080"],
+        "env": {}
+      },
+      "semgrep-mcp-docker-sse": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-p", "8080:8080", "ghcr.io/semgrep/mcp", "-t", "sse", "--port", "8080"],
+        "env": {},
+        "docker_image": "ghcr.io/semgrep/mcp"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "semgrep",
+    "repo": "mcp",
+    "url": "https://github.com/semgrep/mcp",
+    "name": "mcp",
+    "path": null,
+    "stars": 360,
+    "contributors": 14,
+    "issues": 46,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "0440ce93876161857d6fabbbe872e03277e3ce13"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:35.099Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "semgrep",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\n    \"hatchling\",\n]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"semgrep-mcp\"\nversion = \"0.4.1\"\ndescription = \"MCP Server for using Semgrep to scan code\"\nreadme = \"README.md\"\nchangelog = \"CHANGELOG.md\"\nrequires-python = \">=3.10\"\nauthors = [\n    { name = \"Semgrep, Inc.\", email = \"hello@semgrep.com\" },\n    { name = \"Seth Jaksik\", email = \"seth@semgrep.com\" },\n    { name = \"Drew Dennison\", email = \"drew@semgrep.com\" },\n]\nkeywords = [\n    \"security\",\n    \"static-analysis\",\n    \"code-scanning\",\n    \"semgrep\",\n    \"mcp\",\n]\nclassifiers = [\n    \"Development Status :: 4 - Beta\",\n    \"Intended Audience :: Developers\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Programming Language :: Python :: 3\",\n    \"Programming Language :: Python :: 3.10\",\n    \"Programming Language :: Python :: 3.11\",\n    \"Programming Language :: Python :: 3.12\",\n    \"Programming Language :: Python :: 3.13\",\n    \"Topic :: Security\",\n    \"Topic :: Software Development :: Quality Assurance\",\n]\ndependencies = [\n    \"mcp>=1.12.0\",\n    \"semgrep==1.128.1\"\n]\n\n[project.license]\ntext = \"MIT\"\n\n[project.urls]\nHomepage = \"https://github.com/semgrep/mcp\"\nRepository = \"https://github.com/semgrep/mcp.git\"\nIssues = \"https://github.com/semgrep/mcp/issues\"\nDocumentation = \"https://github.com/semgrep/mcp#readme\"\nChangelog = \"https://github.com/semgrep/mcp/blob/main/CHANGELOG.md\"\n\n[project.scripts]\nsemgrep-mcp = \"semgrep_mcp.server:main\"\n\n[tool.uv]\ndev-dependencies = [\n    \"mcp[cli]>=1.11.0\",\n    \"ruff>=0.11.4\",\n    \"pytest>=8.1.1\",\n    \"pytest-asyncio>=0.23.0\",\n    \"tomli>=2.0.1\",\n    \"tomli-w>=1.0.0\",\n    \"pre-commit>=3.0.0\",\n    \"pyright>=1.1.0\",\n]\n\n[tool.ruff]\ntarget-version = \"py310\"\nline-length = 100\nextend-exclude = [\n    \"build\",\n    \"dist\",\n]\n\n[tool.ruff.lint]\nselect = [\n    \"E\",\n    \"F\",\n    \"B\",\n    \"I\",\n    \"UP\",\n    \"N\",\n    \"W\",\n    \"C90\",\n    \"RUF\",\n]\n\n[tool.ruff.lint.isort]\nknown-first-party = [\n    \"semgrep_mcp\",\n]\ncombine-as-imports = true\nsplit-on-trailing-comma = true\n\n[tool.ruff.lint.mccabe]\nmax-complexity = 10\n\n[tool.hatch.build.targets.wheel]\npackages = [\n    \"src/semgrep_mcp\",\n]\n\n[tool.pyright]\nexclude = [\n    \"src/semgrep_mcp/semgrep_interfaces\"\n]\n"
+}

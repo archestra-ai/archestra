@@ -1,0 +1,131 @@
+{
+  "name": "wooonster__hocr_mcp_server",
+  "display_name": "hocr_mcp_server",
+  "description": "MCP server from Wooonster/hocr_mcp_server",
+  "author": {
+    "name": "Wooonster"
+  },
+  "server": {
+    "command": "python",
+    "args": [
+      "-m",
+      "uvicorn",
+      "mcp_server:app",
+      "--host",
+      "${user_config.server_host}",
+      "--port",
+      "${user_config.server_port}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "server_host": {
+      "type": "string",
+      "title": "Server Host",
+      "description": "The host address for the MCP server.",
+      "default": "0.0.0.0",
+      "required": false
+    },
+    "server_port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port for the MCP server.",
+      "default": 8000,
+      "required": false,
+      "min": 1,
+      "max": 65535
+    }
+  },
+  "readme": "# HOCR MCP Agent\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Wooonster/hocr_mcp_server)](https://archestra.ai/mcp-catalog/wooonster__hocr_mcp_server)\n\n### Vue Frontend\n\nStart command:\n\n```bash\ncd hocr-vue-client/\n\nnpm install\nnpm run dev\n```\n\nRequired packages:\n```bash\ncd hocr-vue-client/\n\nnpm install katex\nnpm install axios\n```\n\n### MCP Server\n\nStart command:\n\n```bash\nuvicorn mcp_server:app --reload --host 0.0.0.0 --port 8000\n````",
+  "category": "AI Tools",
+  "quality_score": 30,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp_server": {
+        "command": "uvicorn",
+        "args": ["mcp_server:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Wooonster",
+    "repo": "hocr_mcp_server",
+    "url": "https://github.com/Wooonster/hocr_mcp_server",
+    "name": "wooonster__hocr_mcp_server",
+    "path": null,
+    "stars": 2,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "85890d468ea095207e9f0b652bec471eef342be5"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:44.258Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "pillow",
+      "importance": 8
+    },
+    {
+      "name": "python-multipart",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "katex",
+      "importance": 5
+    },
+    {
+      "name": "vue",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"hocr\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n    \"fastapi>=0.115.12\",\n    \"mcp>=1.6.0\",\n    \"openai>=1.76.2\",\n    \"pillow>=11.2.1\",\n    \"python-multipart>=0.0.20\",\n    \"requests>=2.32.3\",\n]\n\n\n=== requirements.txt ===\nmcp==1.6.0\nopenai==1.76.2\npillow==11.2.1\npython-multipart==0.0.20\nrequests==2.32.3\nuvicorn==0.34.2\nfastapi==0.115.12\n\n=== hocr-vue-client/package.json ===\n{\n  \"name\": \"hocr-vue-client\",\n  \"version\": \"0.1.0\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"build\": \"vite build\",\n    \"preview\": \"vite preview\"\n  },\n  \"dependencies\": {\n    \"axios\": \"^1.4.0\",\n    \"katex\": \"^0.16.4\",\n    \"vue\": \"^3.3.4\"\n  },\n  \"devDependencies\": {\n    \"vite\": \"^4.3.9\",\n    \"@vitejs/plugin-vue\": \"^4.2.3\"\n  }\n}\n"
+}

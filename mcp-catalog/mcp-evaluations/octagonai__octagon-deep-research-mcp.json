@@ -1,0 +1,101 @@
+{
+  "name": "octagonai__octagon-deep-research-mcp",
+  "display_name": "octagon-deep-research-mcp",
+  "description": "The Octagon Deep Research MCP server provides specialized AI-powered comprehensive research and analysis capabilities by integrating with advanced deep research agents. No rate limits, faster than ChatGPT Deep Research, more thorough than Grok DeepSearch or Perplexity Deep Research. ",
+  "author": {
+    "name": "OctagonAI"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "octagon-deep-research-mcp@latest"],
+    "env": {
+      "OCTAGON_API_KEY": "${user_config.octagon_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "octagon_api_key": {
+      "type": "string",
+      "title": "Octagon API Key",
+      "description": "Your API key for authentication with Octagon Deep Research MCP.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Octagon Deep Research MCP\n\n![Favicon](https://docs.octagonagents.com/logo.svg) The Octagon Deep Research MCP server provides specialized AI-powered comprehensive research and analysis capabilities by integrating with advanced deep research agents. No rate limits, faster than ChatGPT Deep Research, more thorough than Grok DeepSearch or Perplexity Deep Research. Add unlimited deep research functionality to any MCP client including Claude Desktop, Cursor, and other popular MCP-enabled applications.\n\n**Powered by [Octagon AI](https://docs.octagonagents.com)** - Learn more about the Deep Research Agent at [docs.octagonagents.com](https://docs.octagonagents.com/guide/agents/deep-research-agent.html)\n\n[![Demo](https://img.youtube.com/vi/yh1cyrm9aus/0.jpg)](https://youtu.be/yh1cyrm9aus)\n\n## 🏆 Why Teams Choose Octagon's Enterprise-Grade Deep Research API\n\n👉 **8–10x faster** than the leading incumbent—complex analyses complete in seconds, not minutes  \n👉 **Greater depth & accuracy** —pulls data from 3x more high-quality sources and cross-checks every figure  \n👉 **Unlimited parallel runs**—no rate caps, so your analysts can launch as many deep-dive tasks as they need (unlike ChatGPT Pro's 125-task monthly limit)  \n\n## 🚀 Core Differentiators\n\n✅ **No Rate Limits** - Execute unlimited deep research queries without restrictions (vs ChatGPT Pro's 125-task monthly limit)  \n✅ **Superior Performance** - Faster than ChatGPT Deep Research, more thorough than Grok DeepSearch or Perplexity Deep Research  \n✅ **Enterprise-Grade Speed** - 8-10x faster than leading incumbents, with 3x more source coverage  \n✅ **Universal MCP Integration** - Add deep research functionality to any MCP client  \n✅ **Multi-Domain Expertise** - Comprehensive research across any topic or industry  \n✅ **Advanced Data Synthesis** - Multi-source aggregation with cross-verification of every figure  \n\n## Features\n\n✅ **Comprehensive Research Capabilities**\n   - Multi-source data aggregation and synthesis\n   - Academic research and literature review\n   - Competitive landscape analysis\n   - Market intelligence and trend analysis\n   - Technical and scientific research\n   - Policy and regulatory research\n   - Real-time web scraping and data extraction\n     \n✅ **Universal Domain Coverage**\n   - Technology and AI research\n   - Healthcare and medical research\n   - Environmental and sustainability studies\n   - Economic and business analysis\n   - Scientific and engineering research\n   - Social and cultural studies\n   - Political and policy analysis\n     \n✅ **Advanced Analysis Tools**\n   - Comprehensive report generation\n   - Cross-source verification\n   - Trend identification and forecasting\n   - Comparative analysis frameworks\n\n## Get Your Octagon API Key\n\nTo use Octagon Deep Research MCP, you need to:\n\n1. Sign up for a free account at [Octagon](https://app.octagonai.co/signup/?redirectToAfterSignup=https://app.octagonai.co/api-keys)\n2. After logging in, from left menu, navigate to **API Keys** \n3. Generate a new API key\n4. Use this API key in your configuration as the `OCTAGON_API_KEY` value\n\n## Prerequisites\n\nBefore installing or running Octagon Deep Research MCP, you need to have `npx` (which comes with Node.js and npm) installed on your system.\n\n### Mac (macOS)\n\n1. **Install Homebrew** (if you don't have it):\n   ```bash\n   /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"\n   ```\n2. **Install Node.js (includes npm and npx):**\n   ```bash\n   brew install node\n   ```\n   This will install the latest version of Node.js, npm, and npx.\n\n3. **Verify installation:**\n   ```bash\n   node -v\n   npm -v\n   npx -v\n   ```\n\n### Windows\n\n1. **Download the Node.js installer:**\n   - Go to [https://nodejs.org/](https://nodejs.org/) and download the LTS version for Windows.\n2. **Run the installer** and follow the prompts. This will install Node.js, npm, and npx.\n3. **Verify installation:**\n   Open Command Prompt and run:\n   ```cmd\n   node -v\n   npm -v\n   npx -v\n   ```\n\nIf you see version numbers for all three, you are ready to proceed with the installation steps below.\n\n## Installation\n\n### Running on Claude Desktop\n\nTo configure Octagon Deep Research MCP for Claude Desktop:\n\n1. Open Claude Desktop\n2. Go to Settings > Developer > Edit Config\n3. Add the following to your `claude_desktop_config.json` (Replace `your-octagon-api-key` with your Octagon API key):\n```json\n{\n  \"mcpServers\": {\n    \"octagon-deep-research-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"octagon-deep-research-mcp@latest\"],\n      \"env\": {\n        \"OCTAGON_API_KEY\": \"YOUR_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n4. Restart Claude for the changes to take effect\n\n### Running on Cursor\n\nConfiguring Cursor Desktop 🖥️\nNote: Requires Cursor version 0.45.6+\n\nTo configure Octagon Deep Research MCP in Cursor:\n\n1. Open Cursor Settings\n2. Go to Features > MCP Servers \n3. Click \"+ Add New MCP Server\"\n4. Enter the following:\n   - Name: \"octagon-deep-research-mcp\" (or your preferred name)\n   - Type: \"command\"\n   - Command: `env OCTAGON_API_KEY=your-octagon-api-key npx -y octagon-deep-research-mcp`\n\n> If you are using Windows and are running into issues, try `cmd /c \"set OCTAGON_API_KEY=your-octagon-api-key && npx -y octagon-deep-research-mcp\"`\n\nReplace `your-octagon-api-key` with your Octagon API key.\n\nAfter adding, refresh the MCP server list to see the new tools. The Composer Agent will automatically use Octagon Deep Research MCP when appropriate, but you can explicitly request it by describing your research needs. Access the Composer via Command+L (Mac), select \"Agent\" next to the submit button, and enter your query.\n\n### Running on Windsurf\n\nAdd this to your `./codeium/windsurf/model_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"octagon-deep-research-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"octagon-deep-research-mcp@latest\"],\n      \"env\": {\n        \"OCTAGON_API_KEY\": \"YOUR_API_KEY_HERE\"\n      }\n    }\n  }\n}\n```\n\n### Running with npx\n\n```bash\nenv OCTAGON_API_KEY=your_octagon_api_key npx -y octagon-deep-research-mcp\n```\n\n### Manual Installation\n\n```bash\nnpm install -g octagon-deep-research-mcp\n```\n\n## Documentation\n\nFor comprehensive documentation on using Deep Research capabilities, please visit our official documentation at:\n[https://docs.octagonagents.com](https://docs.octagonagents.com)\n\nSpecifically for the Deep Research Agent: [Deep Research Agent Guide](https://docs.octagonagents.com/guide/agents/deep-research-agent.html)\n\nThe documentation includes:\n- Detailed API references\n- Research methodology guidelines\n- Examples and use cases\n- Best practices for comprehensive research\n- Advanced features and capabilities\n\n## Available Tool\n\n### octagon-deep-research-agent\nComprehensive deep research and analysis across any topic or domain.\n\nThe tool uses a single `prompt` parameter that accepts a natural language query. Include all relevant details in your prompt for optimal results.\n\n## 📚 Example Research Queries\n\n### Technology & AI Research\n- \"Research the current state of quantum computing development and commercial applications across major tech companies\"\n- \"Analyze the competitive landscape in large language models, comparing capabilities, limitations, and market positioning\"\n- \"Investigate recent developments in autonomous vehicle technology and regulatory challenges\"\n- \"Study the evolution of edge computing architectures and their impact on IoT deployment\"\n\n### Healthcare & Medical Research\n- \"Research breakthrough medical treatments for Alzheimer's disease developed in the last 3 years\"\n- \"Analyze the effectiveness of different COVID-19 vaccine technologies and their global distribution\"\n- \"Investigate the current state of gene therapy research for rare diseases\"\n- \"Study mental health treatment innovations and their accessibility across different demographics\"\n\n### Environmental & Sustainability\n- \"Research sustainable agriculture practices and their adoption rates globally\"\n- \"Analyze renewable energy adoption trends and policy drivers across different countries\"\n- \"Investigate the environmental impact of cryptocurrency mining and proposed solutions\"\n- \"Study carbon capture technologies and their commercial viability\"\n\n### Business & Economics\n- \"Analyze the gig economy's impact on traditional employment models and worker protections\"\n- \"Research the evolution of remote work policies post-pandemic and their effectiveness on productivity\"\n- \"Investigate supply chain resilience strategies adopted after global disruptions\"\n- \"Study the impact of digital transformation on traditional retail businesses\"\n\n### Social & Cultural Studies\n- \"Research the impact of social media algorithms on information consumption patterns and political polarization\"\n- \"Analyze changing demographics in urban areas and their impact on city planning\"\n- \"Investigate the effectiveness of different approaches to digital literacy education\"\n- \"Study the cultural impact of streaming services on traditional media consumption\"\n\n### Science & Engineering\n- \"Research advances in materials science for semiconductor manufacturing\"\n- \"Analyze the development of fusion energy technologies and timeline to commercialization\"\n- \"Investigate innovations in water purification technologies for developing regions\"\n- \"Study the engineering challenges and solutions for space exploration missions\"\n\n### Policy & Governance\n- \"Investigate recent developments in AI regulation across different countries and their potential impact\"\n- \"Research privacy legislation trends and their effects on technology companies\"\n- \"Analyze different approaches to cryptocurrency regulation globally\"\n- \"Study the effectiveness of various climate policy mechanisms\"\n\n### Cybersecurity & Privacy\n- \"Investigate cybersecurity threats in IoT devices and enterprise mitigation strategies\"\n- \"Research the evolution of ransomware attacks and defensive technologies\"\n- \"Analyze privacy-preserving technologies and their adoption in consumer applications\"\n- \"Study the security implications of quantum computing on current encryption methods\"\n\n### Education & Learning\n- \"Research the effectiveness of different online learning platforms and methodologies\"\n- \"Analyze the impact of AI tools on academic research and education\"\n- \"Investigate innovative approaches to STEM education in underserved communities\"\n- \"Study the future of skills-based learning and certification programs\"\n\n## 🔍 Research Capabilities\n\n- **Multi-Source Analysis**: Aggregates information from academic papers, industry reports, news sources, and expert opinions\n- **Real-Time Data**: Accesses current information and recent developments\n- **Cross-Verification**: Validates findings across multiple reliable sources\n- **Trend Analysis**: Identifies patterns and forecasts future developments\n- **Competitive Intelligence**: Comprehensive competitive landscape analysis\n- **Technical Deep-Dives**: Detailed analysis of complex technical topics\n- **Policy Impact Assessment**: Analysis of regulatory and policy implications\n- **Market Dynamics**: Understanding of market forces and business implications\n\n## Troubleshooting\n\n1. **API Key Issues**: Ensure your Octagon API key is correctly set in the environment or config file.\n2. **Connection Issues**: Make sure the connectivity to the Octagon API is working properly.\n3. **Rate Limiting**: No rate limits apply to Deep Research MCP - execute unlimited queries.\n\n## License\n\nMIT \n\n---\n\n⭐ Star this repo if you find it helpful for your research needs!\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "octagon-deep-research-mcp": {
+        "command": "npx",
+        "args": ["-y", "octagon-deep-research-mcp"],
+        "env": {
+          "OCTAGON_API_KEY": "your-octagon-api-key"
+        }
+      },
+      "octagon-deep-research-mcp-configured": {
+        "command": "npx",
+        "args": ["-y", "octagon-deep-research-mcp@latest"],
+        "env": {
+          "OCTAGON_API_KEY": "YOUR_API_KEY_HERE"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OctagonAI",
+    "repo": "octagon-deep-research-mcp",
+    "url": "https://github.com/OctagonAI/octagon-deep-research-mcp",
+    "name": "octagon-deep-research-mcp",
+    "path": null,
+    "stars": 39,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8a8166fa13f42b45314ce326cca30e43e3fe04e0"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.725Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"octagon-deep-research-mcp\",\n  \"version\": \"1.0.18\",\n  \"description\": \"MCP server for Deep Research. Provides specialized AI-powered deep research capabilities with no rate limits - faster than ChatGPT Deep Research, more thorough than Grok DeepSearch or Perplexity Deep Research.\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"octagon-deep-research-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"test\": \"echo \\\"No tests specified\\\"\",\n    \"start\": \"node dist/index.js\",\n    \"lint\": \"echo \\\"No linting configured\\\"\",\n    \"format\": \"echo \\\"No formatting configured\\\"\",\n    \"prepare\": \"npm run build\",\n    \"release\": \"npm run build && npm publish\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"deep-research\",\n    \"research-agent\",\n    \"comprehensive-analysis\",\n    \"web-scraping\",\n    \"data-synthesis\",\n    \"intelligence-gathering\",\n    \"academic-research\",\n    \"market-research\",\n    \"competitive-analysis\"\n  ],\n  \"author\": \"Octagon AI\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"dotenv\": \"^16.3.1\",\n    \"openai\": \"^4.20.1\",\n    \"zod\": \"^3.22.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.10.0\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.3.2\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/OctagonAI/octagon-deep-research-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/OctagonAI/octagon-deep-research-mcp/issues\"\n  },\n  \"homepage\": \"https://docs.octagonagents.com\"\n}\n"
+}

@@ -1,0 +1,270 @@
+{
+  "name": "qdrant__mcp-server-qdrant",
+  "display_name": "mcp-server-qdrant",
+  "description": "An official Qdrant Model Context Protocol (MCP) server implementation",
+  "author": {
+    "name": "qdrant"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-qdrant"],
+    "env": {
+      "QDRANT_URL": "${user_config.qdrant_url}",
+      "QDRANT_API_KEY": "${user_config.qdrant_api_key}",
+      "COLLECTION_NAME": "${user_config.collection_name}",
+      "QDRANT_LOCAL_PATH": "${user_config.qdrant_local_path}",
+      "EMBEDDING_PROVIDER": "${user_config.embedding_provider}",
+      "EMBEDDING_MODEL": "${user_config.embedding_model}",
+      "TOOL_STORE_DESCRIPTION": "${user_config.tool_store_description}",
+      "TOOL_FIND_DESCRIPTION": "${user_config.tool_find_description}",
+      "FASTMCP_DEBUG": "${user_config.fastmcp_debug}",
+      "FASTMCP_LOG_LEVEL": "${user_config.fastmcp_log_level}",
+      "FASTMCP_HOST": "${user_config.fastmcp_host}",
+      "FASTMCP_PORT": "${user_config.fastmcp_port}",
+      "FASTMCP_WARN_ON_DUPLICATE_RESOURCES": "${user_config.fastmcp_warn_on_duplicate_resources}",
+      "FASTMCP_WARN_ON_DUPLICATE_TOOLS": "${user_config.fastmcp_warn_on_duplicate_tools}",
+      "FASTMCP_WARN_ON_DUPLICATE_PROMPTS": "${user_config.fastmcp_warn_on_duplicate_prompts}",
+      "FASTMCP_DEPENDENCIES": "${user_config.fastmcp_dependencies}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "qdrant_url": {
+      "type": "string",
+      "title": "Qdrant URL",
+      "description": "URL of the Qdrant server",
+      "required": false
+    },
+    "qdrant_api_key": {
+      "type": "string",
+      "title": "Qdrant API Key",
+      "description": "API key for the Qdrant server",
+      "sensitive": true,
+      "required": false
+    },
+    "collection_name": {
+      "type": "string",
+      "title": "Collection Name",
+      "description": "Name of the default collection to use",
+      "required": false
+    },
+    "qdrant_local_path": {
+      "type": "directory",
+      "title": "Qdrant Local Path",
+      "description": "Path to the local Qdrant database (alternative to QDRANT_URL)",
+      "required": false
+    },
+    "embedding_provider": {
+      "type": "string",
+      "title": "Embedding Provider",
+      "description": "Embedding provider to use (currently only 'fastembed' is supported)",
+      "required": false,
+      "default": "fastembed"
+    },
+    "embedding_model": {
+      "type": "string",
+      "title": "Embedding Model",
+      "description": "Name of the embedding model to use",
+      "required": false,
+      "default": "sentence-transformers/all-MiniLM-L6-v2"
+    },
+    "tool_store_description": {
+      "type": "string",
+      "title": "Store Tool Description",
+      "description": "Custom description for the store tool",
+      "required": false
+    },
+    "tool_find_description": {
+      "type": "string",
+      "title": "Find Tool Description",
+      "description": "Custom description for the find tool",
+      "required": false
+    },
+    "fastmcp_debug": {
+      "type": "boolean",
+      "title": "FastMCP Debug Mode",
+      "description": "Enable debug mode",
+      "required": false,
+      "default": false
+    },
+    "fastmcp_log_level": {
+      "type": "string",
+      "title": "FastMCP Log Level",
+      "description": "Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+      "required": false,
+      "default": "INFO"
+    },
+    "fastmcp_host": {
+      "type": "string",
+      "title": "FastMCP Host",
+      "description": "Host address to bind the server to",
+      "required": false,
+      "default": "127.0.0.1"
+    },
+    "fastmcp_port": {
+      "type": "number",
+      "title": "FastMCP Port",
+      "description": "Port to run the server on",
+      "required": false,
+      "default": 8000
+    },
+    "fastmcp_warn_on_duplicate_resources": {
+      "type": "boolean",
+      "title": "FastMCP Warn on Duplicate Resources",
+      "description": "Show warnings for duplicate resources",
+      "required": false,
+      "default": true
+    },
+    "fastmcp_warn_on_duplicate_tools": {
+      "type": "boolean",
+      "title": "FastMCP Warn on Duplicate Tools",
+      "description": "Show warnings for duplicate tools",
+      "required": false,
+      "default": true
+    },
+    "fastmcp_warn_on_duplicate_prompts": {
+      "type": "boolean",
+      "title": "FastMCP Warn on Duplicate Prompts",
+      "description": "Show warnings for duplicate prompts",
+      "required": false,
+      "default": true
+    },
+    "fastmcp_dependencies": {
+      "type": "string",
+      "title": "FastMCP Dependencies",
+      "description": "List of dependencies to install in the server environment",
+      "required": false,
+      "default": "[]"
+    }
+  },
+  "readme": "# mcp-server-qdrant: A Qdrant MCP server\n\n[![smithery badge](https://smithery.ai/badge/mcp-server-qdrant)](https://smithery.ai/protocol/mcp-server-qdrant)\n\n> The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open protocol that enables\n> seamless integration between LLM applications and external data sources and tools. Whether you're building an\n> AI-powered IDE, enhancing a chat interface, or creating custom AI workflows, MCP provides a standardized way to\n> connect LLMs with the context they need.\n\nThis repository is an example of how to create a MCP server for [Qdrant](https://qdrant.tech/), a vector search engine.\n\n## Overview\n\nAn official Model Context Protocol server for keeping and retrieving memories in the Qdrant vector search engine.\nIt acts as a semantic memory layer on top of the Qdrant database.\n\n## Components\n\n### Tools\n\n1. `qdrant-store`\n   - Store some information in the Qdrant database\n   - Input:\n     - `information` (string): Information to store\n     - `metadata` (JSON): Optional metadata to store\n     - `collection_name` (string): Name of the collection to store the information in. This field is required if there are no default collection name.\n                                   If there is a default collection name, this field is not enabled.\n   - Returns: Confirmation message\n2. `qdrant-find`\n   - Retrieve relevant information from the Qdrant database\n   - Input:\n     - `query` (string): Query to use for searching\n     - `collection_name` (string): Name of the collection to store the information in. This field is required if there are no default collection name.\n                                   If there is a default collection name, this field is not enabled.\n   - Returns: Information stored in the Qdrant database as separate messages\n\n## Environment Variables\n\nThe configuration of the server is done using environment variables:\n\n| Name                     | Description                                                         | Default Value                                                     |\n|--------------------------|---------------------------------------------------------------------|-------------------------------------------------------------------|\n| `QDRANT_URL`             | URL of the Qdrant server                                            | None                                                              |\n| `QDRANT_API_KEY`         | API key for the Qdrant server                                       | None                                                              |\n| `COLLECTION_NAME`        | Name of the default collection to use.                              | None                                                              |\n| `QDRANT_LOCAL_PATH`      | Path to the local Qdrant database (alternative to `QDRANT_URL`)     | None                                                              |\n| `EMBEDDING_PROVIDER`     | Embedding provider to use (currently only \"fastembed\" is supported) | `fastembed`                                                       |\n| `EMBEDDING_MODEL`        | Name of the embedding model to use                                  | `sentence-transformers/all-MiniLM-L6-v2`                          |\n| `TOOL_STORE_DESCRIPTION` | Custom description for the store tool                               | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |\n| `TOOL_FIND_DESCRIPTION`  | Custom description for the find tool                                | See default in [`settings.py`](src/mcp_server_qdrant/settings.py) |\n\nNote: You cannot provide both `QDRANT_URL` and `QDRANT_LOCAL_PATH` at the same time.\n\n> [!IMPORTANT]\n> Command-line arguments are not supported anymore! Please use environment variables for all configuration.\n\n### FastMCP Environment Variables\n\nSince `mcp-server-qdrant` is based on FastMCP, it also supports all the FastMCP environment variables. The most\nimportant ones are listed below:\n\n| Environment Variable                  | Description                                               | Default Value |\n|---------------------------------------|-----------------------------------------------------------|---------------|\n| `FASTMCP_DEBUG`                       | Enable debug mode                                         | `false`       |\n| `FASTMCP_LOG_LEVEL`                   | Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | `INFO`        |\n| `FASTMCP_HOST`                        | Host address to bind the server to                        | `127.0.0.1`   |\n| `FASTMCP_PORT`                        | Port to run the server on                                 | `8000`        |\n| `FASTMCP_WARN_ON_DUPLICATE_RESOURCES` | Show warnings for duplicate resources                     | `true`        |\n| `FASTMCP_WARN_ON_DUPLICATE_TOOLS`     | Show warnings for duplicate tools                         | `true`        |\n| `FASTMCP_WARN_ON_DUPLICATE_PROMPTS`   | Show warnings for duplicate prompts                       | `true`        |\n| `FASTMCP_DEPENDENCIES`                | List of dependencies to install in the server environment | `[]`          |\n\n## Installation\n\n### Using uvx\n\nWhen using [`uvx`](https://docs.astral.sh/uv/guides/tools/#running-tools) no specific installation is needed to directly run *mcp-server-qdrant*.\n\n```shell\nQDRANT_URL=\"http://localhost:6333\" \\\nCOLLECTION_NAME=\"my-collection\" \\\nEMBEDDING_MODEL=\"sentence-transformers/all-MiniLM-L6-v2\" \\\nuvx mcp-server-qdrant\n```\n\n#### Transport Protocols\n\nThe server supports different transport protocols that can be specified using the `--transport` flag:\n\n```shell\nQDRANT_URL=\"http://localhost:6333\" \\\nCOLLECTION_NAME=\"my-collection\" \\\nuvx mcp-server-qdrant --transport sse\n```\n\nSupported transport protocols:\n\n- `stdio` (default): Standard input/output transport, might only be used by local MCP clients\n- `sse`: Server-Sent Events transport, perfect for remote clients\n- `streamable-http`: Streamable HTTP transport, perfect for remote clients, more recent than SSE\n\nThe default transport is `stdio` if not specified.\n\nWhen SSE transport is used, the server will listen on the specified port and wait for incoming connections. The default\nport is 8000, however it can be changed using the `FASTMCP_PORT` environment variable.\n\n```shell\nQDRANT_URL=\"http://localhost:6333\" \\\nCOLLECTION_NAME=\"my-collection\" \\\nFASTMCP_PORT=1234 \\\nuvx mcp-server-qdrant --transport sse\n```\n\n### Using Docker\n\nA Dockerfile is available for building and running the MCP server:\n\n```bash\n# Build the container\ndocker build -t mcp-server-qdrant .\n\n# Run the container\ndocker run -p 8000:8000 \\\n  -e FASTMCP_HOST=\"0.0.0.0\" \\\n  -e QDRANT_URL=\"http://your-qdrant-server:6333\" \\\n  -e QDRANT_API_KEY=\"your-api-key\" \\\n  -e COLLECTION_NAME=\"your-collection\" \\\n  mcp-server-qdrant\n```\n\n> [!TIP]\n> Please note that we set `FASTMCP_HOST=\"0.0.0.0\"` to make the server listen on all network interfaces. This is\n> necessary when running the server in a Docker container.\n\n### Installing via Smithery\n\nTo install Qdrant MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/protocol/mcp-server-qdrant):\n\n```bash\nnpx @smithery/cli install mcp-server-qdrant --client claude\n```\n\n### Manual configuration of Claude Desktop\n\nTo use this server with the Claude Desktop app, add the following configuration to the \"mcpServers\" section of your\n`claude_desktop_config.json`:\n\n```json\n{\n  \"qdrant\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-qdrant\"],\n    \"env\": {\n      \"QDRANT_URL\": \"https://xyz-example.eu-central.aws.cloud.qdrant.io:6333\",\n      \"QDRANT_API_KEY\": \"your_api_key\",\n      \"COLLECTION_NAME\": \"your-collection-name\",\n      \"EMBEDDING_MODEL\": \"sentence-transformers/all-MiniLM-L6-v2\"\n    }\n  }\n}\n```\n\nFor local Qdrant mode:\n\n```json\n{\n  \"qdrant\": {\n    \"command\": \"uvx\",\n    \"args\": [\"mcp-server-qdrant\"],\n    \"env\": {\n      \"QDRANT_LOCAL_PATH\": \"/path/to/qdrant/database\",\n      \"COLLECTION_NAME\": \"your-collection-name\",\n      \"EMBEDDING_MODEL\": \"sentence-transformers/all-MiniLM-L6-v2\"\n    }\n  }\n}\n```\n\nThis MCP server will automatically create a collection with the specified name if it doesn't exist.\n\nBy default, the server will use the `sentence-transformers/all-MiniLM-L6-v2` embedding model to encode memories.\nFor the time being, only [FastEmbed](https://qdrant.github.io/fastembed/) models are supported.\n\n## Support for other tools\n\nThis MCP server can be used with any MCP-compatible client. For example, you can use it with\n[Cursor](https://docs.cursor.com/context/model-context-protocol) and [VS Code](https://code.visualstudio.com/docs), which provide built-in support for the Model Context\nProtocol.\n\n### Using with Cursor/Windsurf\n\nYou can configure this MCP server to work as a code search tool for Cursor or Windsurf by customizing the tool\ndescriptions:\n\n```bash\nQDRANT_URL=\"http://localhost:6333\" \\\nCOLLECTION_NAME=\"code-snippets\" \\\nTOOL_STORE_DESCRIPTION=\"Store reusable code snippets for later retrieval. \\\nThe 'information' parameter should contain a natural language description of what the code does, \\\nwhile the actual code should be included in the 'metadata' parameter as a 'code' property. \\\nThe value of 'metadata' is a Python dictionary with strings as keys. \\\nUse this whenever you generate some code snippet.\" \\\nTOOL_FIND_DESCRIPTION=\"Search for relevant code snippets based on natural language descriptions. \\\nThe 'query' parameter should describe what you're looking for, \\\nand the tool will return the most relevant code snippets. \\\nUse this when you need to find existing code snippets for reuse or reference.\" \\\nuvx mcp-server-qdrant --transport sse # Enable SSE transport\n```\n\nIn Cursor/Windsurf, you can then configure the MCP server in your settings by pointing to this running server using\nSSE transport protocol. The description on how to add an MCP server to Cursor can be found in the [Cursor\ndocumentation](https://docs.cursor.com/context/model-context-protocol#adding-an-mcp-server-to-cursor). If you are\nrunning Cursor/Windsurf locally, you can use the following URL:\n\n```\nhttp://localhost:8000/sse\n```\n\n> [!TIP]\n> We suggest SSE transport as a preferred way to connect Cursor/Windsurf to the MCP server, as it can support remote\n> connections. That makes it easy to share the server with your team or use it in a cloud environment.\n\nThis configuration transforms the Qdrant MCP server into a specialized code search tool that can:\n\n1. Store code snippets, documentation, and implementation details\n2. Retrieve relevant code examples based on semantic search\n3. Help developers find specific implementations or usage patterns\n\nYou can populate the database by storing natural language descriptions of code snippets (in the `information` parameter)\nalong with the actual code (in the `metadata.code` property), and then search for them using natural language queries\nthat describe what you're looking for.\n\n> [!NOTE]\n> The tool descriptions provided above are examples and may need to be customized for your specific use case. Consider\n> adjusting the descriptions to better match your team's workflow and the specific types of code snippets you want to\n> store and retrieve.\n\n**If you have successfully installed the `mcp-server-qdrant`, but still can't get it to work with Cursor, please\nconsider creating the [Cursor rules](https://docs.cursor.com/context/rules-for-ai) so the MCP tools are always used when\nthe agent produces a new code snippet.** You can restrict the rules to only work for certain file types, to avoid using\nthe MCP server for the documentation or other types of content.\n\n### Using with Claude Code\n\nYou can enhance Claude Code's capabilities by connecting it to this MCP server, enabling semantic search over your\nexisting codebase.\n\n#### Setting up mcp-server-qdrant\n\n1. Add the MCP server to Claude Code:\n\n    ```shell\n    # Add mcp-server-qdrant configured for code search\n    claude mcp add code-search \\\n    -e QDRANT_URL=\"http://localhost:6333\" \\\n    -e COLLECTION_NAME=\"code-repository\" \\\n    -e EMBEDDING_MODEL=\"sentence-transformers/all-MiniLM-L6-v2\" \\\n    -e TOOL_STORE_DESCRIPTION=\"Store code snippets with descriptions. The 'information' parameter should contain a natural language description of what the code does, while the actual code should be included in the 'metadata' parameter as a 'code' property.\" \\\n    -e TOOL_FIND_DESCRIPTION=\"Search for relevant code snippets using natural language. The 'query' parameter should describe the functionality you're looking for.\" \\\n    -- uvx mcp-server-qdrant\n    ```\n\n2. Verify the server was added:\n\n    ```shell\n    claude mcp list\n    ```\n\n#### Using Semantic Code Search in Claude Code\n\nTool descriptions, specified in `TOOL_STORE_DESCRIPTION` and `TOOL_FIND_DESCRIPTION`, guide Claude Code on how to use\nthe MCP server. The ones provided above are examples and may need to be customized for your specific use case. However,\nClaude Code should be already able to:\n\n1. Use the `qdrant-store` tool to store code snippets with descriptions.\n2. Use the `qdrant-find` tool to search for relevant code snippets using natural language.\n\n### Run MCP server in Development Mode\n\nThe MCP server can be run in development mode using the `mcp dev` command. This will start the server and open the MCP\ninspector in your browser.\n\n```shell\nCOLLECTION_NAME=mcp-dev fastmcp dev src/mcp_server_qdrant/server.py\n```\n\n### Using with VS Code\n\nFor one-click installation, click one of the install buttons below:\n\n[![Install with UVX in VS Code](https://img.shields.io/badge/VS_Code-UVX-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=qdrant&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22mcp-server-qdrant%22%5D%2C%22env%22%3A%7B%22QDRANT_URL%22%3A%22%24%7Binput%3AqdrantUrl%7D%22%2C%22QDRANT_API_KEY%22%3A%22%24%7Binput%3AqdrantApiKey%7D%22%2C%22COLLECTION_NAME%22%3A%22%24%7Binput%3AcollectionName%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22qdrantUrl%22%2C%22description%22%3A%22Qdrant+URL%22%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22qdrantApiKey%22%2C%22description%22%3A%22Qdrant+API+Key%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22collectionName%22%2C%22description%22%3A%22Collection+Name%22%7D%5D) [![Install with UVX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-UVX-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=qdrant&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22mcp-server-qdrant%22%5D%2C%22env%22%3A%7B%22QDRANT_URL%22%3A%22%24%7Binput%3AqdrantUrl%7D%22%2C%22QDRANT_API_KEY%22%3A%22%24%7Binput%3AqdrantApiKey%7D%22%2C%22COLLECTION_NAME%22%3A%22%24%7Binput%3AcollectionName%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22qdrantUrl%22%2C%22description%22%3A%22Qdrant+URL%22%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22qdrantApiKey%22%2C%22description%22%3A%22Qdrant+API+Key%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22collectionName%22%2C%22description%22%3A%22Collection+Name%22%7D%5D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=qdrant&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-p%22%2C%228000%3A8000%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22QDRANT_URL%22%2C%22-e%22%2C%22QDRANT_API_KEY%22%2C%22-e%22%2C%22COLLECTION_NAME%22%2C%22mcp-server-qdrant%22%5D%2C%22env%22%3A%7B%22QDRANT_URL%22%3A%22%24%7Binput%3AqdrantUrl%7D%22%2C%22QDRANT_API_KEY%22%3A%22%24%7Binput%3AqdrantApiKey%7D%22%2C%22COLLECTION_NAME%22%3A%22%24%7Binput%3AcollectionName%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22qdrantUrl%22%2C%22description%22%3A%22Qdrant+URL%22%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22qdrantApiKey%22%2C%22description%22%3A%22Qdrant+API+Key%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22collectionName%22%2C%22description%22%3A%22Collection+Name%22%7D%5D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=qdrant&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-p%22%2C%228000%3A8000%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22QDRANT_URL%22%2C%22-e%22%2C%22QDRANT_API_KEY%22%2C%22-e%22%2C%22COLLECTION_NAME%22%2C%22mcp-server-qdrant%22%5D%2C%22env%22%3A%7B%22QDRANT_URL%22%3A%22%24%7Binput%3AqdrantUrl%7D%22%2C%22QDRANT_API_KEY%22%3A%22%24%7Binput%3AqdrantApiKey%7D%22%2C%22COLLECTION_NAME%22%3A%22%24%7Binput%3AcollectionName%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22qdrantUrl%22%2C%22description%22%3A%22Qdrant+URL%22%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22qdrantApiKey%22%2C%22description%22%3A%22Qdrant+API+Key%22%2C%22password%22%3Atrue%7D%2C%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22collectionName%22%2C%22description%22%3A%22Collection+Name%22%7D%5D&quality=insiders)\n\n#### Manual Installation\n\nAdd the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"qdrantUrl\",\n        \"description\": \"Qdrant URL\"\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"qdrantApiKey\",\n        \"description\": \"Qdrant API Key\",\n        \"password\": true\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"collectionName\",\n        \"description\": \"Collection Name\"\n      }\n    ],\n    \"servers\": {\n      \"qdrant\": {\n        \"command\": \"uvx\",\n        \"args\": [\"mcp-server-qdrant\"],\n        \"env\": {\n          \"QDRANT_URL\": \"${input:qdrantUrl}\",\n          \"QDRANT_API_KEY\": \"${input:qdrantApiKey}\",\n          \"COLLECTION_NAME\": \"${input:collectionName}\"\n        }\n      }\n    }\n  }\n}\n```\n\nOr if you prefer using Docker, add this configuration instead:\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"qdrantUrl\",\n        \"description\": \"Qdrant URL\"\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"qdrantApiKey\",\n        \"description\": \"Qdrant API Key\",\n        \"password\": true\n      },\n      {\n        \"type\": \"promptString\",\n        \"id\": \"collectionName\",\n        \"description\": \"Collection Name\"\n      }\n    ],\n    \"servers\": {\n      \"qdrant\": {\n        \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"-p\", \"8000:8000\",\n          \"-i\",\n          \"--rm\",\n          \"-e\", \"QDRANT_URL\",\n          \"-e\", \"QDRANT_API_KEY\",\n          \"-e\", \"COLLECTION_NAME\",\n          \"mcp-server-qdrant\"\n        ],\n        \"env\": {\n          \"QDRANT_URL\": \"${input:qdrantUrl}\",\n          \"QDRANT_API_KEY\": \"${input:qdrantApiKey}\",\n          \"COLLECTION_NAME\": \"${input:collectionName}\"\n        }\n      }\n    }\n  }\n}\n```\n\nAlternatively, you can create a `.vscode/mcp.json` file in your workspace with the following content:\n\n```json\n{\n  \"inputs\": [\n    {\n      \"type\": \"promptString\",\n      \"id\": \"qdrantUrl\",\n      \"description\": \"Qdrant URL\"\n    },\n    {\n      \"type\": \"promptString\",\n      \"id\": \"qdrantApiKey\",\n      \"description\": \"Qdrant API Key\",\n      \"password\": true\n    },\n    {\n      \"type\": \"promptString\",\n      \"id\": \"collectionName\",\n      \"description\": \"Collection Name\"\n    }\n  ],\n  \"servers\": {\n    \"qdrant\": {\n      \"command\": \"uvx\",\n      \"args\": [\"mcp-server-qdrant\"],\n      \"env\": {\n        \"QDRANT_URL\": \"${input:qdrantUrl}\",\n        \"QDRANT_API_KEY\": \"${input:qdrantApiKey}\",\n        \"COLLECTION_NAME\": \"${input:collectionName}\"\n      }\n    }\n  }\n}\n```\n\nFor workspace configuration with Docker, use this in `.vscode/mcp.json`:\n\n```json\n{\n  \"inputs\": [\n    {\n      \"type\": \"promptString\",\n      \"id\": \"qdrantUrl\",\n      \"description\": \"Qdrant URL\"\n    },\n    {\n      \"type\": \"promptString\",\n      \"id\": \"qdrantApiKey\",\n      \"description\": \"Qdrant API Key\",\n      \"password\": true\n    },\n    {\n      \"type\": \"promptString\",\n      \"id\": \"collectionName\",\n      \"description\": \"Collection Name\"\n    }\n  ],\n  \"servers\": {\n    \"qdrant\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-p\", \"8000:8000\",\n        \"-i\",\n        \"--rm\",\n        \"-e\", \"QDRANT_URL\",\n        \"-e\", \"QDRANT_API_KEY\",\n        \"-e\", \"COLLECTION_NAME\",\n        \"mcp-server-qdrant\"\n      ],\n      \"env\": {\n        \"QDRANT_URL\": \"${input:qdrantUrl}\",\n        \"QDRANT_API_KEY\": \"${input:qdrantApiKey}\",\n        \"COLLECTION_NAME\": \"${input:collectionName}\"\n      }\n    }\n  }\n}\n```\n\n## Contributing\n\nIf you have suggestions for how mcp-server-qdrant could be improved, or want to report a bug, open an issue!\nWe'd love all and any contributions.\n\n### Testing `mcp-server-qdrant` locally\n\nThe [MCP inspector](https://github.com/modelcontextprotocol/inspector) is a developer tool for testing and debugging MCP\nservers. It runs both a client UI (default port 5173) and an MCP proxy server (default port 3000). Open the client UI in\nyour browser to use the inspector.\n\n```shell\nQDRANT_URL=\":memory:\" COLLECTION_NAME=\"test\" \\\nfastmcp dev src/mcp_server_qdrant/server.py\n```\n\nOnce started, open your browser to http://localhost:5173 to access the inspector interface.\n\n## License\n\nThis MCP server is licensed under the Apache License 2.0. This means you are free to use, modify, and distribute the\nsoftware, subject to the terms and conditions of the Apache License 2.0. For more details, please see the LICENSE file\nin the project repository.\n",
+  "category": "AI Tools",
+  "quality_score": 78,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-qdrant": {
+        "command": "uvx",
+        "args": ["mcp-server-qdrant"],
+        "env": {
+          "QDRANT_URL": "http://localhost:6333",
+          "COLLECTION_NAME": "my-collection",
+          "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+        }
+      },
+      "mcp-server-qdrant-sse": {
+        "command": "uvx",
+        "args": ["mcp-server-qdrant", "--transport", "sse"],
+        "env": {
+          "QDRANT_URL": "http://localhost:6333",
+          "COLLECTION_NAME": "my-collection"
+        }
+      },
+      "mcp-server-qdrant-sse-custom-port": {
+        "command": "uvx",
+        "args": ["mcp-server-qdrant", "--transport", "sse"],
+        "env": {
+          "QDRANT_URL": "http://localhost:6333",
+          "COLLECTION_NAME": "my-collection",
+          "FASTMCP_PORT": "1234"
+        }
+      },
+      "mcp-server-qdrant-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-p",
+          "8000:8000",
+          "-e",
+          "FASTMCP_HOST=\"0.0.0.0\"",
+          "-e",
+          "QDRANT_URL=\"http://your-qdrant-server:6333\"",
+          "-e",
+          "QDRANT_API_KEY=\"your-api-key\"",
+          "-e",
+          "COLLECTION_NAME=\"your-collection\"",
+          "mcp-server-qdrant"
+        ],
+        "env": {
+          "FASTMCP_HOST": "0.0.0.0",
+          "QDRANT_URL": "http://your-qdrant-server:6333",
+          "QDRANT_API_KEY": "your-api-key",
+          "COLLECTION_NAME": "your-collection"
+        },
+        "docker_image": "mcp-server-qdrant"
+      },
+      "mcp-server-qdrant-claude-remote": {
+        "command": "uvx",
+        "args": ["mcp-server-qdrant"],
+        "env": {
+          "QDRANT_URL": "https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+          "QDRANT_API_KEY": "your_api_key",
+          "COLLECTION_NAME": "your-collection-name",
+          "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+        }
+      },
+      "mcp-server-qdrant-claude-local": {
+        "command": "uvx",
+        "args": ["mcp-server-qdrant"],
+        "env": {
+          "QDRANT_LOCAL_PATH": "/path/to/qdrant/database",
+          "COLLECTION_NAME": "your-collection-"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "qdrant",
+    "repo": "mcp-server-qdrant",
+    "url": "https://github.com/qdrant/mcp-server-qdrant",
+    "name": "qdrant__mcp-server-qdrant",
+    "path": null,
+    "stars": 907,
+    "contributors": 7,
+    "issues": 24,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8d6f388543e1b3043a687a3270b6cdebd54a6fe1"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.241Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastembed",
+      "importance": 9
+    },
+    {
+      "name": "qdrant-client",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-qdrant\"\nversion = \"0.8.0\"\ndescription = \"MCP server for retrieving context from a Qdrant vector database\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = \"Apache-2.0\"\ndependencies = [\n    \"fastembed>=0.6.0\",\n    \"qdrant-client>=1.12.0\",\n    \"pydantic>=2.10.6\",\n    \"fastmcp>=2.7.0\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\n    \"ipdb>=0.13.13\",\n    \"isort>=6.0.1\",\n    \"mypy>=1.9.0\",\n    \"pre-commit>=4.1.0\",\n    \"pyright>=1.1.389\",\n    \"pytest>=8.3.3\",\n    \"pytest-asyncio>=0.23.0\",\n    \"ruff>=0.8.0\",\n]\n\n[project.scripts]\nmcp-server-qdrant = \"mcp_server_qdrant.main:main\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_functions = \"test_*\"\nasyncio_mode = \"auto\"\n"
+}

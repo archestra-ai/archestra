@@ -1,0 +1,197 @@
+{
+  "name": "neondatabase__mcp-server-neon",
+  "display_name": "mcp-server-neon",
+  "description": "MCP server for interacting with Neon Management API and databases",
+  "author": {
+    "name": "neondatabase"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@neondatabase/mcp-server-neon", "start", "${user_config.neon_api_key}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "neon_api_key": {
+      "type": "string",
+      "title": "Neon API Key",
+      "description": "Your Neon API key for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"https://neon.com/brand/neon-logo-dark-color.svg\">\n  <source media=\"(prefers-color-scheme: light)\" srcset=\"https://neon.com/brand/neon-logo-light-color.svg\">\n  <img width=\"250px\" alt=\"Neon Logo fallback\" src=\"https://neon.com/brand/neon-logo-dark-color.svg\">\n</picture>\n\n# Neon MCP Server\n\n[![Install MCP Server in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=Neon&config=eyJ1cmwiOiJodHRwczovL21jcC5uZW9uLnRlY2gvbWNwIn0%3D)\n\n**Neon MCP Server** is an open-source tool that lets you interact with your Neon Postgres databases in **natural language**.\n\n[![npm version](https://img.shields.io/npm/v/@neondatabase/mcp-server-neon)](https://www.npmjs.com/package/@neondatabase/mcp-server-neon)\n[![npm downloads](https://img.shields.io/npm/dt/@neondatabase/mcp-server-neon)](https://www.npmjs.com/package/@neondatabase/mcp-server-neon)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\nThe Model Context Protocol (MCP) is a [new, standardized protocol](https://modelcontextprotocol.io/introduction) designed to manage context between large language models (LLMs) and external systems. This repository offers an installer and an MCP Server for [Neon](https://neon.tech).\n\nNeon's MCP server acts as a bridge between natural language requests and the [Neon API](https://api-docs.neon.tech/reference/getting-started-with-neon-api). Built upon MCP, it translates your requests into the necessary API calls, enabling you to manage tasks such as creating projects and branches, running queries, and performing database migrations seamlessly.\n\nSome of the key features of the Neon MCP server include:\n\n- **Natural language interaction:** Manage Neon databases using intuitive, conversational commands.\n- **Simplified database management:** Perform complex actions without writing SQL or directly using the Neon API.\n- **Accessibility for non-developers:** Empower users with varying technical backgrounds to interact with Neon databases.\n- **Database migration support:** Leverage Neon's branching capabilities for database schema changes initiated via natural language.\n\nFor example, in Claude Desktop, or any MCP Client, you can use natural language to accomplish things with Neon, such as:\n\n- `Let's create a new Postgres database, and call it \"my-database\". Let's then create a table called users with the following columns: id, name, email, and password.`\n- `I want to run a migration on my project called \"my-project\" that alters the users table to add a new column called \"created_at\".`\n- `Can you give me a summary of all of my Neon projects and what data is in each one?`\n\n> [!WARNING]  \n> **Neon MCP Server Security Considerations**  \n> The Neon MCP Server grants powerful database management capabilities through natural language requests. **Always review and authorize actions requested by the LLM before execution.** Ensure that only authorized users and applications have access to the Neon MCP Server.\n>\n> The Neon MCP Server is intended for local development and IDE integrations only. **We do not recommend using the Neon MCP Server in production environments.** It can execute powerful operations that may lead to accidental or unauthorized changes.\n>\n> For more information, see [MCP security guidance →](https://neon.tech/docs/ai/neon-mcp-server#mcp-security-guidance).\n\n## Setting up Neon MCP Server\n\nYou have two options for connecting your MCP client to Neon:\n\n1. **Remote MCP Server (Preview):** Connect to Neon's managed MCP server using OAuth for authentication. This method is more convenient as it eliminates the need to manage API keys. Additionally, you will automatically receive the latest features and improvements as soon as they are released.\n\n2. **Local MCP Server:** Run the Neon MCP server locally on your machine, authenticating with a Neon API key.\n\n## Prerequisites\n\n- An MCP Client application.\n- A [Neon account](https://console.neon.tech/signup).\n- **Node.js (>= v18.0.0) and npm:** Download from [nodejs.org](https://nodejs.org).\n\nFor Local MCP Server setup, you also need a Neon API key. See [Neon API Keys documentation](https://neon.tech/docs/manage/api-keys) for instructions on generating one.\n\n### Option 1. Remote Hosted MCP Server (Preview)\n\nConnect to Neon's managed MCP server using OAuth for authentication. This is the easiest setup, requires no local installation of this server, and doesn't need a Neon API key configured in the client.\n\n- Add the following \"Neon\" entry to your client's MCP server configuration file (e.g., `mcp.json`, `mcp_config.json`):\n\n  ```json\n  {\n    \"mcpServers\": {\n      \"Neon\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"mcp-remote\", \"https://mcp.neon.tech/mcp\"]\n      }\n    }\n  }\n  ```\n\n- Save the configuration file.\n- Restart or refresh your MCP client.\n- An OAuth window will open in your browser. Follow the prompts to authorize your MCP client to access your Neon account.\n\n> With OAuth base authentication, the MCP server will, by default operate on projects under your personal Neon account. To access or manage projects under organization, you must explicitly provide either the `org_id` or the `project_id` in your prompt to MCP client.\n\nRemote MCP Server also supports authentication using API key in the `Authorization` header if your client supports it\n\n```json\n{\n  \"mcpServers\": {\n    \"Neon\": {\n      \"url\": \"https://mcp.neon.tech/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer <$NEON_API_KEY>\"\n      }\n    }\n  }\n}\n```\n\n> Provider organization's API key to limit access to projects under the organization only.\n\nMCP supports two remote server transports: the deprecated Server-Sent Events (SSE) and the newer, recommended Streamable HTTP. If your LLM client doesn't support Streamable HTTP yet, you can switch the endpoint from `https://mcp.neon.tech/mcp` to `https://mcp.neon.tech/sse` to use SSE instead.\n\n### Option 2. Local MCP Server\n\nRun the Neon MCP server on your local machine with your Neon API key. This method allows you to manage your Neon projects and databases without relying on a remote MCP server.\n\nAdd the following JSON configuration within the `mcpServers` section of your client's `mcp_config` file, replacing `<YOUR_NEON_API_KEY>` with your actual Neon API key:\n\n```json\n{\n  \"mcpServers\": {\n    \"neon\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@neondatabase/mcp-server-neon\",\n        \"start\",\n        \"<YOUR_NEON_API_KEY>\"\n      ]\n    }\n  }\n}\n```\n\n### Troubleshooting\n\nIf your client does not use `JSON` for configuration of MCP servers (such as older versions of Cursor), you can use the following command when prompted:\n\n```bash\nnpx -y @neondatabase/mcp-server-neon start <YOUR_NEON_API_KEY>\n```\n\n#### Troubleshooting on Windows\n\nIf you are using Windows and encounter issues while adding the MCP server, you might need to use the Command Prompt (`cmd`) or Windows Subsystem for Linux (`wsl`) to run the necessary commands. Your configuration setup may resemble the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"neon\": {\n      \"command\": \"cmd\",\n      \"args\": [\n        \"/c\",\n        \"npx\",\n        \"-y\",\n        \"@neondatabase/mcp-server-neon\",\n        \"start\",\n        \"<YOUR_NEON_API_KEY>\"\n      ]\n    }\n  }\n}\n```\n\n```json\n{\n  \"mcpServers\": {\n    \"neon\": {\n      \"command\": \"wsl\",\n      \"args\": [\n        \"npx\",\n        \"-y\",\n        \"@neondatabase/mcp-server-neon\",\n        \"start\",\n        \"<YOUR_NEON_API_KEY>\"\n      ]\n    }\n  }\n}\n```\n\n## Guides\n\n- [Neon MCP Server Guide](https://neon.tech/docs/ai/neon-mcp-server)\n- [Connect MCP Clients to Neon](https://neon.tech/docs/ai/connect-mcp-clients-to-neon)\n- [Cursor with Neon MCP Server](https://neon.tech/guides/cursor-mcp-neon)\n- [Claude Desktop with Neon MCP Server](https://neon.tech/guides/neon-mcp-server)\n- [Cline with Neon MCP Server](https://neon.tech/guides/cline-mcp-neon)\n- [Windsurf with Neon MCP Server](https://neon.tech/guides/windsurf-mcp-neon)\n- [Zed with Neon MCP Server](https://neon.tech/guides/zed-mcp-neon)\n\n# Features\n\n## Supported Tools\n\nThe Neon MCP Server provides the following actions, which are exposed as \"tools\" to MCP Clients. You can use these tools to interact with your Neon projects and databases using natural language commands.\n\n**Project Management:**\n\n- **`list_projects`**: Lists the first 10 Neon projects in your account, providing a summary of each project. If you can't find a specific project, increase the limit by passing a higher value to the `limit` parameter.\n- **`list_shared_projects`**: Lists Neon projects shared with the current user. Supports a search parameter and limiting the number of projects returned (default: 10).\n- **`describe_project`**: Fetches detailed information about a specific Neon project, including its ID, name, and associated branches and databases.\n- **`create_project`**: Creates a new Neon project in your Neon account. A project acts as a container for branches, databases, roles, and computes.\n- **`delete_project`**: Deletes an existing Neon project and all its associated resources.\n\n**Branch Management:**\n\n- **`create_branch`**: Creates a new branch within a specified Neon project. Leverages [Neon's branching](/docs/introduction/branching) feature for development, testing, or migrations.\n- **`delete_branch`**: Deletes an existing branch from a Neon project.\n- **`describe_branch`**: Retrieves details about a specific branch, such as its name, ID, and parent branch.\n- **`list_branch_computes`**: Lists compute endpoints for a project or specific branch, including compute ID, type, size, and autoscaling information.\n- **`list_organizations`**: Lists all organizations that the current user has access to. Optionally filter by organization name or ID using the search parameter.\n- **`reset_from_parent`**: Resets the current branch to its parent's state, discarding local changes. Automatically preserves to backup if branch has children, or optionally preserve on request with a custom name.\n\n**SQL Query Execution:**\n\n- **`get_connection_string`**: Returns your database connection string.\n- **`run_sql`**: Executes a single SQL query against a specified Neon database. Supports both read and write operations.\n- **`run_sql_transaction`**: Executes a series of SQL queries within a single transaction against a Neon database.\n- **`get_database_tables`**: Lists all tables within a specified Neon database.\n- **`describe_table_schema`**: Retrieves the schema definition of a specific table, detailing columns, data types, and constraints.\n- **`list_slow_queries`**: Identifies performance bottlenecks by finding the slowest queries in a database. Requires the pg_stat_statements extension.\n\n**Database Migrations (Schema Changes):**\n\n- **`prepare_database_migration`**: Initiates a database migration process. Critically, it creates a temporary branch to apply and test the migration safely before affecting the main branch.\n- **`complete_database_migration`**: Finalizes and applies a prepared database migration to the main branch. This action merges changes from the temporary migration branch and cleans up temporary resources.\n\n**Query Performance Optimization:**\n\n- **`explain_sql_statement`**: Provides detailed execution plans for SQL queries to help identify performance bottlenecks.\n- **`prepare_query_tuning`**: Analyzes query performance and suggests optimizations like index creation. Creates a temporary branch for safely testing these optimizations.\n- **`complete_query_tuning`**: Applies or discards query optimizations after testing. Can merge changes from the temporary branch to the main branch.\n- **`list_slow_queries`**: Identifies and analyzes slow-performing queries in your database. Requires the `pg_stat_statements` extension.\n\n**Compute Management:**\n\n- **`list_branch_computes`**: Lists compute endpoints for a project or specific branch, showing details like compute ID, type, size, and last active time.\n\n**Neon Auth:**\n\n- **`provision_neon_auth`**: Provisions Neon Auth for a Neon project. It allows developers to easily set up authentication infrastructure by creating an integration with Stack Auth (`@stackframe/stack`).\n\n**Query Performance Tuning:**\n\n- **`explain_sql_statement`**: Analyzes a SQL query and returns detailed execution plan information to help understand query performance.\n- **`prepare_query_tuning`**: Identifies potential performance issues in a SQL query and suggests optimizations. Creates a temporary branch for testing improvements.\n- **`complete_query_tuning`**: Finalizes and applies query optimizations after testing. Merges changes from the temporary tuning branch to the main branch.\n\n## Migrations\n\nMigrations are a way to manage changes to your database schema over time. With the Neon MCP server, LLMs are empowered to do migrations safely with separate \"Start\" (`prepare_database_migration`) and \"Commit\" (`complete_database_migration`) commands.\n\nThe \"Start\" command accepts a migration and runs it in a new temporary branch. Upon returning, this command hints to the LLM that it should test the migration on this branch. The LLM can then run the \"Commit\" command to apply the migration to the original branch.\n\n# Development\n\n## Development with MCP CLI Client\n\nThe easiest way to iterate on the MCP Server is using the `mcp-client/`. Learn more in `mcp-client/README.md`.\n\n```bash\nnpm install\nnpm run build\nnpm run watch # You can keep this open.\ncd mcp-client/ && NEON_API_KEY=... npm run start:mcp-server-neon\n```\n\n## Development with Claude Desktop (Local MCP Server)\n\n```bash\nnpm install\nnpm run build\nnpm run watch # You can keep this open.\nnode dist/index.js init $NEON_API_KEY\n```\n\nThen, **restart Claude** each time you want to test changes.\n\n# Testing\n\nTo run the tests you need to setup the `.env` file according to the `.env.example` file.\n\n```bash\nnpm run test\n```\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-remote": {
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "https://mcp.neon.tech/mcp"],
+        "env": {}
+      },
+      "neondatabase-mcp-server-neon": {
+        "command": "npx",
+        "args": ["-y", "@neondatabase/mcp-server-neon", "start", "<YOUR_NEON_API_KEY>"],
+        "env": {}
+      },
+      "neondatabase-mcp-server-neon-cmd": {
+        "command": "cmd",
+        "args": ["/c", "npx", "-y", "@neondatabase/mcp-server-neon", "start", "<YOUR_NEON_API_KEY>"],
+        "env": {}
+      },
+      "neondatabase-mcp-server-neon-wsl": {
+        "command": "wsl",
+        "args": ["npx", "-y", "@neondatabase/mcp-server-neon", "start", "<YOUR_NEON_API_KEY>"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "neondatabase",
+    "repo": "mcp-server-neon",
+    "url": "https://github.com/neondatabase/mcp-server-neon",
+    "name": "neondatabase__mcp-server-neon",
+    "path": null,
+    "stars": 448,
+    "contributors": 13,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "75f6f1b59be1ec98fc7b25d356cab3cfa2e98856"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:30.547Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@keyv/postgres",
+      "importance": 8
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@neondatabase/api-client",
+      "importance": 9
+    },
+    {
+      "name": "@neondatabase/serverless",
+      "importance": 8
+    },
+    {
+      "name": "@radix-ui/react-accordion",
+      "importance": 3
+    },
+    {
+      "name": "@segment/analytics-node",
+      "importance": 5
+    },
+    {
+      "name": "@sentry/node",
+      "importance": 6
+    },
+    {
+      "name": "@tailwindcss/postcss",
+      "importance": 3
+    },
+    {
+      "name": "body-parser",
+      "importance": 8
+    },
+    {
+      "name": "chalk",
+      "importance": 4
+    },
+    {
+      "name": "class-variance-authority",
+      "importance": 3
+    },
+    {
+      "name": "cookie-parser",
+      "importance": 7
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "keyv",
+      "importance": 7
+    },
+    {
+      "name": "lucide-react",
+      "importance": 3
+    },
+    {
+      "name": "morgan",
+      "importance": 6
+    },
+    {
+      "name": "next",
+      "importance": 3
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    },
+    {
+      "name": "oauth2-server",
+      "importance": 9
+    },
+    {
+      "name": "openid-client",
+      "importance": 9
+    },
+    {
+      "name": "pug",
+      "importance": 6
+    },
+    {
+      "name": "react-syntax-highlighter",
+      "importance": 3
+    },
+    {
+      "name": "tailwind-merge",
+      "importance": 3
+    },
+    {
+      "name": "winston",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@neondatabase/mcp-server-neon\",\n  \"version\": \"0.6.4\",\n  \"description\": \"MCP server for interacting with Neon Management API and databases\",\n  \"license\": \"MIT\",\n  \"author\": \"Neon, Inc. (https://neon.tech/)\",\n  \"homepage\": \"https://github.com/neondatabase/mcp-server-neon/\",\n  \"bugs\": \"https://github.com/neondatabase/mcp-server-neon/issues\",\n  \"type\": \"module\",\n  \"access\": \"public\",\n  \"bin\": {\n    \"mcp-server-neon\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"CHANGELOG.md\"\n  ],\n  \"scripts\": {\n    \"typecheck\": \"tsc --noEmit\",\n    \"build\": \"tsc && npm run build:chmod && npm run export-tools && npm run build:landing\",\n    \"build:chmod\": \"node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"build:landing\": \"cd landing/ && npm run build && cp -r out/* ../public\",\n    \"watch\": \"tsc-watch --onSuccess \\\"chmod 755 dist/index.js\\\"\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector dist/index.js\",\n    \"format\": \"prettier --write .\",\n    \"lint\": \"npm run typecheck && eslint src && prettier --check .\",\n    \"lint:fix\": \"npm run typecheck && eslint src --fix && prettier --w .\",\n    \"prerelease\": \"npm run build\",\n    \"prepublishOnly\": \"bun scripts/before-publish.ts\",\n    \"test\": \"npx braintrust eval src/tools-evaluations\",\n    \"start\": \"node dist/index.js start\",\n    \"start:sse\": \"node dist/index.js start:sse\",\n    \"export-tools\": \"node dist/index.js export-tools > landing/tools.json\"\n  },\n  \"dependencies\": {\n    \"@keyv/postgres\": \"2.1.2\",\n    \"@modelcontextprotocol/sdk\": \"1.11.2\",\n    \"@neondatabase/api-client\": \"2.0.0\",\n    \"@neondatabase/serverless\": \"1.0.0\",\n    \"@radix-ui/react-accordion\": \"1.2.11\",\n    \"@segment/analytics-node\": \"2.2.1\",\n    \"@sentry/node\": \"9.19.0\",\n    \"@tailwindcss/postcss\": \"4.1.10\",\n    \"axios\": \"1.11.0\",\n    \"body-parser\": \"2.2.0\",\n    \"chalk\": \"5.3.0\",\n    \"class-variance-authority\": \"0.7.1\",\n    \"cookie-parser\": \"1.4.7\",\n    \"cors\": \"2.8.5\",\n    \"dotenv\": \"16.4.7\",\n    \"express\": \"5.0.1\",\n    \"keyv\": \"5.3.2\",\n    \"lucide-react\": \"0.515.0\",\n    \"morgan\": \"1.10.0\",\n    \"next\": \"15.3.3\",\n    \"node-fetch\": \"2.7.0\",\n    \"oauth2-server\": \"3.1.1\",\n    \"openid-client\": \"6.3.4\",\n    \"pug\": \"3.0.3\",\n    \"react-syntax-highlighter\": \"15.6.1\",\n    \"tailwind-merge\": \"3.3.1\",\n    \"winston\": \"3.17.0\",\n    \"zod\": \"3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"9.21.0\",\n    \"@types/cookie-parser\": \"1.4.8\",\n    \"@types/cors\": \"2.8.17\",\n    \"@types/express\": \"5.0.1\",\n    \"@types/morgan\": \"1.9.9\",\n    \"@types/node\": \"20.17.9\",\n    \"@types/node-fetch\": \"2.6.12\",\n    \"@types/oauth2-server\": \"3.0.18\",\n    \"@types/react\": \"19.1.8\",\n    \"autoevals\": \"0.0.111\",\n    \"braintrust\": \"0.0.177\",\n    \"bun\": \"1.1.40\",\n    \"eslint\": \"9.21.0\",\n    \"eslint-config-prettier\": \"10.0.2\",\n    \"prettier\": \"3.4.1\",\n    \"tsc-watch\": \"6.2.1\",\n    \"typescript\": \"5.7.2\",\n    \"typescript-eslint\": \"v8.25.0\"\n  },\n  \"engines\": {\n    \"node\": \">=22.0.0\"\n  }\n}\n\n\n=== landing/package.json ===\n{\n  \"name\": \"neon-mcp-landing\",\n  \"version\": \"0.0.1\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"next dev --turbopack\",\n    \"build\": \"next build\",\n    \"start\": \"next start\",\n    \"lint\": \"next lint\"\n  },\n  \"dependencies\": {\n    \"@radix-ui/react-accordion\": \"^1.2.10\",\n    \"@radix-ui/react-slot\": \"^1.2.2\",\n    \"class-variance-authority\": \"^0.7.1\",\n    \"clsx\": \"^2.1.1\",\n    \"lodash\": \"^4.17.21\",\n    \"lucide-react\": \"^0.511.0\",\n    \"next\": \"15.3.2\",\n    \"react\": \"^19.0.0\",\n    \"react-dom\": \"^19.0.0\",\n    \"react-syntax-highlighter\": \"^15.6.1\",\n    \"tailwind-merge\": \"^3.3.0\"\n  },\n  \"devDependencies\": {\n    \"@eslint/eslintrc\": \"^3\",\n    \"@tailwindcss/postcss\": \"^4\",\n    \"@types/lodash\": \"^4.17.16\",\n    \"@types/node\": \"^20\",\n    \"@types/react\": \"19.1.8\",\n    \"@types/react-dom\": \"^19\",\n    \"@types/react-syntax-highlighter\": \"^15.5.13\",\n    \"eslint\": \"^9\",\n    \"eslint-config-next\": \"15.3.2\",\n    \"tailwindcss\": \"^4\",\n    \"tw-animate-css\": \"^1.3.0\",\n    \"typescript\": \"^5\"\n  }\n}\n\n\n=== mcp-client/package.json ===\n{\n  \"name\": \"@neondatabase/mcp-client-cli\",\n  \"version\": \"0.1.1\",\n  \"description\": \"MCP client CLI for interacting with a MCP server\",\n  \"license\": \"MIT\",\n  \"author\": \"Neon, Inc. (https://neon.tech/)\",\n  \"homepage\": \"https://github.com/neondatabase/mcp-server-neon/\",\n  \"bugs\": \"https://github.com/neondatabase/mcp-server-neon/issues\",\n  \"type\": \"module\",\n  \"access\": \"public\",\n  \"bin\": {\n    \"mcp-client\": \"./dist/bin.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"start:mcp-server-neon\": \"cd .. && bun run build && cd - && bun ./src/neon-cli-client.ts\",\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc-watch --onSuccess \\\"chmod 755 dist/index.js\\\"\",\n    \"format\": \"prettier --write .\"\n  },\n  \"dependencies\": {\n    \"@anthropic-ai/sdk\": \"^0.32.1\",\n    \"@modelcontextprotocol/sdk\": \"^1.0.3\",\n    \"chalk\": \"^5.3.0\",\n    \"dotenv\": \"16.4.7\",\n    \"zod\": \"^3.24.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.10.2\",\n    \"bun\": \"^1.1.38\",\n    \"prettier\": \"^3.4.1\",\n    \"tsc-watch\": \"^6.2.1\",\n    \"typescript\": \"^5.7.2\"\n  }\n}\n"
+}

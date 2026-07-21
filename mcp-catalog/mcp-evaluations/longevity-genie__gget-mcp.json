@@ -1,0 +1,125 @@
+{
+  "name": "longevity-genie__gget-mcp",
+  "display_name": "gget-mcp",
+  "description": "Bioinformatic MCP server that wraps the most useful functions of the gget library",
+  "author": {
+    "name": "longevity-genie"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "gget-mcp@latest", "stdio"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# gget-mcp\n\n[![Tests](https://github.com/longevity-genie/gget-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/longevity-genie/gget-mcp/actions/workflows/test.yml)\n[![PyPI version](https://badge.fury.io/py/gget-mcp.svg)](https://badge.fury.io/py/gget-mcp)\n[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)\n\nMCP (Model Context Protocol) server for the [gget](https://github.com/pachterlab/gget) bioinformatics library.\n\n![gget-mcp Example](images/screenshot_example.png)\n\nThis server implements the Model Context Protocol (MCP) for gget, providing a standardized interface for accessing powerful bioinformatics tools and databases. MCP enables AI assistants and agents to perform complex genomics queries through structured interfaces.\n\nThe gget bioinformatics toolkit provides efficient querying of genomic databases and includes functions for:\n- Gene and sequence information retrieval\n- BLAST and sequence alignment\n- Protein structure prediction\n- Gene expression analysis\n- Functional enrichment analysis\n- And much more!\n\n## 🚀 Quick Example: What Can You Do?\n\n<details>\n<summary>See how the gget MCP server works in practice with AI assistants</summary>\n\n**👤 User:** \"Analyze the TP53 gene - find its details and protein sequence, then check for cancer mutations\"\n\n**🤖 AI Assistant:** I'll help you analyze TP53 step by step:\n\n*[Uses gget_search]* → Found TP53 (ENSG00000141510) on chromosome 17  \n*[Uses gget_info]* → TP53 is a protein-coding tumor suppressor gene  \n*[Uses gget_seq with translate=True]* → Retrieved 393 amino acid protein sequence  \n*[Uses gget_cosmic]* → Found hotspot mutations R175H, R248Q, R273H in multiple cancers\n\n**👤 User:** \"Now predict the 3D structure of this protein sequence: MSKGEELFTGVVPILVEL...\"\n\n**🤖 AI Assistant:** Let me analyze this sequence:\n\n*[Uses gget_blast]* → Identified as Green Fluorescent Protein (GFP)  \n*[Uses gget_alphafold]* → Predicted classic beta-barrel structure with 90%+ confidence\n\n**👤 User:** \"Perform pathway enrichment for DNA repair genes: TP53, BRCA1, BRCA2, ATM\"\n\n**🤖 AI Assistant:** *[Uses gget_enrichr]* → Top pathways: DNA Damage Response, Homologous Recombination, Cell Cycle Checkpoints, p53 Signaling\n\n**See how powerful this is?** You can now ask natural language questions about genes, sequences, mutations, and pathways - the AI does the complex bioinformatics work for you!\n\n</details>\n\n## About MCP (Model Context Protocol)\n\n<details>\n<summary>Learn more about the Model Context Protocol</summary>\n\nMCP is a protocol that bridges the gap between AI systems and specialized domain tools. It enables:\n\n- **Structured Access**: Direct connection to powerful bioinformatics tools and databases\n- **Natural Language Queries**: Simplified interaction with complex genomics workflows\n- **Type Safety**: Strong typing and validation through FastMCP\n- **AI Integration**: Seamless integration with AI assistants and agents\n\nIf you want to understand more about what the Model Context Protocol is and how to use it more efficiently, you can take the [DeepLearning AI Course](https://www.deeplearning.ai/short-courses/mcp-build-rich-context-ai-apps-with-anthropic/) or search for MCP videos on YouTube.\n\n</details>\n\n## Available Tools\n\n<details>\n<summary>Comprehensive bioinformatics functionality through gget</summary>\n\n### Gene Information & Search\n- **`gget_search`**: Find Ensembl IDs associated with search terms\n- **`gget_info`**: Fetch detailed information for Ensembl IDs\n- **`gget_seq`**: Retrieve nucleotide or amino acid sequences\n- **`gget_ref`**: Get reference genome information from Ensembl\n\n### Sequence Analysis\n- **`gget_blast`**: BLAST nucleotide or amino acid sequences\n- **`gget_blat`**: Find genomic locations of sequences\n- **`gget_muscle`**: Align multiple sequences\n\n### Expression & Functional Analysis\n- **`gget_archs4`**: Get gene expression data from ARCHS4\n- **`gget_enrichr`**: Perform gene set enrichment analysis\n\n### Protein Structure & Function\n- **`gget_pdb`**: Fetch protein structure data from PDB\n- **`gget_alphafold`**: Predict protein structure using AlphaFold\n\n### Cancer & Mutation Analysis\n- **`gget_cosmic`**: Search COSMIC database for cancer mutations\n\n### Single-cell Analysis\n- **`gget_cellxgene`**: Query single-cell RNA-seq data from CellxGene\n\n</details>\n\n## Quick Start\n\n<details>\n<summary>Installing uv (optional - uvx can auto-install)</summary>\n\n```bash\n# Download and install uv\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n\n# Verify installation\nuv --version\nuvx --version\n```\n\nuvx is a very nice tool that can run a python package installing it if needed.\n\n</details>\n\n### Running with uvx\n\nYou can run the gget-mcp server directly using uvx without cloning the repository:\n\n```bash\n# Run the server in HTTP mode (default)\nuvx gget-mcp http\n```\n\n<details>\n<summary>Other uvx modes (STDIO, HTTP, SSE)</summary>\n\n#### STDIO Mode (for MCP clients that require stdio)\n\n```bash\n# Run the server in stdio mode\nuvx gget-mcp stdio\n```\n\n#### HTTP Mode (Web Server)\n```bash\n# Run the server in streamable HTTP mode on default (3002) port\nuvx gget-mcp http\n\n# Run on a specific port\nuvx gget-mcp http --port 8000\n```\n\n#### SSE Mode (Server-Sent Events)\n```bash\n# Run the server in SSE mode\nuvx gget-mcp sse\n```\n\n</details>\n\nIn cases when there are problems with uvx often they can be caused by cleaning uv cache:\n```\nuv cache clean\n```\n\nThe HTTP mode will start a web server that you can access at `http://localhost:3002/mcp` (with documentation at `http://localhost:3002/docs`). The STDIO mode is designed for MCP clients that communicate via standard input/output, while SSE mode uses Server-Sent Events for real-time communication.\n\n**Note:** Currently, we do not have a Swagger/OpenAPI interface, so accessing the server directly in your browser will not show much useful information. To explore the available tools and capabilities, you should either use the MCP Inspector (see below) or connect through an MCP client to see the available tools.\n\n## Configuring your AI Client (Anthropic Claude Desktop, Cursor, Windsurf, etc.)\n\nWe provide preconfigured JSON files for different use cases. Here are the actual configuration examples:\n\n### STDIO Mode Configuration (Recommended)\n\nUse this configuration for most AI clients. Use this mode when you want to save large output files (sequences, structures, alignments) to disk instead of returning them as text.\nCreate or update your MCP configuration file:\n\n```json\n{\n  \"mcpServers\": {\n    \"gget-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"gget-mcp@latest\", \"stdio\"]\n    }\n  }\n}\n```\n\n### HTTP Mode Configuration\n\nFor HTTP mode:\n\n```json\n{\n  \"mcpServers\": {\n    \"gget-mcp\": {\n      \"command\": \"uvx\",\n      \"args\": [\"--from\", \"gget-mcp@latest\", \"server\"]\n    }\n  }\n}\n```\n\n### Configuration Video Tutorial\n\nFor a visual guide on how to configure MCP servers with AI clients, check out our [configuration tutorial video](https://www.youtube.com/watch?v=Xo0sHWGJvE0) for our sister MCP server (biothings-mcp). The configuration principles are exactly the same for the gget MCP server - just use the appropriate JSON configuration files provided above.\n\n### Inspecting gget MCP server\n\n<details>\n<summary>Using MCP Inspector to explore server capabilities</summary>\n\nIf you want to inspect the methods provided by the MCP server, use npx (you may need to install nodejs and npm):\n\nFor STDIO mode with uvx:\n```bash\nnpx @modelcontextprotocol/inspector --config mcp-config.json --server gget-mcp\n```\n\nYou can also run the inspector manually and configure it through the interface:\n```bash\nnpx @modelcontextprotocol/inspector\n```\n\nAfter that you can explore the tools and resources with MCP Inspector at which is usually at 6274 port (note, if you run inspector several times it can change port)\n\n</details>\n\n### Integration with AI Systems\n\nSimply point your AI client (like Cursor, Windsurf, ClaudeDesktop, VS Code with Copilot, or [others](https://github.com/punkpeye/awesome-mcp-clients)) to use the appropriate configuration file from the repository.\n\n## Repository setup\n\n<details>\n<summary>For developers: cloning and running locally</summary>\n\n```bash\n# Clone the repository\ngit clone https://github.com/longevity-genie/gget-mcp.git\ncd gget-mcp\nuv sync\n```\n\n### Running the MCP Server\n\nIf you already cloned the repo you can run the server with uv:\n\n```bash\n# Start the MCP server locally (HTTP mode)\nuv run server\n\n# Or start in STDIO mode  \nuv run stdio\n\n# Or start in SSE mode\nuv run sse\n```\n\n</details>\n\n## Safety Features\n\n- **Input validation**: Comprehensive parameter validation for all gget functions\n- **Error handling**: Robust error handling with informative messages\n- **Rate limiting**: Respectful usage of external APIs and databases\n- **Data validation**: Type checking and data format validation\n\n## Testing & Verification\n\n<details>\n<summary>Developer information: Testing and CI/CD workflows</summary>\n\nThe MCP server is provided with comprehensive tests including both unit tests and integration tests for network-dependent operations.\n\n### Running Tests\n\nRun tests for the MCP server:\n```bash\n# Run all tests (excluding expensive judge tests)\nuv run pytest -vvv -m \"not judge\"\n\n# Run only fast tests (skip slow, integration, and judge tests)\nuv run pytest -vvv -m \"not slow and not integration and not judge\"\n\n# Run only integration tests\nuv run pytest -vvv -m integration\n\n# Run judge tests (expensive LLM tests - requires API keys and may cost money)\nuv run pytest test/test_judge.py -vvv\n\n# Run tests with coverage (excluding judge tests)\nuv run pytest -vvv --cov=src/gget_mcp --cov-report=term-missing -m \"not judge\"\n```\n\n**Note on Judge Tests**: The judge tests (`test_judge.py`) use large language models to evaluate the AI agent's performance with gget tools. These tests:\n- Are automatically excluded from CI/CD to avoid costs\n- Require API keys (GEMINI_API_KEY or similar) \n- May incur charges from LLM API providers\n- Are designed for local development and manual evaluation\n- Provide valuable insights into how well the tools work with AI agents\n\n### GitHub Actions Workflows\n\nThis project includes several GitHub Actions workflows:\n\n- **CI** (`.github/workflows/ci.yml`): Runs on every push/PR with basic linting and fast tests\n- **Tests** (`.github/workflows/test.yml`): Comprehensive testing across multiple OS and Python versions\n  - Fast tests on all platforms\n  - Integration tests (may require network access)\n  - Slow tests (like BLAST operations) - runs only on Ubuntu with Python 3.11\n  - Code coverage reporting\n  - Security checks with bandit and safety\n- **Publish** (`.github/workflows/publish.yml`): Publishes to PyPI when tags are pushed\n\nYou can use MCP inspector with locally built MCP server same way as with uvx.\n\n</details>\n\n*Note: Using the MCP Inspector is optional. Most MCP clients (like Cursor, Windsurf, etc.) will automatically display the available tools from this server once configured. However, the Inspector can be useful for detailed testing and exploration.*\n\n*If you choose to use the Inspector via `npx`, ensure you have Node.js and npm installed. Using [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager) is recommended for managing Node.js versions.*\n\n## Example Questions from Test Suite\n\nHere are validated example questions that you can ask the AI assistant when using this MCP server:\n\n* \"Find information about the human TP53 gene and get its protein sequence.\"\n* \"What are the orthologs of BRCA1 gene across different species?\"\n* \"Perform enrichment analysis for a set of cancer-related genes: TP53, BRCA1, BRCA2, ATM, CHEK2.\"\n* \"Get the 3D structure information for the protein encoded by the EGFR gene.\"\n* \"Find mutations in the COSMIC database for the PIK3CA gene.\"\n* \"Analyze gene expression patterns for insulin (INS) gene across different tissues.\"\n* \"Perform BLAST search with a DNA sequence to identify its origin: ATGGCGCCCGAACAGGGAC.\"\n* \"Find diseases associated with the APOE gene using OpenTargets.\"\n* \"Get reference genome information for mouse (Mus musculus).\"\n* \"Align multiple protein sequences and identify conserved regions.\"\n\nThese questions are taken directly from our automated test suite and are validated to work correctly with the available gget tools.\n\n## Contributing\n\nWe welcome contributions from the community! 🎉 Whether you're a researcher, developer, or enthusiast interested in bioinformatics and genomics research, there are many ways to get involved:\n\n**We especially encourage you to try our MCP server and share your feedback with us!** Your experience using the server, any issues you encounter, and suggestions for improvement are incredibly valuable for making this tool better for the entire research community.\n\n### Ways to Contribute\n\n- **🐛 Bug Reports**: Found an issue? Please open a GitHub issue with detailed information\n- **💡 Feature Requests**: Have ideas for new functionality? We'd love to hear them!\n- **📝 Documentation**: Help improve our documentation, examples, or tutorials\n- **🧪 Testing**: Add test cases, especially for edge cases or new query patterns\n- **🔍 Data Quality**: Help identify and report data inconsistencies or suggest improvements\n- **🚀 Performance**: Optimize queries, improve caching, or enhance server performance\n- **🌐 Integration**: Create examples for new MCP clients or AI systems\n- **🎥 Tutorials & Videos**: Create tutorials, video guides, or educational content showing how to use MCP servers\n- **📖 User Stories**: Share your research workflows and success stories using our MCP servers\n- **🤝 Community Outreach**: Help us evangelize MCP adoption in the bioinformatics community\n\n**Tutorials, videos, and user stories are especially valuable to us!** We're working to push the bioinformatics community toward AI adoption, and real-world examples of how researchers use our MCP servers help demonstrate the practical benefits and encourage wider adoption.\n\n### Getting Started\n\n1. Fork the repository\n2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n3. Make your changes and add tests\n4. Run the test suite (`uv run pytest`)\n5. Commit your changes (`git commit -m 'Add amazing feature'`)\n6. Push to your branch (`git push origin feature/amazing-feature`)\n7. Open a Pull Request\n\n### Development Guidelines\n\n- Follow the existing code style (we use `ruff` for formatting and linting)\n- Add tests for new functionality\n- Update documentation as needed\n- Keep commits focused and write clear commit messages\n\n### Questions or Ideas?\n\nDon't hesitate to open an issue for discussion! We're friendly and always happy to help newcomers get started. Your contributions help advance open science and bioinformatics research for everyone. 🧬✨\n\n## Known Issues\n\n<details>\n<summary>Technical limitations and considerations</summary>\n\n### External Dependencies\nSome gget functions depend on external web services and databases that may occasionally be unavailable or rate-limited. The server implements proper error handling and retries where appropriate.\n\n### Test Coverage\nWhile we provide comprehensive tests including integration tests for network-dependent operations, some test cases may be sensitive to external service availability. Some automated test results may need manual validation.\n\n</details>\n\n## License\n\nThis project is licensed under the MIT License.\n\n## Acknowledgments\n\n- [gget](https://github.com/pachterlab/gget) - The amazing bioinformatics toolkit this server wraps\n- [FastMCP](https://github.com/jlowin/fastmcp) - The MCP server framework used\n- [Model Context Protocol](https://modelcontextprotocol.io/) - The protocol specification\n\n### Other MCP Servers by Longevity Genie\n\nWe also develop other specialized MCP servers for biomedical research:\n\n- **[biothings-mcp](https://github.com/longevity-genie/biothings-mcp)** - MCP server for BioThings.io APIs, providing access to gene annotation (mygene.info), variant annotation (myvariant.info), and chemical compound data (mychem.info)\n- **[opengenes-mcp](https://github.com/longevity-genie/opengenes-mcp)** - MCP server for OpenGenes database, providing access to aging and longevity research data\n- **[synergy-age-mcp](https://github.com/longevity-genie/synergy-age-mcp)** - MCP server for SynergyAge database, providing access to synergistic and antagonistic longevity gene interactions\n\nWe are supported by:\n\n[![HEALES](https://github.com/longevity-genie/biothings-mcp/raw/main/images/heales.jpg)](https://heales.org/)\n\n*HEALES - Healthy Life Extension Society*\n\nand\n\n[![IBIMA](https://github.com/longevity-genie/biothings-mcp/raw/main/images/IBIMA.jpg)](https://ibima.med.uni-rostock.de/)\n\n[IBIMA - Institute for Biostatistics and Informatics in Medicine and Ageing Research](https://ibima.med.uni-rostock.de/)\n",
+  "category": "AI Tools",
+  "quality_score": 41,
+  "archestra_config": {
+    "client_config_permutations": {
+      "gget-mcp": {
+        "command": "uvx",
+        "args": ["--from", "gget-mcp", "stdio"],
+        "env": {}
+      },
+      "gget-mcp-http": {
+        "command": "uvx",
+        "args": ["--from", "gget-mcp", "server"],
+        "env": {}
+      },
+      "gget-mcp-stdio-local": {
+        "command": "uvx",
+        "args": ["--from", "gget-mcp", "stdio", "--output-dir", "./gget_output"],
+        "env": {}
+      },
+      "gget-mcp-sse": {
+        "command": "uvx",
+        "args": ["gget-mcp", "server-sse"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "longevity-genie",
+    "repo": "gget-mcp",
+    "url": "https://github.com/longevity-genie/gget-mcp",
+    "name": "longevity-genie__gget-mcp",
+    "path": null,
+    "stars": 9,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d85060b40638e10b7a928b8346503f6a254a77f4"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:13.047Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "gget",
+      "importance": 10
+    },
+    {
+      "name": "typer",
+      "importance": 8
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "biopython",
+      "importance": 7
+    },
+    {
+      "name": "openmm",
+      "importance": 6
+    },
+    {
+      "name": "py3dmol",
+      "importance": 6
+    },
+    {
+      "name": "simtk",
+      "importance": 6
+    },
+    {
+      "name": "eliot",
+      "importance": 5
+    },
+    {
+      "name": "pycomfort",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"gget-mcp\"\nversion = \"0.2.5\"\ndescription = \"MCP server for gget bioinformatics library\"\nreadme = \"README.md\"\nauthors = [\n    { name = \"antonkulaga\", email = \"antonkulaga@gmail.com\" },\n    { name = \"Newton Winter\", email = \"isoutthere@gmail.com\" }\n]\nrequires-python = \">=3.10\"\ndependencies = [\n    \"eliot>=1.17.5\",\n    \"pycomfort>=0.0.18\",\n    \"fastmcp>=2.7.0\",\n    \"fastapi>=0.115.12\",\n    \"gget>=0.29.1\",\n    \"pandas>=2.0.0\",\n    \"biopython>=1.84\",\n    \"typer>=0.16.0\",\n    \"simtk>=0.1.0\",\n    \"openmm>=8.3.0\",\n    \"py3dmol>=2.5.0\",\n]\n\n[project.scripts]\ngget-mcp = \"gget_mcp.server:cli_app\"\nstdio = \"gget_mcp.server:stdio\"\nserver = \"gget_mcp.server:server\"\nsse = \"gget_mcp.server:sse\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/gget_mcp\"]\n\n[tool.hatch.build]\nexclude = [\n    \"*.log\",\n    \"logs/\",\n    \"images/\",\n    \".venv/\",\n    \".pytest_cache/\",\n    \"test/\",\n    \"*.tmp\",\n    \"temp*\",\n]\n\n[dependency-groups]\ndev = [\n    \"pytest>=8.3.5\",\n    \"pytest-asyncio>=0.26.0\",\n    \"ruff>=0.8.0\",\n    \"jupyter>=1.0.0\",\n    \"just-agents-core>=0.7.4\",\n    \"python-dotenv>=1.0.0\",\n] \n"
+}

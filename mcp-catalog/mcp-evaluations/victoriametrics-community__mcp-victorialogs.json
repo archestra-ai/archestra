@@ -1,0 +1,196 @@
+{
+  "name": "victoriametrics-community__mcp-victorialogs",
+  "display_name": "mcp-victorialogs",
+  "description": "The implementation of Model Context Protocol (MCP) server for VictoriaLogs.",
+  "author": {
+    "name": "VictoriaMetrics-Community"
+  },
+  "server": {
+    "command": "mcp-victorialogs",
+    "args": [],
+    "env": {
+      "VL_INSTANCE_ENTRYPOINT": "${user_config.vl_instance_entrypoint}",
+      "VL_INSTANCE_BEARER_TOKEN": "${user_config.vl_instance_bearer_token}",
+      "MCP_SERVER_MODE": "${user_config.mcp_server_mode}",
+      "MCP_LISTEN_ADDR": "${user_config.mcp_listen_addr}",
+      "MCP_DISABLED_TOOLS": "${user_config.mcp_disabled_tools}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "vl_instance_entrypoint": {
+      "type": "string",
+      "title": "VictoriaLogs Instance URL",
+      "description": "URL to VictoriaLogs instance",
+      "required": true
+    },
+    "vl_instance_bearer_token": {
+      "type": "string",
+      "title": "VictoriaLogs API Authentication Token",
+      "description": "Authentication token for VictoriaLogs API",
+      "sensitive": true,
+      "required": false
+    },
+    "mcp_server_mode": {
+      "type": "string",
+      "title": "Server Operation Mode",
+      "description": "Server operation mode. See Modes for details.",
+      "required": false,
+      "default": "stdio"
+    },
+    "mcp_listen_addr": {
+      "type": "string",
+      "title": "Listen Address for SSE or HTTP Server",
+      "description": "Address for SSE or HTTP server to listen on",
+      "required": false,
+      "default": "localhost:8081"
+    },
+    "mcp_disabled_tools": {
+      "type": "string",
+      "title": "Disabled Tools",
+      "description": "Comma-separated list of tools to disable",
+      "required": false
+    }
+  },
+  "readme": "# VictoriaLogs MCP Server\n\n[![Latest Release](https://img.shields.io/github/v/release/VictoriaMetrics-Community/mcp-victorialogs?sort=semver&label=&filter=!*-victorialogs&logo=github&labelColor=gray&color=gray&link=https%3A%2F%2Fgithub.com%2FVictoriaMetrics-Community%2Fmcp-victorialogs%2Freleases%2Flatest)](https://github.com/VictoriaMetrics-Community/mcp-victorialogs/releases)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/VictoriaMetrics-Community/mcp-victorialogs)](https://archestra.ai/mcp-catalog/victoriametrics-community__mcp-victorialogs)\n[![smithery badge](https://smithery.ai/badge/@VictoriaMetrics-Community/mcp-victorialogs)](https://smithery.ai/server/@VictoriaMetrics-Community/mcp-victorialogs)\n![License](https://img.shields.io/github/license/VictoriaMetrics-Community/mcp-victorialogs?labelColor=green&label=&link=https%3A%2F%2Fgithub.com%2FVictoriaMetrics-Community%2Fmcp-victorialogs%2Fblob%2Fmain%2FLICENSE)\n![Slack](https://img.shields.io/badge/Join-4A154B?logo=slack&link=https%3A%2F%2Fslack.victoriametrics.com)\n![X](https://img.shields.io/twitter/follow/VictoriaMetrics?style=flat&label=Follow&color=black&logo=x&labelColor=black&link=https%3A%2F%2Fx.com%2FVictoriaMetrics)\n![Reddit](https://img.shields.io/reddit/subreddit-subscribers/VictoriaMetrics?style=flat&label=Join&labelColor=red&logoColor=white&logo=reddit&link=https%3A%2F%2Fwww.reddit.com%2Fr%2FVictoriaMetrics)\n\nThe implementation of [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/).\n\nThis provides access to your VictoriaLogs instance and seamless integration with [VictoriaLogs APIs](https://docs.victoriametrics.com/victorialogs/querying/#http-api) and [documentation](https://docs.victoriametrics.com/victorialogs/).\nIt can give you a comprehensive interface for logs, observability, and debugging tasks related to your VictoriaLogs instances, enable advanced automation and interaction capabilities for engineers and tools.\n\n## Features\n\nThis MCP server allows you to use almost all read-only APIs of VictoriaLogs, i.e. all functions available in [Web UI](https://docs.victoriametrics.com/victorialogs/querying/#web-ui):\n\n- Querying logs and exploring logs data\n- Showing parameters of your VictoriaLogs instance\n- Listing available streams, fields, field values\n- Query statistics for the logs as metrics\n \nIn addition, the MCP server contains embedded up-to-date documentation and is able to search it without online access.\n\nMore details about the exact available tools and prompts can be found in the [Usage](#usage) section.\n\nYou can combine functionality of tools, docs search in your prompts and invent great usage scenarios for your VictoriaLogs instance.\nAnd please note the fact that the quality of the MCP Server and its responses depends very much on the capabilities of your client and the quality of the model you are using.\n\nYou can also combine the MCP server with other observability or doc search related MCP Servers and get even more powerful results.\n\n## Try without installation\n\nThere is a publicly available instance of the VictoriaMetrics MCP Server that you can use to test the features without installing it: \n\n```\nhttps://play-vmlogs-mcp.victoriametrics.com/mcp\n```\n\nIt's available in [Streamable HTTP Mode](#modes) mode and configured to work with [Public VictoriaLogs Playground](https://play-vmlogs.victoriametrics.com).\n\nHere is example of configuration for [Claude Desktop](https://claude.ai/download):\n\n![image](https://github.com/user-attachments/assets/938d9eb9-f188-42f1-8377-a283be454ac7)\n\n## Requirements\n\n- [VictoriaLogs](https://docs.victoriametrics.com/victorialogs/) instance: ([single-node](https://docs.victoriametrics.com/victorialogs/) or [cluster](https://docs.victoriametrics.com/victorialogs/cluster/))\n- Go 1.24 or higher (if you want to build from source)\n\n## Installation\n\n### Go\n\n```bash\ngo install github.com/VictoriaMetrics-Community/mcp-victorialogs/cmd/mcp-victorialogs@latest\n```\n\n### Binaries\n\nJust download the latest release from [Releases](https://github.com/VictoriaMetrics-Community/mcp-victorialogs/releases) page and put it to your PATH.\n\nExample for Linux x86_64 (note that other architectures and platforms are also available):\n\n```bash\nlatest=$(curl -s https://api.github.com/repos/VictoriaMetrics-Community/mcp-victorialogs/releases/latest | grep 'tag_name' | cut -d\\\" -f4)\nwget https://github.com/VictoriaMetrics-Community/mcp-victorialogs/releases/download/$latest/mcp-victorialogs_Linux_x86_64.tar.gz\ntar axvf mcp-victorialogs_Linux_x86_64.tar.gz\n```\n\n### Docker\n\nYou can run VictoriaLogs MCP Server using Docker.\n\nThis is the easiest way to get started without needing to install Go or build from source.\n\n```bash\ndocker run -d --name mcp-victorialogs \\\n  -e MCP_SERVER_MODE=sse \\\n  -e VL_INSTANCE_ENTRYPOINT=https://play-vmlogs.victoriametrics.com \\\n  ghcr.io/victoriametrics-community/mcp-victorialogs\n```\n\nYou should replace environment variables with your own parameters.\n\nNote that the `MCP_SERVER_MODE=sse` flag is used to enable Server-Sent Events mode, which used by MCP clients to connect.\nAlternatively, you can use `MCP_SERVER_MODE=http` to enable Streamable HTTP mode. More details about server modes can be found in the [Configuration](#configuration) section.\n\nSee available docker images in [github registry](https://github.com/orgs/VictoriaMetrics-Community/packages/container/package/mcp-victorialogs).\n\nAlso see [Using Docker instead of binary](#using-docker-instead-of-binary) section for more details about using Docker with MCP server with clients in stdio mode.\n\n\n### Source Code\n\nFor building binary from source code you can use the following approach:\n\n- Clone repo:\n\n  ```bash\n  git clone https://github.com/VictoriaMetrics-Community/mcp-victorialogs.git\n  cd mcp-victorialogs\n  ```\n- Build binary from cloned source code:\n\n  ```bash\n  make build\n  # after that you can find binary mcp-victorialogs and copy this file to your PATH or run inplace\n  ```\n- Build image from cloned source code:\n\n  ```bash\n  docker build -t mcp-victorialogs .\n  # after that you can use docker image mcp-victorialogs for running or pushing\n  ```\n\n### Smithery\n\nTo install VictoriaLogs MCP Server for your client automatically via [Smithery](https://smithery.ai/server/@VictoriaMetrics-Community/mcp-victorialogs), yo can use the following commands:\n\n```bash\n# Get the list of supported MCP clients\nnpx -y @smithery/cli list clients\n#Available clients:\n#  claude\n#  cline\n#  windsurf\n#  roocode\n#  witsy\n#  enconvo\n#  cursor\n#  vscode\n#  vscode-insiders\n#  boltai\n#  amazon-bedrock\n\n# Install VictoriaLogs MCP server for your client\nnpx -y @smithery/cli install @VictoriaMetrics-Community/mcp-victorialogs --client <YOUR-CLIENT-NAME>\n# and follow the instructions\n```\n\n## Configuration\n\nMCP Server for VictoriaLogs is configured via environment variables:\n\n| Variable                   | Description                                             | Required | Default          | Allowed values         |\n|----------------------------|---------------------------------------------------------|----------|------------------|------------------------|\n| `VL_INSTANCE_ENTRYPOINT`   | URL to VictoriaLogs instance                            | Yes      | -                | -                      |\n| `VL_INSTANCE_BEARER_TOKEN` | Authentication token for VictoriaLogs API               | No       | -                | -                      |\n| `VL_INSTANCE_HEADERS`      | Custom HTTP headers to send with requests (comma-separated key=value pairs) | No       | -                | -                      |\n| `MCP_SERVER_MODE`          | Server operation mode. See [Modes](#modes) for details. | No       | `stdio`          | `stdio`, `sse`, `http` |\n| `MCP_LISTEN_ADDR`          | Address for SSE or HTTP server to listen on             | No       | `localhost:8081` | -                      |\n| `MCP_DISABLED_TOOLS`       | Comma-separated list of tools to disable                | No       | -                | -                      |\n| `MCP_HEARTBEAT_INTERVAL`   | Defines the heartbeat interval for the streamable-http protocol. <br /> It means the MCP server will send a heartbeat to the client through the GET connection, <br /> to keep the connection alive from being closed by the network infrastructure (e.g. gateways) | No | `30s`  | -   |\n\n### Modes\n\nMCP Server supports the following modes of operation (transports):\n\n- `stdio` - Standard input/output mode, where the server reads commands from standard input and writes responses to standard output. This is the default mode and is suitable for local servers.\n- `sse` - Server-Sent Events. Server will expose the `/sse` and `/message` endpoints for SSE connections.\n- `http` - Streamable HTTP. Server will expose the `/mcp` endpoint for HTTP connections.\n\nMore info about traqnsports you can find in MCP docs:\n\n- [Core concepts -> Transports](https://modelcontextprotocol.io/docs/concepts/transports)\n- [Specifications -> Transports](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports)\n\n### Сonfiguration examples\n\n```bash\n# For a public playground\nexport VL_INSTANCE_ENTRYPOINT=\"https://play-vmlogs.victoriametrics.com\"\n\n# Custom headers for authentication (e.g., behind a reverse proxy)\n# Expected syntax is key=value separated by commas\nexport VL_INSTANCE_HEADERS=\"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n\n# Server mode\nexport MCP_SERVER_MODE=\"sse\"\nexport MCP_SSE_ADDR=\"0.0.0.0:8081\"\nexport MCP_DISABLED_TOOLS=\"hits,facets\"\n```\n\n## Endpoints\n\nIn SSE and HTTP modes the MCP server provides the following endpoints:\n\n| Endpoint            | Description                                                                                      |\n|---------------------|--------------------------------------------------------------------------------------------------|\n| `/sse` + `/message` | Endpoints for messages in SSE mode (for MCP clients that support SSE)                            |\n| `/mcp`              | HTTP endpoint for streaming messages in HTTP mode (for MCP clients that support Streamable HTTP) |\n| `/metrics`          | Metrics in Prometheus format for monitoring the MCP server                                       |\n| `/health/liveness`  | Liveness check endpoint to ensure the server is running                                          |\n| `/health/readiness` | Readiness check endpoint to ensure the server is ready to accept requests                        |\n\n## Setup in clients\n\n### Cursor\n\nGo to: `Settings` -> `Cursor Settings` -> `MCP` -> `Add new global MCP server` and paste the following configuration into your Cursor `~/.cursor/mcp.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"victorialogs\": {\n      \"command\": \"/path/to/mcp-victorialogs\",\n      \"env\": {\n        \"VL_INSTANCE_ENTRYPOINT\": \"<YOUR_VL_INSTANCE>\",\n        \"VL_INSTANCE_BEARER_TOKEN\": \"<YOUR_VL_BEARER_TOKEN>\",\n        \"VL_INSTANCE_HEADERS\": \"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n      }\n    }\n  }\n}\n```\n\nSee [Cursor MCP docs](https://docs.cursor.com/context/model-context-protocol) for more info.\n\n### Claude Desktop\n\nAdd this to your Claude Desktop `claude_desktop_config.json` file (you can find it if open `Settings` -> `Developer` -> `Edit config`):\n\n```json\n{\n  \"mcpServers\": {\n    \"victorialogs\": {\n      \"command\": \"/path/to/mcp-victorialogs\",\n      \"env\": {\n        \"VL_INSTANCE_ENTRYPOINT\": \"<YOUR_VL_INSTANCE>\",\n        \"VL_INSTANCE_BEARER_TOKEN\": \"<YOUR_VL_BEARER_TOKEN>\",\n        \"VL_INSTANCE_HEADERS\": \"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n      }\n    }\n  }\n}\n```\n\nSee [Claude Desktop MCP docs](https://modelcontextprotocol.io/quickstart/user) for more info.\n\n### Claude Code\n\nRun the command:\n\n```sh\nclaude mcp add victorialogs -- /path/to/mcp-victorialogs \\\n  -e VL_INSTANCE_ENTRYPOINT=<YOUR_VL_INSTANCE> \\\n  -e VL_INSTANCE_BEARER_TOKEN=<YOUR_VL_BEARER_TOKEN> \\\n  -e VL_INSTANCE_HEADERS=\"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n```\n\nSee [Claude Code MCP docs](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/tutorials#set-up-model-context-protocol-mcp) for more info.\n\n### Visual Studio Code\n\nAdd this to your VS Code MCP config file:\n\n```json\n{\n  \"servers\": {\n    \"victorialogs\": {\n      \"type\": \"stdio\",\n      \"command\": \"/path/to/mcp-victorialogs\",\n      \"env\": {\n        \"VL_INSTANCE_ENTRYPOINT\": \"<YOUR_VL_INSTANCE>\",\n        \"VL_INSTANCE_BEARER_TOKEN\": \"<YOUR_VL_BEARER_TOKEN>\",\n        \"VL_INSTANCE_HEADERS\": \"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n      }\n    }\n  }\n}\n```\n\nSee [VS Code MCP docs](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) for more info.\n\n### Zed\n\nAdd the following to your Zed config file:\n\n```json\n  \"context_servers\": {\n    \"victorialogs\": {\n      \"command\": {\n        \"path\": \"/path/to/mcp-victorialogs\",\n        \"args\": [],\n        \"env\": {\n                  \"VL_INSTANCE_ENTRYPOINT\": \"<YOUR_VL_INSTANCE>\",\n        \"VL_INSTANCE_BEARER_TOKEN\": \"<YOUR_VL_BEARER_TOKEN>\",\n        \"VL_INSTANCE_HEADERS\": \"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n      }\n      },\n      \"settings\": {}\n    }\n  }\n}\n```\n\nSee [Zed MCP docs](https://zed.dev/docs/ai/mcp) for more info.\n\n### JetBrains IDEs\n\n- Open `Settings` -> `Tools` -> `AI Assistant` -> `Model Context Protocol (MCP)`.\n- Click `Add (+)`\n- Select `As JSON`\n- Put the following to the input field:\n\n```json\n{\n  \"mcpServers\": {\n    \"victorialogs\": {\n      \"command\": \"/path/to/mcp-victorialogs\",\n      \"env\": {\n        \"VL_INSTANCE_ENTRYPOINT\": \"<YOUR_VL_INSTANCE>\",\n        \"VL_INSTANCE_BEARER_TOKEN\": \"<YOUR_VL_BEARER_TOKEN>\",\n        \"VL_INSTANCE_HEADERS\": \"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n      }\n    }\n  }\n}\n```\n\n### Windsurf\n\nAdd the following to your Windsurf MCP config file.\n\n```json\n{\n  \"mcpServers\": {\n    \"victorialogs\": {\n      \"command\": \"/path/to/mcp-victorialogs\",\n      \"env\": {\n        \"VL_INSTANCE_ENTRYPOINT\": \"<YOUR_VL_INSTANCE>\",\n        \"VL_INSTANCE_BEARER_TOKEN\": \"<YOUR_VL_BEARER_TOKEN>\",\n        \"VL_INSTANCE_HEADERS\": \"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n      }\n    }\n  }\n}\n```\n\nSee [Windsurf MCP docs](https://docs.windsurf.com/windsurf/mcp) for more info.\n\n### Using Docker instead of binary\n\nYou can run VictoriaLogs MCP Server using Docker instead of local binary.\n\nYou should replace run command in configuration examples above in the following way:\n\n```\n{\n  \"mcpServers\": {\n    \"victoriametrics\": {\n      \"command\": \"docker\",\n        \"args\": [\n          \"run\",\n          \"-i\", \"--rm\",\n          \"-e\", \"VL_INSTANCE_ENTRYPOINT\",\n          \"-e\", \"VL_INSTANCE_BEARER_TOKEN\",\n          \"-e\", \"VL_INSTANCE_HEADERS\",\n          \"ghcr.io/victoriametrics-community/mcp-victorialogs\",\n        ],\n      \"env\": {\n        \"VL_INSTANCE_ENTRYPOINT\": \"<YOUR_VL_INSTANCE>\",\n        \"VL_INSTANCE_BEARER_TOKEN\": \"<YOUR_VL_BEARER_TOKEN>\",\n        \"VL_INSTANCE_HEADERS\": \"<HEADER>=<HEADER_VALUE>,<HEADER>=<HEADER_VALUE>\"\n      }\n    }\n  }\n}\n```\n\n## Usage\n\nAfter [installing](#installation) and [configuring](#setup-in-clients) the MCP server, you can start using it with your favorite MCP client.\n\nYou can start dialog with AI assistant from the phrase:\n\n```\nUse MCP VictoriaLogs in the following answers\n```\n\nBut it's not required, you can just start asking questions and the assistant will automatically use the tools and documentation to provide you with the best answers.\n\n### Toolset\n\nMCP VictoriaLogs provides numerous tools for interacting with your VictoriaLogs instance.\n\nHere's a list of available tools:\n\n| Tool                 | Description                                           |\n|----------------------|-------------------------------------------------------|\n| `documentation`      | Search in embedded VictoriaLogs documentation         |\n| `facets`             | Most frequent values per each log field               |\n| `field_names`        | List of field names for the query                     |\n| `field_values`       | List of field values for the query                    |\n| `flags`              | View non-default flags of the VictoriaLogs instance   |\n| `hits`               | The number of matching log entries grouped by buckets |\n| `query`              | Execute LogsQL queries                                |\n| `stats_query`        | Querying log stats for the given time                 |\n| `stats_query_range`  | Querying log stats on the given time range            |\n| `stream_field_names` | List of stream fields for the query                   |\n| `stream_field_values` | List of stream field values for the query             |\n| `stream_ids`         | List of stream IDs for the query                      |\n| `streams`            | List of streams for the query                         |\n\n### Prompts\n\nThe server includes pre-defined prompts for common tasks.\n\nThese are just examples at the moment, the prompt library will be added to in the future:\n\n| Prompt | Description                                           |\n|--------|-------------------------------------------------------|\n| `documentation` | Search VictoriaLogs documentation for specific topics |\n\n## Roadmap\n\n- [ ] Support \"Explain query\" tool\n- [ ] Support optional integration with [VictoriaMetrics Cloud](https://victoriametrics.com/products/cloud/)  \n- [ ] Add some extra knowledge to server in addition to current documentation tool:\n  - [x] [VictoriaMetrics blog](https://victoriametrics.com/blog/) posts\n  - [ ] Github issues\n  - [ ] Public slack chat history\n  - [ ] CRD schemas\n- [ ] Implement multitenant version of MCP (that will support several deployments)\n- [ ] Add flags/configs validation tool\n- [x] Enabling/disabling tools via configuration\n\n## Disclaimer\n\nAI services and agents along with MCP servers like this cannot guarantee the accuracy, completeness and reliability of results.\nYou should double check the results obtained with AI.\n\nThe quality of the MCP Server and its responses depends very much on the capabilities of your client and the quality of the model you are using.\n\n## Contributing\n\nContributions to the MCP VictoriaLogs project are welcome! \n\nPlease feel free to submit issues, feature requests, or pull requests.\n",
+  "category": "Monitoring",
+  "quality_score": 74,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ghcr.io-victoriametrics-community-mcp-victorialogs-docker-sse": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-d",
+          "--name",
+          "mcp-victorialogs",
+          "-e",
+          "MCP_SERVER_MODE=sse",
+          "-e",
+          "VL_INSTANCE_ENTRYPOINT=https://play-vmlogs.victoriametrics.com",
+          "ghcr.io/victoriametrics-community/mcp-victorialogs"
+        ],
+        "env": {
+          "MCP_SERVER_MODE": "sse",
+          "VL_INSTANCE_ENTRYPOINT": "https://play-vmlogs.victoriametrics.com"
+        },
+        "docker_image": "ghcr.io/victoriametrics-community/mcp-victorialogs"
+      },
+      "ghcr.io-victoriametrics-community-mcp-victorialogs-docker-http": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-d",
+          "--name",
+          "mcp-victorialogs",
+          "-e",
+          "MCP_SERVER_MODE=http",
+          "-e",
+          "VL_INSTANCE_ENTRYPOINT=YOUR_VL_INSTANCE_URL",
+          "ghcr.io/victoriametrics-community/mcp-victorialogs"
+        ],
+        "env": {
+          "MCP_SERVER_MODE": "http",
+          "VL_INSTANCE_ENTRYPOINT": "YOUR_VL_INSTANCE_URL"
+        },
+        "docker_image": "ghcr.io/victoriametrics-community/mcp-victorialogs"
+      },
+      "ghcr.io-victoriametrics-community-mcp-victorialogs-docker-stdio": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-d",
+          "--name",
+          "mcp-victorialogs",
+          "-e",
+          "VL_INSTANCE_ENTRYPOINT=YOUR_VL_INSTANCE_URL",
+          "ghcr.io/victoriametrics-community/mcp-victorialogs"
+        ],
+        "env": {
+          "VL_INSTANCE_ENTRYPOINT": "YOUR_VL_INSTANCE_URL"
+        },
+        "docker_image": "ghcr.io/victoriametrics-community/mcp-victorialogs"
+      },
+      "mcp-victorialogs-stdio": {
+        "command": "mcp-victorialogs",
+        "args": [],
+        "env": {
+          "VL_INSTANCE_ENTRYPOINT": "YOUR_VL_INSTANCE_URL"
+        }
+      },
+      "mcp-victorialogs-sse": {
+        "command": "mcp-victorialogs",
+        "args": [],
+        "env": {
+          "MCP_SERVER_MODE": "sse",
+          "VL_INSTANCE_ENTRYPOINT": "YOUR_VL_INSTANCE_URL",
+          "MCP_LISTEN_ADDR": "localhost:8081"
+        }
+      },
+      "mcp-victorialogs-http": {
+        "command": "mcp-victorialogs",
+        "args": [],
+        "env": {
+          "MCP_SERVER_MODE": "http",
+          "VL_INSTANCE_ENTRYPOINT": "YOUR_VL_INSTANCE_URL",
+          "MCP_LISTEN_ADDR": "localhost:8081"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "VictoriaMetrics-Community",
+    "repo": "mcp-victorialogs",
+    "url": "https://github.com/VictoriaMetrics-Community/mcp-victorialogs",
+    "name": "victoriametrics-community__mcp-victorialogs",
+    "path": null,
+    "stars": 20,
+    "contributors": 5,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e890e761fefb864182e806f9f6426319d05c9b93"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:32.664Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "VictoriaMetrics/metrics",
+      "importance": 7
+    },
+    {
+      "name": "blevesearch/bleve/v2",
+      "importance": 9
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "tmc/langchaingo",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/VictoriaMetrics-Community/mcp-victorialogs\n\ngo 1.24.4\n\nrequire (\n\tgithub.com/VictoriaMetrics/metrics v1.39.1\n\tgithub.com/blevesearch/bleve/v2 v2.5.3\n\tgithub.com/mark3labs/mcp-go v0.38.0\n\tgithub.com/tmc/langchaingo v0.1.13\n)\n\nrequire (\n\tgithub.com/RoaringBitmap/roaring/v2 v2.8.0 // indirect\n\tgithub.com/bahlo/generic-list-go v0.2.0 // indirect\n\tgithub.com/bits-and-blooms/bitset v1.24.0 // indirect\n\tgithub.com/blevesearch/bleve_index_api v1.2.8 // indirect\n\tgithub.com/blevesearch/geo v0.2.4 // indirect\n\tgithub.com/blevesearch/go-faiss v1.0.25 // indirect\n\tgithub.com/blevesearch/go-porterstemmer v1.0.3 // indirect\n\tgithub.com/blevesearch/gtreap v0.1.1 // indirect\n\tgithub.com/blevesearch/mmap-go v1.0.4 // indirect\n\tgithub.com/blevesearch/scorch_segment_api/v2 v2.3.10 // indirect\n\tgithub.com/blevesearch/segment v0.9.1 // indirect\n\tgithub.com/blevesearch/snowballstem v0.9.0 // indirect\n\tgithub.com/blevesearch/upsidedown_store_api v1.0.2 // indirect\n\tgithub.com/blevesearch/vellum v1.1.0 // indirect\n\tgithub.com/blevesearch/zapx/v11 v11.4.2 // indirect\n\tgithub.com/blevesearch/zapx/v12 v12.4.2 // indirect\n\tgithub.com/blevesearch/zapx/v13 v13.4.2 // indirect\n\tgithub.com/blevesearch/zapx/v14 v14.4.2 // indirect\n\tgithub.com/blevesearch/zapx/v15 v15.4.2 // indirect\n\tgithub.com/blevesearch/zapx/v16 v16.2.4 // indirect\n\tgithub.com/buger/jsonparser v1.1.1 // indirect\n\tgithub.com/dlclark/regexp2 v1.11.5 // indirect\n\tgithub.com/golang/protobuf v1.5.4 // indirect\n\tgithub.com/golang/snappy v1.0.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/invopop/jsonschema v0.13.0 // indirect\n\tgithub.com/json-iterator/go v1.1.12 // indirect\n\tgithub.com/mailru/easyjson v0.9.0 // indirect\n\tgithub.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect\n\tgithub.com/modern-go/reflect2 v1.0.2 // indirect\n\tgithub.com/mschoch/smat v0.2.0 // indirect\n\tgithub.com/pkoukk/tiktoken-go v0.1.7 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/valyala/fastrand v1.1.0 // indirect\n\tgithub.com/valyala/histogram v1.2.0 // indirect\n\tgithub.com/wk8/go-ordered-map/v2 v2.1.8 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgitlab.com/golang-commonmark/html v0.0.0-20191124015941-a22733972181 // indirect\n\tgitlab.com/golang-commonmark/linkify v0.0.0-20200225224916-64bca66f6ad3 // indirect\n\tgitlab.com/golang-commonmark/markdown v0.0.0-20211110145824-bf3e522c626a // indirect\n\tgitlab.com/golang-commonmark/mdurl v0.0.0-20191124015652-932350d1cb84 // indirect\n\tgitlab.com/golang-commonmark/puny v0.0.0-20191124015043-9f83538fa04f // indirect\n\tgo.etcd.io/bbolt v1.4.2 // indirect\n\tgolang.org/x/sys v0.34.0 // indirect\n\tgolang.org/x/text v0.27.0 // indirect\n\tgoogle.golang.org/protobuf v1.36.6 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

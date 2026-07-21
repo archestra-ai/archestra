@@ -1,0 +1,155 @@
+{
+  "name": "ttommyth__interactive-mcp",
+  "display_name": "interactive-mcp",
+  "description": "Vibe coding should have human in the loop! interactive-mcp: Local, cross-platform MCP server for interact with your AI Agent",
+  "author": {
+    "name": "ttommyth"
+  },
+  "server": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "interactive-mcp",
+      "-t",
+      "${user_config.timeout}",
+      "--disable-tools",
+      "${user_config.disable_tools}"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "timeout": {
+      "type": "number",
+      "title": "User Input Timeout (seconds)",
+      "description": "Sets the default timeout (in seconds) for user input prompts.",
+      "default": 30,
+      "required": false
+    },
+    "disable_tools": {
+      "type": "string",
+      "title": "Disable Tools",
+      "description": "Comma-separated list of tools or groups to disable (e.g., 'request_user_input,intensive_chat').",
+      "default": "",
+      "required": false
+    }
+  },
+  "readme": "# interactive-mcp\n\n[![npm version](https://img.shields.io/npm/v/interactive-mcp)](https://www.npmjs.com/package/interactive-mcp) [![npm downloads](https://img.shields.io/npm/dm/interactive-mcp)](https://www.npmjs.com/package/interactive-mcp) [![smithery badge](https://smithery.ai/badge/@ttommyth/interactive-mcp)](https://smithery.ai/server/@ttommyth/interactive-mcp) [![GitHub license](https://img.shields.io/github/license/ttommyth/interactive-mcp)](https://github.com/ttommyth/interactive-mcp/blob/main/LICENSE) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier) [![Platforms](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](https://github.com/ttommyth/interactive-mcp) [![GitHub last commit](https://img.shields.io/github/last-commit/ttommyth/interactive-mcp)](https://github.com/ttommyth/interactive-mcp/commits/main)\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=interactive&config=eyJjb21tYW5kIjoibnB4IC15IGludGVyYWN0aXZlLW1jcCJ9)\n\n![Screenshot 2025-05-13 213745](https://github.com/user-attachments/assets/40208534-5910-4eb2-bfbc-58f7d93aec95)\n\nA MCP Server implemented in Node.js/TypeScript, facilitating interactive communication between LLMs and users. **Note:** This server is designed to run locally alongside the MCP client (e.g., Claude Desktop, VS Code), as it needs direct access to the user's operating system to display notifications and command-line prompts.\n\n_(Note: This project is in its early stages.)_\n\n**Want a quick overview?** Check out the introductory blog post: [Stop Your AI Assistant From Guessing — Introducing interactive-mcp](https://medium.com/@ttommyth/stop-your-ai-assistant-from-guessing-introducing-interactive-mcp-b42ac6d9b0e2)\n\n[Demo Video](https://youtu.be/ebwDZdfgSHo)\n\n<div align=\"center\">\n<a href=\"https://glama.ai/mcp/servers/@ttommyth/interactive-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@ttommyth/interactive-mcp/badge\" alt=\"interactive-mcp MCP server\" />\n</a>\n</div>\n\n## Tools\n\nThis server exposes the following tools via the Model Context Protocol (MCP):\n\n- `request_user_input`: Asks the user a question and returns their answer. Can display predefined options.\n- `message_complete_notification`: Sends a simple OS notification.\n- `start_intensive_chat`: Initiates a persistent command-line chat session.\n- `ask_intensive_chat`: Asks a question within an active intensive chat session.\n- `stop_intensive_chat`: Closes an active intensive chat session.\n\n## Demo\n\nHere are demonstrations of the interactive features:\n\n|                      Normal Question                       |                       Completion Notification                       |\n| :--------------------------------------------------------: | :-----------------------------------------------------------------: |\n| ![Normal Question Demo](./docs/assets/normal-question.gif) | ![Completion Notification Demo](./docs/assets/end-notification.gif) |\n\n|                         Intensive Chat Start                         |                        Intensive Chat End                        |\n| :------------------------------------------------------------------: | :--------------------------------------------------------------: |\n| ![Start Intensive Chat Demo](./docs/assets/start-intensive-chat.gif) | ![End Intensive Chat Demo](./docs/assets/end-intensive-chat.gif) |\n\n## Usage Scenarios\n\nThis server is ideal for scenarios where an LLM needs to interact directly with the user on their local machine, such as:\n\n- Interactive setup or configuration processes.\n- Gathering feedback during code generation or modification.\n- Clarifying instructions or confirming actions in pair programming.\n- Any workflow requiring user input or confirmation during LLM operation.\n\n## Client Configuration\n\nThis section explains how to configure MCP clients to use the `interactive-mcp` server.\n\nBy default, user prompts will time out after 30 seconds. You can customize server options like timeout or disabled tools by adding command-line flags directly to the `args` array when configuring your client.\n\nPlease make sure you have the `npx` command available.\n\n### Usage with Claude Desktop / Cursor\n\nAdd the following minimal configuration to your `claude_desktop_config.json` (Claude Desktop) or `mcp.json` (Cursor):\n\n```json\n{\n  \"mcpServers\": {\n    \"interactive\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"interactive-mcp\"]\n    }\n  }\n}\n```\n\n**With specific version**\n\n```json\n{\n  \"mcpServers\": {\n    \"interactive\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"interactive-mcp@1.9.0\"]\n    }\n  }\n}\n```\n\n**Example with Custom Timeout (30s):**\n\n```json\n{\n  \"mcpServers\": {\n    \"interactive\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"interactive-mcp\", \"-t\", \"30\"]\n    }\n  }\n}\n```\n\n### Usage with VS Code\n\nAdd the following minimal configuration to your User Settings (JSON) file or `.vscode/mcp.json`:\n\n```json\n{\n  \"mcp\": {\n    \"servers\": {\n      \"interactive-mcp\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"interactive-mcp\"]\n      }\n    }\n  }\n}\n```\n\n#### macOS Recommendations\n\nFor a smoother experience on macOS using the default `Terminal.app`, consider this profile setting:\n\n- **(Shell Tab):** Under **\"When the shell exits\"** (**Terminal > Settings > Profiles > _[Your Profile]_ > Shell**), select **\"Close if the shell exited cleanly\"** or **\"Close the window\"**. This helps manage windows when the MCP server starts and stops.\n\n## Development Setup\n\nThis section is primarily for developers looking to modify or contribute to the server. If you just want to _use_ the server with an MCP client, see the \"Client Configuration\" section above.\n\n### Prerequisites\n\n- **Node.js:** Check `package.json` for version compatibility.\n- **pnpm:** Used for package management. Install via `npm install -g pnpm` after installing Node.js.\n\n### Installation (Developers)\n\n1. Clone the repository:\n\n   ```bash\n   git clone https://github.com/ttommyth/interactive-mcp.git\n   cd interactive-mcp\n   ```\n\n2. Install dependencies:\n\n   ```bash\n   pnpm install\n   ```\n\n### Running the Application (Developers)\n\n```bash\npnpm start\n```\n\n#### Command-Line Options\n\nThe `interactive-mcp` server accepts the following command-line options. These should typically be configured in your MCP client's JSON settings by adding them directly to the `args` array (see \"Client Configuration\" examples).\n\n| Option            | Alias | Description                                                                                                                                                                                           |\n| ----------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |\n| `--timeout`       | `-t`  | Sets the default timeout (in seconds) for user input prompts. Defaults to 30 seconds.                                                                                                                 |\n| `--disable-tools` | `-d`  | Disables specific tools or groups (comma-separated list). Prevents the server from advertising or registering them. Options: `request_user_input`, `message_complete_notification`, `intensive_chat`. |\n\n**Example:** Setting multiple options in the client config `args` array:\n\n```jsonc\n// Example combining options in client config's \"args\":\n\"args\": [\n  \"-y\", \"interactive-mcp\",\n  \"-t\", \"30\", // Set timeout to 30 seconds\n  \"--disable-tools\", \"message_complete_notification,intensive_chat\" // Disable notifications and intensive chat\n]\n```\n\n## Development Commands\n\n- **Build:** `pnpm build`\n- **Lint:** `pnpm lint`\n- **Format:** `pnpm format`\n\n## Guiding Principles for Interaction\n\nWhen interacting with this MCP server (e.g., as an LLM client), please adhere to the following principles to ensure clarity and reduce unexpected changes:\n\n- **Prioritize Interaction:** Utilize the provided MCP tools (`request_user_input`, `start_intensive_chat`, etc.) frequently to engage with the user.\n- **Seek Clarification:** If requirements, instructions, or context are unclear, **always** ask clarifying questions before proceeding. Do not make assumptions.\n- **Confirm Actions:** Before performing significant actions (like modifying files, running complex commands, or making architectural decisions), confirm the plan with the user.\n- **Provide Options:** Whenever possible, present the user with predefined options through the MCP tools to facilitate quick decisions.\n\nYou can provide these instructions to an LLM client like this:\n\n```markdown\n# Interaction\n\n- Please use the interactive MCP tools\n- Please provide options to interactive MCP if possible\n\n# Reduce Unexpected Changes\n\n- Do not make assumption.\n- Ask more questions before executing, until you think the requirement is clear enough.\n```\n\n## Contributing\n\nContributions are welcome! Please follow standard development practices. (Further details can be added later).\n\n## License\n\nMIT (See `LICENSE` file for details - if applicable, or specify license directly).\n",
+  "category": "Development",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "interactive-mcp": {
+        "command": "npx",
+        "args": ["-y", "interactive-mcp"],
+        "env": {}
+      },
+      "interactive-mcp-versioned": {
+        "command": "npx",
+        "args": ["-y", "interactive-mcp@1.9.0"],
+        "env": {}
+      },
+      "interactive-mcp-configured": {
+        "command": "npx",
+        "args": ["-y", "interactive-mcp", "-t", "30"],
+        "env": {}
+      },
+      "interactive-mcp-with-config": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "interactive-mcp",
+          "-t",
+          "30",
+          "--disable-tools",
+          "message_complete_notification,intensive_chat"
+        ],
+        "env": {}
+      },
+      "interactive-mcp-dev": {
+        "command": "pnpm",
+        "args": ["start"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ttommyth",
+    "repo": "interactive-mcp",
+    "url": "https://github.com/ttommyth/interactive-mcp",
+    "name": "interactive-mcp",
+    "path": null,
+    "stars": 276,
+    "contributors": 4,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "241ab80836d782a5440ca46bbddc08a471ec5a8d"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:53.376Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "ink",
+      "importance": 9
+    },
+    {
+      "name": "@inkjs/ui",
+      "importance": 8
+    },
+    {
+      "name": "react",
+      "importance": 8
+    },
+    {
+      "name": "react-dom",
+      "importance": 8
+    },
+    {
+      "name": "node-notifier",
+      "importance": 7
+    },
+    {
+      "name": "yargs",
+      "importance": 7
+    },
+    {
+      "name": "pino",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    },
+    {
+      "name": "@types/yargs",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"interactive-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"interactive-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"README.md\",\n    \"LICENSE\",\n    \"package.json\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc --outDir dist && tsc-alias\",\n    \"start\": \"node dist/index.js\",\n    \"lint\": \"eslint \\\"src/**/*.{js,ts,jsx,tsx}\\\"\",\n    \"format\": \"prettier --write \\\"src/**/*.{js,ts,jsx,tsx,json,md}\\\"\",\n    \"check-types\": \"tsc --noEmit\",\n    \"prepare\": \"husky\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"description\": \"\",\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.25.1\",\n    \"@semantic-release/commit-analyzer\": \"^13.0.1\",\n    \"@semantic-release/git\": \"^10.0.1\",\n    \"@semantic-release/github\": \"^11.0.2\",\n    \"@semantic-release/npm\": \"^12.0.1\",\n    \"@semantic-release/release-notes-generator\": \"^14.0.3\",\n    \"@types/node\": \"^22.15.2\",\n    \"@types/node-notifier\": \"^8.0.5\",\n    \"@types/pino\": \"^7.0.5\",\n    \"@types/react\": \"^19.1.2\",\n    \"@types/react-dom\": \"^19.1.2\",\n    \"conventional-changelog-conventionalcommits\": \"^8.0.0\",\n    \"eslint\": \"^9.25.1\",\n    \"eslint-config-prettier\": \"^10.1.2\",\n    \"eslint-plugin-prettier\": \"^5.2.6\",\n    \"globals\": \"^16.0.0\",\n    \"husky\": \"^9.1.7\",\n    \"jiti\": \"^2.4.2\",\n    \"lint-staged\": \"^15.5.1\",\n    \"pino-pretty\": \"^13.0.0\",\n    \"prettier\": \"^3.5.3\",\n    \"semantic-release\": \"^24.2.3\",\n    \"tsc-alias\": \"^1.8.15\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"^8.31.0\"\n  },\n  \"dependencies\": {\n    \"@inkjs/ui\": \"^2.0.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"@types/yargs\": \"^17.0.33\",\n    \"ink\": \"^5.2.0\",\n    \"node-notifier\": \"^10.0.1\",\n    \"pino\": \"^9.6.0\",\n    \"react\": \"^18.3.1\",\n    \"react-dom\": \"^18.3.1\",\n    \"yargs\": \"^17.7.2\",\n    \"zod\": \"^3.24.3\"\n  },\n  \"lint-staged\": {\n    \"*.{js,ts,jsx,tsx}\": [\n      \"eslint --fix\"\n    ],\n    \"*.{js,ts,jsx,tsx,json,md}\": [\n      \"prettier --write\"\n    ]\n  }\n}\n"
+}

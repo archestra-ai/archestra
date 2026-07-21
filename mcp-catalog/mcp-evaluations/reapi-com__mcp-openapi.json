@@ -1,0 +1,115 @@
+{
+  "name": "reapi-com__mcp-openapi",
+  "display_name": "mcp-openapi",
+  "description": "OpenAPI specification MCP server.",
+  "author": {
+    "name": "ReAPI-com"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@reapi/mcp-openapi@latest", "--dir", "${user_config.specs_directory}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "specs_directory": {
+      "type": "directory",
+      "title": "OpenAPI Specifications Directory",
+      "description": "The directory containing your OpenAPI 3.x specification files (JSON or YAML). Use a relative path like './specs' for project-specific configurations.",
+      "required": true,
+      "default": "./specs"
+    }
+  },
+  "readme": "# @reapi/mcp-openapi\n\nA Model Context Protocol (MCP) server that loads and serves multiple OpenAPI specifications to enable LLM-powered IDE integrations. This server acts as a bridge between your OpenAPI specifications and LLM-powered development tools like Cursor and other code editors.\n\n## Features\n\n- Loads multiple OpenAPI specifications from a directory\n- Exposes API operations and schemas through MCP protocol\n- Enables LLMs to understand and work with your APIs directly in your IDE\n- Supports dereferenced schemas for complete API context\n- Maintains a catalog of all available APIs\n\n## Powered by [ReAPI](https://reapi.com)\n\nThis open-source MCP server is sponsored by [ReAPI](https://reapi.com), a next-generation API platform that simplifies API design and testing. While this server provides local OpenAPI integration for development, ReAPI offers two powerful modules:\n\n### 🎨 API CMS\n- Design APIs using an intuitive no-code editor\n- Generate and publish OpenAPI specifications automatically\n- Collaborate with team members in real-time\n- Version control and change management\n\n### 🧪 API Testing\n- The most developer-friendly no-code API testing solution\n- Create and manage test cases with an intuitive interface\n- Powerful assertion and validation capabilities\n- Serverless cloud test executor\n- Perfect for both QA teams and developers\n- CI/CD integration ready\n\nTry ReAPI for free at [reapi.com](https://reapi.com) and experience the future of API development.\n\n## Cursor Configuration\n\nTo integrate the MCP OpenAPI server with Cursor IDE, you have two options for configuration locations:\n\n### Option 1: Project-specific Configuration (Recommended)\nCreate a `.cursor/mcp.json` file in your project directory. This option is recommended as it allows you to maintain different sets of specs for different projects\n\n```json\n{\n  \"mcpServers\": {\n    \"@reapi/mcp-openapi\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@reapi/mcp-openapi@latest\", \"--dir\", \"./specs\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n> **Tip**: Using a relative path like `./specs` makes the configuration portable and easier to share across team members.\n> \n> **Note**: We recommend using `@latest` tag as we frequently update the server with new features and improvements.\n>\n> **Important**: Project-specific configuration helps manage LLM context limits. When all specifications are placed in a single folder, the combined metadata could exceed the LLM's context window, leading to errors. Organizing specs by project keeps the context size manageable.\n\n### Option 2: Global Configuration\nCreate or edit `~/.cursor/mcp.json` in your home directory to make the server available across all projects:\n\n```json\n{\n  \"mcpServers\": {\n    \"@reapi/mcp-openapi\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@reapi/mcp-openapi@latest\", \"--dir\", \"/path/to/your/specs\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n### Enable in Cursor Settings\n\nAfter adding the configuration:\n\n1. Open Cursor IDE\n2. Go to Settings > Cursor Settings > MCP\n3. Enable the @reapi/mcp-openapi server\n4. Click the refresh icon next to the server to apply changes\n\n> **Note**: By default, Cursor requires confirmation for each MCP tool execution. If you want to allow automatic execution without confirmation, you can enable [Yolo mode](https://docs.cursor.com/context/model-context-protocol#yolo-mode) in Cursor settings.\n\nThe server is now ready to use. When you add new OpenAPI specifications to your directory, you can refresh the catalog by:\n\n1. Opening Cursor's chat panel\n2. Typing one of these prompts:\n   ```\n   \"Please refresh the API catalog\"\n   \"Reload the OpenAPI specifications\"\n   ```\n\n### OpenAPI Specification Requirements\n\n1. Place your OpenAPI 3.x specifications in the target directory:\n   - Supports both JSON and YAML formats\n   - Files should have `.json`, `.yaml`, or `.yml` extensions\n   - Scanner will automatically discover and process all specification files\n\n2. Specification ID Configuration:\n   - By default, the filename (without extension) is used as the specification ID\n   - To specify a custom ID, add `x-spec-id` in the OpenAPI info object:\n   ```yaml\n   openapi: 3.0.0\n   info:\n     title: My API\n     version: 1.0.0\n     x-spec-id: my-custom-api-id  # Custom specification ID\n   ```\n   \n   > **Important**: Setting a custom `x-spec-id` is crucial when working with multiple specifications that have:\n   > - Similar or identical endpoint paths\n   > - Same schema names\n   > - Overlapping operation IDs\n   >\n   > The spec ID helps distinguish between these similar resources and prevents naming conflicts. For example:\n   > ```yaml\n   > # user-service.yaml\n   > info:\n   >   x-spec-id: user-service\n   > paths:\n   >   /users:\n   >     get: ...\n   > \n   > # admin-service.yaml\n   > info:\n   >   x-spec-id: admin-service\n   > paths:\n   >   /users:\n   >     get: ...\n   > ```\n   > Now you can reference these endpoints specifically as `user-service/users` and `admin-service/users`\n\n## How It Works\n\n1. The server scans the specified directory for OpenAPI specification files\n2. It processes and dereferences the specifications for complete context\n3. Creates and maintains a catalog of all API operations and schemas\n4. Exposes this information through the MCP protocol\n5. IDE integrations can then use this information to:\n   - Provide API context to LLMs\n   - Enable intelligent code completion\n   - Assist in API integration\n   - Generate API-aware code snippets\n\n\n## Tools\n\n1. `refresh-api-catalog`\n   - Refresh the API catalog\n   - Returns: Success message when catalog is refreshed\n\n2. `get-api-catalog`\n   - Get the API catalog, the catalog contains metadata about all openapi specifications, their operations and schemas\n   - Returns: Complete API catalog with all specifications, operations, and schemas\n\n3. `search-api-operations`\n   - Search for operations across specifications\n   - Inputs:\n     - `query` (string): Search query\n     - `specId` (optional string): Specific API specification ID to search within\n   - Returns: Matching operations from the API catalog\n\n4. `search-api-schemas`\n   - Search for schemas across specifications\n   - Inputs:\n     - `query` (string): Search query\n     - `specId` (optional string): Specific API specification ID to search\n   - Returns: Matching schemas from the API catalog\n\n5. `load-api-operation-by-operationId`\n   - Load an operation by operationId\n   - Inputs:\n     - `specId` (string): API specification ID\n     - `operationId` (string): Operation ID to load\n   - Returns: Complete operation details\n\n6. `load-api-operation-by-path-and-method`\n   - Load an operation by path and method\n   - Inputs:\n     - `specId` (string): API specification ID\n     - `path` (string): API endpoint path\n     - `method` (string): HTTP method\n   - Returns: Complete operation details\n\n7. `load-api-schema-by-schemaName`\n   - Load a schema by schemaName\n   - Inputs:\n     - `specId` (string): API specification ID\n     - `schemaName` (string): Name of the schema to load\n   - Returns: Complete schema details\n\n## Roadmap\n\n1. **Semantic Search**\n   - Enable natural language queries for API operations and schemas\n   - Improve search accuracy with semantic understanding\n\n2. **Remote Specs Sync**\n   - Support syncing OpenAPI specifications from remote sources\n\n3. **Code Templates**\n   - Expose code templates through MCP protocol\n   - Provide reference patterns for LLM code generation\n\n4. **Community Contributions**\n   - Submit feature requests and bug reports\n   - Contribute to improve the server\n\n## Example Prompts in Cursor\n\nHere are some example prompts you can use in Cursor IDE to interact with your APIs:\n\n1. **Explore Available APIs**\n   ```\n   \"Show me all available APIs in the catalog with their operations\"\n   \"List all API specifications and their endpoints\"\n   ```\n\n2. **API Operation Details**\n   ```\n   \"Show me the details of the create pet API endpoint\"\n   \"What are the required parameters for creating a new pet?\"\n   \"Explain the response schema for the pet creation endpoint\"\n   ```\n\n3. **Schema and Mock Data**\n   ```\n   \"Generate mock data for the Pet schema\"\n   \"Create a valid request payload for the create pet endpoint\"\n   \"Show me examples of valid pet objects based on the schema\"\n   ```\n\n4. **Code Generation**\n   ```\n   \"Generate an Axios client for the create pet API\"\n   \"Create a TypeScript interface for the Pet schema\"\n   \"Write a React hook that calls the create pet endpoint\"\n   ```\n\n5. **API Integration Assistance**\n   ```\n   \"Help me implement error handling for the pet API endpoints\"\n   \"Generate unit tests for the pet API client\"\n   \"Create a service class that encapsulates all pet-related API calls\"\n   ```\n\n6. **Documentation and Usage**\n   ```\n   \"Show me example usage of the pet API with curl\"\n   \"Generate JSDoc comments for the pet API client methods\"\n   \"Create a README section explaining the pet API integration\"\n   ```\n\n7. **Validation and Types**\n   ```\n   \"Generate Zod validation schema for the Pet model\"\n   \"Create TypeScript types for all pet-related API responses\"\n   \"Help me implement request payload validation for the pet endpoints\"\n   ```\n\n8. **API Search and Discovery**\n   ```\n   \"Find all endpoints related to pet management\"\n   \"Show me all APIs that accept file uploads\"\n   \"List all endpoints that return paginated responses\"\n   ```\n\nThese prompts demonstrate how to leverage the MCP server's capabilities for API development. Feel free to adapt them to your specific needs or combine them for more complex tasks.\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request. ",
+  "category": "Development",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "reapi-mcp-openapi-project-config": {
+        "command": "npx",
+        "args": ["-y", "@reapi/mcp-openapi@latest", "--dir", "./specs"],
+        "env": {}
+      },
+      "reapi-mcp-openapi-global-config": {
+        "command": "npx",
+        "args": ["-y", "@reapi/mcp-openapi@latest", "--dir", "/path/to/your/specs"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ReAPI-com",
+    "repo": "mcp-openapi",
+    "url": "https://github.com/ReAPI-com/mcp-openapi",
+    "name": "reapi-com__mcp-openapi",
+    "path": null,
+    "stars": 60,
+    "contributors": 1,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "263c5e6368baf1519ba1ca4146eea413acc2bc3f"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:41.883Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@apidevtools/json-schema-ref-parser",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "commander",
+      "importance": 7
+    },
+    {
+      "name": "fuse.js",
+      "importance": 7
+    },
+    {
+      "name": "lodash",
+      "importance": 4
+    },
+    {
+      "name": "swagger2openapi",
+      "importance": 8
+    },
+    {
+      "name": "yaml",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@reapi/mcp-openapi\",\n  \"version\": \"0.0.4\",\n  \"description\": \"MCP (Model Context Protocol) server for OpenAPI specifications - loads and serves multiple OpenAPI specs to enable LLM-powered IDE integrations\",\n  \"main\": \"./dist/index.mjs\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"reapi-mcp-openapi\": \"./dist/cli.mjs\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"engines\": {\n    \"node\": \">=16\"\n  },\n  \"scripts\": {\n    \"build\": \"unbuild\",\n    \"debug\": \"SERVER_PORT=9000 LOG_ENABLED=true npx @modelcontextprotocol/inspector npx tsx src/index.ts\",\n    \"test\": \"LOG_ENABLED=true vitest run\",\n    \"test:watch\": \"LOG_ENABLED=true vitest\",\n    \"test:coverage\": \"LOG_ENABLED=true vitest run --coverage\"\n  },\n  \"keywords\": [\n    \"openapi\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"llm\",\n    \"ide\",\n    \"api\",\n    \"specification\",\n    \"cursor\",\n    \"code-editor\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"packageManager\": \"pnpm@10.4.1\",\n  \"dependencies\": {\n    \"@apidevtools/json-schema-ref-parser\": \"^11.9.3\",\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"@types/axios\": \"^0.14.4\",\n    \"axios\": \"^1.8.4\",\n    \"commander\": \"^12.0.0\",\n    \"fuse.js\": \"^7.1.0\",\n    \"lodash\": \"^4.17.21\",\n    \"openapi-types\": \"^12.1.3\",\n    \"swagger2openapi\": \"^7.0.8\",\n    \"yaml\": \"^2.7.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/lodash\": \"^4.17.16\",\n    \"@types/node\": \"^22.13.14\",\n    \"@vitest/coverage-v8\": \"^1.4.0\",\n    \"tsx\": \"^4.19.3\",\n    \"unbuild\": \"^3.5.0\",\n    \"vitest\": \"^1.6.1\"\n  }\n}"
+}

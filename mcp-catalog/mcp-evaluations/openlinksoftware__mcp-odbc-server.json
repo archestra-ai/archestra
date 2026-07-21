@@ -1,0 +1,126 @@
+{
+  "name": "openlinksoftware__mcp-odbc-server",
+  "display_name": "mcp-odbc-server",
+  "description": "Typescript based Model Context Procotol (MCP) Server for Open Database Connectivity (ODBC)",
+  "author": {
+    "name": "OpenLinkSoftware"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "API_KEY": "${user_config.api_key}",
+      "ODBC_DSN": "${user_config.odbc_dsn}",
+      "ODBC_USER": "${user_config.odbc_user}",
+      "ODBC_PASSWORD": "${user_config.odbc_password}",
+      "ODBCINI": "${user_config.odbcini}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "LLM API Key",
+      "description": "API Key for the OpenLink AI Layer (OPAL) via ODBC.",
+      "sensitive": true,
+      "required": false
+    },
+    "odbc_dsn": {
+      "type": "string",
+      "title": "ODBC Data Source Name (DSN)",
+      "description": "The ODBC Data Source Name to connect to.",
+      "sensitive": false,
+      "required": true,
+      "default": "Local Virtuoso"
+    },
+    "odbc_user": {
+      "type": "string",
+      "title": "ODBC User",
+      "description": "The username for ODBC connection.",
+      "sensitive": false,
+      "required": true,
+      "default": "dba"
+    },
+    "odbc_password": {
+      "type": "string",
+      "title": "ODBC Password",
+      "description": "The password for ODBC connection.",
+      "sensitive": true,
+      "required": true,
+      "default": "dba"
+    },
+    "odbcini": {
+      "type": "file",
+      "title": "ODBC INI File Path",
+      "description": "Path to the ODBC INI configuration file.",
+      "sensitive": false,
+      "required": false,
+      "default": "/Library/ODBC/odbc.ini"
+    }
+  },
+  "readme": "# OpenLink MCP Server for ODBC\n\nThis document covers the set up and use of a generic ODBC server for the Model Context Protocol (MCP), referred to as an `mcp-odbc` server. It has been developed to provide Large Language Models with transparent access to ODBC-accessible data sources via a Data Source Name configured for a specific ODBC Connector (also called an ODBC Driver).\n\n![mcp-client-and-servers|648x499](https://www.openlinksw.com/data/gifs/mcp-client-and-servers.gif)\n\n## Server Implementation\n\nThis **MCP Server for ODBC** is a small TypeScript layer built on top of `node-odbc`. It routes calls to the host system's local ODBC Driver Manager via `node.js` (specifically using `npx` for TypeScript).\n\n## Operating Environment Set Up & Prerequisites\n\nWhile the examples that follow are oriented toward the Virtuoso ODBC Connector, this guide will also work with other ODBC Connectors. We *strongly* encourage code contributions and submissions of usage demos related to other database management systems (DBMS) for incorporation into this project.\n\n### Key System Components\n\n1. Check the `node.js` version. If it's not `21.1.0` or higher, upgrade or install explicitly using:\n   ```sh\n   nvm install v21.1.0\n   ```\n2. Install MCP components using: \n   ```sh\n   npm install @modelcontextprotocol/sdk zod tsx odbc dotenv\n   ```\n3. Set the `nvm` version using: \n   ```sh\n   nvm alias default 21.1.0\n   ```\n\n### Installation\n\n1. Run \n   ```sh\n   git clone https://github.com/OpenLinkSoftware/mcp-odbc-server.git\n   ```\n2. Change directory \n   ```sh\n   cd mcp-odbc-server\n   ```\n3. Run \n   ```sh\n   npm init -y\n   ```\n4. Run \n   ```sh\n   npm install @modelcontextprotocol/sdk zod tsx odbc dotenv\n   ```\n\n### unixODBC Runtime Environment Checks\n\n1. Check installation configuration (i.e., location of key INI files) by running: \n   ```sh\n   odbcinst -j\n   ```\n2. List available data source names (DSNs) by running: \n   ```sh\n   odbcinst -q -s\n   ```\n\n### Environment Variables\nAs good security practice, you should use the `.env` file situated in the same directory as the `mcp-ser` to set bindings for the ODBC Data Source Name (`ODBC_DSN`), the User (`ODBC_USER`), the Password (`ODBC_PWD`), the ODBC INI (`ODBCINI`), and, if you want to use the OpenLink AI Layer (OPAL) via ODBC, the target Large Language Model (LLM) API Key (`API_KEY`).\n\n```sh\nAPI_KEY=sk-xxx\nODBC_DSN=Local Virtuoso\nODBC_USER=dba\nODBC_PASSWORD=dba\nODBCINI=/Library/ODBC/odbc.ini \n```\n\n# Usage\n\n## Tools\nAfter successful installation, the following tools will be available to MCP client applications.\n\n### Overview\n\n|name                 |description|\n|:---                 |:---|\n|`get_schemas`        |List database schemas accessible to connected database management system (DBMS).|\n|`get_tables`         |List tables associated with a selected database schema.|\n|`describe_table`     |Provide the description of a table associated with a designated database schema. This includes information about column names, data types, null handling, autoincrement, primary key, and foreign keys|\n|`filter_table_names` |List tables associated with a selected database schema, based on a substring pattern from the `q` input field.|\n|`query_database`     |Execute a SQL query and return results in JSON Lines (JSONL) format.|\n|`execute_query`      |Execute a SQL query and return results in JSON Lines (JSONL) format.|\n|`execute_query_md`   |Execute a SQL query and return results in Markdown table format.|\n|`spasql_query`       |Execute a SPASQL query and return results.|\n|`sparql_query`       |Execute a SPARQL query and return results.|\n|`virtuoso_support_ai`|Interact with the Virtuoso Support Assistant/Agent — a Virtuoso-specific feature for interacting with LLMs|\n\n### Detailed Description\n\n- **`get_schemas`**\n  - Retrieve and return a list of all schema names from the connected database.\n  - Input parameters:\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns a JSON string array of schema names.\n\n- **`get_tables`**\n  - Retrieve and return a list containing information about tables in a specified schema. If no schema is provided, uses the connection's default schema.\n  - Input parameters:\n    - `schema` (string, optional): Database schema to filter tables. Defaults to connection default.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns a JSON string containing table information (e.g., `TABLE_CAT`, `TABLE_SCHEM`, `TABLE_NAME`, `TABLE_TYPE`).\n\n- **`filter_table_names`**\n  - Filters and returns information about tables whose names contain a specific substring.\n  - Input parameters:\n    - `q` (string, required): The substring to search for within table names.\n    - `schema` (string, optional): Database schema to filter tables. Defaults to connection default.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns a JSON string containing information for matching tables.\n\n- **`describe_table`**\n  - Retrieve and return detailed information about the columns of a specific table.\n  - Input parameters:\n    - `schema` (string, required): The database schema name containing the table.\n    - `table` (string, required): The name of the table to describe.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns a JSON string describing the table's columns (e.g., `COLUMN_NAME`, `TYPE_NAME`, `COLUMN_SIZE`, `IS_NULLABLE`).\n\n- **`query_database`**\n  - Execute a standard SQL query and return the results in JSON format.\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns query results as a JSON string.\n\n- **`query_database_md`**\n  - Execute a standard SQL query and return the results formatted as a Markdown table.\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns query results as a Markdown table string.\n\n- **`query_database_jsonl`**\n  - Execute a standard SQL query and return the results in JSON Lines (JSONL) format (one JSON object per line).\n  - Input parameters:\n    - `query` (string, required): The SQL query string to execute.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns query results as a JSONL string.\n\n- **`spasql_query`**\n  - Execute a SPASQL (SQL/SPARQL hybrid) query return results. This is a Virtuoso-specific feature.\n  - Input parameters:\n    - `query` (string, required): The SPASQL query string.\n    - `max_rows` (number, optional): Maximum number of rows to return. Defaults to `20`.\n    - `timeout` (number, optional): Query timeout in milliseconds. Defaults to `30000`, i.e., 30 seconds.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns the result from the underlying stored procedure call (e.g., `Demo.demo.execute_spasql_query`).\n\n- **`sparql_query`**\n  - Execute a SPARQL query and return results. This is a Virtuoso-specific feature.\n  - Input parameters:\n    - `query` (string, required): The SPARQL query string.\n    - `format` (string, optional): Desired result format. Defaults to `'json'`.\n    - `timeout` (number, optional): Query timeout in milliseconds. Defaults to `30000`, i.e., 30 seconds.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns the result from the underlying function call (e.g., `\"UB\".dba.\"sparqlQuery\"`).\n\n- **`virtuoso_support_ai`**\n  - Utilizes a Virtuoso-specific AI Assistant function, passing a prompt and optional API key. This is a Virtuoso-specific feature.\n  - Input parameters:\n    - `prompt` (string, required): The prompt text for the AI function.\n    - `api_key` (string, optional): API key for the AI service. Defaults to `\"none\"`.\n    - `user` (string, optional): Database username. Defaults to `\"demo\"`.\n    - `password` (string, optional): Database password. Defaults to `\"demo\"`.\n    - `dsn` (string, optional): ODBC data source name. Defaults to `\"Local Virtuoso\"`.\n  - Returns the result from the AI Support Assistant function call (e.g., `DEMO.DBA.OAI_VIRTUOSO_SUPPORT_AI`).\n\n## Basic Installation Testing & Troubleshooting\n\n### MCP Inspector Tool\n\n#### Canonical MCP Inspector Tool Edition\n\n1. Start the inspector from the mcp-server directory/folder using the following command:\n    ```sh\n    ODBCINI=/Library/ODBC/odbc.ini npx -y @modelcontextprotocol/inspector npx tsx ./src/main.ts \n    ```\n2. Click on the \"Connect\" button, then click on the \"Tools\" tab to get started.\n\n    [![MCP Inspector](https://www.openlinksw.com/data/screenshots/mcp-server-inspector-demo-1.png)](https://www.openlinksw.com/data/screenshots/mcp-server-inspector-demo-1.png)\n\n#### OpenLink MCP Inspector Tool Edition\n\nThis is a fork of the canonical edition that includes a JSON handling bug fix related to use with this MCP Server.\n\n1. run\n   ```sh\n   git clone git@github.com:OpenLinkSoftware/inspector.git\n   cd inspector\n   ```\n2. run\n   ```sh\n   npm run start\n   ```\n3. Provide the following value in the `Arguments` input field of MCP Inspectors UI from http://localhost:6274\n   ```sh\n   tsx /path/to/mcp-odbc-server/src/main.ts\n   ```\n4. Click on the `Connect` button to initialize your session with the designated MCP Server\n\n\n### Apple Silicon (ARM64) Compatibility with MCP ODBC Server Issues\n\n#### Node x86_64 vs arm64 Conflict Issue\n\nThe x86_64 rather than arm64 edition of `node` may be in place, but the ODBC bridge and MCP server are arm64-based components.\n\nYou can solve this problem by performing the following steps:\n\n1. Uninstall the x86_64 edition of `node` by running:\n   ```sh\n    nvm uninstall 21.1.0\n   ```\n2. Run the following command to confirm your current shell is in arm64 mode:\n   ```sh\n   arch\n   ```\n   - if that returns x86_64, then run the following command to change the active mode:\n     ```\n     arch arm64\n     ```\n3. Install the arm64 edition of `node` by running:\n   ```sh\n   nvm install 21.1.0\n   ```\n\n#### Node to ODBC Bridge Layer Incompatibility\n\nWhen attempting to use a Model Context Protocol (MCP) ODBC Server on Apple Silicon machines, you may encounter architecture mismatch errors. These occur because the `Node.js` ODBC native module (`odbc.node`) is compiled for ARM64 architecture, but the x86_64-based edition of the unixODBC runtime is being loaded.\n\nTypical error message:\n\n```\nError: dlopen(...odbc.node, 0x0001): tried: '...odbc.node' (mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e' or 'arm64'))\n```\n\nYou solve this problem by performing the following steps:\n\n1. Verify your `Node.js` is running in ARM64 mode:\n\n   ```bash\n   node -p \"process.arch\"  # Should output: `arm64`\n   ```\n\n2. Install unixODBC for ARM64:\n\n   ```bash\n   # Verify Homebrew is running in ARM64 mode\n   which brew  # Should point to /opt/homebrew/bin/brew\n   \n   # Remove existing unixODBC\n   brew uninstall --force unixodbc\n   \n   # Install ARM64 version\n   arch -arm64 brew install unixodbc\n   ```\n\n3. Rebuild the Node.js ODBC module for ARM64:\n\n   ```bash\n   # Navigate to your project\n   cd /path/to/mcp-odbc-server\n   \n   # Remove existing module\n   rm -rf node_modules/odbc\n   \n   # Set architecture environment variable\n   export npm_config_arch=arm64\n   \n   # Reinstall with force build\n   npm install odbc --build-from-source\n   ```\n\n4. Verify the module is now ARM64:\n\n   ```bash\n   file node_modules/odbc/lib/bindings/napi-v8/odbc.node\n   # Should show \"arm64\" instead of \"x86_64\"\n   ```\n\n#### Key Points\n\n- Both unixODBC and the `Node.js` ODBC module must be ARM64-compatible\n- Using environment variables (`export npm_config_arch=arm64`) is more reliable than `npm config` commands\n- Always verify architecture with the `file` command or `node -p \"process.arch\"`\n- When using Homebrew on Apple Silicon, commands can be prefixed with `arch -arm64` to force use of ARM64 binaries\n\n## MCP Application Usage\n\n### Claude Desktop Configuration\n\nThe path for this config file is: `~{username}/Library/Application Support/Claude/claude_desktop_config.json`.\n\n```json\n{\n    \"mcpServers\": {\n        \"ODBC\": {\n            \"command\": \"/path/to/.nvm/versions/node/v21.1.0/bin/node\",\n            \"args\": [\n                \"/path/to/mcp-odbc-server/node_modules/.bin/tsx\",\n                \"/path/to/mcp-odbc-server/src/main.ts\"\n            ],\n            \"env\": {\n                \"ODBCINI\": \"/Library/ODBC/odbc.ini\",\n                \"NODE_VERSION\": \"v21.1.0\",\n                \"PATH\": \"~/.nvm/versions/node/v21.1.0/bin:${PATH}\"\n            },\n            \"disabled\": false,\n            \"autoApprove\": []\n        }\n    }\n}\n```\n\n### Claude Desktop Usage\n\n1. Start the application.\n2. Apply configuration (from above) via Settings | Developer user interface.\n3. Ensure you have a working ODBC connection to a Data Source Name (DSN).\n4. Present a prompt requesting query execution, e.g.,\n   ```\n   Execute the following query: SELECT TOP * from Demo..Customers\n   ```\n\n    [![Claude Desktop](https://www.openlinksw.com/data/screenshots/claude-desktp-mcp-odbc-server-demo-1.png)](https://www.openlinksw.com/data/screenshots/claude-desktp-mcp-odbc-server-demo-1.png)\n\n### Cline (Visual Studio Extension) Configuration\n\nThe path for this config file is: `~{username}/Library/Application\\ Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"ODBC\": {\n      \"command\": \"/path/to/.nvm/versions/node/v21.1.0/bin/node\",\n      \"args\": [\n        \"/path/to/mcp-odbc-server/node_modules/.bin/tsx\",\n        \"/path/to/mcp-odbc-server/src/main.ts\"\n      ],\n      \"env\": {\n        \"ODBCINI\": \"/Library/ODBC/odbc.ini\",\n        \"NODE_VERSION\": \"v21.1.0\",\n        \"PATH\": \"/path/to/.nvm/versions/node/v21.1.0/bin:${PATH}\"\n      },\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n### Cline (Visual Studio Extension) Usage\n\n1. Use Shift+Command+`P` to open the Command Palette.\n2. Type in: `Cline`.\n3. Select: `Cline View`, which opens the Cline UI in the VSCode sidebar.\n4. Use the four-squares icon to access the UI for installing and configuring MCP servers.\n6. Apply the Cline Config (from above).\n7. Return to the extension's main UI and start a new task requesting processing of the following prompt:\n   ```\n   \"Execute the following query: SELECT TOP 5 * from Demo..Customers\"\n   ```\n\n    [![Cline Extension](https://www.openlinksw.com/data/screenshots/cline-extension-mcp-server-odbc-demo-1.png)](https://www.openlinksw.com/data/screenshots/cline-extension-mcp-server-odbc-demo-1.png)\n\n### Cursor Configuration\n\nUse the settings gear to open the configuration menu that includes the MCP menu item for registering and configuring `mcp servers`.\n\n### Cursor Usage\n\n1. Use the Command+`I` or Control+`I` key combination to open the Chat Interface.\n2. Select `Agent` from the drop-down at the bottom left of the UI, where the default is `Ask`.\n3. Enter your prompt, qualifying the use of the `mcp-server for odbc` using the pattern: `@odbc {rest-of-prompt}`.\n4. Click on \"Accept\" to execute the prompt.\n   \n   [![Cursor Editor](https://www.openlinksw.com/data/screenshots/cursor-editor-mcp-config-for-odbc-server-1.png)](https://www.openlinksw.com/data/screenshots/cursor-editor-mcp-config-for-odbc-server-1.png)\n\n# Related\n\n* [MCP Inspector Usage Screencast](https://www.openlinksw.com/data/screencasts/mcp-inspector-odbc-sparql-spasql-demo-1.mp4)\n* [Basic Claude Desktop Usage Screencast](https://www.openlinksw.com/data/screencasts/claude-odbc-mcp-sql-spasql-demo-1.mp4)\n* [Basic Cline Visual Studio Code Extension Usage Screencast](https://www.openlinksw.com/data/screencasts/cline-vscode-mcp-odbc-sql-spasql-1.mp4)\n* [Basic Cursor Editor Usage Screencast](https://www.openlinksw.com/data/screencasts/cursor-odbc-mcp-sql-spasql-demo-1.mp4)\n",
+  "category": "AI Tools",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {},
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "OpenLinkSoftware",
+    "repo": "mcp-odbc-server",
+    "url": "https://github.com/OpenLinkSoftware/mcp-odbc-server",
+    "name": "openlinksoftware__mcp-odbc-server",
+    "path": null,
+    "stars": 9,
+    "contributors": 6,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "d9313b52ae86d72f537f0436c3aa9e63d3709848"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.327Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "odbc",
+      "importance": 9
+    },
+    {
+      "name": "tsx",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-odbc-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-odbc-server\": \"./src/main.ts\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"start\": \"tsx src/main.ts\",\n    \"prepare\": \"npm run build\",\n    \"build\": \"tsc -p tsconfig.json && mv dist/main.js dist/mcp-odbc-server.js && sh -c '[ -f .env ] || cp _env .env'\",\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.9.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"odbc\": \"^2.4.9\",\n    \"tsx\": \"^4.19.3\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

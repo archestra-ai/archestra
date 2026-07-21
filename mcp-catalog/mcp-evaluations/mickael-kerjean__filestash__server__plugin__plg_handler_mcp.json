@@ -1,0 +1,64 @@
+{
+  "name": "mickael-kerjean__filestash__server__plugin__plg_handler_mcp",
+  "display_name": "plg_handler_mcp",
+  "description": ":file_folder: The Dropbox like web client for SFTP, S3, FTP, WebDAV, Git, Minio, LDAP, CalDAV, CardDAV, Mysql, Backblaze, ...",
+  "author": {
+    "name": "mickael-kerjean"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/server/index.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "This is a MCP plugin acting as an interface for AI agent to do stuff on a remote storage you have configured in Filestash, be it a FTP server, SFTP, S3, WebDAV, SMB, GIT, NFS, ....\n\ndemo server: https://demo.filestash.app/sse\nrelease note: https://www.filestash.app/2025/04/01/mcp-feature/\n",
+  "category": "AI Tools",
+  "quality_score": 76,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mickael-kerjean",
+    "repo": "filestash",
+    "url": "https://github.com/mickael-kerjean/filestash/tree/master/server/plugin/plg_handler_mcp",
+    "name": "mickael-kerjean__filestash__server__plugin__plg_handler_mcp",
+    "path": "server/plugin/plg_handler_mcp",
+    "stars": 12590,
+    "contributors": 77,
+    "issues": 633,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "10503f8deedb61c400963dcb344b1f1f712d70ac"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:07.922Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

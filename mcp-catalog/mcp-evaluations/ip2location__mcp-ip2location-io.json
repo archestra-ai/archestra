@@ -1,0 +1,86 @@
+{
+  "name": "ip2location__mcp-ip2location-io",
+  "display_name": "mcp-ip2location-io",
+  "description": "IP Geolocation MCP server using IP2Location.io API",
+  "author": {
+    "name": "ip2location"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}/src", "run", "server.py"],
+    "env": {
+      "IP2LOCATION_API_KEY": "${user_config.ip2location_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ip2location_api_key": {
+      "type": "string",
+      "title": "IP2Location.io API Key",
+      "description": "Your IP2Location.io API key. Optional, but recommended for higher query limits (up to 50,000 per month).",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# IP2Location.io MCP server\n\nThis is a simple Model Context Protocol (MCP) server implementation for IP2Location.io API. It will return a detailed geolocation information for any given IPv4 or IPv6 address.\n\n<a href=\"https://glama.ai/mcp/servers/@ip2location/mcp-ip2location-io\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@ip2location/mcp-ip2location-io/badge\" />\n</a>\n\n# Features\n\n- **Comprehensive Geolocation Data**: Retrieves a wide range of information, including country, region, city, latitude, longitude, ZIP code, time zone, and more.\n- **Network Details**: Provides network-related data such as ASN, ISP, domain, and network speed.\n- **Security Insights**: Detects proxy information, including proxy type and provider.\n- **Simple Integration**: Built as a `FastMCP` tool, allowing for easy integration into compatible systems.\n- **Asynchronous**: Utilizes `httpx` for non-blocking asynchronous API requests.\n\n# Requirement\n\nThis MCP server supports to query without an API key, with a limitation of 1,000 queries per day. You can also [sign up](https://www.ip2location.io/sign-up) for a free API key and enjoy up to 50,000 queries per month.\n\nThe setup also use `uv`, which can be install by following [the guide](https://modelcontextprotocol.io/quickstart/server#set-up-your-environment).\n\n# Setup\n\nFollow the steps to use this MCP server with Claude Desktop:\n 1. Download the repository to your local.\n 2. Setup the `uv` package manager, you can once again refer to [the guide](https://modelcontextprotocol.io/quickstart/server#set-up-your-environment) to do so.\n 3. Make sure you have installed the Claude Desktop, if you haven't, kindly download from [here](https://claude.ai/download) for Windows and MacOS users, or follow [this guide](https://modelcontextprotocol.io/quickstart/client) for Linux user.\n 4. Open the `claude_desktop_config.json` in your choice of editor, if you do not having one yet, follow [this guide](https://modelcontextprotocol.io/quickstart/server#testing-your-server-with-claude-for-desktop) to create one.\n 5. Add the following to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"ip2locationio\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/path/to/ip2locationio/src\",\n        \"run\",\n        \"server.py\"\n      ],\n      \"env\": {\n        \"IP2LOCATION_API_KEY\": \"<YOUR API key HERE>\"\n      }\n    }\n  }\n}\n```\n 6. Remember to replace the `/path/to/ip2locationio`  path with your actual path to IP2Location.io MCP server in local.\n 7. To get your API key, just [login](https://www.ip2location.io/log-in) to your dashboard and get it from there. Replaced the `<YOUR API key HERE>` in above with your actual API key.\n 8. Restart the Claude Desktop after save the changes, and you should see it appear in the `Search and tools` menu.\n\n# Usage\n\nJust enter your query about the IP in a chat in Claude Desktop. Some of the example query will be:\n\n- Where is the location of (IP)?\n- Where is (IP) located?\n- What is the coordinate of (IP)?\n\nFor instance, below is the result of the IP 8.8.8.8:\n\n![The output of the IP 8.8.8.8](example.png \"The output of the IP 8.8.8.8\")\n\nIn Claude Desktop, the model will automatically generate the output based on the result returned by IP2Location.io MCP server.\n\n# Environment Variable\n\n`IP2LOCATION_API_KEY`\n\nThe IP2Location.io API key, which allows you to query up to 50,000 per month and more details of the IP address. You can [sign up](https://www.ip2location.io/sign-up) for a free API key, or [subscribe](https://www.ip2location.io/pricing) to a plan to enjoy more benefits.\n\n# Tool\n\n`get_geolocation`\n\n**Description**\nFetch geolocation for the given IP address. It helps users to retrieve detailed information such as country, region, city, latitude, longitude, ZIP code, time zone, ASN, and proxy information for any IPv4 or IPv6 address.\n\n**Arguments**\nip (str): The IP address (IPv4 or IPv6) to analyze.\n\n**Returns**\nA JSON string containing the geolocation data. The result may include the following fields, depending on your API plan:\n\n- Location & Geography: Country, region, district, city, ZIP code, latitude & longitude, time zone.\n- Network & Connectivity: ASN (Autonomous System Number), ISP (Internet Service Provider), domain, net speed, IDD code, area code, address type, usage type.\n- Mobile Information: MNC (Mobile Network Code), MCC (Mobile Country Code), Mobile Brand.\n- Currency & Language: currency code, currency name, currency symbol, language code, language name.\n- Proxy & Security: proxy type, last seen, threat level/type, proxy provider, fraud score.\n- Others: IAB category, weather, elevation, population, and more.\n\nIf the request fails or the IP address is invalid, the tool will return an error message as a string.\n# License\n\nSee the LICENSE file.",
+  "category": "Location",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ip2locationio": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/ip2locationio/src", "run", "server.py"],
+        "env": {
+          "IP2LOCATION_API_KEY": "<YOUR API key HERE>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ip2location",
+    "repo": "mcp-ip2location-io",
+    "url": "https://github.com/ip2location/mcp-ip2location-io",
+    "name": "mcp-ip2location-io",
+    "path": null,
+    "stars": 8,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "49016ad5f48f2ad3ad2dbd4a0a43b77875271252"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.064Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"ip2locationio\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.9.4\",\n]\n"
+}

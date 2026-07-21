@@ -1,0 +1,120 @@
+{
+  "name": "haris-musa__excel-mcp-server",
+  "display_name": "excel-mcp-server",
+  "description": "A Model Context Protocol server for Excel file manipulation",
+  "author": {
+    "name": "haris-musa"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["excel-mcp-server", "stdio"],
+    "env": {
+      "EXCEL_FILES_PATH": "${user_config.excel_files_path}",
+      "FASTMCP_PORT": "${user_config.fastmcp_port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "excel_files_path": {
+      "type": "directory",
+      "title": "Excel Files Path",
+      "description": "Directory where Excel files are read from and written to. Only applicable for SSE and Streamable HTTP transports.",
+      "required": false,
+      "default": "./excel_files"
+    },
+    "fastmcp_port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "Port the server listens on. Only applicable for SSE and Streamable HTTP transports.",
+      "required": false,
+      "default": 8000,
+      "min": 1,
+      "max": 65535
+    }
+  },
+  "readme": "<p align=\"center\">\n  <img src=\"https://raw.githubusercontent.com/haris-musa/excel-mcp-server/main/assets/logo.png\" alt=\"Excel MCP Server Logo\" width=\"300\"/>\n</p>\n\n[![PyPI version](https://img.shields.io/pypi/v/excel-mcp-server.svg)](https://pypi.org/project/excel-mcp-server/)\n[![Total Downloads](https://static.pepy.tech/badge/excel-mcp-server)](https://pepy.tech/project/excel-mcp-server)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n[![smithery badge](https://smithery.ai/badge/@haris-musa/excel-mcp-server)](https://smithery.ai/server/@haris-musa/excel-mcp-server)\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=excel-mcp-server&config=eyJjb21tYW5kIjoidXZ4IGV4Y2VsLW1jcC1zZXJ2ZXIgc3RkaW8ifQ%3D%3D)\n\nA Model Context Protocol (MCP) server that lets you manipulate Excel files without needing Microsoft Excel installed. Create, read, and modify Excel workbooks with your AI agent.\n\n## Features\n\n- 📊 **Excel Operations**: Create, read, update workbooks and worksheets\n- 📈 **Data Manipulation**: Formulas, formatting, charts, pivot tables, and Excel tables\n- 🔍 **Data Validation**: Built-in validation for ranges, formulas, and data integrity\n- 🎨 **Formatting**: Font styling, colors, borders, alignment, and conditional formatting\n- 📋 **Table Operations**: Create and manage Excel tables with custom styling\n- 📊 **Chart Creation**: Generate various chart types (line, bar, pie, scatter, etc.)\n- 🔄 **Pivot Tables**: Create dynamic pivot tables for data analysis\n- 🔧 **Sheet Management**: Copy, rename, delete worksheets with ease\n- 🔌 **Triple transport support**: stdio, SSE (deprecated), and streamable HTTP\n- 🌐 **Remote & Local**: Works both locally and as a remote service\n\n## Usage\n\nThe server supports three transport methods:\n\n### 1. Stdio Transport (for local use)\n\n```bash\nuvx excel-mcp-server stdio\n```\n\n```json\n{\n   \"mcpServers\": {\n      \"excel\": {\n         \"command\": \"uvx\",\n         \"args\": [\"excel-mcp-server\", \"stdio\"]\n      }\n   }\n}\n```\n\n### 2. SSE Transport (Server-Sent Events - Deprecated)\n\n```bash\nuvx excel-mcp-server sse\n```\n\n**SSE transport connection**:\n```json\n{\n   \"mcpServers\": {\n      \"excel\": {\n         \"url\": \"http://localhost:8000/sse\",\n      }\n   }\n}\n```\n\n### 3. Streamable HTTP Transport (Recommended for remote connections)\n\n```bash\nuvx excel-mcp-server streamable-http\n```\n\n**Streamable HTTP transport connection**:\n```json\n{\n   \"mcpServers\": {\n      \"excel\": {\n         \"url\": \"http://localhost:8000/mcp\",\n      }\n   }\n}\n```\n\n## Environment Variables & File Path Handling\n\n### SSE and Streamable HTTP Transports\n\nWhen running the server with the **SSE or Streamable HTTP protocols**, you **must set the `EXCEL_FILES_PATH` environment variable on the server side**. This variable tells the server where to read and write Excel files.\n- If not set, it defaults to `./excel_files`.\n\nYou can also set the `FASTMCP_PORT` environment variable to control the port the server listens on (default is `8017` if not set).\n- Example (Windows PowerShell):\n  ```powershell\n  $env:EXCEL_FILES_PATH=\"E:\\MyExcelFiles\"\n  $env:FASTMCP_PORT=\"8007\"\n  uvx excel-mcp-server streamable-http\n  ```\n- Example (Linux/macOS):\n  ```bash\n  EXCEL_FILES_PATH=/path/to/excel_files FASTMCP_PORT=8007 uvx excel-mcp-server streamable-http\n  ```\n\n### Stdio Transport\n\nWhen using the **stdio protocol**, the file path is provided with each tool call, so you do **not** need to set `EXCEL_FILES_PATH` on the server. The server will use the path sent by the client for each operation.\n\n## Available Tools\n\nThe server provides a comprehensive set of Excel manipulation tools. See [TOOLS.md](TOOLS.md) for complete documentation of all available tools.\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=haris-musa/excel-mcp-server&type=Date)](https://www.star-history.com/#haris-musa/excel-mcp-server&Date)\n\n## License\n\nMIT License - see [LICENSE](LICENSE) for details.\n",
+  "category": "AI Tools",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "excel-mcp-server-stdio": {
+        "command": "uvx",
+        "args": ["excel-mcp-server", "stdio"],
+        "env": {}
+      },
+      "excel-mcp-server-sse": {
+        "command": "uvx",
+        "args": ["excel-mcp-server", "sse"],
+        "env": {}
+      },
+      "excel-mcp-server-streamable-http": {
+        "command": "uvx",
+        "args": ["excel-mcp-server", "streamable-http"],
+        "env": {}
+      },
+      "excel-mcp-server-streamable-http-configured": {
+        "command": "uvx",
+        "args": ["excel-mcp-server", "streamable-http"],
+        "env": {
+          "EXCEL_FILES_PATH": "/path/to/excel_files",
+          "FASTMCP_PORT": "8007"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "haris-musa",
+    "repo": "excel-mcp-server",
+    "url": "https://github.com/haris-musa/excel-mcp-server",
+    "name": "haris-musa__excel-mcp-server",
+    "path": null,
+    "stars": 2248,
+    "contributors": 9,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f0c0ecdcd7e5c13fb446f12f3b6c8e3e729f6417"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.931Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "openpyxl",
+      "importance": 10
+    },
+    {
+      "name": "typer",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"excel-mcp-server\"\nversion = \"0.1.7\"\ndescription = \"Excel MCP Server for manipulating Excel files\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.10.1\",\n    \"fastmcp>=2.0.0,<3.0.0\",\n    \"openpyxl>=3.1.5\",\n    \"typer>=0.16.0\"\n]\n[[project.authors]]\nname = \"haris\"\nemail = \"haris.musa@outlook.com\"\n\n[project.scripts]\nexcel-mcp-server = \"excel_mcp.__main__:app\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/excel_mcp\"]\n\n[tool.hatch.build]\npackages = [\"src/excel_mcp\"]\n"
+}

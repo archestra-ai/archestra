@@ -1,0 +1,86 @@
+{
+  "name": "ipfind__ipfind-mcp-server",
+  "display_name": "ipfind-mcp-server",
+  "description": "IP Find MCP Server",
+  "author": {
+    "name": "ipfind"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@ipfind/ipfind-mcp-server"],
+    "env": {
+      "IPFIND_API_KEY": "${user_config.ipfind_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ipfind_api_key": {
+      "type": "string",
+      "title": "IP Find API Key",
+      "description": "You can generate an API key at IPfind.com.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# IP Find MCP Server\n\nA Model Context Protocol server that enables AI assistants to use IP Find. \n\n## How It Works\n\nThe MCP server:\n\n-   Connects to your IP Find API and allows AI Assistants to get locations of IP Addresses.\n\n## Usage with Claude Desktop\n\n### Prerequisites\n\n-   NodeJS\n-   MCP Client (like Claude Desktop App)\n-   IP Find API Key\n\n### Installation\n\nTo use this server with the Claude Desktop app, add the following configuration to the \"mcpServers\" section of your `claude_desktop_config.json`:\n\n```json\n{\n    \"mcpServers\": {\n        \"ipfind\": {\n            \"command\": \"npx\",\n            \"args\": [\"-y\", \"@ipfind/ipfind-mcp-server\"],\n            \"env\": {\n                \"IPFIND_API_KEY\": \"<API KEY GOES HERE>\"\n            }\n        }\n    }\n}\n```\n\n-   `IPFIND_API_KEY` - You can generate an API key at IPfind.com.\n\n\nCertified by [MCPHub](https://mcphub.com/mcp-servers/ipfind/ipfind-mcp-server)\n",
+  "category": "Location",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ipfind-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "@ipfind/ipfind-mcp-server"],
+        "env": {
+          "IPFIND_API_KEY": "<API KEY GOES HERE>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ipfind",
+    "repo": "ipfind-mcp-server",
+    "url": "https://github.com/ipfind/ipfind-mcp-server",
+    "name": "ipfind-mcp-server",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 3,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b7e07a881a60fd2caed94067d4b4237004759cfd"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.110Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n    \"name\": \"@ipfind/ipfind-mcp-server\",\n    \"version\": \"0.1.1\",\n    \"description\": \"MCP server for interacting with IP Find API\",\n    \"license\": \"MIT\",\n    \"author\": \"IP Find\",\n    \"repository\": \"github:ipfind/ipfind-mcp-server\",\n    \"homepage\": \"https://ipfind.com\",\n    \"engines\": {\n        \"node\": \">=18\"\n    },\n    \"type\": \"module\",\n    \"bin\": {\n        \"mcp-server-ipfind\": \"build/index.js\"\n    },\n    \"files\": [\n        \"build\"\n    ],\n    \"scripts\": {\n        \"test\": \"jest --runInBand --forceExit --verbose false\",\n        \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n        \"prepare\": \"npm run build\",\n        \"watch\": \"tsc --watch\",\n        \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n    },\n    \"dependencies\": {\n        \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n        \"zod\": \"^3.24.2\"\n    },\n    \"devDependencies\": {\n        \"@jest/globals\": \"^29.7.0\",\n        \"@types/node\": \"^22.13.10\",\n        \"jest\": \"^29.7.0\",\n        \"jest-fetch-mock\": \"^3.0.3\",\n        \"ts-jest\": \"^29.2.6\",\n        \"ts-node\": \"^10.9.2\",\n        \"typescript\": \"^5.8.2\"\n    }\n}\n"
+}

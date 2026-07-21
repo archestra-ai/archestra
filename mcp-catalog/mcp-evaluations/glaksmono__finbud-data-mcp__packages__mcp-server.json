@@ -1,0 +1,106 @@
+{
+  "name": "glaksmono__finbud-data-mcp__packages__mcp-server",
+  "display_name": "Finbud Data",
+  "description": "AI & Developer centric financial data API",
+  "author": {
+    "name": "glaksmono"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "finbud-data-mcp"],
+    "env": {
+      "FINBUD_DATA_API_KEY": "${user_config.finbud_data_api_key}",
+      "FINBUD_DATA_BASE_URL": "${user_config.finbud_data_base_url}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "finbud_data_api_key": {
+      "type": "string",
+      "title": "Finbud Data API Key",
+      "description": "Your API key for authentication with the Finbud Data API.",
+      "sensitive": true,
+      "required": true
+    },
+    "finbud_data_base_url": {
+      "type": "string",
+      "title": "Finbud Data Base URL",
+      "description": "The base URL for Finbud Data API requests.",
+      "default": "https://data.finbud.ai/api",
+      "required": false
+    }
+  },
+  "readme": "# Finbud Data TypeScript MCP Server\n\nIt is generated with [Stainless](https://www.stainless.com/).\n\n## Installation\n\n### Direct invocation\n\nYou can run the MCP Server directly via `npx`:\n\n```sh\nexport FINBUD_DATA_API_KEY=\"My API Key\"\nnpx -y finbud-data-mcp\n```\n\n### Via MCP Client\n\nThere is a partial list of existing clients at [modelcontextprotocol.io](https://modelcontextprotocol.io/clients). If you already\nhave a client, consult their documentation to install the MCP server.\n\nFor clients with a configuration JSON, it might look something like this:\n\n```json\n{\n  \"mcpServers\": {\n    \"finbud_data_api\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"finbud-data-mcp\"],\n      \"env\": {\n        \"FINBUD_DATA_API_KEY\": \"My API Key\",\n        \"FINBUD_DATA_BASE_URL\": \"https://data.finbud.ai/api\"\n      }\n    }\n  }\n}\n```\n\n## Filtering tools\n\nYou can run the package on the command line to discover and filter the set of tools that are exposed by the\nMCP Server. This can be helpful for large APIs where including all endpoints at once is too much for your AI's\ncontext window.\n\nYou can filter by multiple aspects:\n\n- `--tool` includes a specific tool by name\n- `--resource` includes all tools under a specific resource, and can have wildcards, e.g. `my.resource*`\n- `--operation` includes just read (get/list) or just write operations\n\nSee more information with `--help`.\n\nAll of these command-line options can be repeated, combined together, and have corresponding exclusion versions (e.g. `--no-tool`).\n\nUse `--list` to see the list of available tools, or see below.\n\n## Importing the tools and server individually\n\n```js\n// Import the server, generated endpoints, or the init function\nimport { server, endpoints, init } from \"finbud-data-mcp/server\";\n\n// import a specific tool\nimport retrieveEstimatesAnalysts from \"finbud-data-mcp/tools/analysts/retrieve-estimates-analysts\";\n\n// initialize the server and all endpoints\ninit({ server, endpoints });\n\n// manually start server\nconst transport = new StdioServerTransport();\nawait server.connect(transport);\n\n// or initialize your own server with specific tools\nconst myServer = new McpServer(...);\n\n// define your own endpoint\nconst myCustomEndpoint = {\n  tool: {\n    name: 'my_custom_tool',\n    description: 'My custom tool',\n    inputSchema: zodToJsonSchema(z.object({ a_property: z.string() })),\n  },\n  handler: async (client: client, args: any) => {\n    return { myResponse: 'Hello world!' };\n  })\n};\n\n// initialize the server with your custom endpoints\ninit({ server: myServer, endpoints: [retrieveEstimatesAnalysts, myCustomEndpoint] });\n```\n\n## Available Tools\n\nThe following tools are available in this MCP server.\n\n### Resource `analysts`:\n\n- `retrieve_estimates_analysts` (`read`): Fetches analyst estimates (revenue, EPS) for a given company stock symbol.\n- `retrieve_price_targets_analysts` (`read`): Fetches analyst price target data for a given company stock symbol.\n- `retrieve_recommendations_analysts` (`read`): Fetches analyst stock recommendations (buy, hold, sell ratings) for a given company stock symbol.\n\n### Resource `charts`:\n\n- `retrieve_historical_charts` (`read`): Fetches historical intraday chart data for a specific company stock symbol and timeframe. Optional query parameters allow specifying a date range ('from', 'to') and requesting extended hours data ('extended').\n\n### Resource `company.revenue_segmentation`:\n\n- `retrieve_by_geography_company_revenue_segmentation` (`read`): Fetches a breakdown of a company's revenue by geographic segment for a given stock symbol, optionally filtered by period (annual/quarter).\n- `retrieve_by_product_company_revenue_segmentation` (`read`): Fetches a breakdown of a company's revenue by product segment for a given stock symbol, optionally filtered by period (annual/quarter).\n\n### Resource `earnings`:\n\n- `get_calendar_earnings` (`read`): Fetches the earnings calendar for a specified date range or the next few days.\n- `get_transcripts_earnings` (`read`): Fetches the earnings call transcripts for a given company stock symbol, optionally filtered by year or quarter.\n\n### Resource `economics`:\n\n- `get_calendar_economics` (`read`): Fetches a calendar of upcoming or past economic events (e.g., CPI release, FOMC meeting) for a specified date range.\n- `get_indicator_data_economics` (`read`): Fetches historical data for a specific economic indicator (e.g., real GDP, CPI, unemployment rate). The indicator name should be provided in kebab-case (e.g., 'real-gdp').\n\n### Resource `etf`:\n\n- `retrieve_holdings_etf` (`read`): Fetches the underlying holdings for a specific Exchange Traded Fund (ETF) symbol.\n\n### Resource `financials`:\n\n- `retrieve_balance_sheet_financials` (`read`): Fetches the 10 most recent annual balance sheet statements for a given company stock symbol.\n- `retrieve_cash_flow_financials` (`read`): Fetches the 10 most recent annual cash flow statements for a given company stock symbol.\n- `retrieve_financial_score_financials` (`read`): Fetches the financial score for a given company stock symbol. The score provides a quick assessment of a company's financial health.\n- `retrieve_income_statement_financials` (`read`): Fetches the 10 most recent annual income statements for a given company stock symbol.\n- `retrieve_key_metrics_financials` (`read`): Fetches the 10 most recent annual key metrics for a given company stock symbol.\n- `retrieve_ratios_financials` (`read`): Fetches the 10 most recent annual financial ratios for a given company stock symbol.\n\n### Resource `government.congress`:\n\n- `retrieve_disclosure_government_congress` (`read`): Fetches data from financial disclosures made by members of the U.S. House of Representatives. Can be filtered by stock symbol.\n- `retrieve_trading_government_congress` (`read`): Fetches data on stock trades made by U.S. Senators, as reported in Periodic Transaction Reports (PTRs). Can be filtered by stock symbol.\n\n### Resource `insider_trading`:\n\n- `retrieve_insider_trading` (`read`): Fetches insider trading data for a specific company stock symbol.\n\n### Resource `market.overview`:\n\n- `list_active_market_overview` (`read`): Fetches a list of the stocks with the highest trading volume for the day.\n- `list_gainers_market_overview` (`read`): Fetches a list of the stocks with the highest percentage gain for the day.\n- `list_losers_market_overview` (`read`): Fetches a list of the stocks with the largest percentage loss for the day.\n\n### Resource `news`:\n\n- `retrieve_crypto_news` (`read`): Fetches recent news articles related to the cryptocurrency market.\n- `retrieve_forex_news` (`read`): Fetches recent news articles related to the Forex market.\n- `retrieve_stock_news` (`read`): Fetches recent news articles for a given company stock symbol or multiple symbols.\n\n### Resource `options`:\n\n- `retrieve_quotes_options` (`read`): Retrieves historical quotes (NBBO - National Best Bid and Offer) for a specified options contract over a defined time range.\n  Includes bid/ask prices, sizes, exchange IDs, and timestamps. Max 50,000 results per request.\n- `retrieve_technical_indicator_options` (`read`): Retrieves historical technical indicator data (SMA, EMA, MACD, RSI) for a specified options ticker.\n  Query parameters vary based on the selected indicator.\n\n### Resource `options.snapshot`:\n\n- `retrieve_chain_options_snapshot` (`read`): Retrieves a comprehensive snapshot of all options contracts for a specified underlying asset ticker.\n  This consolidates key metrics like pricing, greeks, IV, quotes, trades, and open interest.\n- `retrieve_contract_options_snapshot` (`read`): Retrieves a comprehensive snapshot for a specific options contract identifier.\n  Consolidates vital metrics like break-even price, day changes, IV, open interest, greeks, last quote/trade, and underlying asset info.\n- `retrieve_unified_options_snapshot` (`read`): Retrieves a snapshot of the latest market data for one or more option contract tickers.\n  This typically includes last trade, last quote, day's aggregate data, and previous day's aggregate data.\n\n### Resource `options.trades`:\n\n- `retrieve_options_trades` (`read`): Retrieves comprehensive, tick-level trade data for a specified options ticker within a defined time range.\n  Includes price, size, exchange, conditions, and precise timestamps. Max 50,000 results per request.\n- `retrieve_last_options_trades` (`read`): Retrieves the most recent trade for a specified options ticker symbol.\n\n### Resource `quotes`:\n\n- `retrieve_quotes` (`read`): Fetches the real-time full stock quote(s) for one or more comma-separated company stock symbols.\n\n### Resource `search`:\n\n- `general_search_search` (`read`): Search for various financial instruments including stocks, ETFs, forex, and cryptocurrencies by name or symbol across different exchanges.\n\n### Resource `technicals`:\n\n- `retrieve_indicator_data_technicals` (`read`): Fetches historical technical indicator data for a specific stock symbol, indicator type, and time interval. Supports various indicators like SMA, EMA, WMA, DEMA, TEMA, Williams %R, RSI, ADX, and Standard Deviation. Specific required parameters depend on the chosen indicator (e.g., 'period' is required for most).\n",
+  "category": "Finance",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "finbud-data-mcp": {
+        "command": "npx",
+        "args": ["-y", "finbud-data-mcp"],
+        "env": {
+          "FINBUD_DATA_API_KEY": "My API Key"
+        }
+      },
+      "finbud-data-mcp-with-config": {
+        "command": "npx",
+        "args": ["-y", "finbud-data-mcp"],
+        "env": {
+          "FINBUD_DATA_API_KEY": "My API Key",
+          "FINBUD_DATA_BASE_URL": "https://data.finbud.ai/api"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "glaksmono",
+    "repo": "finbud-data-mcp",
+    "url": "https://github.com/glaksmono/finbud-data-mcp/tree/main/packages/mcp-server",
+    "name": "finbud-data-mcp",
+    "path": "packages/mcp-server",
+    "stars": 1,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "87380f462abd8822e164df60d3883ecaa4398036"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:10.557Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "finbud-data",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "yargs",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"finbud-data-mcp\",\n  \"version\": \"0.0.1-alpha.1\",\n  \"description\": \"The official MCP Server for the Finbud Data API\",\n  \"author\": \"Finbud Data <>\",\n  \"types\": \"dist/index.d.ts\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"commonjs\",\n  \"repository\": \"github:glaksmono/finbud-data-mcp\",\n  \"license\": \"Apache-2.0\",\n  \"packageManager\": \"yarn@1.22.22\",\n  \"private\": false,\n  \"scripts\": {\n    \"test\": \"jest\",\n    \"build\": \"bash ./build\",\n    \"prepack\": \"echo 'to pack, run yarn build && (cd dist; yarn pack)' && exit 1\",\n    \"prepublishOnly\": \"echo 'to publish, run yarn build && (cd dist; yarn publish)' && exit 1\",\n    \"format\": \"prettier --write --cache --cache-strategy metadata . !dist\",\n    \"prepare\": \"npm run build\",\n    \"tsn\": \"ts-node -r tsconfig-paths/register\",\n    \"lint\": \"eslint --ext ts,js .\",\n    \"fix\": \"eslint --fix --ext ts,js .\"\n  },\n  \"dependencies\": {\n    \"finbud-data\": \"file:../../dist/\",\n    \"@modelcontextprotocol/sdk\": \"^1.6.1\",\n    \"yargs\": \"^17.7.2\"\n  },\n  \"bin\": {\n    \"mcp-server\": \"dist/index.js\"\n  },\n  \"devDependencies\": {\n    \"@types/jest\": \"^29.4.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^6.7.0\",\n    \"@typescript-eslint/parser\": \"^6.7.0\",\n    \"eslint\": \"^8.49.0\",\n    \"eslint-plugin-prettier\": \"^5.0.1\",\n    \"eslint-plugin-unused-imports\": \"^3.0.0\",\n    \"jest\": \"^29.4.0\",\n    \"prettier\": \"^3.0.0\",\n    \"ts-jest\": \"^29.1.0\",\n    \"ts-morph\": \"^19.0.0\",\n    \"ts-node\": \"^10.5.0\",\n    \"tsc-multi\": \"https://github.com/stainless-api/tsc-multi/releases/download/v1.1.3/tsc-multi.tgz\",\n    \"tsconfig-paths\": \"^4.0.0\",\n    \"typescript\": \"^4.8.2\"\n  },\n  \"imports\": {\n    \"finbud-data-mcp\": \".\",\n    \"finbud-data-mcp/*\": \"./src/*\"\n  },\n  \"exports\": {\n    \".\": {\n      \"require\": \"./dist/index.js\",\n      \"default\": \"./dist/index.mjs\"\n    },\n    \"./*.mjs\": \"./dist/*.mjs\",\n    \"./*.js\": \"./dist/*.js\",\n    \"./*\": {\n      \"require\": \"./dist/*.js\",\n      \"default\": \"./dist/*.mjs\"\n    }\n  }\n}\n"
+}

@@ -1,0 +1,99 @@
+{
+  "name": "21st-dev__magic-mcp",
+  "display_name": "magic-mcp",
+  "description": "It's like v0 but in your Cursor/WindSurf/Cline. 21st dev Magic MCP server for working with your frontend like Magic",
+  "author": {
+    "name": "21st-dev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@21st-dev/magic@latest"],
+    "env": {
+      "API_KEY": "${user_config.api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "21st.dev Magic API Key",
+      "description": "21st.dev Magic API Key",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# 21st.dev Magic AI Agent\n\n![MCP Banner](https://21st.dev/magic-agent-og-image.png)\n\nMagic Component Platform (MCP) is a powerful AI-driven tool that helps developers create beautiful, modern UI components instantly through natural language descriptions. It integrates seamlessly with popular IDEs and provides a streamlined workflow for UI development.\n\n## 🌟 Features\n\n- **AI-Powered UI Generation**: Create UI components by describing them in natural language\n- **Multi-IDE Support**:\n  - [Cursor](https://cursor.com) IDE integration\n  - [Windsurf](https://windsurf.ai) support\n  - [VSCode](https://code.visualstudio.com/) support\n  - [VSCode + Cline](https://cline.bot) integration (Beta)\n- **Modern Component Library**: Access to a vast collection of pre-built, customizable components inspired by [21st.dev](https://21st.dev)\n- **Real-time Preview**: Instantly see your components as you create them\n- **TypeScript Support**: Full TypeScript support for type-safe development\n- **SVGL Integration**: Access to a vast collection of professional brand assets and logos\n- **Component Enhancement**: Improve existing components with advanced features and animations (Coming Soon)\n\n## 🎯 How It Works\n\n1. **Tell Agent What You Need**\n\n   - In your AI Agent's chat, just type `/ui` and describe the component you're looking for\n   - Example: `/ui create a modern navigation bar with responsive design`\n\n2. **Let Magic Create It**\n\n   - Your IDE prompts you to use Magic\n   - Magic instantly builds a polished UI component\n   - Components are inspired by 21st.dev's library\n\n3. **Seamless Integration**\n   - Components are automatically added to your project\n   - Start using your new UI components right away\n   - All components are fully customizable\n\n## 🚀 Getting Started\n\n### Prerequisites\n\n- Node.js (Latest LTS version recommended)\n- One of the supported IDEs:\n  - Cursor\n  - Windsurf\n  - VSCode (with Cline extension)\n\n### Installation\n\n1. **Generate API Key**\n\n   - Visit [21st.dev Magic Console](https://21st.dev/magic/console)\n   - Generate a new API key\n\n2. **Choose Installation Method**\n\n#### Method 1: CLI Installation (Recommended)\n\nOne command to install and configure MCP for your IDE:\n\n```bash\nnpx @21st-dev/cli@latest install <client> --api-key <key>\n```\n\nSupported clients: cursor, windsurf, cline, claude\n\n#### Method 2: Manual Configuration\n\nIf you prefer manual setup, add this to your IDE's MCP config file:\n\n```json\n{\n  \"mcpServers\": {\n    \"@21st-dev/magic\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@21st-dev/magic@latest\", \"API_KEY=\\\"your-api-key\\\"\"]\n    }\n  }\n}\n```\n\nConfig file locations:\n\n- Cursor: `~/.cursor/mcp.json`\n- Windsurf: `~/.codeium/windsurf/mcp_config.json`\n- Cline: `~/.cline/mcp_config.json`\n- Claude: `~/.claude/mcp_config.json`\n\n#### Method 3: VS Code Installation\n\nFor one-click installation, click one of the install buttons below:\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=%4021st-dev%2Fmagic&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%4021st-dev%2Fmagic%40latest%22%5D%2C%22env%22%3A%7B%22API_KEY%22%3A%22%24%7Binput%3AapiKey%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%2C%22description%22%3A%2221st.dev+Magic+API+Key%22%2C%22password%22%3Atrue%7D%5D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=%4021st-dev%2Fmagic&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%4021st-dev%2Fmagic%40latest%22%5D%2C%22env%22%3A%7B%22API_KEY%22%3A%22%24%7Binput%3AapiKey%7D%22%7D%7D&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22apiKey%22%2C%22description%22%3A%2221st.dev+Magic+API+Key%22%2C%22password%22%3Atrue%7D%5D&quality=insiders)\n\n##### Manual VS Code Setup\n\nFirst, check the install buttons above for one-click installation. For manual setup:\n\nAdd the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`:\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"apiKey\",\n        \"description\": \"21st.dev Magic API Key\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"@21st-dev/magic\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"@21st-dev/magic@latest\"],\n        \"env\": {\n          \"API_KEY\": \"${input:apiKey}\"\n        }\n      }\n    }\n  }\n}\n```\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace:\n\n```json\n{\n  \"inputs\": [\n    {\n      \"type\": \"promptString\",\n      \"id\": \"apiKey\",\n      \"description\": \"21st.dev Magic API Key\",\n      \"password\": true\n    }\n  ],\n  \"servers\": {\n    \"@21st-dev/magic\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@21st-dev/magic@latest\"],\n      \"env\": {\n        \"API_KEY\": \"${input:apiKey}\"\n      }\n    }\n  }\n}\n```\n\n## ❓ FAQ\n\n### How does Magic AI Agent handle my codebase?\n\nMagic AI Agent only writes or modifies files related to the components it generates. It follows your project's code style and structure, and integrates seamlessly with your existing codebase without affecting other parts of your application.\n\n### Can I customize the generated components?\n\nYes! All generated components are fully editable and come with well-structured code. You can modify the styling, functionality, and behavior just like any other React component in your codebase.\n\n### What happens if I run out of generations?\n\nIf you exceed your monthly generation limit, you'll be prompted to upgrade your plan. You can upgrade at any time to continue generating components. Your existing components will remain fully functional.\n\n### How soon do new components get added to 21st.dev's library?\n\nAuthors can publish components to 21st.dev at any time, and Magic Agent will have immediate access to them. This means you'll always have access to the latest components and design patterns from the community.\n\n### Is there a limit to component complexity?\n\nMagic AI Agent can handle components of varying complexity, from simple buttons to complex interactive forms. However, for best results, we recommend breaking down very complex UIs into smaller, manageable components.\n\n## 🛠️ Development\n\n### Project Structure\n\n```\nmcp/\n├── app/\n│   └── components/     # Core UI components\n├── types/             # TypeScript type definitions\n├── lib/              # Utility functions\n└── public/           # Static assets\n```\n\n### Key Components\n\n- `IdeInstructions`: Setup instructions for different IDEs\n- `ApiKeySection`: API key management interface\n- `WelcomeOnboarding`: Onboarding flow for new users\n\n## 🤝 Contributing\n\nWe welcome contributions! Please join our [Discord community](https://discord.gg/Qx4rFunHfm) and provide feedback to help improve Magic Agent. The source code is available on [GitHub](https://github.com/serafimcloud/21st).\n\n## 👥 Community & Support\n\n- [Discord Community](https://discord.gg/Qx4rFunHfm) - Join our active community\n- [Twitter](https://x.com/serafimcloud) - Follow us for updates\n\n## ⚠️ Beta Notice\n\nMagic Agent is currently in beta. All features are free during this period. We appreciate your feedback and patience as we continue to improve the platform.\n\n## 📝 License\n\nMIT License\n\n## 🙏 Acknowledgments\n\n- Thanks to our beta testers and community members\n- Special thanks to the Cursor, Windsurf, and Cline teams for their collaboration\n- Integration with [21st.dev](https://21st.dev) for component inspiration\n- [SVGL](https://svgl.app) for logo and brand asset integration\n\n---\n\nFor more information, join our [Discord community](https://discord.gg/Qx4rFunHfm) or visit [21st.dev/magic](https://21st.dev/magic).\n",
+  "category": "AI Tools",
+  "quality_score": 79,
+  "archestra_config": {
+    "client_config_permutations": {
+      "21st-dev-magic-configured": {
+        "command": "npx",
+        "args": ["-y", "@21st-dev/magic@latest", "API_KEY=\"your-api-key\""],
+        "env": {}
+      },
+      "21st-dev-magic-with-env": {
+        "command": "npx",
+        "args": ["-y", "@21st-dev/magic@latest"],
+        "env": {
+          "API_KEY": "${input:apiKey}"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "21st-dev",
+    "repo": "magic-mcp",
+    "url": "https://github.com/21st-dev/magic-mcp",
+    "name": "21st-dev__magic-mcp",
+    "path": null,
+    "stars": 3562,
+    "contributors": 6,
+    "issues": 21,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "ba1f71e62879e6c0026322cf518f4ccf02620414"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:33.524Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "cors",
+      "importance": 8
+    },
+    {
+      "name": "open",
+      "importance": 5
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@21st-dev/magic\",\n  \"version\": \"0.1.0\",\n  \"type\": \"module\",\n  \"description\": \"Magic MCP UI builder by 21st.dev\",\n  \"homepage\": \"https://21st.dev/magic\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/21st-dev/magic-mcp.git\"\n  },\n  \"bin\": {\n    \"magic\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"ai\",\n    \"UI\",\n    \"frontend\",\n    \"21st.dev\",\n    \"21\",\n    \"magic\"\n  ],\n  \"main\": \"dist/index.js\",\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"build:prod\": \"npm run build && npm run test\",\n    \"debug\": \"npm run build && npx @modelcontextprotocol/inspector node dist/index.js DEBUG=true\",\n    \"start\": \"node dist/index.js\",\n    \"prepare\": \"npm run build:prod\",\n    \"dev\": \"nodemon --watch src --ext ts,json --exec \\\"npm run build\\\"\",\n    \"publish-patch\": \"npm version patch && npm run build:prod && npm publish --access public\",\n    \"test\": \"jest\"\n  },\n  \"author\": \"serafim@21st.dev\",\n  \"license\": \"ISC\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"@types/cors\": \"^2.8.17\",\n    \"@types/express\": \"^5.0.0\",\n    \"cors\": \"^2.8.5\",\n    \"open\": \"^10.1.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/axios\": \"^0.9.36\",\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/node\": \"^22.13.4\",\n    \"@types/react\": \"^19.0.12\",\n    \"jest\": \"^29.7.0\",\n    \"nodemon\": \"^3.1.9\",\n    \"shx\": \"^0.3.4\",\n    \"ts-jest\": \"^29.1.2\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n"
+}

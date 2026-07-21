@@ -1,0 +1,44 @@
+{
+  "name": "box__remote-mcp",
+  "display_name": "Box MCP",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjg1ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgNTEyIDI3NyI+PHBhdGggZmlsbD0iIzAwNjFkNSIgZD0iTTUwNy40ODYgMjQ1LjQzNGM2LjM5MSA4Ljk0OCA1LjExMyAyMC40NTMtMi41NTcgMjYuODQ0Yy04Ljk0OCA2LjM5Mi0yMS43MyA1LjExMy0yOC4xMjItMi41NTZsLTQ0Ljc0MS01Ny41MjRsLTQzLjQ2MiA1Ni4yNDVjLTYuMzkyIDguOTQ4LTE5LjE3NSA4Ljk0OC0yOC4xMjMgMi41NTdjLTguOTQ4LTYuMzkyLTEwLjIyNi0xNy44OTYtMy44MzUtMjYuODQ0bDUxLjEzMi02Ni40NzJsLTUxLjEzMi02Ni40NzJjLTYuMzkxLTguOTQ4LTMuODM1LTIxLjczIDMuODM1LTI4LjEyMmM4Ljk0OC02LjM5MiAyMS43MzEtMy44MzUgMjguMTIzIDMuODM1bDQzLjQ2MiA1Ny41MjNsNDQuNzQtNTQuOTY3YzYuMzkyLTguOTQ4IDE3Ljg5Ny0xMC4yMjYgMjguMTIzLTMuODM1YzguOTQ4IDYuMzkyIDguOTQ4IDE5LjE3NSAyLjU1NyAyOC4xMjNsLTQ5Ljg1NCA2NS4xOTN6bS0yMzIuNjUxLTcuNjdjLTMzLjIzNiAwLTYwLjA4LTI1LjU2Ni02MC4wOC01OC44MDJjMC0zMS45NTcgMjYuODQ0LTU4LjgwMiA2MC4wOC01OC44MDJzNjAuMDggMjYuODQ1IDYwLjA4IDU4LjgwMmMtMS4yNzggMzMuMjM2LTI4LjEyMyA1OC44MDItNjAuMDggNTguODAybS0xNzYuNDA2IDBjLTMzLjIzNiAwLTYwLjA4LTI1LjU2Ni02MC4wOC01OC44MDJjMC0zMS45NTcgMjYuODQ0LTU4LjgwMiA2MC4wOC01OC44MDJzNjAuMDggMjYuODQ1IDYwLjA4IDU4LjgwMmMwIDMzLjIzNi0yNi44NDQgNTguODAyLTYwLjA4IDU4LjgwMk0yNzQuODM1IDgxLjgxMWMtMzcuMDcgMC03MC4zMDcgMjAuNDUzLTg2LjkyNSA1MS4xMzJjLTE2LjYxOC0zMC42NzktNDkuODUzLTUxLjEzMi04OC4yMDItNTEuMTMyYy0yMy4wMSAwLTQzLjQ2MyA3LjY3LTYwLjA4IDE5LjE3NVYxOS4xNzVDMzkuNjI3IDguOTQ4IDMwLjY3OCAwIDIwLjQ1MiAwQzguOTQ4IDAgMCA4Ljk0OCAwIDE5LjE3NVYxODAuMjRjMS4yNzggNTMuNjg4IDQ0Ljc0IDk1Ljg3MiA5OC40MyA5NS44NzJjMzguMzQ4IDAgNzEuNTg0LTIxLjczIDg4LjIwMi01Mi40MWMxNi42MTggMzAuNjggNDkuODU0IDUyLjQxIDg2LjkyNSA1Mi40MWM1NC45NjcgMCA5OS43MDctNDMuNDYyIDk5LjcwNy05OC40M2MxLjI3OC01Mi40MS00My40NjItOTUuODcyLTk4LjQzLTk1Ljg3MiIvPjwvc3ZnPg==",
+  "description": "Remote MCP server for Box - cloud content management and file sharing",
+  "oauth_config": {
+    "name": "Box MCP",
+    "server_url": "https://mcp.box.com/",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Remote MCP server for Box - cloud content management and file sharing",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "File Management",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "box"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.box.com/",
+    "docs_url": "https://box.dev/guides/box-mcp/remote/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

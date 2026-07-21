@@ -1,0 +1,93 @@
+{
+  "name": "kukapay__dune-analytics-mcp",
+  "display_name": "dune-analytics-mcp",
+  "description": "A mcp server that bridges Dune Analytics data to AI agents.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "DUNE_API_KEY": "${user_config.dune_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "dune_api_key": {
+      "type": "string",
+      "title": "Dune API Key",
+      "description": "Your Dune Analytics API key (get one from Dune Analytics settings).",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Dune Analytics MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@kukapay/dune-analytics-mcp)](https://smithery.ai/server/@kukapay/dune-analytics-mcp)\n\nA mcp server that bridges Dune Analytics data to AI agents.\n\n## Features\n\n- **Tools**: \n  - `get_latest_result`: Fetch the latest results of a Dune query by ID.\n  - `run_query`: Execute a Dune query by ID and retrieve results.\n- **CSV Output**: All results are returned as CSV-formatted strings for easy processing.\n\n## Prerequisites\n\n- Python 3.10+\n- A valid Dune Analytics API key (get one from [Dune Analytics](https://dune.com/settings/api))\n\n## Installation\n\n### Installing via Smithery\n\nTo install Dune Analytics for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kukapay/dune-analytics-mcp):\n\n```bash\nnpx -y @smithery/cli install @kukapay/dune-analytics-mcp --client claude\n```\n\n### Manual Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/dune-analytics-mcp.git\n   cd dune-analytics-mcp\n   ```\n\n2. **Set Up Environment Variables**:\n   Create a `.env` file in the project root:\n   ```\n   DUNE_API_KEY=your_api_key_here\n   ```\n   Alternatively, set it as a system environment variable:\n   ```bash\n   export DUNE_API_KEY=\"your_api_key_here\"\n   ```\n\n## Usage\n\n### Running the Server\n\n- **Development Mode**:\n  ```bash\n  mcp dev main.py\n  ```\n  This starts the server with hot reloading for development.\n\n- **Install for Claude Desktop**:\n  ```bash\n  mcp install main.py --name \"Dune Analytics\"\n  ```\n  Installs the server as a service for use with Claude Desktop.\n\n### Tool Usage\n\n1. **`get_latest_result(query_id)`**\n   - **Description**: Retrieves the latest results of a specified Dune query.\n   - **Input**: `query_id` (int) - The ID of the Dune query.\n   - **Output**: CSV-formatted string of the query results.\n   - **Example**:\n     ```\n     get_latest_result(query_id=4853921)\n     ```\n\n2. **`run_query(query_id)`**\n   - **Description**: Executes a Dune query and returns the results.\n   - **Input**: `query_id` (int) - The ID of the Dune query to run.\n   - **Output**: CSV-formatted string of the query results.\n   - **Example**:\n     ```\n     run_query(query_id=1215383)\n     ```\n\n### Example Commands in Claude Desktop\n\n- \"Get latest results for dune query 1215383\"\n- \"Run dune query 1215383\"\n\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kukapay-dune-analytics-mcp": {
+        "command": "mcp",
+        "args": ["dev", "main.py"],
+        "env": {
+          "DUNE_API_KEY": "your_api_key_here"
+        }
+      },
+      "kukapay-dune-analytics-mcp-claude-install": {
+        "command": "mcp",
+        "args": ["install", "main.py", "--name", "Dune Analytics"],
+        "env": {
+          "DUNE_API_KEY": "your_api_key_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "dune-analytics-mcp",
+    "url": "https://github.com/kukapay/dune-analytics-mcp",
+    "name": "dune-analytics-mcp",
+    "path": null,
+    "stars": 22,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.873Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": null
+}

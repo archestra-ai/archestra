@@ -1,0 +1,90 @@
+{
+  "name": "jordandalton__restcsvmcpserver",
+  "display_name": "RestCsvMcpServer",
+  "description": "MCP Server for RestCSV, Generated using MCPGen",
+  "author": {
+    "name": "JordanDalton"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["restcsv-mcp-server"],
+    "env": {
+      "RESTCSV_API_KEY": "${user_config.restcsv_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "restcsv_api_key": {
+      "type": "string",
+      "title": "RestCSV API Key",
+      "description": "Your API key for RestCSV.com",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# REST CSV MCP Server\n\nThis was generated using [mcpgen](https://mcpgen.jordandalton.com/).\n\nTo build the MCP server, run:\n\n```\nnpm install && npm run build\n```\n\nThis will compile the typescript files and produce a build directory plus it will output the json you can copy/paste into your MCP client (Claude Desktop, Windsurf, Cursor, etc.)\n\nIf all things go well, this will produce an output similar to this:\n\n```json\n{\n  \"mcpServers\": {\n    \"my-mcp\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"restcsv-mcp-server\"\n      ],\n      \"env\": {\n        \"RESTCSV_API_KEY\": \"<REPLACE>\"\n      }\n    }\n  }\n}\n```\n\n## Register an account at RestCSV.com](https://restcsv.com/)\n\n## Sharing\n\nIf you have found value in this service please share it on social media. You can tag me [@jordandalton](https://x.com/jordankdalton) on X, or [jdcarnivore](https://www.reddit.com/user/jdcarnivore) on Reddit.",
+  "category": "Data",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "restcsv-mcp-server": {
+        "command": "npx",
+        "args": ["restcsv-mcp-server"],
+        "env": {
+          "RESTCSV_API_KEY": "<REPLACE>"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JordanDalton",
+    "repo": "RestCsvMcpServer",
+    "url": "https://github.com/JordanDalton/RestCsvMcpServer",
+    "name": "jordandalton__restcsvmcpserver",
+    "path": null,
+    "stars": 10,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "dd0b46d757ed8db0b5b5b9a17e91e82ce1227331"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.645Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"restcsv-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc && chmod 755 build/index.js && node showSettings\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"csv\",\n    \"restcsv\"\n  ],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"description\": \"MCP Server for RestCSV\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"axios\": \"^1.8.4\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"typescript\": \"^5.8.3\"\n  },\n  \"bin\": {\n    \"restcsv-mcp-server\": \"./bin.js\"\n  }\n}\n"
+}

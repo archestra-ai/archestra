@@ -1,0 +1,116 @@
+{
+  "name": "mikechao__brave-search-mcp",
+  "display_name": "brave-search-mcp",
+  "description": "An MCP Server implementation that integrates the Brave Search API, providing, Web Search, Local Points of Interest Search, Image Search, Video Search and News Search capabilities",
+  "author": {
+    "name": "mikechao"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "brave-search-mcp"],
+    "env": {
+      "BRAVE_API_KEY": "${user_config.brave_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "brave_api_key": {
+      "type": "string",
+      "title": "Brave API Key",
+      "description": "Your API key for authentication with the Brave Search API. Sign up for an account and generate your key from the Brave Search API developer dashboard (api.search.brave.com/app/keys).",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Brave Search MCP Server\n\nAn MCP Server implementation that integrates the [Brave Search API](https://brave.com/search/api/), providing, Web Search, Local Points of Interest Search, Video Search, Image Search and News Search capabilities\n\n<a href=\"https://glama.ai/mcp/servers/@mikechao/brave-search-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@mikechao/brave-search-mcp/badge\" alt=\"Brave Search MCP server\" />\n</a>\n\n## Features\n\n- **Web Search**: Perform a regular search on the web\n- **Image Search**: Search the web for images. Image search results will be available as a Resource\n- **News Search**: Search the web for news\n- **Video Search**: Search the web for videos\n- **Local Points of Interest Search**: Search for local physical locations, businesses, restaurants, services, etc\n\n## Tools\n\n- **brave_web_search**\n\n  - Execute web searches using Brave's API\n  - Inputs:\n    - `query` (string): The term to search the internet for\n    - `count` (number, optional): The number of results to return (max 20, default 10)\n    - `offset` (number, optional, default 0): The offset for pagination\n    - `freshness` (enum, optional): Filters search results by when they were discovered\n      - The following values are supported\n        - pd: Discovered within the last 24 hours.\n        - pw: Discovered within the last 7 Days.\n        - pm: Discovered within the last 31 Days.\n        - py: Discovered within the last 365 Days\n        - YYYY-MM-DDtoYYYY-MM-DD: Custom date range (e.g., 2022-04-01to2022-07-30)\n\n- **brave_image_search**\n\n  - Get images from the web relevant to the query\n  - Inputs:\n    - `query` (string): The term to search the internet for images of\n    - `count` (number, optional): The number of images to return (max 3, default 1)\n\n- **brave_news_search**\n\n  - Searches the web for news\n  - Inputs:\n    - `query` (string): The term to search the internet for news articles, trending topics, or recent events\n    - `count` (number, optional): The number of results to return (max 20, default 10)\n    - `freshness` (enum, optional): Filters search results by when they were discovered\n      - The following values are supported\n        - pd: Discovered within the last 24 hours.\n        - pw: Discovered within the last 7 Days.\n        - pm: Discovered within the last 31 Days.\n        - py: Discovered within the last 365 Days\n        - YYYY-MM-DDtoYYYY-MM-DD: Custom date range (e.g., 2022-04-01to2022-07-30)\n\n- **brave_local_search**\n\n  - Search for local businesses, services and points of interest\n  - **REQUIRES** subscription to the Pro api plan for location results\n  - Falls back to brave_web_search if no location results are found\n  - Inputs:\n    - `query` (string): Local search term\n    - `count` (number, optional): The number of results to return (max 20, default 5)\n\n- **brave_video_search**\n\n  - Search the web for videos\n  - Inputs:\n    - `query`: (string): The term to search for videos\n    - `count`: (number, optional): The number of videos to return (max 20, default 10)\n    - `freshness` (enum, optional): Filters search results by when they were discovered\n      - The following values are supported\n        - pd: Discovered within the last 24 hours.\n        - pw: Discovered within the last 7 Days.\n        - pm: Discovered within the last 31 Days.\n        - py: Discovered within the last 365 Days\n        - YYYY-MM-DDtoYYYY-MM-DD: Custom date range (e.g., 2022-04-01to2022-07-30)\n\n## Configuration\n\n### Getting an API Key\n\n1. Sign up for a [Brave Search API account](https://brave.com/search/api/)\n2. Choose a plan (Free tier available with 2,000 queries/month)\n3. Generate your API key [from the developer dashboard](https://api.search.brave.com/app/keys)\n\n### Usage with Claude Code\n\nFor [Claude Code](https://claude.ai/code) users, run this command:\n\n**Windows:**\n\n```bash\nclaude mcp add-json brave-search '{\"command\":\"cmd\",\"args\":[\"/c\",\"npx\",\"-y\",\"brave-search-mcp\"],\"env\":{\"BRAVE_API_KEY\":\"YOUR_API_KEY_HERE\"}}'\n```\n\n**Linux/macOS:**\n\n```bash\nclaude mcp add-json brave-search '{\"command\":\"npx\",\"args\":[\"-y\",\"brave-search-mcp\"],\"env\":{\"BRAVE_API_KEY\":\"YOUR_API_KEY_HERE\"}}'\n```\n\nReplace `YOUR_API_KEY_HERE` with your actual Brave Search API key.\n\n### Usage with Claude Desktop\n\n## Desktop Extension (DXT)\n\n1. Download the `dxt` file from the [Releases](https://github.com/mikechao/brave-search-mcp/releases)\n2. Open it with Claude Desktop\n   or\n   Go to File -> Settings -> Extensions and drag the .DXT file to the window to install it\n\n## Docker\n\n1. Clone the repo\n2. Docker build\n\n```bash\ndocker build -t brave-search-mcp:latest -f ./Dockerfile .\n```\n\n3. Add this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcp-servers\": {\n    \"brave-search\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"BRAVE_API_KEY\",\n        \"brave-search-mcp\"\n      ],\n      \"env\": {\n        \"BRAVE_API_KEY\": \"YOUR API KEY HERE\"\n      }\n    }\n  }\n}\n```\n\n### NPX\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcp-servers\": {\n    \"brave-search\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"brave-search-mcp\"\n      ],\n      \"env\": {\n        \"BRAVE_API_KEY\": \"YOUR API KEY HERE\"\n      }\n    }\n  }\n}\n```\n\n### Usage with LibreChat\n\nAdd this to librechat.yaml\n\n```yaml\nbrave-search:\n  command: sh\n  args:\n    - -c\n    - BRAVE_API_KEY=API KEY npx -y brave-search-mcp\n```\n\n## Contributing\n\nContributions are welcome! Please feel free to submit a Pull Request.\n\n## Desktop Extensions (DXT)\n\nAnthropic recently released [Desktop Extensions](https://github.com/anthropics/dxt) allowing installation of local MCP Servers with one click.\n\nInstall the CLI tool to help generate both `manifest.json` and final `.dxt` file.\n\n```sh\nnpm install -g @anthropic-ai/dxt\n```\n\n### Creating the manifest.json file\n\n1. In this folder/directory which contains the local MCP Server, run `dxt init`. The command will start an interactive CLI to help create the `manifest.json`.\n\n### Creating the `dxt` file\n\n1. First install dev dependencies and build\n\n```sh\nnpm install\nnpm run build\n```\n\n2. Then install only the production dependencies, generate a smaller nodule_modules directory\n\n```sh\nnpm install --omit=dev\n```\n\n3. Run `dxt pack` to create a `dxt` file. This will also validate the manifest.json that was created. The `dxt` is essentially a zip file and will contain everything in this directory.\n\n## Disclaimer\n\nThis library is not officially associated with Brave Software. It is a third-party implementation of the Brave Search API with a MCP Server.\n\n## License\n\nThis project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Search",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "brave-search-mcp": {
+        "command": "npx",
+        "args": ["-y", "brave-search-mcp"],
+        "env": {
+          "BRAVE_API_KEY": "YOUR API KEY HERE"
+        }
+      },
+      "brave-search-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "BRAVE_API_KEY", "brave-search-mcp"],
+        "env": {
+          "BRAVE_API_KEY": "YOUR API KEY HERE"
+        },
+        "docker_image": "brave-search-mcp"
+      },
+      "brave-search-mcp-librechat": {
+        "command": "sh",
+        "args": ["-c", "BRAVE_API_KEY=API KEY npx -y brave-search-mcp"],
+        "env": {
+          "BRAVE_API_KEY": "API KEY"
+        }
+      },
+      "brave-search-mcp-windows-cmd": {
+        "command": "cmd",
+        "args": ["/c", "npx", "-y", "brave-search-mcp"],
+        "env": {
+          "BRAVE_API_KEY": "YOUR_API_KEY_HERE"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mikechao",
+    "repo": "brave-search-mcp",
+    "url": "https://github.com/mikechao/brave-search-mcp",
+    "name": "brave-search-mcp",
+    "path": null,
+    "stars": 57,
+    "contributors": 3,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "4c03607a4e03184c6ebec527ea3ea29f68093b51"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:29.742Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "brave-search",
+      "importance": 9
+    },
+    {
+      "name": "image-to-base64",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"brave-search-mcp\",\n  \"type\": \"module\",\n  \"version\": \"0.8.0\",\n  \"description\": \"MCP Server that uses Brave Search API to search for images, general web search, video, news and points of interest.\",\n  \"author\": \"mike.chao.one@gmail.com\",\n  \"license\": \"GPL-3.0-or-later\",\n  \"homepage\": \"https://github.com/mikechao/brave-search-mcp\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/mikechao/brave-search-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/mikechao/brave-search-mcp/issues\"\n  },\n  \"keywords\": [\n    \"brave\",\n    \"mcp\",\n    \"web-search\",\n    \"image-search\",\n    \"news-search\",\n    \"brave-search-api\",\n    \"brave-search\",\n    \"brave-search-mcp\"\n  ],\n  \"main\": \"dist/index.js\",\n  \"bin\": {\n    \"brave-search-mcp\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"LICENSE\",\n    \"README.md\",\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"clean\": \"shx rm -rf dist && shx mkdir dist\",\n    \"build\": \"npm run clean && tsc && shx chmod +x dist/*.js\",\n    \"build:watch\": \"tsc --sourceMap -p tsconfig.json -w\",\n    \"lint\": \"eslint . --ext .ts,.js,.mjs,.cjs --fix\",\n    \"lint:check\": \"eslint . --ext .ts,.js,.mjs,.cjs\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"check\": \"npm run lint:check && npm run typecheck\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"brave-search\": \"^0.9.0\",\n    \"image-to-base64\": \"^2.2.0\",\n    \"zod\": \"^3.24.3\"\n  },\n  \"devDependencies\": {\n    \"@antfu/eslint-config\": \"^4.11.0\",\n    \"@modelcontextprotocol/inspector\": \"^0.14.1\",\n    \"@types/express\": \"^5.0.1\",\n    \"@types/image-to-base64\": \"^2.1.2\",\n    \"@types/node\": \"^22.13.14\",\n    \"eslint\": \"^9.23.0\",\n    \"eslint-plugin-format\": \"^1.0.1\",\n    \"shx\": \"^0.4.0\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"overrides\": {\n    \"form-data\": \"^4.0.4\"\n  }\n}\n"
+}

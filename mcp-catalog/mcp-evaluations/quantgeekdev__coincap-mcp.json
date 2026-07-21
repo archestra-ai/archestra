@@ -1,0 +1,79 @@
+{
+  "name": "quantgeekdev__coincap-mcp",
+  "display_name": "coincap-mcp",
+  "description": "A coincap mcp server to access crypto data from coincap API",
+  "author": {
+    "name": "QuantGeekDev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["coincap-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Coincap MCP\n\n[![smithery badge](https://smithery.ai/badge/coincap-mcp)](https://smithery.ai/server/coincap-mcp)\n\n## What does this server do?\n\nAllows you to query crypto information from coincap's public API - no API keys or registration required\n\n## 🚀 Quick Start\n\nTo get started, add this configuration to your Claude Desktop config file:\n\n**MacOS**: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`  \n**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"mongodb\": {\n      \"command\": \"npx\",\n      \"args\": [\"coincap-mcp\"]\n    }\n  }\n}\n```\n\n### Installing via Smithery\n\nTo install Coincap for Claude Desktop automatically via [Smithery](https://smithery.ai/server/coincap-mcp):\n\n```bash\nnpx -y @smithery/cli install coincap-mcp --client claude\n```\n\n### Prerequisites\n\n- Node.js 18+\n- npx\n\nThen, launch Claude Desktop and you're ready to go!\n\n## Sample Prompts\n\n- What is the price of bitcoin?\n- What are the available crypto assets?\n- What is the market cap of ethereum?\n\n## Tools\n\n#### Bitcoin Price Tool\n\nGets price for Bitcoin specifically, it's a simple example of a primitive API call tool\n\n#### Get Crypto Price Tool\n\nGets price for any cryptocurrency available on coincap API. It's a good example of how to get mandatory parameter data for your tool calls\n\n#### List Assets\n\nGets a list of all crypto assets available in coincap API\n\n## Development - local build\n\nTo build it locally:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"coincap-mcp\": {\n      \"command\": \"/path/to/coincap-mcp/build/index.js\"\n    }\n  }\n}\n```\n\n## Development\n\nInstall dependencies:\n\n```bash\nnpm install\n```\n\nBuild the server:\n\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n\n```bash\nnpm run watch\n```\n\n## 📜 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "Finance",
+  "quality_score": 56,
+  "archestra_config": {
+    "client_config_permutations": {
+      "coincap-mcp": {
+        "command": "npx",
+        "args": ["coincap-mcp"],
+        "env": {}
+      },
+      "coincap-mcp-configured": {
+        "command": "/path/to/coincap-mcp/build/index.js",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "QuantGeekDev",
+    "repo": "coincap-mcp",
+    "url": "https://github.com/QuantGeekDev/coincap-mcp",
+    "name": "coincap-mcp",
+    "path": null,
+    "stars": 80,
+    "contributors": 2,
+    "issues": 6,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "2ca4a322f2a5ea16436f7f926c9734281f803725"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:16.569Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"coincap-mcp\",\n  \"version\": \"0.9.3\",\n  \"author\": {\n    \"name\": \"Alex Andru\",\n    \"email\": \"alex007d@gmail.com\"\n  },\n  \"description\": \"A MCP server to get crypto prices from coincap\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"coincap-mcp\": \"build/index.js\"\n  },\n  \"main\": \"build/index.js\",\n  \"files\": [\n    \"build\",\n    \"build/**/*\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"prepack\": \"npm run build\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"claude\",\n    \"coincap\",\n    \"anthropic\",\n    \"ai\",\n    \"cryptocurrency\"\n  ],\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"zod\": \"^3.23.8\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/QuantGeekDev/coincap-mcp.git\"\n  },\n  \"bugs\": {\n    \"url\": \"https://github.com/QuantGeekDev/coincap-mcp/issues\"\n  },\n  \"engines\": {\n    \"node\": \">=18\"\n  }\n}\n"
+}

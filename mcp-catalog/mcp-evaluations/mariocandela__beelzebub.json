@@ -1,0 +1,128 @@
+{
+  "name": "mariocandela__beelzebub",
+  "display_name": "beelzebub",
+  "description": "A secure low code honeypot framework, leveraging AI for System Virtualization.",
+  "author": {
+    "name": "mariocandela"
+  },
+  "server": {
+    "command": "beelzebub",
+    "args": [
+      "--confCore",
+      "${__dirname}/configurations/beelzebub.yaml",
+      "--confServices",
+      "${__dirname}/configurations/services/"
+    ],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Beelzebub\n\n\n[![CI](https://github.com/mariocandela/beelzebub/actions/workflows/ci.yml/badge.svg)](https://github.com/mariocandela/beelzebub/actions/workflows/ci.yml) [![Docker](https://github.com/mariocandela/beelzebub/actions/workflows/docker-image.yml/badge.svg)](https://github.com/mariocandela/beelzebub/actions/workflows/docker-image.yml) [![codeql](https://github.com/mariocandela/beelzebub/actions/workflows/codeql.yml/badge.svg)](https://github.com/mariocandela/beelzebub/actions/workflows/codeql.yml)\n[![Go Report Card](https://goreportcard.com/badge/github.com/mariocandela/beelzebub/v3)](https://goreportcard.com/report/github.com/mariocandela/beelzebub/v3)\n[![codecov](https://codecov.io/gh/mariocandela/beelzebub/graph/badge.svg?token=8XTK7D4WHE)](https://codecov.io/gh/mariocandela/beelzebub)\n[![Go Reference](https://pkg.go.dev/badge/github.com/mariocandela/beelzebub/v3.svg)](https://pkg.go.dev/github.com/mariocandela/beelzebub/v3)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/mariocandela/beelzebub)](https://archestra.ai/mcp-catalog/mariocandela__beelzebub)\n[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go)\n\n## Overview\n\nBeelzebub is an advanced honeypot framework designed to provide a highly secure environment for detecting and analyzing cyber attacks. It offers a low code approach for easy implementation and uses AI to mimic the behavior of a high-interaction honeypot.\n\n![github beelzebub - inception program](https://github.com/user-attachments/assets/e180d602-6de9-4c48-92ad-eb0ef3c5322d)\n## Key Features\n\nBeelzebub offers a wide range of features to enhance your honeypot environment:\n\n- Low-code configuration: YAML-based, modular service definition\n- LLM integration: The LLM convincingly simulates a real system, creating high-interaction honeypot experiences, while actually maintaining low-interaction architecture for enhanced security and easy management.\n- Multi-protocol support: SSH, HTTP, TCP, MCP(Detect prompt injection against LLM agents)\n- Prometheus metrics & observability \n- Docker & Kubernetes ready\n- ELK stack ready, docs: [Official ELK integration](https://www.elastic.co/docs/reference/integrations/beelzebub)\n\n## LLM Honeypot Demo\n![demo-beelzebub](https://github.com/user-attachments/assets/4dbb9a67-6c12-49c5-82ac-9b3e340406ca)\n\n## Code Quality\n\nWe are strongly committed to maintaining high code quality in the Beelzebub project. Our development workflow includes comprehensive testing, code reviews, static analysis, and continuous integration to ensure the reliability and maintainability of the codebase.\n\n### What We Do\n\n* **Automated Testing:**\n  Both unit and integration tests are run on every pull request to catch regressions and ensure stability.\n\n* **Static Analysis:**\n  We use tools like Go Report Card and CodeQL to automatically check for code quality, style, and security issues.\n\n* **Code Coverage:**\n  Our test coverage is monitored with [Codecov](https://codecov.io/gh/mariocandela/beelzebub), and we aim for extensive coverage of all core components.\n\n* **Continuous Integration:**\n  Every commit triggers automated CI pipelines on GitHub Actions, which run all tests and quality checks.\n\n* **Code Reviews:**\n  All new contributions undergo peer review to maintain consistency and high standards across the project.\n\n## Quick Start\n\nYou can run Beelzebub via Docker, Go compiler(cross device), or Helm (Kubernetes).\n\n### Using Docker Compose\n\n1. Build the Docker images:\n\n   ```bash\n   $ docker-compose build\n   ```\n\n2. Start Beelzebub in detached mode:\n\n   ```bash\n   $ docker-compose up -d\n   ```\n\n\n### Using Go Compiler\n\n1. Download the necessary Go modules:\n\n   ```bash\n   $ go mod download\n   ```\n\n2. Build the Beelzebub executable:\n\n   ```bash\n   $ go build\n   ```\n\n3. Run Beelzebub:\n\n   ```bash\n   $ ./beelzebub\n   ```\n\n### Deploy on kubernetes cluster using helm\n\n1. Install helm\n\n2. Deploy beelzebub:\n\n   ```bash\n   $ helm install beelzebub ./beelzebub-chart\n   ```\n\n3. Next release\n\n   ```bash\n   $ helm upgrade beelzebub ./beelzebub-chart\n   ```\n\n## Example Configuration\n\nBeelzebub allows easy configuration for different services and ports. Simply create a new file for each service/port within the `/configurations/services` directory.\n\nTo execute Beelzebub with your custom path, use the following command:\n\n```bash\n$ ./beelzebub --confCore ./configurations/beelzebub.yaml --confServices ./configurations/services/\n```\n\nHere are some example configurations for different honeypot scenarios:\n\n### MCP Honeypot\n\n#### Why choose an MCP Honeypot?\n\nAn MCP honeypot is a **decoy tool** that the agent should never invoke under normal circumstances. Integrating this strategy into your agent pipeline offers three key benefits:\n\n* **Real-time detection of guardrail bypass attempts.**\n  \n  Instantly identify when a prompt injection attack successfully convinces the agent to invoke a restricted tool.\n* **Automatic collection of real attack prompts for guardrail fine-tuning.**\n  \n   Every activation logs genuine malicious prompts, enabling continuous improvement of your filtering mechanisms.\n* **Continuous monitoring of attack trends through key metrics (HAR, TPR, MTP).**\n  \n   Track exploit frequency and system resilience using objective, actionable measurements.\n\n![video-mcp-diagram](https://github.com/user-attachments/assets/e04fd19e-9537-427e-9131-9bee31d8ebad)\n\n##### Example MCP Honeypot Configuration\n\n###### mcp-8000.yaml\n\n```yaml\napiVersion: \"v1\"\nprotocol: \"mcp\"\naddress: \":8000\"\ndescription: \"MCP Honeypot\"\ntools:\n  - name: \"tool:user-account-manager\"\n    description: \"Tool for querying and modifying user account details. Requires administrator privileges.\"\n    params:\n      - name: \"user_id\"\n        description: \"The ID of the user account to manage.\"\n      - name: \"action\"\n        description: \"The action to perform on the user account, possible values are: get_details, reset_password, deactivate_account\"\n    handler: |\n      {\n        \"tool_id\": \"tool:user-account-manager\",\n        \"status\": \"completed\",\n        \"output\": {\n          \"message\": \"Tool 'tool:user-account-manager' executed successfully. Results are pending internal processing and will be logged.\",\n          \"result\": {\n            \"operation_status\": \"success\",\n            \"details\": \"email: kirsten@gmail.com, role: admin, last-login: 02/07/2025\"\n          }\n        }\n      }\n  - name: \"tool:system-log\"\n    description: \"Tool for querying system logs. Requires administrator privileges.\"\n    params:\n      - name: \"filter\"\n        description: \"The input used to filter the logs.\"\n    handler: |\n      {\n        \"tool_id\": \"tool:system-log\",\n        \"status\": \"completed\",\n        \"output\": {\n          \"message\": \"Tool 'tool:system-log' executed successfully. Results are pending internal processing and will be logged.\",\n          \"result\": {\n            \"operation_status\": \"success\",\n            \"details\": \"Info: email: kirsten@gmail.com, last-login: 02/07/2025\"\n          }\n        }\n      }\n```\n\n#### Invoke remotely: beelzebub:port/mcp (Streamable HTTPServer).\n\n### HTTP Honeypot\n\n###### http-80.yaml\n\n```yaml\napiVersion: \"v1\"\nprotocol: \"http\"\naddress: \":80\"\ndescription: \"Wordpress 6.0\"\ncommands:\n  - regex: \"^(/index.php|/index.html|/)$\"\n    handler:\n      <html>\n        <header>\n          <title>Wordpress 6 test page</title>\n        </header>\n        <body>\n          <h1>Hello from Wordpress</h1>\n        </body>\n      </html>\n    headers:\n      - \"Content-Type: text/html\"\n      - \"Server: Apache/2.4.53 (Debian)\"\n      - \"X-Powered-By: PHP/7.4.29\"\n    statusCode: 200\n  - regex: \"^(/wp-login.php|/wp-admin)$\"\n    handler:\n      <html>\n        <header>\n          <title>Wordpress 6 test page</title>\n        </header>\n        <body>\n          <form action=\"\" method=\"post\">\n            <label for=\"uname\"><b>Username</b></label>\n            <input type=\"text\" placeholder=\"Enter Username\" name=\"uname\" required>\n\n            <label for=\"psw\"><b>Password</b></label>\n            <input type=\"password\" placeholder=\"Enter Password\" name=\"psw\" required>\n\n            <button type=\"submit\">Login</button>\n          </form>\n        </body>\n      </html>\n    headers:\n      - \"Content-Type: text/html\"\n      - \"Server: Apache/2.4.53 (Debian)\"\n      - \"X-Powered-By: PHP/7.4.29\"\n    statusCode: 200\n  - regex: \"^.*$\"\n    handler:\n      <html>\n        <header>\n          <title>404</title>\n        </header>\n        <body>\n          <h1>Not found!</h1>\n        </body>\n      </html>\n    headers:\n      - \"Content-Type: text/html\"\n      - \"Server: Apache/2.4.53 (Debian)\"\n      - \"X-Powered-By: PHP/7.4.29\"\n    statusCode: 404\n```\n\n### HTTP Honeypot\n\n###### http-8080.yaml\n\n```yaml\napiVersion: \"v1\"\nprotocol: \"http\"\naddress: \":8080\"\ndescription: \"Apache 401\"\ncommands:\n  - regex: \".*\"\n    handler: \"Unauthorized\"\n    headers:\n      - \"www-Authenticate: Basic\"\n      - \"server: Apache\"\n    statusCode: 401\n```\n\n### SSH Honeypot\n\n###### LLM Honeypots\n\nFollow a SSH LLM Honeypot using OpenAI as provider LLM:\n\n```yaml\napiVersion: \"v1\"\nprotocol: \"ssh\"\naddress: \":2222\"\ndescription: \"SSH interactive OpenAI  GPT-4\"\ncommands:\n  - regex: \"^(.+)$\"\n    plugin: \"LLMHoneypot\"\nserverVersion: \"OpenSSH\"\nserverName: \"ubuntu\"\npasswordRegex: \"^(root|qwerty|Smoker666|123456|jenkins|minecraft|sinus|alex|postgres|Ly123456)$\"\ndeadlineTimeoutSeconds: 60\nplugin:\n   llmProvider: \"openai\"\n   llmModel: \"gpt-4o\" #Models https://platform.openai.com/docs/models\n   openAISecretKey: \"sk-proj-123456\"\n```\n\nExamples with local Ollama instance using model codellama:7b:\n\n```yaml\napiVersion: \"v1\"\nprotocol: \"ssh\"\naddress: \":2222\"\ndescription: \"SSH Ollama Llama3\"\ncommands:\n  - regex: \"^(.+)$\"\n    plugin: \"LLMHoneypot\"\nserverVersion: \"OpenSSH\"\nserverName: \"ubuntu\"\npasswordRegex: \"^(root|qwerty|Smoker666|123456|jenkins|minecraft|sinus|alex|postgres|Ly123456)$\"\ndeadlineTimeoutSeconds: 60\nplugin:\n   llmProvider: \"ollama\"\n   llmModel: \"codellama:7b\" #Models https://ollama.com/search\n   host: \"http://example.com/api/chat\" #default http://localhost:11434/api/chat\n```\nExample with custom prompt:\n\n```yaml\napiVersion: \"v1\"\nprotocol: \"ssh\"\naddress: \":2222\"\ndescription: \"SSH interactive OpenAI  GPT-4\"\ncommands:\n  - regex: \"^(.+)$\"\n    plugin: \"LLMHoneypot\"\nserverVersion: \"OpenSSH\"\nserverName: \"ubuntu\"\npasswordRegex: \"^(root|qwerty|Smoker666|123456|jenkins|minecraft|sinus|alex|postgres|Ly123456)$\"\ndeadlineTimeoutSeconds: 60\nplugin:\n   llmProvider: \"openai\"\n   llmModel: \"gpt-4o\"\n   openAISecretKey: \"sk-proj-123456\"\n   prompt: \"You will act as an Ubuntu Linux terminal. The user will type commands, and you are to reply with what the terminal should show. Your responses must be contained within a single code block.\"\n```\n\n###### SSH Honeypot\n\n###### ssh-22.yaml\n\n```yaml\napiVersion: \"v1\"\nprotocol: \"ssh\"\naddress: \":22\"\n\n\ndescription: \"SSH interactive\"\ncommands:\n  - regex: \"^ls$\"\n    handler: \"Documents Images Desktop Downloads .m2 .kube .ssh .docker\"\n  - regex: \"^pwd$\"\n    handler: \"/home/\"\n  - regex: \"^uname -m$\"\n    handler: \"x86_64\"\n  - regex: \"^docker ps$\"\n    handler: \"CONTAINER ID IMAGE COMMAND CREATED STATUS PORTS NAMES\"\n  - regex: \"^docker .*$\"\n    handler: \"Error response from daemon: dial unix docker.raw.sock: connect: connection refused\"\n  - regex: \"^uname$\"\n    handler: \"Linux\"\n  - regex: \"^ps$\"\n    handler: \"PID TTY TIME CMD\\n21642 ttys000 0:00.07 /bin/dockerd\"\n  - regex: \"^(.+)$\"\n    handler: \"command not found\"\nserverVersion: \"OpenSSH\"\nserverName: \"ubuntu\"\npasswordRegex: \"^(root|qwerty|Smoker666)$\"\ndeadlineTimeoutSeconds: 60\n```\n\n## Testing\n\nMaintaining excellent code quality is essential for security-focused projects like Beelzebub. We welcome all contributors who share our commitment to robust, readable, and reliable code!\n\n### Unit Tests\n\nFor contributor, we have a comprehensive suite of unit/integration tests that cover the core functionality of Beelzebub. To run the unit tests, use the following command:\n\n```bash\n$ make test.unit\n```\n\n### Integration Tests\n\nTo run integration tests:\n\n```bash\n$ make test.dependencies.start\n$ make test.integration\n$ make test.dependencies.down\n```\n\n\n## Roadmap\n\nOur future plans for Beelzebub include developing it into a robust PaaS platform.\n\n## Contributing\n\nThe Beelzebub team welcomes contributions and project participation. Whether you want to report bugs, contribute new features, or have any questions, please refer to our [Contributor Guide](CONTRIBUTING.md) for detailed information. We encourage all participants and maintainers to adhere to our [Code of Conduct](CODE_OF_CONDUCT.md) and foster a supportive and respectful community.\n\nHappy hacking!\n\n## License\n\nBeelzebub is licensed under the [MIT License](LICENSE).\n\n## Beelzebub is a member of NVIDIA Inception\n![nvidia-inception-program-badge-rgb-for-screen](https://github.com/user-attachments/assets/62c6cdf8-3999-42ce-aea6-6c9045bc1d4c)\n\n## Supported by\n[![JetBrains logo.](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSourceSupport)\n\n![gitbook logo](https://i.postimg.cc/VNQh5hnk/gitbook.png)\n",
+  "category": "Security",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "beelzebub": {
+        "command": "./beelzebub",
+        "args": [],
+        "env": {}
+      },
+      "beelzebub-configured": {
+        "command": "./beelzebub",
+        "args": ["--confCore", "./configurations/beelzebub.yaml", "--confServices", "./configurations/services/"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mariocandela",
+    "repo": "beelzebub",
+    "url": "https://github.com/mariocandela/beelzebub",
+    "name": "beelzebub",
+    "path": null,
+    "stars": 1345,
+    "contributors": 6,
+    "issues": 24,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "5e01dfb0c0c1b40c80eff7ef4166bbeff62cddec"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.906Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "gliderlabs/ssh",
+      "importance": 9
+    },
+    {
+      "name": "go-resty/resty/v2",
+      "importance": 7
+    },
+    {
+      "name": "google/uuid",
+      "importance": 3
+    },
+    {
+      "name": "jarcoal/httpmock",
+      "importance": 2
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "melbahja/goph",
+      "importance": 6
+    },
+    {
+      "name": "prometheus/client_golang",
+      "importance": 8
+    },
+    {
+      "name": "rabbitmq/amqp091-go",
+      "importance": 7
+    },
+    {
+      "name": "sirupsen/logrus",
+      "importance": 8
+    },
+    {
+      "name": "stretchr/testify",
+      "importance": 2
+    },
+    {
+      "name": "golang.org/x/crypto",
+      "importance": 8
+    },
+    {
+      "name": "golang.org/x/term",
+      "importance": 7
+    },
+    {
+      "name": "gopkg.in/yaml.v3",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/mariocandela/beelzebub/v3\n\ngo 1.24\n\ntoolchain go1.24.1\n\nrequire (\n\tgithub.com/gliderlabs/ssh v0.3.8\n\tgithub.com/go-resty/resty/v2 v2.16.5\n\tgithub.com/google/uuid v1.6.0\n\tgithub.com/jarcoal/httpmock v1.4.0\n\tgithub.com/mark3labs/mcp-go v0.36.0\n\tgithub.com/melbahja/goph v1.4.0\n\tgithub.com/prometheus/client_golang v1.23.0\n\tgithub.com/rabbitmq/amqp091-go v1.10.0\n\tgithub.com/sirupsen/logrus v1.9.3\n\tgithub.com/stretchr/testify v1.10.0\n\tgolang.org/x/crypto v0.38.0\n\tgolang.org/x/term v0.33.0\n\tgopkg.in/yaml.v3 v3.0.1\n)\n\nrequire (\n\tgithub.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect\n\tgithub.com/bahlo/generic-list-go v0.2.0 // indirect\n\tgithub.com/beorn7/perks v1.0.1 // indirect\n\tgithub.com/buger/jsonparser v1.1.1 // indirect\n\tgithub.com/cespare/xxhash/v2 v2.3.0 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/invopop/jsonschema v0.13.0 // indirect\n\tgithub.com/kr/fs v0.1.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/pkg/sftp v1.13.5 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/prometheus/client_model v0.6.2 // indirect\n\tgithub.com/prometheus/common v0.65.0 // indirect\n\tgithub.com/prometheus/procfs v0.16.1 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/wk8/go-ordered-map/v2 v2.1.8 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgolang.org/x/net v0.40.0 // indirect\n\tgolang.org/x/sys v0.34.0 // indirect\n\tgoogle.golang.org/protobuf v1.36.6 // indirect\n)\n"
+}

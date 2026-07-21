@@ -1,0 +1,79 @@
+{
+  "name": "chargebee__agentkit__modelcontextprotocol",
+  "display_name": "Chargebee",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjg5ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI4OCI+PHBhdGggZmlsbD0iI2ZmNmMzNiIgZD0iTTI0My44NjcgMjA0LjIwM2MzLjU5NiAyLjQ0Ni0zLjQ1My0yLjQ0NSAwIDBjMy4xNjUgMi4wMTQgNC4zMTYgNi4xODYgMi44NzcgOS42NGMtMS4yOTUgMy4wMi00LjMxNiA0Ljg5LTcuNjI1IDQuNzQ3Yy0zLjMwOS0uMTQ0LTYuMTg2LTIuNDQ2LTcuMTkzLTUuNjExcy4xNDQtNi43NjIgMi44NzctOC42MzJjMi43MzQtMS44NyA2LjMzLTIuMDE0IDkuMDY0LS4xNDRNMTQzLjQ1IDI3Ny40M2MxLjcyNyAwIDMuNTk3IDAgNS4zMjMtLjE0NGMzLjU5Ny0uMTQ0IDcuMTkzLS40MzIgMTAuNjQ2LS44NjNjMi44NzctLjI4OC01Ljg5OC43MTkgMCAwYzMuNTk3LS40MzIgNi40NzQgMi44NzcgNS43NTUgNi40NzNjLS40MzIgMS41ODMtMS41ODMgMi44NzgtMy4wMjEgMy41OTdjLTEuMDA3LjQzMi0yLjAxNS40MzItMy4wMjIuNTc1Yy0xLjE1LjE0NC0yLjQ0NS4yODgtMy41OTYuMjg4cS0xNC4yNDMgMS4wOC0yOC40ODUtLjQzMWMtOC42MzItMS4wMDctMTYuOTc2LTIuNTktMjUuMzItNS4xOGExMzYuNSAxMzYuNSAwIDAgMS0yMy4zMDYtOS40OTRjLTcuNjI0LTMuODg1LTE0LjY3NC04LjQ4OC0yMS40MzUtMTMuNjY3Yy03Ljc2OS01Ljc1NS0xNC44MTgtMTIuMzczLTIxLjE0OC0xOS43MWMtNi4zMy03LjE5My0xMS45NC0xNS4xMDUtMTYuNjg4LTIzLjMwNWMtNC44OTItOC40ODgtOC45Mi0xNy40MDgtMTEuOTQxLTI2Ljc1OWMtMy4xNjUtOS40OTUtNS4xNzktMTkuMjc4LTYuMzMtMjkuMjA0Yy0xLjE1LTEwLjA3LTEuMTUtMjAuMjg1LS4xNDQtMzAuMzU1YzEuMDA3LTkuOTI3IDMuMDIxLTE5Ljg1MyA2LjE4Ni0yOS4zNDhDOS45NDUgOTAuNTUyIDEzLjgzIDgxLjYzMiAxOC43MjEgNzNjNC43NDgtOC40ODggMTAuNTAyLTE2LjQgMTYuODMyLTIzLjczN2ExNTEuNSAxNTEuNSAwIDAgMSAyMS4wMDQtMTkuNzFjNy43NjktNS44OTggMTYuMTEzLTExLjA3NyAyNC43NDUtMTUuMjQ5YzguOTE5LTQuMzE2IDE4LjI3LTcuNjI1IDI3LjkwOS0xMC4wN2M5Ljc4My0yLjQ0NiAxOS44NTMtMy43NCAyOS45MjMtNC4xNzJhMTUyIDE1MiAwIDAgMSAzMC4yMTIgMi4xNThjOS42MzkgMS43MjYgMTkuMTMzIDQuNDYgMjguMzQgOC4wNTZjOS4wNjQgMy41OTcgMTcuNjk2IDguMiAyNS43NTIgMTMuNTIzYzguMDU3IDUuMzIzIDE1LjUzNyAxMS41MSAyMi40NDMgMTguNDE1YzIuODc3IDIuODc3IDUuNDY3IDUuNzU0IDcuMzM3IDkuNDk0YzEuNTgyIDMuMTY1IDIuNDQ2IDYuNzYyIDIuNzMzIDEwLjIxNWMuNDMyIDcuMTkzLTIuMDE0IDE0LjUzLTYuOTA1IDE5Ljg1M2MtNS42MSA2LjMzLTE0LjA5OSA5Ljc4My0yMi40NDMgOS4yMDdjLTQuMDI4LS4yODgtOC4wNTYtMS40MzktMTEuNjUzLTMuNDUzYTIxLjggMjEuOCAwIDAgMS01LjAzNS0zLjc0Yy0xLjcyNi0xLjU4My0zLjMwOS0zLjQ1My01LjAzNS01LjAzNWMtNy4wNS02LjYxOC0xNS4xMDYtMTEuOTQtMjMuODgxLTE1Ljk3Yy05LjA2NC00LjAyNy0xOC43MDMtNi42MTctMjguNDg1LTcuNDhjLTEwLjA3LS44NjMtMjAuMjg1LS4xNDQtMzAuMDY4IDIuMzAyYy05LjQ5NSAyLjQ0Ni0xOC41NTggNi40NzQtMjYuOTAyIDExLjc5N2MtOC4wNTYgNS4zMjMtMTUuMjUgMTEuOTQtMjEuMTQ4IDE5LjQyMWMtNi4wNDIgNy42MjUtMTAuNzkgMTYuMjU3LTE0LjA5OCAyNS40NjRjLTMuMzEgOS4zNTEtNS4wMzYgMTkuMjc4LTUuMDM2IDI5LjIwNGMwIDEwLjA3IDEuNTgzIDE5Ljk5NyA0Ljg5MiAyOS40OTJjMy4xNjUgOS4yMDcgNy45MTIgMTcuNjk1IDEzLjgxIDI1LjMyczEzLjA5MiAxNC4yNDIgMjEuMTQ4IDE5LjU2NWE4NyA4NyAwIDAgMCAyNi45MDMgMTEuOTQxYzkuNzgyIDIuNTkgMTkuOTk3IDMuMzA5IDMwLjA2NyAyLjQ0NmM5Ljc4My0uODY0IDE5LjQyMi0zLjMxIDI4LjQ4NS03LjMzN2MxLjAwNy0uNDMyIDEuODctMS4wMDcgMi44NzctMS4xNTFjLjg2My0uMTQ0IDEuNzI3LS4xNDQgMi41OS4xNDRjMS43MjYuNTc1IDMuMDIgMS44NyAzLjQ1MyAzLjU5NmMuNDMxIDEuNTgzLjE0MyAzLjQ1My0xLjAwOCA0Ljc0OGMtLjU3NS43MTktMS40MzggMS4xNS0yLjMwMSAxLjU4MmMtMS4xNTEuNDMyLTIuMTU4IDEuMDA3LTMuMzEgMS40MzljLTkuMjA2IDMuODg0LTE4Ljg0NSA2LjMzLTI4Ljc3MiA3LjE5M2MtMTAuMDcgMS4wMDctMjAuMjg0LjQzMS0zMC4wNjctMS41ODNjMS4yOTUgMS40MzkgMi40NDYgMy4wMjIgMy41OTYgNC42MDRhOTggOTggMCAwIDEgMy4zMSA0Ljg5MWMuMTQzLjI4OC41NzUuODY0LjU3NS44NjRoLjQzMWMuNTc2IDAgMS4wMDcuMTQzIDEuNTgzLjE0M2MxLjAwNy4xNDQgMi4wMTQuMTQ0IDMuMDIuMjg4YzQuMTczLjI4OCA4LjM0NS4yODggMTIuNTE3LjE0NGM4LjItLjQzMiAxNi40LTEuNTgyIDI0LjMxMy0zLjg4NGM3LjYyNS0yLjE1OCAxNS4xMDUtNS4xOCAyMi4xNTUtOC45MmM2LjkwNS0zLjc0IDEzLjM3OS04LjA1NiAxOS4yNzctMTMuMjM1bDQuMzE2LTMuODg1YzEuMjk1LTEuMTUgMi4zMDItMi41ODkgMy44ODUtMy4zMDhjMi43MzMtMS40MzkgNi4wNDItMS4wMDcgOC4zNDQuODYzYzIuNDQ1IDEuODcgMy40NTIgNS4wMzUgMi43MzMgOC4wNTZjLS40MzIgMS41ODMtMS4xNSAyLjg3Ny0yLjMwMiAzLjg4NGMtMS40MzggMS4yOTUtMi43MzMgMi43MzQtNC4xNzIgNC4wMjljLTUuNzU0IDUuMTc5LTExLjk0IDkuOTI2LTE4LjU1OCAxMy45NTRjLTYuNzYyIDQuMTcyLTEzLjgxIDcuNjI1LTIxLjI5MiAxMC4zNThjLTcuNjI1IDIuODc4LTE1LjM5MyA0Ljg5Mi0yMy40NSA2LjE4N2MtOC4yIDEuMjk0LTE2LjU0NCAxLjg3LTI0Ljg4OCAxLjU4MmMuNzIgMS44NyAxLjI5NSAzLjc0IDEuODcgNS42MWMuMjg4Ljg2NC40MzIgMS43MjcuNzIgMi41OWMwIC4yODguMjg3IDEuMDA3LjI4NyAxLjAwN3ptODAuMjc2LTI2LjQ3MWMyLjMwMi0xLjcyNy0xNC44MTggMTAuOTMzIDAgMGMuNzItLjU3NiAxLjcyNi0xLjAwNyAyLjg3Ny0xLjI5NWMxLjg3LS4xNDQgMy44ODUuODYzIDQuODkyIDIuNTlzMS4wMDcgNC4wMjgtLjE0NCA1LjYxYy0uNzIgMS4wMDctMS43MjcgMS41ODMtMi41OSAyLjMwMmMtMS4wMDcuNzItMi4xNTggMS40MzktMy4xNjUgMi4xNThhOTYgOTYgMCAwIDEtNi4zMyA0LjE3MmMtOC42MzIgNS4zMjMtMTcuODM5IDkuNzgzLTI3LjMzNCAxMy4wOTJhMTI5IDEyOSAwIDAgMS0xNC41MyA0LjMxNWMtMi4xNTguNDMyLTQuMzE2LjE0NC01Ljc1NC0xLjcyNmMtMS4yOTUtMS41ODItMS41ODMtMy43NC0uNTc2LTUuNjFjLjQzMi0uODY0IDEuMDA3LTEuNTgzIDEuODctMi4wMTVjMS4wMDctLjU3NSAyLjE1OC0uNzE5IDMuMTY1LTEuMDA3YzIuNDQ2LS41NzUgNC44OTItMS4yOTQgNy4zMzctMi4wMTRjNC44OTItMS41ODIgOS42NC0zLjMwOSAxNC4yNDMtNS4zMjNjOS4yMDctNC4wMjggMTcuOTgzLTkuMjA3IDI2LjAzOS0xNS4yNW0xNy4yNjQtMTUuNTM3YzIuMDE0LTIuMTU4LTEuODcgMi4wMTQgMCAwYzIuMzAxLTIuNDQ2IDYuNDczLTIuMDE0IDguMi44NjNjLjcxOSAxLjE1Ljg2MyAyLjczMy41NzUgNC4wMjhjLS40MzEgMS43MjYtMS43MjYgMi44NzctMi44NzcgNC4wMjhhNTcgNTcgMCAwIDEtNC4xNzIgNC4xNzJjLTEuMjk1IDEuMTUxLTIuODc3IDEuODctNC43NDggMS41ODNjLTMuMDItLjQzMi01LjAzNS0zLjU5Ny00LjE3Mi02LjYxOGMuNTc2LTEuNTgzIDEuODctMi41OSAzLjAyMS0zLjc0YzEuNDQtMS40NCAyLjg3OC0yLjg3OCA0LjE3My00LjMxNm0tMzIuNjU3LTMwLjIxMmMyLjAxNC0yLjAxNC01LjAzNiA1LjMyMyAwIDBjMS43MjYtMS43MjYgNC40Ni0yLjAxNCA2LjYxNy0uODYzYzIuMTU4IDEuMjk1IDMuMDIxIDQuMDI4IDIuMTU4IDYuMzNjLS41NzUgMS4xNTEtMS40MzggMi4wMTQtMi4zMDIgMi44NzdjLTEuMDA3IDEuMDA3LTEuODcgMi4wMTUtMi44NzcgMi44NzhjLTEuNzI2IDEuNTgyLTMuNDUzIDMuMTY1LTUuMTc5IDQuNjAzYy0xLjg3IDEuNDM5LTMuODg0IDIuODc4LTUuODk4IDQuMzE2Yy0yLjE1OCAxLjU4My00Ljc0OCAxLjcyNy02Ljc2MiAwYy0xLjcyNi0xLjQzOC0yLjMwMi0zLjg4NC0xLjQzOC01Ljg5OGE1LjYgNS42IDAgMCAxIDIuMDE0LTIuNDQ2YzEuMDA3LS43MiAyLjE1OC0xLjU4MiAzLjE2NS0yLjMwMmMzLjc0LTIuODc3IDcuMTkzLTYuMDQyIDEwLjUwMi05LjQ5NW0tNjQuMzA3LTk1LjIzN2MxLjcyNiAwIDMuNDUzLjE0NCA1LjMyMy4xNDRjNi43NjEgMS4xNSAxMy4yMzUgNC4zMTYgMTguMjcgOS4wNjNjNC44OTIgNC43NDggOC40ODggMTEuMDc4IDkuNzgzIDE3Ljg0YzEuNDM5IDcuMDQ5LjU3NSAxNC4zODYtMi4zMDIgMjAuODZhMzQuMSAzNC4xIDAgMCAxLTEzLjM3OSAxNS4xMDVhMzMuNTggMzMuNTggMCAwIDEtMjAuMjg1IDQuODkxYy02LjkwNS0uNDMxLTEzLjY2Ny0zLjE2NS0xOC45OS03LjYyNGEzMy40IDMzLjQgMCAwIDEtMTEuMDc3LTE2LjgzMmMtMi4wMTQtNi45MDYtMS43MjYtMTQuMzg3LjcyLTIxLjAwNGMyLjMwMS02LjQ3NCA2LjYxNy0xMi4wODUgMTIuMjI4LTE2LjExM2M1Ljc1NC00LjE3MiAxMi42Ni02LjMzIDE5LjcwOS02LjMzIi8+PC9zdmc+",
+  "description": "Seamlessly integrate AI agents with Chargebee using AgentKit for smarter billing and subscription workflows.",
+  "author": {
+    "name": "chargebee"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@chargebee/mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Chargebee Model Context Protocol (MCP) Server\n\n![MCP Chargebee](https://img.shields.io/badge/MCP-Chargebee-blue)\n[![npm version](https://img.shields.io/npm/v/@chargebee/mcp.svg)](https://www.npmjs.com/package/@chargebee/mcp)\n\nModel Context Protocol (MCP) is a [standardized protocol](https://modelcontextprotocol.io/introduction) designed to manage context between large language models (LLMs) and external systems.\n\nThe [Chargebee MCP Server](https://npmjs.com/package/@chargebee/mcp) offers a robust set of tools to improve developer efficiency. It integrates with AI-powered code editors like Cursor, Windsurf, and Cline, as well as general-purpose tools such as Claude Desktop. It is compatible with any MCP Client.\n\nWith this MCP Server, you can:\n\n- Get immediate answers about the Chargebee products and API services.\n\n- Receive context-aware code snippets tailored to your integration needs.\n\n- Access Chargebee's knowledge base, including:\n  - Documentation\n  - FAQs\n  - Release notes\n  - And much more\n\n![MCP Demo](https://raw.githubusercontent.com/chargebee/agentkit/main/media/mcp-demo.gif)\n\n## Prerequisites\n\n- [Node.js LTS](https://nodejs.org/en/download/) - The Chargebee MCP server requires the Node.js LTS version to function correctly.\n\n## Setup\n\nTo run the Chargebee MCP server using [Node.js npx](https://docs.npmjs.com/cli/v10/commands/npx), execute the following command:\n\n```sh\nnpx -y @chargebee/mcp@latest\n```\n\n## Available Tools\n\n| Tool                                 | Description                                                                                      |\n| -------------------------------------| -------------------------------------------------------------------------------------------------|\n| `chargebee_documentation_search`     | Search Chargebee's documentation to retrieve detailed information and usage guides.              |\n| `chargebee_code_planner`             | Generate structured code outlines and sample code for integrating Chargebee's APIs and features. |\n\n## Installation\n\n### Cursor\n\nTo add this server to Cursor IDE:\n\n1. Navigate to `Cursor Settings` > `MCP`.\n2. Click `+ Add new Global MCP Server`.\n3. Add the following configuration to your global `.cursor/mcp.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\nRefer to the [Cursor documentation](https://docs.cursor.com/context/model-context-protocol) for additional details. Note: You can also add this to your project-specific Cursor configuration (supported in Cursor 0.46+).\n\n\n### Windsurf\n\nTo set up MCP with Cascade:\n\n1. Open Windsurf and navigate to `Settings` > `Advanced Settings` or use the Command Palette > `Open Windsurf Settings Page`.\n2. Scroll to the Cascade section to add a new server, view existing servers, or access the raw JSON config file at `mcp_config.json`.\n3. Click “Add custom server +” to include the Chargebee MCP server directly in `mcp_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\nRefer to the [Windsurf documentation](https://docs.codeium.com/windsurf/mcp) for more information.\n\n\n### VS Code\n\nInstall the Chargebee MCP server in VS Code using one of these buttons:\n\n[<img alt=\"Install in VS Code Insiders\" src=\"https://img.shields.io/badge/VS_Code_Insiders-VS_Code_Insiders?style=flat-square&label=Install%20Server&color=24bfa5\">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522chargebee%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540chargebee%252Fmcp%2522%255D%257D)\n\nAlternatively, you can install the Chargebee MCP server using the VS Code CLI:\n\n```bash\n# For VS Code\ncode --add-mcp '{\"name\":\"chargebee\",\"command\":\"npx\",\"args\":[\"-y\",\"@chargebee/mcp\"]}'\n```\n\n```bash\n# For VS Code Insiders\ncode-insiders --add-mcp '{\"name\":\"chargebee\",\"command\":\"npx\",\"args\":[\"-y\",\"@chargebee/mcp\"]}'\n```\n\nAfter installation, the Chargebee MCP server will be available for use with your GitHub Copilot agent in VS Code.\n\n\n### Claude\n\nAdd the following configuration to your `claude_desktop_config.json` file. Refer to the [Claude Desktop documentation](https://modelcontextprotocol.io/quickstart/user) for more details:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Cline\n\nManually add the following JSON to your `cline_mcp_settings.json` file via the Cline MCP Server settings:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Roo Code\n\nAccess the MCP settings by selecting `Edit MCP Settings` in Roo Code settings or using the `Roo Code: Open MCP Config` command in the VS Code command palette:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\n## Contribution\n\nTo contribute to this project, refer to the [contribution guide](CONTRIBUTING.md).\n\n## License\n\n[MIT](https://github.com/chargebee/agentkit/blob/main/LICENSE)\n",
+  "category": "AI Tools",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "chargebee-mcp": {
+        "command": "npx",
+        "args": ["-y", "@chargebee/mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "chargebee",
+    "repo": "agentkit",
+    "url": "https://github.com/chargebee/agentkit/tree/main/modelcontextprotocol",
+    "name": "chargebee__agentkit__modelcontextprotocol",
+    "path": "modelcontextprotocol",
+    "stars": 14,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "39d859432b215895e9f001138b1190c34a72c5b7"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-07T22:18:05.614Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"@chargebee/mcp\",\n\t\"version\": \"0.0.8\",\n\t\"description\": \"MCP server for interacting with Chargebee\",\n\t\"type\": \"module\",\n\t\"main\": \"dist/index.js\",\n\t\"module\": \"dist/index.js\",\n\t\"types\": \"dist/index.d.ts\",\n\t\"bin\": \"dist/index.js\",\n\t\"publishConfig\": {\n\t\t\"access\": \"public\"\n\t},\n\t\"files\": [\n\t\t\"dist\",\n\t\t\"README.md\"\n\t],\n\t\"scripts\": {\n\t\t\"prepublish\": \"npm run build\",\n\t\t\"build\": \"cross-env NODE_ENV=production tsup\",\n\t\t\"postbuild\": \"shx chmod +x dist/*.js\",\n\t\t\"check\": \"tsc --noEmit\",\n\t\t\"dev\": \"cross-env NODE_ENV=development tsup --watch\"\n\t},\n\t\"keywords\": [\n\t\t\"chargebee\",\n\t\t\"mcp\",\n\t\t\"mcp-server\",\n\t\t\"modelcontextprotocol\"\n\t],\n\t\"author\": \"Chargebee, Inc. (https://chargebee.com)\",\n\t\"license\": \"MIT\",\n\t\"engines\": {\n\t\t\"node\": \">=18\"\n\t},\n\t\"bugs\": {\n\t\t\"url\": \"https://github.com/chargebee/agentkit/issues/new\",\n\t\t\"email\": \"support@chargebee.com\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@types/node\": \"^22.13.10\",\n\t\t\"cross-env\": \"^7.0.3\",\n\t\t\"dotenv\": \"^16.4.7\",\n\t\t\"shx\": \"^0.3.4\",\n\t\t\"tsup\": \"^8.4.0\",\n\t\t\"typescript\": \"^5.8.2\"\n\t},\n\t\"dependencies\": {\n\t\t\"@modelcontextprotocol/sdk\": \"^1.6.1\",\n\t\t\"commander\": \"^13.1.0\",\n\t\t\"zod\": \"^3.24.2\"\n\t}\n}\n"
+}

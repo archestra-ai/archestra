@@ -1,0 +1,565 @@
+{
+  "name": "apecloud__aperag",
+  "display_name": "ApeRAG",
+  "description": "ApeRAG: Best choice for building your own Knowledge Graph and for Context Engineering",
+  "author": {
+    "name": "apecloud"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"],
+    "env": {
+      "API_KEY": "${user_config.api_key}",
+      "DOCRAY_HOST": "${user_config.docray_host}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "A valid API key from your ApeRAG settings. Important: Replace 'your-api-key-here' with a valid API key from your ApeRAG settings.",
+      "sensitive": true,
+      "required": true
+    },
+    "docray_host": {
+      "type": "string",
+      "title": "DocRay Host",
+      "description": "Host URL for the advanced document parsing service (MinerU). This service provides superior parsing for complex documents, tables, and formulas. It can be enabled with 'make compose-up WITH_DOCRAY=1'.",
+      "default": "http://aperag-docray:8639",
+      "required": false
+    }
+  },
+  "readme": "# ApeRAG\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/apecloud/ApeRAG)](https://archestra.ai/mcp-catalog/apecloud__aperag)\n\n**🚀 [Try ApeRAG Live Demo](https://rag.apecloud.com/)** - Experience the full platform capabilities with our hosted demo\n\n\n![HarryPotterKG2.png](docs%2Fimages%2FHarryPotterKG2.png)\n\n![chat2.png](docs%2Fimages%2Fchat2.png)\n\n\nApeRAG is a production-ready RAG (Retrieval-Augmented Generation) platform that combines Graph RAG, vector search, and full-text search with advanced AI agents. Build sophisticated AI applications with hybrid retrieval, multimodal document processing, intelligent agents, and enterprise-grade management features.\n\nApeRAG is the best choice for building your own Knowledge Graph, Context Engineering, and deploying intelligent AI agents that can autonomously search and reason across your knowledge base.\n\n[阅读中文文档](README-zh.md)\n\n- [Quick Start](#quick-start)\n- [Key Features](#key-features)\n- [Kubernetes Deployment (Recommended for Production)](#kubernetes-deployment-recommended-for-production)\n- [Development](./docs/development-guide.md)\n- [Build Docker Image](./docs/build-docker-image.md)\n- [Acknowledgments](#acknowledgments)\n- [License](#license)\n\n## Quick Start\n\n> Before installing ApeRAG, make sure your machine meets the following minimum system requirements:\n>\n> - CPU >= 2 Core\n> - RAM >= 4 GiB\n> - Docker & Docker Compose\n\nThe easiest way to start ApeRAG is through Docker Compose. Before running the following commands, make sure that [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) are installed on your machine:\n\n```bash\ngit clone https://github.com/apecloud/ApeRAG.git\ncd ApeRAG\ncp envs/env.template .env\ndocker-compose up -d --pull always\n```\n\nAfter running, you can access ApeRAG in your browser at:\n- **Web Interface**: http://localhost:3000/web/\n- **API Documentation**: http://localhost:8000/docs\n\n#### MCP (Model Context Protocol) Support\n\nApeRAG supports [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) integration, allowing AI assistants to interact with your knowledge base directly. After starting the services, configure your MCP client with:\n\n```json\n{\n  \"mcpServers\": {\n    \"aperag-mcp\": {\n      \"url\": \"https://rag.apecloud.com/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer your-api-key-here\"\n      }\n    }\n  }\n}\n```\n\n**Important**: Replace `http://localhost:8000` with your actual ApeRAG API URL and `your-api-key-here` with a valid API key from your ApeRAG settings.\n\nThe MCP server provides:\n- **Collection browsing**: List and explore your knowledge collections\n- **Hybrid search**: Search using vector, full-text, and graph methods\n- **Intelligent querying**: Ask natural language questions about your documents\n\n#### Enhanced Document Parsing\n\nFor enhanced document parsing capabilities, ApeRAG supports an **advanced document parsing service** powered by MinerU, which provides superior parsing for complex documents, tables, and formulas. \n\n<details>\n<summary><strong>Enhanced Document Parsing Commands</strong></summary>\n\n```bash\n# Enable advanced document parsing service\nDOCRAY_HOST=http://aperag-docray:8639 docker compose --profile docray up -d\n\n# Enable advanced parsing with GPU acceleration \nDOCRAY_HOST=http://aperag-docray-gpu:8639 docker compose --profile docray-gpu up -d\n```\n\nOr use the Makefile shortcuts (requires [GNU Make](https://www.gnu.org/software/make/)):\n```bash\n# Enable advanced document parsing service\nmake compose-up WITH_DOCRAY=1\n\n# Enable advanced parsing with GPU acceleration (recommended)\nmake compose-up WITH_DOCRAY=1 WITH_GPU=1\n```\n\n</details>\n\n#### Development & Contributing\n\nFor developers interested in source code development, advanced configurations, or contributing to ApeRAG, please refer to our [Development Guide](./docs/development-guide.md) for detailed setup instructions.\n\n## Key Features\n\n**1. Advanced Index Types**:\nFive comprehensive index types for optimal retrieval: **Vector**, **Full-text**, **Graph**, **Summary**, and **Vision** - providing multi-dimensional document understanding and search capabilities.\n\n**2. Intelligent AI Agents**:\nBuilt-in AI agents with MCP (Model Context Protocol) tool support that can automatically identify relevant collections, search content intelligently, and provide web search capabilities for comprehensive question answering.\n\n**3. Enhanced Graph RAG with Entity Normalization**:\nDeeply modified LightRAG implementation with advanced entity normalization (entity merging) for cleaner knowledge graphs and improved relational understanding.\n\n**4. Multimodal Processing & Vision Support**:\nComplete multimodal document processing including vision capabilities for images, charts, and visual content analysis alongside traditional text processing.\n\n**5. Hybrid Retrieval Engine**:\nSophisticated retrieval system combining Graph RAG, vector search, full-text search, summary-based retrieval, and vision-based search for comprehensive document understanding.\n\n**6. MinerU Integration**:\nAdvanced document parsing service powered by MinerU technology, providing superior parsing for complex documents, tables, formulas, and scientific content with optional GPU acceleration.\n\n**7. Production-Grade Deployment**:\nFull Kubernetes support with Helm charts and KubeBlocks integration for simplified deployment of production-grade databases (PostgreSQL, Redis, Qdrant, Elasticsearch, Neo4j).\n\n**8. Enterprise Management**:\nBuilt-in audit logging, LLM model management, graph visualization, comprehensive document management interface, and agent workflow management.\n\n**9. MCP Integration**:\nFull support for Model Context Protocol (MCP), enabling seamless integration with AI assistants and tools for direct knowledge base access and intelligent querying.\n\n**10. Developer Friendly**:\nFastAPI backend, React frontend, async task processing with Celery, extensive testing, comprehensive development guides, and agent development framework for easy contribution and customization.\n\n## Kubernetes Deployment (Recommended for Production)\n\n> **Enterprise-grade deployment with high availability and scalability**\n\nDeploy ApeRAG to Kubernetes using our provided Helm chart. This approach offers high availability, scalability, and production-grade management capabilities.\n\n### Prerequisites\n\n*   [Kubernetes cluster](https://kubernetes.io/docs/setup/) (v1.20+)\n*   [`kubectl`](https://kubernetes.io/docs/tasks/tools/) configured and connected to your cluster\n*   [Helm v3+](https://helm.sh/docs/intro/install/) installed\n\n### Clone the Repository\n\nFirst, clone the ApeRAG repository to get the deployment files:\n\n```bash\ngit clone https://github.com/apecloud/ApeRAG.git\ncd ApeRAG\n```\n\n### Step 1: Deploy Database Services\n\nApeRAG requires PostgreSQL, Redis, Qdrant, and Elasticsearch. You have two options:\n\n**Option A: Use existing databases** - If you already have these databases running in your cluster, edit `deploy/aperag/values.yaml` to configure your database connection details, then skip to Step 2.\n\n**Option B: Deploy databases with KubeBlocks** - Use our automated database deployment (database connections are pre-configured):\n\n```bash\n# Navigate to database deployment scripts\ncd deploy/databases/\n\n# (Optional) Review configuration - defaults work for most cases\n# edit 00-config.sh\n\n# Install KubeBlocks and deploy databases\nbash ./01-prepare.sh          # Installs KubeBlocks\nbash ./02-install-database.sh # Deploys PostgreSQL, Redis, Qdrant, Elasticsearch\n\n# Monitor database deployment\nkubectl get pods -n default\n\n# Return to project root for Step 2\ncd ../../\n```\n\nWait for all database pods to be in `Running` status before proceeding.\n\n### Step 2: Deploy ApeRAG Application\n\n```bash\n# If you deployed databases with KubeBlocks in Step 1, database connections are pre-configured\n# If you're using existing databases, edit deploy/aperag/values.yaml with your connection details\n\n# Deploy ApeRAG\nhelm install aperag ./deploy/aperag --namespace default --create-namespace\n\n# Monitor ApeRAG deployment\nkubectl get pods -n default -l app.kubernetes.io/instance=aperag\n```\n\n### Configuration Options\n\n**Resource Requirements**: By default, includes [`doc-ray`](https://github.com/apecloud/doc-ray) service (requires 4+ CPU cores, 8GB+ RAM). To disable: set `docray.enabled: false` in `values.yaml`.\n\n**Advanced Settings**: Review `values.yaml` for additional configuration options including images, resources, and Ingress settings.\n\n### Access Your Deployment\n\nOnce deployed, access ApeRAG using port forwarding:\n\n```bash\n# Forward ports for quick access\nkubectl port-forward svc/aperag-frontend 3000:3000 -n default\nkubectl port-forward svc/aperag-api 8000:8000 -n default\n\n# Access in browser\n# Web Interface: http://localhost:3000\n# API Documentation: http://localhost:8000/docs\n```\n\nFor production environments, configure Ingress in `values.yaml` for external access.\n\n### Troubleshooting\n\n**Database Issues**: See `deploy/databases/README.md` for KubeBlocks management, credentials, and uninstall procedures.\n\n**Pod Status**: Check pod logs for any deployment issues:\n```bash\nkubectl logs -f deployment/aperag-api -n default\nkubectl logs -f deployment/aperag-frontend -n default\n```\n\n## Acknowledgments\n\nApeRAG integrates and builds upon several excellent open-source projects:\n\n### LightRAG\nThe graph-based knowledge retrieval capabilities in ApeRAG are powered by a deeply modified version of [LightRAG](https://github.com/HKUDS/LightRAG):\n- **Paper**: \"LightRAG: Simple and Fast Retrieval-Augmented Generation\" ([arXiv:2410.05779](https://arxiv.org/abs/2410.05779))\n- **Authors**: Zirui Guo, Lianghao Xia, Yanhua Yu, Tu Ao, Chao Huang\n- **License**: MIT License\n\nWe have extensively modified LightRAG to support production-grade concurrent processing, distributed task queues (Celery/Prefect), and stateless operations. See our [LightRAG modifications changelog](./aperag/graph/changelog.md) for details.\n\n## Community\n\n* [Discord](https://discord.gg/FsKpXukFuB)\n* [Feishu](docs%2Fimages%2Ffeishu-qr-code.png)\n\n<img src=\"docs/images/feishu-qr-code.png\" alt=\"Feishu\" width=\"150\"/>\n\n## Star History\n\n![star-history-202595.png](docs%2Fimages%2Fstar-history-202595.png)\n\n## License\n\nApeRAG is licensed under the Apache License 2.0. See the [LICENSE](./LICENSE) file for details.",
+  "category": "AI Tools",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "aperag-mcp": {
+        "command": "docker-compose",
+        "args": ["up", "-d", "--pull", "always"],
+        "env": {}
+      },
+      "aperag-helm": {
+        "command": "helm",
+        "args": ["install", "aperag", "./deploy/aperag", "--namespace", "default", "--create-namespace"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "apecloud",
+    "repo": "ApeRAG",
+    "url": "https://github.com/apecloud/ApeRAG",
+    "name": "ApeRAG",
+    "path": null,
+    "stars": 59,
+    "contributors": 17,
+    "issues": 43,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "775e8a257df4f59d798f3fa91351299160777b38"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.721Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@ant-design/icons",
+      "importance": 6
+    },
+    {
+      "name": "@dagrejs/dagre",
+      "importance": 6
+    },
+    {
+      "name": "@emotion/react",
+      "importance": 6
+    },
+    {
+      "name": "@emotion/styled",
+      "importance": 6
+    },
+    {
+      "name": "@umijs/plugins",
+      "importance": 6
+    },
+    {
+      "name": "@xyflow/react",
+      "importance": 8
+    },
+    {
+      "name": "ahooks",
+      "importance": 5
+    },
+    {
+      "name": "aiohttp",
+      "importance": 6
+    },
+    {
+      "name": "aiosqlite",
+      "importance": 6
+    },
+    {
+      "name": "alembic",
+      "importance": 8
+    },
+    {
+      "name": "antd",
+      "importance": 9
+    },
+    {
+      "name": "arrow",
+      "importance": 4
+    },
+    {
+      "name": "asyncpg",
+      "importance": 8
+    },
+    {
+      "name": "auth0-python",
+      "importance": 7
+    },
+    {
+      "name": "axios",
+      "importance": 7
+    },
+    {
+      "name": "base-64",
+      "importance": 3
+    },
+    {
+      "name": "boto3",
+      "importance": 7
+    },
+    {
+      "name": "byte-size",
+      "importance": 3
+    },
+    {
+      "name": "celery",
+      "importance": 8
+    },
+    {
+      "name": "channels",
+      "importance": 6
+    },
+    {
+      "name": "classnames",
+      "importance": 4
+    },
+    {
+      "name": "color",
+      "importance": 4
+    },
+    {
+      "name": "color-alpha",
+      "importance": 4
+    },
+    {
+      "name": "cryptography",
+      "importance": 6
+    },
+    {
+      "name": "d3",
+      "importance": 7
+    },
+    {
+      "name": "dashscope",
+      "importance": 7
+    },
+    {
+      "name": "ddgs",
+      "importance": 5
+    },
+    {
+      "name": "django-celery-beat",
+      "importance": 7
+    },
+    {
+      "name": "django-environ",
+      "importance": 5
+    },
+    {
+      "name": "duckduckgo-search",
+      "importance": 5
+    },
+    {
+      "name": "elasticsearch",
+      "importance": 8
+    },
+    {
+      "name": "eventsource-parser",
+      "importance": 6
+    },
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "fastapi-users",
+      "importance": 8
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    },
+    {
+      "name": "flower",
+      "importance": 7
+    },
+    {
+      "name": "func-timeout",
+      "importance": 4
+    },
+    {
+      "name": "gevent",
+      "importance": 5
+    },
+    {
+      "name": "gitpython",
+      "importance": 5
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "jsonref",
+      "importance": 4
+    },
+    {
+      "name": "katex",
+      "importance": 7
+    },
+    {
+      "name": "langchain",
+      "importance": 9
+    },
+    {
+      "name": "litellm",
+      "importance": 8
+    },
+    {
+      "name": "llama-index",
+      "importance": 9
+    },
+    {
+      "name": "llama-index-embeddings-langchain",
+      "importance": 7
+    },
+    {
+      "name": "llama-index-vector-stores-qdrant",
+      "importance": 7
+    },
+    {
+      "name": "lodash",
+      "importance": 5
+    },
+    {
+      "name": "markitdown",
+      "importance": 5
+    },
+    {
+      "name": "markdown-it-py",
+      "importance": 5
+    },
+    {
+      "name": "markdownify",
+      "importance": 6
+    },
+    {
+      "name": "mcp-agent",
+      "importance": 10
+    },
+    {
+      "name": "moment",
+      "importance": 5
+    },
+    {
+      "name": "nano-vectordb",
+      "importance": 7
+    },
+    {
+      "name": "nebula3-python",
+      "importance": 8
+    },
+    {
+      "name": "neo4j",
+      "importance": 8
+    },
+    {
+      "name": "numpy",
+      "importance": 5
+    },
+    {
+      "name": "oidc-react",
+      "importance": 8
+    },
+    {
+      "name": "openai",
+      "importance": 7
+    },
+    {
+      "name": "opik",
+      "importance": 3
+    },
+    {
+      "name": "opentelemetry-api",
+      "importance": 7
+    },
+    {
+      "name": "opentelemetry-exporter-jaeger",
+      "importance": 7
+    },
+    {
+      "name": "opentelemetry-exporter-otlp",
+      "importance": 7
+    },
+    {
+      "name": "opentelemetry-instrumentation-fastapi",
+      "importance": 7
+    },
+    {
+      "name": "opentelemetry-instrumentation-sqlalchemy",
+      "importance": 7
+    },
+    {
+      "name": "opentelemetry-sdk",
+      "importance": 7
+    },
+    {
+      "name": "oss2",
+      "importance": 5
+    },
+    {
+      "name": "pgvector",
+      "importance": 8
+    },
+    {
+      "name": "pillow",
+      "importance": 5
+    },
+    {
+      "name": "pikepdf",
+      "importance": 6
+    },
+    {
+      "name": "pipmaster",
+      "importance": 3
+    },
+    {
+      "name": "pydantic",
+      "importance": 7
+    },
+    {
+      "name": "pydantic-settings",
+      "importance": 6
+    },
+    {
+      "name": "py7zr",
+      "importance": 6
+    },
+    {
+      "name": "pypdfium2",
+      "importance": 6
+    },
+    {
+      "name": "pytablewriter",
+      "importance": 3
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    },
+    {
+      "name": "psycopg",
+      "importance": 8
+    },
+    {
+      "name": "psycopg-pool",
+      "importance": 8
+    },
+    {
+      "name": "psycopg2-binary",
+      "importance": 8
+    },
+    {
+      "name": "qianfan",
+      "importance": 7
+    },
+    {
+      "name": "qdrant-client",
+      "importance": 8
+    },
+    {
+      "name": "rarfile",
+      "importance": 6
+    },
+    {
+      "name": "react",
+      "importance": 10
+    },
+    {
+      "name": "react-dom",
+      "importance": 9
+    },
+    {
+      "name": "react-file-icon",
+      "importance": 3
+    },
+    {
+      "name": "react-force-graph-2d",
+      "importance": 7
+    },
+    {
+      "name": "react-icons",
+      "importance": 3
+    },
+    {
+      "name": "react-markdown",
+      "importance": 7
+    },
+    {
+      "name": "react-pdf",
+      "importance": 7
+    },
+    {
+      "name": "react-scroll",
+      "importance": 3
+    },
+    {
+      "name": "react-stickynode",
+      "importance": 3
+    },
+    {
+      "name": "react-toastify",
+      "importance": 3
+    },
+    {
+      "name": "react-top-loading-bar",
+      "importance": 3
+    },
+    {
+      "name": "react-transition-group",
+      "importance": 3
+    },
+    {
+      "name": "react-undraw-illustrations",
+      "importance": 3
+    },
+    {
+      "name": "redis",
+      "importance": 8
+    },
+    {
+      "name": "rehype-highlight",
+      "importance": 7
+    },
+    {
+      "name": "rehype-highlight-code-lines",
+      "importance": 7
+    },
+    {
+      "name": "rehype-katex",
+      "importance": 7
+    },
+    {
+      "name": "rehype-raw",
+      "importance": 7
+    },
+    {
+      "name": "rehype-react",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "remark-directive",
+      "importance": 7
+    },
+    {
+      "name": "remark-gfm",
+      "importance": 7
+    },
+    {
+      "name": "remark-github-admonitions-to-directives",
+      "importance": 7
+    },
+    {
+      "name": "remark-math",
+      "importance": 7
+    },
+    {
+      "name": "sqlalchemy",
+      "importance": 9
+    },
+    {
+      "name": "socksio",
+      "importance": 4
+    },
+    {
+      "name": "terminal",
+      "importance": 3
+    },
+    {
+      "name": "trafilatura",
+      "importance": 6
+    },
+    {
+      "name": "umi",
+      "importance": 10
+    },
+    {
+      "name": "uniqid",
+      "importance": 3
+    },
+    {
+      "name": "url-pattern",
+      "importance": 3
+    },
+    {
+      "name": "uuid",
+      "importance": 3
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "watchfiles",
+      "importance": 4
+    },
+    {
+      "name": "whitenoise",
+      "importance": 5
+    },
+    {
+      "name": "yaml",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nauthors = [\n    {name = \"nayutah\", email = \"dullboy@apecloud.com\"},\n]\nrequires-python = \"<3.13,>=3.11.12\"\ndependencies = [\n    \"langchain<1.0.0,>=0.3.23\",\n    \"llama-index<1.0.0,>=0.12.28\",\n    \"uvicorn[standard]<1.0.0,>=0.23.1\",\n    \"pydantic[email]>=2.10.3,<3.0.0\",\n    \"cryptography<42.0.0,>=41.0.1\",\n    \"python-dotenv<2.0.0,>=1.0.0\",\n    \"auth0-python<5.0.0,>=4.2.0\",\n    \"celery<6.0.0,>=5.3.1\",\n    \"channels<5.0.0,>=4.0.0\",\n    \"py7zr<1.0.0,>=0.20.8\",\n    \"rarfile<5.0,>=4.1\",\n    \"qdrant-client<2.0.0,>=1.3.0; python_version < \\\"3.12\\\" and python_full_version >= \\\"3.8.1\\\"\",\n    \"redis<5.0.0,>=4.6.0\",\n    \"arrow<2.0.0,>=1.2.3\",\n    \"func-timeout<5.0.0,>=4.3.5\",\n    \"terminal<1.0.0,>=0.4.0\",\n    \"psycopg2-binary<3.0.0,>=2.9.6\",\n    \"watchfiles<1.0.0,>=0.19.0\",\n    \"flower<3.0.0,>=2.0.0\",\n    \"django-celery-beat<3.0.0,>=2.5.0\",\n    \"boto3>=1.26.165,<2.0.0\",\n    \"aioboto3>=15.0.0\",\n    \"oss2<3.0.0,>=2.18.0\",\n    \"socksio<2.0.0,>=1.0.0\",\n    \"whitenoise<7.0.0,>=6.5.0\",\n    \"elasticsearch<9.0.0,>=8.9.0\",\n    \"gevent<24.0.0,>=23.9.1\",\n    \"requests<3.0.0,>=2.31.0\",\n    \"qianfan<1.0.0.0,>=0.4.12.3\",\n    \"pillow<11.0.0,>=10.0.0\",\n    \"openai<2.0.0,>=1.71.0\",\n    \"dashscope<2.0.0,>=1.23.1\",\n    \"gitpython<4.0.0,>=3.1.43\",\n    \"llama-index-embeddings-langchain<1.0.0,>=0.3.0\",\n    \"llama-index-vector-stores-qdrant<1.0.0,>=0.6.0\",\n    \"numpy>=2.1.3\",\n    \"pipmaster<1.0.0,>=0.5.4\",\n    \"pytablewriter<2.0.0,>=1.2.1\",\n    \"litellm>=1.74.3\",\n    \"requests\",\n    \"asyncpg>=0.30.0\",\n    \"markitdown[all]>=0.1.1\",\n    \"markdown-it-py[linkify]>=3.0.0\",\n    \"nano-vectordb>=0.0.4.3\",\n    \"jsonref>=1.1.0\",\n    \"fastapi[standard]>=0.115.12\",\n    \"pydantic-settings>=2.9.1\",\n    \"fastapi-users[sqlalchemy]>=14.0.1\",\n    \"neo4j>=5.28.1\",\n    \"django-environ>=0.12.0\",\n    \"alembic>=1.16.1\",\n    \"sqlalchemy>=2.0.40\",\n    \"pgvector>=0.3.6\",\n    \"opik>=1.7.34\",\n    \"nebula3-python==3.8.3\",\n    \"psycopg>=3.2.9\",\n    \"psycopg-pool>=3.2.6\",\n    \"fastmcp>=2.10.0\",\n    \"httpx>=0.27.0\",\n    \"mcp-agent>=0.1.6\",\n    \"duckduckgo-search>=8.1.1\",\n    \"trafilatura>=2.0.0\",\n    \"markdownify>=1.1.0\",\n    \"aiohttp>=3.11.16\",\n    \"ddgs>=9.0.0\",\n    \"aiosqlite>=0.21.0\",\n    \"pikepdf>=9.9.0\",\n    \"opentelemetry-api>=1.20.0\",\n    \"opentelemetry-sdk>=1.20.0\",\n    \"opentelemetry-exporter-otlp>=1.20.0\",\n    \"opentelemetry-exporter-jaeger>=1.20.0\",\n    \"opentelemetry-instrumentation-fastapi>=0.41b0\",\n    \"opentelemetry-instrumentation-sqlalchemy>=0.41b0\",\n    \"pypdfium2>=4.30.0\",\n]\nname = \"aperag\"\nversion = \"0.1.0\"\ndescription = \"A LLM based tool to support Text2SQL, Chatbot, KubeBlocks pilot and troubleshooting\"\nreadme = \"README.md\"\n\n[tool.uv]\n# index-url = \"https://mirrors.aliyun.com/pypi/simple/\"\nprerelease = \"allow\"\n\n[project.optional-dependencies]\nall = [\n]\nlightrag-dev = [\n    \"nano-vectordb\"\n]\nevaluation = [\n    \"ragas\"\n]\nmodel = [\n    \"torch<3.0.0,>=2.6.0\",\n    \"text2vec<2.0.0,>=1.3.3\",\n    \"flagembedding<2.0.0,>=1.3.4\",\n    \"sentence-transformers<5.0.0,>=4.0.2\",\n    \"transformers==4.49.0\",\n]\ndev = [\n    \"ruff<1.0.0,>=0.11.2\",\n    \"types-toml<1.0.0.0,>=0.10.8.1\",\n    \"types-redis<5.0.0.0,>=4.3.21.6\",\n    \"types-chardet<6.0.0.0,>=5.0.4.6\",\n    \"types-requests>=2.31.0.2,<3.0.0.0\",\n    \"types-chardet<6.0.0.0,>=5.0.4.6\",\n    \"vulture<3.0,>=2.14\",\n    \"deptry<1.0.0,>=0.23.0\",\n    \"mypy<2.0.0,>=1.4.1\",\n    \"datamodel-code-generator>=0.30.0\",\n]\ntest = [\n    \"tabulate<1.0.0,>=0.9.0\",\n    \"pytablewriter<2.0.0,>=1.0.0\",\n    \"pytest\",\n    \"pytest-asyncio\",\n    \"pytest-benchmark>=5.1.0\",\n    \"moto\",\n    \"pytest-aioboto3>=0.6.0\",\n]\n\n[tool.ruff]\nlint.select = [\n    \"E\",  # pycodestyle\n    \"F\",  # pyflakes\n    \"I\",  # isort\n]\n\nlint.ignore = [\n    \"E501\", # line too long\n]\n\n# Exclude a variety of commonly ignored directories.\nexclude = [\n    \".bzr\",\n    \".direnv\",\n    \".eggs\",\n    \".git\",\n    \".git-rewrite\",\n    \".hg\",\n    \".mypy_cache\",\n    \".nox\",\n    \".pants.d\",\n    \".pytype\",\n    \".ruff_cache\",\n    \".svn\",\n    \".tox\",\n    \".venv\",\n    \"__pypackages__\",\n    \"_build\",\n    \"buck-out\",\n    \"build\",\n    \"dist\",\n    \"node_modules\",\n    \"venv\",\n    \".github\",\n    \"models\",\n    \"playground\",\n    \"aperag/migration\",\n    \"aperag/migrations\",\n    \"aperag/schema/view_models.py\",\n    \"vectorstore/test_connector.py\",\n    \"readers/test_local_path_embedding.py\",\n]\n\n# Same as Black.\nline-length = 120\n\n[tool.mypy]\nignore_missing_imports = true\ndisallow_untyped_defs = false\n# https://discuss.python.org/t/mypy-dir-is-excluded-but-then-errors-are-thrown-for-files-within-the-dir/75952\n# https://mypy.readthedocs.io/en/stable/running_mypy.html#following-imports\nfollow_imports = \"silent\"\nexclude = [\n    \"playground\",\n    \"services/text2SQL\",\n    \".github\",\n    \"models\",\n    \"playground\",\n    \"aperag/migrations\",\n    \"vectorstore/test_connector.py\",\n    \"readers/test_local_path_embedding.py\",\n    \"aperag/schema/view_models.py\",\n]\n\n[tool.pytest.ini_options]\nasyncio_mode = \"auto\"\nasyncio_default_fixture_loop_scope = \"function\"\nmarkers = [\n    \"integration: marks tests as integration tests (requires network)\",\n    \"slow: marks tests as slow running\",\n]\n\n[tool.setuptools]\npackages = [\"aperag\", \"config\"]\n\n[dependency-groups]\ndev = [\n    \"datamodel-code-generator>=0.30.0\",\n]\n\n\n=== frontend/package.json ===\n{\n  \"private\": true,\n  \"author\": \"sailwebs <sailwebs@apecloud.com>\",\n  \"scripts\": {\n    \"api:build\": \"yarn api:clean && yarn api:bundle && openapi-generator-cli generate && yarn api:clear\",\n    \"api:bundle\": \"redocly bundle ../aperag/api/openapi.yaml > ./src/api/openapi.merged.yaml\",\n    \"api:clean\": \"rm -rf ./src/api/*\",\n    \"api:clear\": \"rm -rf ./src/api/.openapi-generator && rm -rf ./src/api/.gitignore && rm -rf ./src/api/.npmignore && rm -rf ./src/api/.openapi-generator-ignore && rm -rf ./src/api/git_push.sh\",\n    \"build\": \"yarn install && umi build\",\n    \"dev\": \"rm -rf ./src/.umi && yarn install && umi dev\",\n    \"postinstall\": \"umi setup\",\n    \"lint\": \"umi lint --fix\",\n    \"prettier\": \"prettier --cache --write ./ && yarn lint\",\n    \"setup\": \"umi setup\",\n    \"start\": \"npm run dev\"\n  },\n  \"dependencies\": {\n    \"@ant-design/icons\": \"^6.0.0\",\n    \"@dagrejs/dagre\": \"^1.1.4\",\n    \"@emotion/react\": \"^11.14.0\",\n    \"@emotion/styled\": \"^11.14.1\",\n    \"@types/d3\": \"^7.4.3\",\n    \"@umijs/plugins\": \"^4.4.6\",\n    \"@xyflow/react\": \"^12.5.5\",\n    \"ahooks\": \"^3.8.4\",\n    \"antd\": \"^5.24.6\",\n    \"axios\": \"^1.8.4\",\n    \"base-64\": \"^1.0.0\",\n    \"byte-size\": \"^9.0.1\",\n    \"classnames\": \"^2.5.1\",\n    \"color\": \"^5.0.0\",\n    \"color-alpha\": \"^2.0.0\",\n    \"d3\": \"^7.9.0\",\n    \"eventsource-parser\": \"^3.0.2\",\n    \"katex\": \"^0.16.22\",\n    \"lodash\": \"^4.17.21\",\n    \"moment\": \"^2.30.1\",\n    \"oidc-react\": \"^3.4.1\",\n    \"react\": \"~18.2.0\",\n    \"react-dom\": \"~18.2.0\",\n    \"react-file-icon\": \"^1.6.0\",\n    \"react-force-graph-2d\": \"^1.28.0\",\n    \"react-icons\": \"^5.5.0\",\n    \"react-markdown\": \"^10.1.0\",\n    \"react-pdf\": \"^9.1.0\",\n    \"react-scroll\": \"^1.9.3\",\n    \"react-stickynode\": \"^5.0.2\",\n    \"react-toastify\": \"^11.0.5\",\n    \"react-top-loading-bar\": \"^3.0.2\",\n    \"react-transition-group\": \"^4.4.5\",\n    \"react-undraw-illustrations\": \"^2.0.3\",\n    \"rehype-highlight\": \"^7.0.2\",\n    \"rehype-highlight-code-lines\": \"^1.1.3\",\n    \"rehype-katex\": \"^7.0.1\",\n    \"rehype-raw\": \"^7.0.0\",\n    \"rehype-react\": \"^8.0.0\",\n    \"remark-directive\": \"^4.0.0\",\n    \"remark-gfm\": \"^4.0.1\",\n    \"remark-github-admonitions-to-directives\": \"^2.1.0\",\n    \"remark-math\": \"^6.0.0\",\n    \"umi\": \"^4.4.6\",\n    \"uniqid\": \"^5.4.0\",\n    \"url-pattern\": \"^1.0.3\",\n    \"uuid\": \"^11.1.0\",\n    \"yaml\": \"^2.7.1\"\n  },\n  \"devDependencies\": {\n    \"@openapitools/openapi-generator-cli\": \"^2.19.1\",\n    \"@redocly/cli\": \"^1.34.3\",\n    \"@types/base-64\": \"^1.0.2\",\n    \"@types/byte-size\": \"^8.1.2\",\n    \"@types/lodash\": \"^4.17.16\",\n    \"@types/react\": \"~18.2.0\",\n    \"@types/react-dom\": \"~18.2.0\",\n    \"@types/react-file-icon\": \"^1.0.4\",\n    \"@types/react-scroll\": \"^1.8.10\",\n    \"@types/react-stickynode\": \"^4.0.3\",\n    \"@types/react-transition-group\": \"^4.4.12\",\n    \"@types/react-window\": \"^1.8.8\",\n    \"@types/uniqid\": \"^5.3.4\",\n    \"@umijs/lint\": \"^4.4.6\",\n    \"eslint\": \"^8\",\n    \"prettier\": \"^3.5.3\",\n    \"prettier-plugin-organize-imports\": \"^4.1.0\",\n    \"prettier-plugin-packagejson\": \"^2.5.10\",\n    \"stylelint\": \"^14\",\n    \"typescript\": \"^5.0.3\"\n  },\n  \"engines\": {\n    \"node\": \">=20\"\n  }\n}\n"
+}

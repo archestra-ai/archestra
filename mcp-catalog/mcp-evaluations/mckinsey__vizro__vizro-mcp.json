@@ -1,0 +1,107 @@
+{
+  "name": "mckinsey__vizro__vizro-mcp",
+  "display_name": "vizro-mcp",
+  "description": "Vizro is a low-code toolkit for building high-quality data visualization apps.",
+  "author": {
+    "name": "mckinsey"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["vizro-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "<!-- <a href=\"https://glama.ai/mcp/servers/@mckinsey/vizro\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@mckinsey/vizro/badge\" />\n</a> -->\n\n# Vizro-MCP\n\nVizro-MCP is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server, which works alongside an LLM to help you create Vizro dashboards and charts.\n\n<img src=\"docs/assets/images/vizro-mcp.gif\" width=\"600\" alt=\"Vizro-MCP Demo\">\n\nTo find out more, consult the [Vizro-MCP documentation](https://vizro.readthedocs.io/projects/vizro-mcp/).\n\n## Set up Vizro-MCP\n\nVizro-MCP is best used with Claude Desktop, Cursor or VS Code. However, it can be used with most LLM products that enable configuration of MCP server usage.\n\n> 💡 Tip: For best performance, we recommend using the `claude-4-sonnet` model, or another high-performing model of your choice. Using the often offered `auto` setting may lead to inconsistent or unexpected results.\n\nOur documentation offers separate, detailed steps for [Claude Desktop](https://vizro.readthedocs.io/projects/vizro-mcp/en/latest/pages/guides/set-up-vizro-mcp-with-claude/), [Cursor](https://vizro.readthedocs.io/projects/vizro-mcp/en/latest/pages/guides/set-up-vizro-mcp-with-cursor/) and [VS Code](https://vizro.readthedocs.io/projects/vizro-mcp/en/latest/pages/guides/set-up-vizro-mcp-with-vscode/).\n\n### Basic configuration\n\nThe following is for those familiar with MCP server setup who are comfortable with basic configuration settings. You must have downloaded and installed the LLM app you want to configure and use as a MCP host.\n\n<details>\n<summary><strong>Quick setup for Vizro-MCP using uv</strong></summary>\n\nYou must first install [uv](https://docs.astral.sh/uv/getting-started/installation/).\n\nNext, open a terminal window and type `uv` to confirm that is available. To get the path to `uvx`, type the following:\n\n```shell\nwhich uv\n```\n\nCopy the path returned, and add the following to the JSON file used to configure MCP servers for your LLM app. Be sure to substitute your path to uv as returned above, for the placeholder given:\n\n```\n{\n  \"mcpServers\": {\n    \"vizro-mcp\": {\n      \"command\": \"/placeholder-path/uvx\",\n      \"args\": [\n        \"vizro-mcp\"\n      ]\n    }\n  }\n}\n```\n\n**Quick install**\n\n| Host                                      | Prerequisite                                                  | Link                                                                                                                                                                                                                                                                                       |\n| ----------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |\n| [Cursor](https://www.cursor.com/)         | [uv](https://docs.astral.sh/uv/getting-started/installation/) | [![Install with UVX in Cursor](https://img.shields.io/badge/Cursor-Install-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://cursor.com/en/install-mcp?name=vizro-mcp&config=eyJjb21tYW5kIjoidXZ4IHZpenJvLW1jcCJ9)                                                  |\n| [VS Code](https://code.visualstudio.com/) | [uv](https://docs.astral.sh/uv/guides/tools/)                 | [![Install with UVX in VS Code](https://img.shields.io/badge/VS_Code-Install-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=vizro-mcp&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22vizro-mcp%22%5D%7D) |\n\n</details>\n\n<details>\n<summary><strong>Quick setup for Vizro-MCP using Docker</strong></summary>\n\nYou must first install [Docker](https://www.docker.com/get-started/).\n\nNext, add the following to the JSON file used to configure MCP servers for your LLM app.\n\n```\n{\n  \"mcpServers\": {\n    \"vizro-mcp\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"mcp/vizro\"\n      ]\n    }\n  }\n}\n```\n\n**To use local data with Docker**\n\nMount your data directory or directories into the container with the following extended configuration. Replace `</absolute/path/to/allowed/dir>` (syntax for folders) or `</absolute/path/to/data.csv>` (syntax for files) with the absolute path to your data on your machine. For consistency, we recommend that the `dst` path matches the `src` path.\n\n```\n{\n  \"mcpServers\": {\n    \"vizro-mcp\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"--mount\",\n        \"type=bind,src=</absolute/path/to/allowed/dir>,dst=</absolute/path/to/allowed/dir>\",\n        \"--mount\",\n        \"type=bind,src=</absolute/path/to/data.csv>,dst=</absolute/path/to/data.csv>\",\n        \"mcp/vizro\"\n      ]\n    }\n  }\n}\n```\n\n**Quick install**\n\n| Host                                      | Prerequisite                                  | Link                                                                                                                                                                                                                                                                                                                                   | Notes                                                                   |\n| ----------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |\n| [Cursor](https://www.cursor.com/)         | [Docker](https://www.docker.com/get-started/) | [![Install with Docker in Cursor](https://img.shields.io/badge/Cursor-Install-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://cursor.com/en/install-mcp?name=vizro-mcp&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIG1jcC92aXpybyIsImVudiI6e319)                                                           | For local data access, [mount your data directory](#setup-instructions) |\n| [VS Code](https://code.visualstudio.com/) | [Docker](https://www.docker.com/get-started/) | [![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Install-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=vizro-mcp&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Fvizro%22%5D%7D) | For local data access, [mount your data directory](#setup-instructions) |\n\n</details>\n\n## Disclaimers\n\n### Transparency and trust\n\nMCP servers are a relatively new concept, and it is important to be transparent about what the tools are capable of so you can make an informed choice as a user. Overall, the Vizro MCP server only reads data, and never writes, deletes or modifies any data on your machine.\n\n### Third party API\n\nUsers are responsible for anything done via their host LLM application.\n\nUsers are responsible for procuring any and all rights necessary to access any third-party generative AI tools and for complying with any applicable terms or conditions thereof.\n\nUsers are wholly responsible for the use and security of the third-party generative AI tools and of Vizro.\n\n### Legal information\n\n<details>\n<summary><strong>User acknowledgments</strong></summary>\n\nUsers acknowledge and agree that:\n\nAny results, options, data, recommendations, analyses, code, or other information (“Outputs”) generated by any third-party generative AI tools (“GenAI Tools”) may contain some inaccuracies, biases, illegitimate, potentially infringing, or otherwise inappropriate content that may be mistaken, discriminatory, or misleading.\n\nMcKinsey & Company:\n\n(i) expressly disclaims the accuracy, adequacy, timeliness, reliability, merchantability, fitness for a particular purpose, non-infringement, safety or completeness of any Outputs,\n\n(ii) shall not be liable for any errors, omissions, or other defects in, delays or interruptions in such Outputs, or for any actions taken in reliance thereon, and\n\n(iii) shall not be liable for any alleged violation or infringement of any right of any third party resulting from the users’ use of the GenAI Tools and the Outputs.\n\nThe Outputs shall be verified and validated by the users and shall not be used without human oversight and as a sole basis for making decisions impacting individuals.\n\nUsers remain solely responsible for the use of the Output, in particular, the users will need to determine the level of human oversight needed to be given the context and use case, as well as for informing the users’ personnel and other affected users about the nature of the GenAI Output. Users are also fully responsible for their decisions, actions, use of Vizro and Vizro-MCP and compliance with applicable laws, rules, and regulations, including but not limited to confirming that the Outputs do not infringe any third-party rights.\n\n</details>\n\n<details>\n<summary><strong>Warning and safety usage for generative AI models</strong></summary>\n\nVizro-MCP is used by generative AI models because large language models (LLMs) represent significant advancements in the AI field. However, as with any powerful tool, there are potential risks associated with connecting to a generative AI model.\n\nWe recommend users research and understand the selected model before using Vizro-MCP. We also recommend users to check the MCP server code before using it.\n\nUsers are encouraged to treat AI-generated content as supplementary, always apply human judgment, approach with caution, review the relevant disclaimer page, and consider the following:\n\n<ol>\n<li>Hallucination and misrepresentation</li>\nGenerative models can potentially generate information while appearing factual, being entirely fictitious or misleading.\n\nThe vendor models might lack real-time knowledge or events beyond its last updates. Vizro-MCP output may vary and you should always verify critical information. It is the user's responsibility to discern the accuracy, consistent, and reliability of the generated content.\n\n<li>Unintended and sensitive output</li>\nThe outputs from these models can be unexpected, inappropriate, or even harmful. Users as human in the loop is an essential part. Users must check and interpret the final output. It is necessary to approach the generated content with caution, especially when shared or applied in various contexts.\n\n<li>Data privacy</li>\nYour data is sent to model vendors if you connect to LLMs via their APIs. For example, if you connect to the model from OpenAI, your data will be sent to OpenAI via their API. Users should be cautious about sharing or inputting any personal or sensitive information.\n\n<li>Bias and fairness</li>\nGenerative AI can exhibit biases present in their training data. Users need to be aware of and navigate potential biases in generated outputs and be cautious when interpreting the generated content.\n\n<li>Malicious use</li>\nThese models can be exploited for various malicious activities. Users should be cautious about how and where they deploy and access such models.\n</ol>\nIt's crucial for users to remain informed, cautious, and ethical in their applications.\n\n</details>\n",
+  "category": "Data Science",
+  "quality_score": 76,
+  "archestra_config": {
+    "client_config_permutations": {
+      "vizro-mcp": {
+        "command": "uvx",
+        "args": ["vizro-mcp"],
+        "env": {}
+      },
+      "mcp-vizro-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "mcp/vizro"],
+        "env": {},
+        "docker_image": "mcp/vizro"
+      },
+      "mcp-vizro-docker-with-config": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "--mount",
+          "type=bind,src=</absolute/path/to/allowed/dir>,dst=</absolute/path/to/allowed/dir>",
+          "--mount",
+          "type=bind,src=</absolute/path/to/data.csv>,dst=</absolute/path/to/data.csv>",
+          "mcp/vizro"
+        ],
+        "env": {},
+        "docker_image": "mcp/vizro"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "mckinsey",
+    "repo": "vizro",
+    "url": "https://github.com/mckinsey/vizro/tree/main/vizro-mcp",
+    "name": "mckinsey__vizro__vizro-mcp",
+    "path": "vizro-mcp",
+    "stars": 3317,
+    "contributors": 35,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "6fc880443e3c603b979f2327678ffcae087db217"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:05.465Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "vizro",
+      "importance": 9
+    },
+    {
+      "name": "pandas",
+      "importance": 8
+    },
+    {
+      "name": "click",
+      "importance": 7
+    },
+    {
+      "name": "httpx",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nbuild-backend = \"hatchling.build\"\nrequires = [\"hatchling\"]\n\n[project]\nauthors = [\n  {name = \"Vizro Team\"}\n]\nclassifiers = [\n  \"Programming Language :: Python\",\n  \"Programming Language :: Python :: 3.10\",\n  \"Programming Language :: Python :: 3.11\",\n  \"Programming Language :: Python :: 3.12\",\n  \"Programming Language :: Python :: 3.13\"\n]\ndependencies = [\n  \"httpx>=0.28.1\",\n  \"mcp[cli]>=1.6.0\",\n  \"vizro>=0.1.42\",\n  \"click>=8.1.7\",\n  \"pandas[html,parquet,excel]\"\n]\ndescription = \"MCP server to help create Vizro dashboards and charts\"\ndynamic = [\"version\"]\nlicense-files = {paths = [\"LICENSE.txt\"]}\nname = \"vizro-mcp\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\n\n[project.scripts]\n\"vizro-mcp\" = \"vizro_mcp:main\"\n\n[tool.coverage.paths]\nvizro = [\"src/vizro_mcp\"]  # omit tests for clarity, although this can be useful to see what test lines DID NOT run\n\n[tool.coverage.report]\nexclude_lines = [\n  \"no cov\",\n  \"if __name__ == .__main__.:\",\n  \"if TYPE_CHECKING:\"\n]\nfail_under = 63\nshow_missing = true\nskip_covered = true\n\n[tool.coverage.run]\nbranch = true\nparallel = true\nsource_pkgs = [\"vizro_mcp\"]\n\n[tool.pytest.ini_options]\naddopts = [\n  # Allow test files to have the same name in different directories.\n  \"--import-mode=importlib\"\n]\nfilterwarnings = [\n  \"error\"\n]\npythonpath = [\"src\"]\n"
+}

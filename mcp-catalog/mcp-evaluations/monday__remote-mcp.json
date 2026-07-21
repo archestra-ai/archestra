@@ -1,0 +1,44 @@
+{
+  "name": "monday__remote-mcp",
+  "display_name": "Monday.com MCP",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjY1ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDE1NiI+PHBhdGggZmlsbD0iI2Y2MmI1NCIgZD0iTTMxLjg0NiAxNTMuNDg5YTMxLjk3IDMxLjk3IDAgMCAxLTI3Ljg2LTE2LjE2N2EzMC45MSAzMC45MSAwIDAgMSAuODc1LTMxLjgyM2w1Ny4zNzMtOTAuMDk2QTMxLjk5IDMxLjk5IDAgMCAxIDkwLjU1Ni4wMTVhMzEuOTMgMzEuOTMgMCAwIDEgMjcuNDEgMTYuODk2YzUuMzQ5IDEwLjExMyA0LjY4IDIyLjI4LTEuNzI1IDMxLjc3NEw1OC45MDQgMTM4Ljc4YTMxLjk4IDMxLjk4IDAgMCAxLTI3LjA1OCAxNC43MDkiLz48cGF0aCBmaWxsPSIjZmMwIiBkPSJNMTMwLjI1NiAxNTMuNDg4Yy0xMS41NzIgMC0yMi4yMi02LjE4Ny0yNy44MTItMTYuMTNhMzAuODEgMzAuODEgMCAwIDEgLjg3NS0zMS43MzdsNTcuMjY0LTg5Ljg5QTMxLjk0IDMxLjk0IDAgMCAxIDE4OC45My4wMTZjMTEuNjY5LjI1NSAyMi4yNDQgNi43ODIgMjcuNTkyIDE2Ljk5M2EzMC44MSAzMC44MSAwIDAgMS0yLjA2NiAzMS45MmwtNTcuMjUyIDg5Ljg4OWEzMS45MyAzMS45MyAwIDAgMS0yNi45NDggMTQuNjcxIi8+PGVsbGlwc2UgY3g9IjIyNi40NjYiIGN5PSIxMjUuMzI0IiBmaWxsPSIjMDBjYTcyIiByeD0iMjkuNTM4IiByeT0iMjguOTE4Ii8+PC9zdmc+",
+  "description": "Remote MCP server for Monday.com - work operating system for teams",
+  "oauth_config": {
+    "name": "Monday.com MCP",
+    "server_url": "https://mcp.monday.com/sse",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "description": "Monday.com MCP Server (dynamic registration)",
+    "default_scopes": ["read", "write"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Enterprise",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": "2025-09-05T19:30:23.066Z",
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "monday"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.monday.com/sse",
+    "docs_url": "https://developer.monday.com/apps/docs/mondaycom-mcp-integration"
+  },
+  "github_info": null,
+  "programming_language": null
+}

@@ -1,0 +1,90 @@
+{
+  "name": "pab1it0__chess-mcp",
+  "display_name": "chess-mcp",
+  "description": "A Model Context Protocol server for Chess.com's Published Data API.  This provides access to Chess.com player data, game records, and other public information through standardized MCP interfaces, allowing AI assistants to search and analyze chess information.",
+  "author": {
+    "name": "pab1it0"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "src/chess_mcp/main.py"],
+    "env": {
+      "NO_UV": "${user_config.no_uv}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "no_uv": {
+      "type": "boolean",
+      "title": "Disable UV Path Check",
+      "description": "Set to true if you encounter 'Error: spawn uv ENOENT' in Claude Desktop. This sets the NO_UV environment variable to '1', which might alter how uv is invoked or handled.",
+      "default": false,
+      "required": false
+    }
+  },
+  "readme": "# Chess.com MCP Server\n\nA [Model Context Protocol][mcp] (MCP) server for Chess.com's Published Data API.\n\nThis provides access to Chess.com player data, game records, and other public information through standardized MCP interfaces, allowing AI assistants to search and analyze chess information.\n\nhttps://github.com/user-attachments/assets/3b33361b-b604-465c-9f6a-3699b6907757\n\n[mcp]: https://modelcontextprotocol.io/introduction/introduction\n\n## Features\n\n- [x] Access player profiles, stats, and game records\n- [x] Search games by date and player\n- [x] Check player online status\n- [x] Get information about clubs and titled players\n- [x] No authentication required (uses Chess.com's public API)\n- [x] Docker containerization support\n- [x] Provide interactive tools for AI assistants\n\nThe list of tools is configurable, so you can choose which tools you want to make available to the MCP client.\n\n## Usage\n\n### Docker (Recommended)\n\nThe easiest way to run chess-mcp with [Claude Desktop](https://claude.ai/desktop) is using Docker. If you don't have Docker installed, you can get it from [Docker's official website](https://www.docker.com/get-started/).\n\n\nEdit your Claude Desktop config file:\n* Mac: `~/Library/Application Support/Claude/claude_desktop_config.json`\n* Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n* Linux: `~/.config/Claude/claude_desktop_config.json`\n\nThen add the following configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"chess\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"pab1it0/chess-mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Running with UV\n\nAlternatively, you can run the server directly using UV. Edit your Claude Desktop config file (locations listed above) and add the server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"chess\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"<full path to chess-mcp directory>\",\n        \"run\",\n        \"src/chess_mcp/main.py\"\n      ]\n    }\n  }\n}\n```\n\n> Note: if you see `Error: spawn uv ENOENT` in [Claude Desktop](https://claude.ai/desktop), you may need to specify the full path to `uv` or set the environment variable `NO_UV=1` in the configuration.\n\n## Development\n\nContributions are welcome! Please open an issue or submit a pull request if you have any suggestions or improvements.\n\nThis project uses [`uv`](https://github.com/astral-sh/uv) to manage dependencies. Install `uv` following the instructions for your platform:\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\nYou can then create a virtual environment and install the dependencies with:\n\n```bash\nuv venv\nsource .venv/bin/activate  # On Unix/macOS\n.venv\\Scripts\\activate     # On Windows\nuv pip install -e .\n```\n\n### Testing\n\nThe project includes a test suite that ensures functionality and helps prevent regressions.\n\nRun the tests with pytest:\n\n```bash\n# Install development dependencies\nuv pip install -e \".[dev]\"\n\n# Run the tests\npytest\n\n# Run with coverage report\npytest --cov=src --cov-report=term-missing\n```\n\n## Available Tools\n\n### Player Information\n- `get_player_profile` - Get a player's profile from Chess.com\n- `get_player_stats` - Get a player's stats from Chess.com\n- `is_player_online` - Check if a player is currently online on Chess.com\n- `get_titled_players` - Get a list of titled players from Chess.com\n\n### Games\n- `get_player_current_games` - Get a player's ongoing games on Chess.com\n- `get_player_games_by_month` - Get a player's games for a specific month from Chess.com\n- `get_player_game_archives` - Get a list of available monthly game archives for a player on Chess.com\n- `download_player_games_pgn` - Download PGN files for all games in a specific month from Chess.com\n\n### Clubs\n- `get_club_profile` - Get information about a club on Chess.com\n- `get_club_members` - Get members of a club on Chess.com\n\n## License\n\nMIT\n\n---\n\n[mcp]: https://modelcontextprotocol.io",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pab1it0-chess-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "pab1it0/chess-mcp"],
+        "env": {},
+        "docker_image": "pab1it0/chess-mcp"
+      },
+      "chess-mcp-uv": {
+        "command": "uv",
+        "args": ["--directory", "<full path to chess-mcp directory>", "run", "src/chess_mcp/main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pab1it0",
+    "repo": "chess-mcp",
+    "url": "https://github.com/pab1it0/chess-mcp",
+    "name": "chess-mcp",
+    "path": null,
+    "stars": 45,
+    "contributors": 1,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "d9120e45cb3f19ecc3839f257ef255121cec093d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.651Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"chess_mcp\"\nversion = \"0.1.0\"\ndescription = \"MCP server for Chess.com API integration\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]\",\n    \"httpx\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-cov>=4.0.0\",\n    \"pytest-asyncio>=0.21.0\",\n    \"pytest-mock>=3.10.0\",\n]\n\n[project.scripts]\nchess-mcp = \"chess_mcp.main:run_server\"\n\n[tool.setuptools]\npackages = [\"chess_mcp\"]\npackage-dir = {\"\" = \"src\"}\n\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_functions = \"test_*\"\npython_classes = \"Test*\"\naddopts = \"--cov=src --cov-report=term-missing\"\n\n[tool.coverage.run]\nsource = [\"src/chess_mcp\"]\nomit = [\"*/__pycache__/*\", \"*/tests/*\", \"*/.venv/*\", \"*/venv/*\"]\n\n[tool.coverage.report]\nexclude_lines = [\n    \"pragma: no cover\",\n    \"def __repr__\",\n    \"if self.debug:\",\n    \"raise NotImplementedError\",\n    \"if __name__ == .__main__.:\",\n    \"pass\",\n    \"raise ImportError\"\n]\n"
+}

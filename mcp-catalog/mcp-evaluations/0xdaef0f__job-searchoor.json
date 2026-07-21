@@ -1,0 +1,82 @@
+{
+  "name": "0xdaef0f__job-searchoor",
+  "display_name": "Job Searchoor",
+  "description": "A simple MCP server that delivers you jobs based on your needs",
+  "author": {
+    "name": "0xDAEF0F"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "job-searchoor"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Job Searchoor MCP Server\n[![Twitter Follow](https://img.shields.io/twitter/follow/Alex?style=social)](https://x.com/0xdaef0f)\n\nAn MCP server implementation that provides job search functionality.\n\n![mc-demo](https://github.com/user-attachments/assets/87159634-5e4c-41af-ad54-4c5ef19bf9d0)\n\n## Tools\n\nget_jobs\n\nGet available jobs with filtering options\nInputs:\n\nsinceWhen (string): Since when to get available jobs. e.g., '1d' or '1w' (only days and weeks are supported)\nkeywords (string[], optional): Keywords to filter jobs by\nexcludeKeywords (string[], optional): Keywords to exclude from the jobs\nisRemote (boolean, optional): Whether to filter jobs by remote work\n\n## Usage with Claude Desktop\n\nAdd this to your claude_desktop_config.json:\n\n```json{\n\"mcpServers\": {\n    \"job-search\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"job-searchoor\"]\n    }\n}\n```\n\nLicense\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Job Search",
+  "quality_score": 36,
+  "archestra_config": {
+    "client_config_permutations": {
+      "job-searchoor": {
+        "command": "npx",
+        "args": ["-y", "job-searchoor"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "0xDAEF0F",
+    "repo": "job-searchoor",
+    "url": "https://github.com/0xDAEF0F/job-searchoor",
+    "name": "job-searchoor",
+    "path": null,
+    "stars": 35,
+    "contributors": 0,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b9c315d0e815f38b75e66083f8d44f94a621b2a3"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:25.353Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@valibot/to-json-schema",
+      "importance": 6
+    },
+    {
+      "name": "arktype",
+      "importance": 7
+    },
+    {
+      "name": "effect",
+      "importance": 8
+    },
+    {
+      "name": "fastmcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"job-searchoor\",\n  \"version\": \"0.1.5\",\n  \"description\": \"A tool to search for jobs\",\n  \"module\": \"index.ts\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"bun build index.ts --outdir dist --target node && shx chmod +x dist/index.js\",\n    \"start\": \"node dist/index.js\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/0xDAEF0F/job-searchoor\"\n  },\n  \"author\": \"alex t. <aletapia@proton.me>\",\n  \"license\": \"MIT\",\n  \"keywords\": [\n    \"mcp-server\",\n    \"mcp\",\n    \"search jobs\",\n    \"FastMCP\"\n  ],\n  \"bin\": {\n    \"job-searchoor\": \"dist/index.js\"\n  },\n  \"devDependencies\": {\n    \"@types/bun\": \"latest\",\n    \"shx\": \"^0.4.0\"\n  },\n  \"peerDependencies\": {\n    \"typescript\": \"^5\"\n  },\n  \"dependencies\": {\n    \"@valibot/to-json-schema\": \"^1.0.0\",\n    \"arktype\": \"^2.1.17\",\n    \"effect\": \"^3.14.6\",\n    \"fastmcp\": \"^1.21.0\"\n  }\n}\n"
+}

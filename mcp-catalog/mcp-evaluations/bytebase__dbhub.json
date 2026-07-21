@@ -1,0 +1,215 @@
+{
+  "name": "bytebase__dbhub",
+  "display_name": "dbhub",
+  "description": "Universal database MCP server connecting to MySQL, PostgreSQL, SQL Server, MariaDB.",
+  "author": {
+    "name": "bytebase"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "> [!NOTE]  \n> Brought to you by [Bytebase](https://www.bytebase.com/), open-source database DevSecOps platform.\n\n<p align=\"center\">\n<a href=\"https://dbhub.ai/\" target=\"_blank\">\n<picture>\n  <img src=\"https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/logo-full.webp\" width=\"50%\">\n</picture>\n</a>\n</p>\n\n<p align=\"center\">\n  <a href=\"https://cursor.com/install-mcp?name=dbhub&config=eyJjb21tYW5kIjoibnB4IEBieXRlYmFzZS9kYmh1YiIsImVudiI6eyJUUkFOU1BPUlQiOiJzdGRpbyIsIkRTTiI6InBvc3RncmVzOi8vdXNlcjpwYXNzd29yZEBsb2NhbGhvc3Q6NTQzMi9kYm5hbWU%2Fc3NsbW9kZT1kaXNhYmxlIiwiUkVBRE9OTFkiOiJ0cnVlIn19\"><img src=\"https://cursor.com/deeplink/mcp-install-dark.svg\" alt=\"Add dbhub MCP server to Cursor\" height=\"32\" /></a>\n  <a href=\"https://discord.gg/BjEkZpsJzn\"><img src=\"https://img.shields.io/badge/%20-Hang%20out%20on%20Discord-5865F2?style=for-the-badge&logo=discord&labelColor=EEEEEE\" alt=\"Join our Discord\" height=\"32\" /></a>\n</p>\n\nDBHub is a universal database gateway implementing the Model Context Protocol (MCP) server interface. This gateway allows MCP-compatible clients to connect to and explore different databases.\n\n```bash\n +------------------+    +--------------+    +------------------+\n |                  |    |              |    |                  |\n |                  |    |              |    |                  |\n |  Claude Desktop  +--->+              +--->+    PostgreSQL    |\n |                  |    |              |    |                  |\n |  Claude Code     +--->+              +--->+    SQL Server    |\n |                  |    |              |    |                  |\n |  Cursor          +--->+    DBHub     +--->+    SQLite        |\n |                  |    |              |    |                  |\n |  Other Clients   +--->+              +--->+    MySQL         |\n |                  |    |              |    |                  |\n |                  |    |              +--->+    MariaDB       |\n |                  |    |              |    |                  |\n |                  |    |              |    |                  |\n +------------------+    +--------------+    +------------------+\n      MCP Clients           MCP Server             Databases\n```\n\n## Demo HTTP Endpoint\n\nhttps://demo.dbhub.ai/message connects a [sample employee database](https://github.com/bytebase/employee-sample-database). You can point Cursor or MCP Inspector to it to see it in action.\n\n![mcp-inspector](https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/mcp-inspector.webp)\n\n## Supported Matrix\n\n### Database Resources\n\n| Resource Name               | URI Format                                             | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |\n| --------------------------- | ------------------------------------------------------ | :--------: | :---: | :-----: | :--------: | :----: |\n| schemas                     | `db://schemas`                                         |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |\n| tables_in_schema            | `db://schemas/{schemaName}/tables`                     |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |\n| table_structure_in_schema   | `db://schemas/{schemaName}/tables/{tableName}`         |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |\n| indexes_in_table            | `db://schemas/{schemaName}/tables/{tableName}/indexes` |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |\n| procedures_in_schema        | `db://schemas/{schemaName}/procedures`                 |     ✅     |  ✅   |   ✅    |     ✅     |   ❌   |\n| procedure_details_in_schema | `db://schemas/{schemaName}/procedures/{procedureName}` |     ✅     |  ✅   |   ✅    |     ✅     |   ❌   |\n\n### Database Tools\n\n| Tool        | Command Name  | Description                                                         | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |\n| ----------- | ------------- | ------------------------------------------------------------------- | :--------: | :---: | :-----: | :--------: | ------ |\n| Execute SQL | `execute_sql` | Execute single or multiple SQL statements (separated by semicolons) |     ✅     |  ✅   |   ✅    |     ✅     | ✅     |\n\n### Prompt Capabilities\n\n| Prompt              | Command Name   | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |\n| ------------------- | -------------- | :--------: | :---: | :-----: | :--------: | ------ |\n| Generate SQL        | `generate_sql` |     ✅     |  ✅   |   ✅    |     ✅     | ✅     |\n| Explain DB Elements | `explain_db`   |     ✅     |  ✅   |   ✅    |     ✅     | ✅     |\n\n## Installation\n\n### Docker\n\n```bash\n# PostgreSQL example\ndocker run --rm --init \\\n   --name dbhub \\\n   --publish 8080:8080 \\\n   bytebase/dbhub \\\n   --transport http \\\n   --port 8080 \\\n   --dsn \"postgres://user:password@localhost:5432/dbname?sslmode=disable\"\n```\n\n```bash\n# Demo mode with sqlite sample employee database\ndocker run --rm --init \\\n   --name dbhub \\\n   --publish 8080:8080 \\\n   bytebase/dbhub \\\n   --transport http \\\n   --port 8080 \\\n   --demo\n```\n\n### NPM\n\n```bash\n# PostgreSQL example\nnpx @bytebase/dbhub --transport http --port 8080 --dsn \"postgres://user:password@localhost:5432/dbname?sslmode=disable\"\n\n# Demo mode with sqlite sample employee database\nnpx @bytebase/dbhub --transport http --port 8080 --demo\n```\n\n```bash\n# Demo mode with sample employee database\nnpx @bytebase/dbhub --transport http --port 8080 --demo\n```\n\n> Note: The demo mode includes a bundled SQLite sample \"employee\" database with tables for employees, departments, salaries, and more.\n\n### Claude Desktop\n\n![claude-desktop](https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/claude-desktop.webp)\n\n- Claude Desktop only supports `stdio` transport https://github.com/orgs/modelcontextprotocol/discussions/16\n\n```json\n// claude_desktop_config.json\n{\n  \"mcpServers\": {\n    \"dbhub-postgres-docker\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"bytebase/dbhub\",\n        \"--transport\",\n        \"stdio\",\n        \"--dsn\",\n        // Use host.docker.internal as the host if connecting to the local db\n        \"postgres://user:password@host.docker.internal:5432/dbname?sslmode=disable\"\n      ]\n    },\n    \"dbhub-postgres-npx\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"@bytebase/dbhub\",\n        \"--transport\",\n        \"stdio\",\n        \"--dsn\",\n        \"postgres://user:password@localhost:5432/dbname?sslmode=disable\"\n      ]\n    },\n    \"dbhub-demo\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@bytebase/dbhub\", \"--transport\", \"stdio\", \"--demo\"]\n    }\n  }\n}\n```\n\n### Claude Code\n\nCheck https://docs.anthropic.com/en/docs/claude-code/mcp\n\n### Cursor\n\n[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=dbhub&config=eyJjb21tYW5kIjoibnB4IEBieXRlYmFzZS9kYmh1YiIsImVudiI6eyJUUkFOU1BPUlQiOiJzdGRpbyIsIkRTTiI6InBvc3RncmVzOi8vdXNlcjpwYXNzd29yZEBsb2NhbGhvc3Q6NTQzMi9kYm5hbWU%2Fc3NsbW9kZT1kaXNhYmxlIiwiUkVBRE9OTFkiOiJ0cnVlIn19)\n\n![cursor](https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/cursor.webp)\n\n- Cursor supports both `stdio` and `http`.\n- Follow [Cursor MCP guide](https://docs.cursor.com/context/model-context-protocol) and make sure to use [Agent](https://docs.cursor.com/chat/agent) mode.\n\n## Usage\n\n### Read-only Mode\n\nYou can run DBHub in read-only mode, which restricts SQL query execution to read-only operations:\n\n```bash\n# Enable read-only mode\nnpx @bytebase/dbhub --readonly --dsn \"postgres://user:password@localhost:5432/dbname\"\n```\n\nIn read-only mode, only [readonly SQL operations](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) are allowed.\n\nThis provides an additional layer of security when connecting to production databases.\n\n### SSL Connections\n\nYou can specify the SSL mode using the `sslmode` parameter in your DSN string:\n\n| Database   | `sslmode=disable` | `sslmode=require` |   Default SSL Behavior   |\n| ---------- | :---------------: | :---------------: | :----------------------: |\n| PostgreSQL |        ✅         |        ✅         | Certificate verification |\n| MySQL      |        ✅         |        ✅         | Certificate verification |\n| MariaDB    |        ✅         |        ✅         | Certificate verification |\n| SQL Server |        ✅         |        ✅         | Certificate verification |\n| SQLite     |        ❌         |        ❌         |     N/A (file-based)     |\n\n**SSL Mode Options:**\n\n- `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.\n- `sslmode=require`: Connection is encrypted, but the server's certificate is not verified. This provides protection against packet sniffing but not against man-in-the-middle attacks. You may use this for trusted self-signed CA.\n\nWithout specifying `sslmode`, most databases default to certificate verification, which provides the highest level of security.\n\nExample usage:\n\n```bash\n# Disable SSL\npostgres://user:password@localhost:5432/dbname?sslmode=disable\n\n# Require SSL without certificate verification\npostgres://user:password@localhost:5432/dbname?sslmode=require\n\n# Standard SSL with certificate verification (default)\npostgres://user:password@localhost:5432/dbname\n```\n\n### SSH Tunnel Support\n\nDBHub supports connecting to databases through SSH tunnels, enabling secure access to databases in private networks or behind firewalls.\n\n#### Using SSH Config File (Recommended)\n\nDBHub can read SSH connection settings from your `~/.ssh/config` file. Simply use the host alias from your SSH config:\n\n```bash\n# If you have this in ~/.ssh/config:\n# Host mybastion\n#   HostName bastion.example.com\n#   User ubuntu\n#   IdentityFile ~/.ssh/id_rsa\n\nnpx @bytebase/dbhub \\\n  --dsn \"postgres://dbuser:dbpass@database.internal:5432/mydb\" \\\n  --ssh-host mybastion\n```\n\nDBHub will automatically use the settings from your SSH config, including hostname, user, port, and identity file. If no identity file is specified in the config, DBHub will try common default locations (`~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc.).\n\n#### SSH with Password Authentication\n\n```bash\nnpx @bytebase/dbhub \\\n  --dsn \"postgres://dbuser:dbpass@database.internal:5432/mydb\" \\\n  --ssh-host bastion.example.com \\\n  --ssh-user ubuntu \\\n  --ssh-password mypassword\n```\n\n#### SSH with Private Key Authentication\n\n```bash\nnpx @bytebase/dbhub \\\n  --dsn \"postgres://dbuser:dbpass@database.internal:5432/mydb\" \\\n  --ssh-host bastion.example.com \\\n  --ssh-user ubuntu \\\n  --ssh-key ~/.ssh/id_rsa\n```\n\n#### SSH with Private Key and Passphrase\n\n```bash\nnpx @bytebase/dbhub \\\n  --dsn \"postgres://dbuser:dbpass@database.internal:5432/mydb\" \\\n  --ssh-host bastion.example.com \\\n  --ssh-port 2222 \\\n  --ssh-user ubuntu \\\n  --ssh-key ~/.ssh/id_rsa \\\n  --ssh-passphrase mykeypassphrase\n```\n\n#### Using Environment Variables\n\n```bash\nexport SSH_HOST=bastion.example.com\nexport SSH_USER=ubuntu\nexport SSH_KEY=~/.ssh/id_rsa\nnpx @bytebase/dbhub --dsn \"postgres://dbuser:dbpass@database.internal:5432/mydb\"\n```\n\n**Note**: When using SSH tunnels, the database host in your DSN should be the hostname/IP as seen from the SSH server (bastion host), not from your local machine.\n\n### Configure your database connection\n\nYou can use DBHub in demo mode with a sample employee database for testing:\n\n```bash\nnpx @bytebase/dbhub  --demo\n```\n\n> [!WARNING]\n> If your user/password contains special characters, you need to escape them first. (e.g. `pass#word` should be escaped as `pass%23word`)\n\nFor real databases, a Database Source Name (DSN) is required. You can provide this in several ways:\n\n- **Command line argument** (highest priority):\n\n  ```bash\n  npx @bytebase/dbhub  --dsn \"postgres://user:password@localhost:5432/dbname?sslmode=disable\"\n  ```\n\n- **Environment variable** (second priority):\n\n  ```bash\n  export DSN=\"postgres://user:password@localhost:5432/dbname?sslmode=disable\"\n  npx @bytebase/dbhub\n  ```\n\n- **Environment file** (third priority):\n  - For development: Create `.env.local` with your DSN\n  - For production: Create `.env` with your DSN\n  ```\n  DSN=postgres://user:password@localhost:5432/dbname?sslmode=disable\n  ```\n\n> [!WARNING]\n> When running in Docker, use `host.docker.internal` instead of `localhost` to connect to databases running on your host machine. For example: `mysql://user:password@host.docker.internal:3306/dbname`\n\nDBHub supports the following database connection string formats:\n\n| Database   | DSN Format                                               | Example                                                                                                        |\n| ---------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |\n| MySQL      | `mysql://[user]:[password]@[host]:[port]/[database]`     | `mysql://user:password@localhost:3306/dbname?sslmode=disable`                                                  |\n| MariaDB    | `mariadb://[user]:[password]@[host]:[port]/[database]`   | `mariadb://user:password@localhost:3306/dbname?sslmode=disable`                                                |\n| PostgreSQL | `postgres://[user]:[password]@[host]:[port]/[database]`  | `postgres://user:password@localhost:5432/dbname?sslmode=disable`                                               |\n| SQL Server | `sqlserver://[user]:[password]@[host]:[port]/[database]` | `sqlserver://user:password@localhost:1433/dbname?sslmode=disable`                                              |\n| SQLite     | `sqlite:///[path/to/file]` or `sqlite:///:memory:`       | `sqlite:///path/to/database.db`, `sqlite:C:/Users/YourName/data/database.db (windows)` or `sqlite:///:memory:` |\n\n#### SQL Server\n\nExtra query parameters:\n\n#### authentication\n\n- `authentication=azure-active-directory-access-token`. Only applicable when running from Azure. See [DefaultAzureCredential](https://learn.microsoft.com/en-us/azure/developer/javascript/sdk/authentication/credential-chains#use-defaultazurecredential-for-flexibility).\n\n### Transport\n\n- **stdio** (default) - for direct integration with tools like Claude Desktop:\n\n  ```bash\n  npx @bytebase/dbhub --transport stdio --dsn \"postgres://user:password@localhost:5432/dbname?sslmode=disable\"\n  ```\n\n- **http** - for browser and network clients:\n  ```bash\n  npx @bytebase/dbhub --transport http --port 5678 --dsn \"postgres://user:password@localhost:5432/dbname?sslmode=disable\"\n  ```\n\n### Command line options\n\n| Option         | Environment Variable | Description                                                      | Default                      |\n| -------------- | -------------------- | ---------------------------------------------------------------- | ---------------------------- |\n| dsn            | `DSN`                | Database connection string                                       | Required if not in demo mode |\n| transport      | `TRANSPORT`          | Transport mode: `stdio` or `http`                                | `stdio`                      |\n| port           | `PORT`               | HTTP server port (only applicable when using `--transport=http`) | `8080`                       |\n| readonly       | `READONLY`           | Restrict SQL execution to read-only operations                   | `false`                      |\n| demo           | N/A                  | Run in demo mode with sample employee database                   | `false`                      |\n| ssh-host       | `SSH_HOST`           | SSH server hostname for tunnel connection                        | N/A                          |\n| ssh-port       | `SSH_PORT`           | SSH server port                                                  | `22`                         |\n| ssh-user       | `SSH_USER`           | SSH username                                                     | N/A                          |\n| ssh-password   | `SSH_PASSWORD`       | SSH password (for password authentication)                       | N/A                          |\n| ssh-key        | `SSH_KEY`            | Path to SSH private key file                                     | N/A                          |\n| ssh-passphrase | `SSH_PASSPHRASE`     | Passphrase for SSH private key                                   | N/A                          |\n\nThe demo mode uses an in-memory SQLite database loaded with the [sample employee database](https://github.com/bytebase/dbhub/tree/main/resources/employee-sqlite) that includes tables for employees, departments, titles, salaries, department employees, and department managers. The sample database includes SQL scripts for table creation, data loading, and testing.\n\n## Development\n\n1. Install dependencies:\n\n   ```bash\n   pnpm install\n   ```\n\n1. Run in development mode:\n\n   ```bash\n   pnpm dev\n   ```\n\n1. Build for production:\n   ```bash\n   pnpm build\n   pnpm start --transport stdio --dsn \"postgres://user:password@localhost:5432/dbname?sslmode=disable\"\n   ```\n\n### Testing\n\nThe project uses Vitest for comprehensive unit and integration testing:\n\n- **Run all tests**: `pnpm test`\n- **Run tests in watch mode**: `pnpm test:watch`\n- **Run integration tests**: `pnpm test:integration`\n\n#### Integration Tests\n\nDBHub includes comprehensive integration tests for all supported database connectors using [Testcontainers](https://testcontainers.com/). These tests run against real database instances in Docker containers, ensuring full compatibility and feature coverage.\n\n##### Prerequisites\n\n- **Docker**: Ensure Docker is installed and running on your machine\n- **Docker Resources**: Allocate sufficient memory (recommended: 4GB+) for multiple database containers\n- **Network Access**: Ability to pull Docker images from registries\n\n##### Running Integration Tests\n\n**Note**: This command runs all integration tests in parallel, which may take 5-15 minutes depending on your system resources and network speed.\n\n```bash\n# Run all database integration tests\npnpm test:integration\n```\n\n```bash\n# Run only PostgreSQL integration tests\npnpm test src/connectors/__tests__/postgres.integration.test.ts\n# Run only MySQL integration tests\npnpm test src/connectors/__tests__/mysql.integration.test.ts\n# Run only MariaDB integration tests\npnpm test src/connectors/__tests__/mariadb.integration.test.ts\n# Run only SQL Server integration tests\npnpm test src/connectors/__tests__/sqlserver.integration.test.ts\n# Run only SQLite integration tests\npnpm test src/connectors/__tests__/sqlite.integration.test.ts\n# Run JSON RPC integration tests\npnpm test src/__tests__/json-rpc-integration.test.ts\n```\n\nAll integration tests follow these patterns:\n\n1. **Container Lifecycle**: Start database container → Connect → Setup test data → Run tests → Cleanup\n2. **Shared Test Utilities**: Common test patterns implemented in `IntegrationTestBase` class\n3. **Database-Specific Features**: Each database includes tests for unique features and capabilities\n4. **Error Handling**: Comprehensive testing of connection errors, invalid SQL, and edge cases\n\n##### Troubleshooting Integration Tests\n\n**Container Startup Issues:**\n\n```bash\n# Check Docker is running\ndocker ps\n\n# Check available memory\ndocker system df\n\n# Pull images manually if needed\ndocker pull postgres:15-alpine\ndocker pull mysql:8.0\ndocker pull mariadb:10.11\ndocker pull mcr.microsoft.com/mssql/server:2019-latest\n```\n\n**SQL Server Timeout Issues:**\n\n- SQL Server containers require significant startup time (3-5 minutes)\n- Ensure Docker has sufficient memory allocated (4GB+ recommended)\n- Consider running SQL Server tests separately if experiencing timeouts\n\n**Network/Resource Issues:**\n\n```bash\n# Run tests with verbose output\npnpm test:integration --reporter=verbose\n\n# Run single database test to isolate issues\npnpm test:integration -- --testNamePattern=\"PostgreSQL\"\n\n# Check Docker container logs if tests fail\ndocker logs <container_id>\n```\n\n#### Pre-commit Hooks (for Developers)\n\nThe project includes pre-commit hooks to run tests automatically before each commit:\n\n1. After cloning the repository, set up the pre-commit hooks:\n\n   ```bash\n   ./scripts/setup-husky.sh\n   ```\n\n2. This ensures the test suite runs automatically whenever you create a commit, preventing commits that would break tests.\n\n### Debug with [MCP Inspector](https://github.com/modelcontextprotocol/inspector)\n\n#### stdio\n\n```bash\n# PostgreSQL example\nTRANSPORT=stdio DSN=\"postgres://user:password@localhost:5432/dbname?sslmode=disable\" npx @modelcontextprotocol/inspector node /path/to/dbhub/dist/index.js\n```\n\n#### HTTP\n\n```bash\n# Start DBHub with HTTP transport\npnpm dev --transport=http --port=8080\n\n# Start the MCP Inspector in another terminal\nnpx @modelcontextprotocol/inspector\n```\n\nConnect to the DBHub server `/message` endpoint\n\n## Contributors\n\n<a href=\"https://github.com/bytebase/dbhub/graphs/contributors\">\n  <img src=\"https://contrib.rocks/image?repo=bytebase/dbhub\" />\n</a>\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=bytebase/dbhub&type=Date)](https://www.star-history.com/#bytebase/dbhub&Date)\n",
+  "category": "Development",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "bytebase-dbhub-cursor-config": {
+        "command": "npx",
+        "args": ["-y", "@bytebase/dbhub"],
+        "env": {
+          "TRANSPORT": "stdio",
+          "DSN": "postgres://user:password@localhost:5432/dbname?sslmode=disable",
+          "READONLY": "true"
+        }
+      },
+      "bytebase-dbhub-docker-http-postgres": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "--init",
+          "--name",
+          "dbhub",
+          "--publish",
+          "8080:8080",
+          "bytebase/dbhub",
+          "--transport",
+          "http",
+          "--port",
+          "8080",
+          "--dsn",
+          "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+        ],
+        "env": {},
+        "docker_image": "8080:8080"
+      },
+      "bytebase-dbhub-docker-http-demo": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "--init",
+          "--name",
+          "dbhub",
+          "--publish",
+          "8080:8080",
+          "bytebase/dbhub",
+          "--transport",
+          "http",
+          "--port",
+          "8080",
+          "--demo"
+        ],
+        "env": {},
+        "docker_image": "8080:8080"
+      },
+      "bytebase-dbhub-npx-http-postgres": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@bytebase/dbhub",
+          "--transport",
+          "http",
+          "--port",
+          "8080",
+          "--dsn",
+          "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+        ],
+        "env": {}
+      },
+      "bytebase-dbhub-npx-http-demo": {
+        "command": "npx",
+        "args": ["-y", "@bytebase/dbhub", "--transport", "http", "--port", "8080", "--demo"],
+        "env": {}
+      },
+      "bytebase-dbhub-docker-stdio-claude-desktop": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "bytebase/dbhub",
+          "--transport",
+          "stdio",
+          "--dsn",
+          "postgres://user:password@host.docker.internal:5432/dbname?sslmode=disable"
+        ],
+        "env": {},
+        "docker_image": "bytebase/dbhub"
+      },
+      "bytebase-dbhub-npx-stdio-claude-desktop": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@bytebase/dbhub",
+          "--transport",
+          "stdio",
+          "--dsn",
+          "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+        ],
+        "env": {}
+      },
+      "bytebase-dbhub-npx-stdio-demo-claude-desktop": {
+        "command": "npx",
+        "args": ["-y", "@bytebase/dbhub", "--transport", "stdio", "--demo"],
+        "env": {}
+      },
+      "bytebase-dbhub-npx-readonly": {
+        "command": "npx",
+        "args": ["-y", "@bytebase/dbhub", "--readonly", "--dsn", "postgres://user:password@localhost:5432/dbname"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "bytebase",
+    "repo": "dbhub",
+    "url": "https://github.com/bytebase/dbhub",
+    "name": "dbhub",
+    "path": null,
+    "stars": 1063,
+    "contributors": 11,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "c5f1d1ee2a53fe44fcbac6d1eb3e172c08f9e9c6"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-08-04T09:33:47.735Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@azure/identity",
+      "importance": 7
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "better-sqlite3",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "mariadb",
+      "importance": 9
+    },
+    {
+      "name": "mssql",
+      "importance": 9
+    },
+    {
+      "name": "mysql2",
+      "importance": 9
+    },
+    {
+      "name": "pg",
+      "importance": 9
+    },
+    {
+      "name": "ssh-config",
+      "importance": 7
+    },
+    {
+      "name": "ssh2",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"dbhub\",\n  \"version\": \"0.11.2\",\n  \"description\": \"Universal Database MCP Server\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"dbhub\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\",\n    \"LICENSE\",\n    \"README.md\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsup\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"NODE_ENV=development tsx src/index.ts\",\n    \"crossdev\": \"cross-env NODE_ENV=development tsx src/index.ts\",\n    \"test\": \"vitest run\",\n    \"test:watch\": \"vitest\",\n    \"test:integration\": \"vitest run --testNamePattern='Integration Tests'\",\n    \"prepare\": \"[[ \\\"$NODE_ENV\\\" != \\\"production\\\" ]] && husky || echo \\\"Skipping husky in production\\\"\",\n    \"pre-commit\": \"lint-staged\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"MIT\",\n  \"dependencies\": {\n    \"@azure/identity\": \"^4.8.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"better-sqlite3\": \"^11.9.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"express\": \"^4.18.2\",\n    \"mariadb\": \"^3.4.0\",\n    \"mssql\": \"^11.0.1\",\n    \"mysql2\": \"^3.13.0\",\n    \"pg\": \"^8.13.3\",\n    \"ssh-config\": \"^5.0.3\",\n    \"ssh2\": \"^1.16.0\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@testcontainers/mariadb\": \"^11.0.3\",\n    \"@testcontainers/mssqlserver\": \"^11.0.3\",\n    \"@testcontainers/mysql\": \"^11.0.3\",\n    \"@testcontainers/postgresql\": \"^11.0.3\",\n    \"@types/better-sqlite3\": \"^7.6.12\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/mssql\": \"^9.1.7\",\n    \"@types/node\": \"^22.13.10\",\n    \"@types/pg\": \"^8.11.11\",\n    \"@types/ssh2\": \"^1.15.5\",\n    \"cross-env\": \"^7.0.3\",\n    \"husky\": \"^9.0.11\",\n    \"lint-staged\": \"^15.2.2\",\n    \"prettier\": \"^3.5.3\",\n    \"testcontainers\": \"^11.0.3\",\n    \"ts-node\": \"^10.9.2\",\n    \"tsup\": \"^8.4.0\",\n    \"tsx\": \"^4.19.3\",\n    \"typescript\": \"^5.8.2\",\n    \"vitest\": \"^1.6.1\"\n  },\n  \"compilerOptions\": {\n    \"target\": \"ES2020\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"esModuleInterop\": true,\n    \"strict\": true,\n    \"outDir\": \"dist\",\n    \"rootDir\": \"src\"\n  },\n  \"include\": [\n    \"src/**/*\"\n  ],\n  \"lint-staged\": {\n    \"*.{js,ts}\": \"vitest related --run\"\n  }\n}\n"
+}

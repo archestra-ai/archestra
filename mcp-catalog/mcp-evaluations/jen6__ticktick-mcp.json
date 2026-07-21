@@ -1,0 +1,128 @@
+{
+  "name": "jen6__ticktick-mcp",
+  "display_name": "ticktick-mcp",
+  "description": "Enhance your TickTick workflow with MCP server. Better filtering interface",
+  "author": {
+    "name": "jen6"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["--from", "git+https://github.com/jen6/ticktick-mcp.git", "ticktick-mcp"],
+    "env": {
+      "TICKTICK_CLIENT_ID": "${user_config.ticktick_client_id}",
+      "TICKTICK_CLIENT_SECRET": "${user_config.ticktick_client_secret}",
+      "TICKTICK_REDIRECT_URI": "${user_config.ticktick_redirect_uri}",
+      "TICKTICK_USERNAME": "${user_config.ticktick_username}",
+      "TICKTICK_PASSWORD": "${user_config.ticktick_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ticktick_client_id": {
+      "type": "string",
+      "title": "TickTick Client ID",
+      "description": "Client ID obtained from TickTick OpenAPI application registration.",
+      "sensitive": true,
+      "required": true
+    },
+    "ticktick_client_secret": {
+      "type": "string",
+      "title": "TickTick Client Secret",
+      "description": "Client Secret obtained from TickTick OpenAPI application registration.",
+      "sensitive": true,
+      "required": true
+    },
+    "ticktick_redirect_uri": {
+      "type": "string",
+      "title": "TickTick OAuth Redirect URI",
+      "description": "The exact OAuth Redirect URL configured in your TickTick application (e.g., http://localhost:8080/redirect). Must match the registered URL exactly.",
+      "sensitive": false,
+      "required": true
+    },
+    "ticktick_username": {
+      "type": "string",
+      "title": "TickTick Username (Email)",
+      "description": "Your TickTick login email address.",
+      "sensitive": false,
+      "required": true
+    },
+    "ticktick_password": {
+      "type": "string",
+      "title": "TickTick Password",
+      "description": "Your TickTick login password (or app password if enabled).",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# TickTick MCP Server\n\n<!-- Add relevant badges here -->\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n<!-- [![PyPI version](https://badge.fury.io/py/your-package-name.svg)](https://badge.fury.io/py/your-package-name) -->\n\n![](images/ticktick_img.webp)\n\nEnhance your TickTick workflow with this MCP server. Built upon the `ticktick-py` library, it offers significantly improved filtering capabilities, allowing AI assistants and MCP-compatible applications (like Claude Desktop, VS Code Agent Mode, or `mcp-use`) to interact with your tasks with greater precision and power.\n\n\n\n## ✨ Features\n\nThis server provides comprehensive access to TickTick functionalities via MCP tools, categorized as follows:\n\n* **Task Management:** Create, update (including conversion to TickTick's date format), delete, complete, and move tasks.\n* **Subtask Management:** Create subtasks by linking existing tasks.\n* **Task Retrieval:**\n  *  Get all uncompleted tasks.\n  *  Get tasks by ID or specific fields.\n  *  Get completed tasks within a date range.\n  *  Get tasks from a specific project.\n  *  Filter tasks based on various critggeria (priority, project, tags, etc.).\n*  **Project/Tag Management:** Retrieve all projects, tags, and project folders.\n*  **Helper Tools:** Convert datetime strings to the required TickTick format.\n\nRefer to the tool definitions within the `src/ticktick_mcp/tools/` directory for detailed specifications.\n\n## 🚀 Getting Started\n\nThis server utilizes the unofficial [`ticktick-py` library](https://lazeroffmichael.github.io/ticktick-py/) to interact with the TickTick API.\n\n### Prerequisites\n\n*  Python >= 3.10\n*  Access to TickTick and API credentials (see below).\n\n### Setup\n\n1. **Register a TickTick Application:** Before using the server, you need to register an application with TickTick to obtain API credentials. Follow these steps based on the `ticktick-py` documentation:\n    * Go to the [TickTick OpenAPI Documentation](https://developer.ticktick.com/docs#/openapi) and log in with your TickTick account.\n    *  Click on `Manage Apps` in the top right corner.\n    *  Register a new app by clicking the `+App Name` button. Provide a name for your application (e.g., \"MCP Server\").\n    *  Once created, edit the app details. Note down the generated `Client ID` and `Client Secret`.\n    *  For the `OAuth Redirect URL`, enter a URL where you want to be redirected after authorizing the application. It doesn't need to be a live URL\n       *  `http://localhost:8080/redirect` or `http://127.0.0.1:8080/` are common choices for local development. \n        * **Ensure this exact URL is saved in your environment variables.**\n\n2. **Environment Variables:** The server requires the TickTick API credentials you just obtained, plus your TickTick login details. By default, it looks for a `.env` file located at `~/.config/ticktick-mcp/.env`.\n    * The server *might* create the `~/.config/ticktick-mcp/` directory if it doesn't exist, but it's safer to create it manually.\n    * You **must create the `.env` file manually** within that directory.\n    * Alternatively, you can specify a different directory using the `--dotenv-dir` command-line argument *only* when running the server directly via Python (see \"Running the Server\" below).\n \n    The `.env` file should contain:\n ```dotenv\n TICKTICK_CLIENT_ID=your_client_id   # Obtained in Step 1\n TICKTICK_CLIENT_SECRET=your_client_secret # Obtained in Step 1\n TICKTICK_REDIRECT_URI=your_redirect_uri # Entered in Step 1 (must match exactly)\n TICKTICK_USERNAME=your_ticktick_email # Your TickTick login email\n TICKTICK_PASSWORD=your_ticktick_password # Your TickTick login password (or app password if enabled)\n ```\n\n3. **Authentication (First Run):** On the first run (either directly or via an MCP client), the underlying `ticktick-py` library will initiate an OAuth2 authentication flow.\n    * A web browser window might open automatically, or a URL will be printed in the console/log output.\n    * You need to visit this URL, log in to TickTick if necessary, and authorize the application (granting Read and Write permissions).\n    * After authorization, you will be redirected to the `TICKTICK_REDIRECT_URI` you specified. \n      * The console will prompt you to **paste this full redirected URL** (which includes a `code=` parameter) back into the terminal.\n    * Upon successful verification, a `.token-oauth` file will be created in the same directory as your `.env` file. \n    * This file caches the authorization token, so you typically only need to perform this manual authorization step once every ~6 months or if the token becomes invalid.\n\n### Running the Server\n\nYou can run the server in two main ways:\n\n**1. Via an MCP Client (Recommended for AI Assistant Integration):**\n\nConfigure your MCP client (like Claude Desktop, VS Code Agent Mode, etc.) to use the server. Example configuration:\n\n```json\n{\n \"mcpServers\": {\n \"ticktick\": {\n  \"command\": \"uvx\",\n  \"args\": [\n  \"--from\",\n  \"git+https://github.com/jen6/ticktick-mcp.git\",\n  \"ticktick-mcp\"\n  // Optional: Add \"--dotenv-dir\", \"/path/to/your/config\" if needed,\n  // but standard clients might not support passing extra args easily.\n  ]\n }\n }\n}\n```\n\n## 🔧 Tools\n\nThis server provides the following tools for interacting with the TickTick task management service:\n\n### Task Management\n\n1. `ticktick_create_task`\n   * Creates a new task in TickTick\n   * Inputs:\n     * `title` (string): The title of the task. Required.\n     * `projectId` (string, optional): ID of the project to add the task to.\n     * `content` (string, optional): Additional details or notes for the task.\n     * `desc` (string, optional): Description for the task.\n     * `allDay` (boolean, optional): Set to True if the task spans the entire day.\n     * `startDate` (string, optional): Start date/time in ISO 8601 format.\n     * `dueDate` (string, optional): Due date/time in ISO 8601 format.\n     * `timeZone` (string, optional): IANA timezone name (e.g., 'Asia/Seoul').\n     * `reminders` (array of strings, optional): List of reminder triggers in RFC 5545 format.\n     * `repeat` (string, optional): Recurring rule in RFC 5545 format.\n     * `priority` (integer, optional): Task priority (0=None, 1=Low, 3=Medium, 5=High).\n     * `sortOrder` (integer, optional): Custom sort order value.\n     * `items` (array of objects, optional): List of subtask dictionaries.\n\n2. `ticktick_update_task`\n   * Updates an existing task\n   * Inputs:\n     * `task_object` (object): A dictionary with task properties to update including the task `id`.\n\n3. `ticktick_delete_tasks`\n   * Deletes one or more tasks\n   * Inputs:\n     * `task_ids` (string or array of strings): A single task ID or list of task IDs to delete.\n\n4. `ticktick_complete_task`\n   * Marks a task as complete\n   * Inputs:\n     * `task_id` (string): The ID of the task to mark as complete.\n\n5. `ticktick_move_task`\n   * Moves a task to a different project\n   * Inputs:\n     * `task_id` (string): The ID of the task to move.\n     * `new_project_id` (string): The ID of the destination project.\n\n6. `ticktick_make_subtask`\n   * Makes one task a subtask of another\n   * Inputs:\n     * `parent_task_id` (string): The ID of the task that will become the parent.\n     * `child_task_id` (string): The ID of the task that will become the subtask.\n\n### Task Retrieval\n\n7. `ticktick_get_by_id`\n   * Retrieves a specific object (task, project, etc.) by ID\n   * Inputs:\n     * `obj_id` (string): The unique ID of the object to retrieve.\n\n8. `ticktick_get_all`\n   * Retrieves all objects of a specified type\n   * Inputs:\n     * `search` (string): The type of objects to retrieve (e.g., 'tasks', 'projects', 'tags').\n\n9. `ticktick_get_tasks_from_project`\n   * Retrieves all uncompleted tasks from a specific project\n   * Inputs:\n     * `project_id` (string): The ID of the project.\n\n10. `ticktick_filter_tasks`\n    * Filters tasks based on various criteria\n    * Inputs:\n      * `filter_criteria` (object): Dictionary with filtering parameters such as:\n        * `status` (string): Task status ('uncompleted' or 'completed').\n        * `project_id` (string, optional): Project ID to filter tasks by.\n        * `tag_label` (string, optional): Tag name to filter tasks by.\n        * `priority` (integer, optional): Priority level.\n        * `due_start_date` (string, optional): ISO format start date for due date filter.\n        * `due_end_date` (string, optional): ISO format end date for due date filter.\n        * `completion_start_date` (string, optional): Start date for completion date filter.\n        * `completion_end_date` (string, optional): End date for completion date filter.\n        * `sort_by_priority` (boolean, optional): Sort results by priority.\n        * `tz` (string, optional): Timezone for date interpretation.\n\n### Helper Tools\n\n11. `ticktick_convert_datetime_to_ticktick_format`\n    * Converts ISO 8601 date/time string to TickTick API format\n    * Inputs:\n      * `datetime_iso_string` (string): The date/time string in ISO 8601 format.\n      * `tz` (string): IANA timezone name to interpret the date/time.\n\n## 🤖 Sample agent prompt\n\n```\n## Persona: Daily Stand-up Agent\n\n- **Role**: AI agent integrated with the user's TickTick account to assist in daily work planning\n- **Goal**: Help the user start their day efficiently, focus on key tasks, and break large tasks into manageable subtasks\n\n---\n\n## Core Features & Workflow\n\n1. **Fetch Current Time** \n - Retrieve current time using `time mcp`.\n\n2. **Session Start & Data Loading** \n - The user initiates the session with a command like \"Start daily stand-up\" or \"Hello.\" \n - Call TickTick MCP API to fetch all tasks due **today**. \n - Optionally notify the user that data is loading (e.g., \"Fetching today's and overdue tasks from TickTick…\").\n\n3. **Daily Briefing**\n Good morning! Today's date is {YYYY-MM-DD}. Here's your daily stand-up from TickTick:\n\n **Tasks Due Today:**\n - Task Name 1\n - Task Name 2\n …\n\n **Overdue Tasks:**\n - Task Name 3\n - Task Name 4\n …\n\n4. **Select Key Task** \n > \"Which of these tasks would you like to focus on first or must complete today? \n > Or is there another important task you'd like to add?\"\n\n5. **Task Breakdown (Subtask Creation)** \n - After the user selects a main task, suggest 2–5 specific subtasks needed to complete it. \n - Example (if \"Write project report\" is selected):\n  1. Draft outline & table of contents (10 min) \n  2. Gather & analyze data (30 min) \n  3. Write section drafts (1 h) \n  4. Review & revise draft (30 min) \n  5. Final submission (10 min)\n\n6. **Confirm & Add Subtasks** \n - Ask the user to confirm or adjust the suggested subtasks: \n  > \"Does this breakdown look good? Any changes?\" \n - Once approved, call MCP to add each subtask to TickTick, setting them as children of the main task if supported, naming them \"[Main Task] – [Subtask]\". \n mcp.ticktick.addTask({\n  name: \"[Main Task] – [Subtask]\",\n  parentId: \"...\"\n });\n\n7. **Session Close** \n > \"All subtasks have been added to TickTick. Have a productive day! Anything else I can help with?\"\n\n---\n\n## Additional Guidelines\n\n- **Tone & Manner**: Friendly, proactive, and organized. \n- **MCP Interface Examples**: \n // Fetch today's due tasks\n mcp.ticktick.getTasks({\n filter_criteria: {\n  status: \"uncompleted\",\n  tz: \"Asia/Seoul\",\n  due_end_date: \"2025-04-29\"\n }\n });\n\n // Add a subtask\n mcp.ticktick.addTask({\n name: \"Project Report – Write Draft\",\n parentId: \"task123\"\n });\n- **Error Handling**: Inform the user and suggest retrying on MCP call failures. \n- **Clarity**: Present task lists and subtask suggestions clearly. \n- **Plan First**: Use `sequential thinking mcp` to plan steps before adding or modifying tasks.\n\n```\n\n## 🤝 Contributing\n\nContributions are welcome! Please feel free to open an issue or submit a pull request.\n\n\n## 📜 License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## 🔗 See Also\n\n* [Model Context Protocol Servers](https://github.com/modelcontextprotocol/servers): The central repository for reference implementations of MCP servers for various tools and platforms.\n* [modelcontextprotocol.io](https://modelcontextprotocol.io/): Official documentation for the Model Context Protocol.\n* [pietrozullo/mcp-use](https://github.com/pietrozullo/mcp-use): A popular Python library for building clients/agents that interact with MCP servers.\n* [lazeroffmichael/ticktick-py](https://lazeroffmichael.github.io/ticktick-py/): The unofficial TickTick API library used by this project to handle authentication and API interactions.\n",
+  "category": "Development",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "ticktick-mcp": {
+        "command": "uvx",
+        "args": ["--from", "git+https://github.com/jen6/ticktick-mcp.git", "ticktick-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jen6",
+    "repo": "ticktick-mcp",
+    "url": "https://github.com/jen6/ticktick-mcp",
+    "name": "ticktick-mcp",
+    "path": null,
+    "stars": 28,
+    "contributors": 2,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "4482bae98c659442311661ba5ba5674e9bd70815"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.948Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "anyio",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "ticktick-py",
+      "importance": 9
+    },
+    {
+      "name": "tzlocal",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"ticktick-mcp\"\nversion = \"0.1.0\"\ndescription = \"MCP server for interacting with the TickTick API.\"\nauthors = [\n  { name=\"jen6\", email=\"work.jen6@gmail.com\" },\n]\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"anyio>=4.9.0\",\n    \"mcp>=1.6.0\",\n    \"python-dotenv>=1.1.0\",\n    \"ticktick-py\",\n    \"tzlocal>=5.3.1\",\n]\n\n[project.scripts]\nticktick-mcp = \"main:main\"\n\n[project.urls]\n\"Homepage\" = \"https://github.com/jen6/ticktick-mcp\"\n\n[tool.uv.sources]\nticktick-py = { git = \"https://github.com/jen6/ticktick-py.git\", rev = \"main\" }\n\n[dependency-groups]\ndev = [\n    \"pytest>=8.3.5\",\n]\n"
+}

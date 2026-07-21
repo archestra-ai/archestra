@@ -1,0 +1,110 @@
+{
+  "name": "chatmcp__mcp-server-chatsum",
+  "display_name": "mcp-server-chatsum",
+  "description": "Query and Summarize your chat messages.",
+  "author": {
+    "name": "chatmcp"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "CHAT_DB_PATH": "${user_config.chat_db_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "chat_db_path": {
+      "type": "file",
+      "title": "Chat Database Path",
+      "description": "Path to your chat database file (e.g., path-to/chatbot/data/chat.db)",
+      "required": true,
+      "default": "${__dirname}/chatbot/data/chat.db"
+    }
+  },
+  "readme": "# mcp-server-chatsum\n\nThis MCP Server is used to summarize your chat messages.\n\n[中文说明](README_CN.md)\n\n![preview](./preview.png)\n\n> **Before you start**\n>\n> move to [chatbot](./chatbot) directory, follow the [README](./chatbot/README.md) to setup the chat database.\n>\n> start chatbot to save your chat messages.\n\n## Features\n\n### Resources\n\n### Tools\n\n- `query_chat_messages` - Query chat messages\n  - Query chat messages with given parameters\n  - Summarize chat messages based on the query prompt\n\n### Prompts\n\n## Development\n\n1. Set up environment variables:\n\ncreate `.env` file in the root directory, and set your chat database path.\n\n```txt\nCHAT_DB_PATH=path-to/chatbot/data/chat.db\n```\n\n2. Install dependencies:\n\n```bash\npnpm install\n```\n\nBuild the server:\n\n```bash\npnpm build\n```\n\nFor development with auto-rebuild:\n\n```bash\npnpm watch\n```\n\n## Installation\n\nTo use with Claude Desktop, add the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-server-chatsum\": {\n      \"command\": \"path-to/bin/node\",\n      \"args\": [\"path-to/mcp-server-chatsum/build/index.js\"],\n      \"env\": {\n        \"CHAT_DB_PATH\": \"path-to/mcp-server-chatsum/chatbot/data/chat.db\"\n      }\n    }\n  }\n}\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\npnpm inspector\n```\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\n## Community\n\n- [MCP Server Telegram](https://t.me/+N0gv4O9SXio2YWU1)\n- [MCP Server Discord](https://discord.gg/RsYPRrnyqg)\n\n## About the author\n\n- [idoubi](https://bento.me/idoubi)\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-chatsum": {
+        "command": "path-to/bin/node",
+        "args": ["path-to/mcp-server-chatsum/build/index.js"],
+        "env": {
+          "CHAT_DB_PATH": "path-to/mcp-server-chatsum/chatbot/data/chat.db"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "chatmcp",
+    "repo": "mcp-server-chatsum",
+    "url": "https://github.com/chatmcp/mcp-server-chatsum",
+    "name": "mcp-server-chatsum",
+    "path": null,
+    "stars": 1009,
+    "contributors": 1,
+    "issues": 6,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5bf9298aa095da8b4af277137f48cc468f736797"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:18.644Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "sqlite3",
+      "importance": 8
+    },
+    {
+      "name": "qrcode-terminal",
+      "importance": 3
+    },
+    {
+      "name": "ts-node",
+      "importance": 3
+    },
+    {
+      "name": "wechaty",
+      "importance": 10
+    },
+    {
+      "name": "wechaty-puppet",
+      "importance": 9
+    },
+    {
+      "name": "wechaty-puppet-padlocal",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-server-chatsum\",\n  \"version\": \"0.1.0\",\n  \"description\": \"Summarize your chat messages.\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-chatsum\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"dotenv\": \"^16.4.6\",\n    \"sqlite3\": \"^5.1.7\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.17.9\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n\n\n=== chatbot/package.json ===\n{\n  \"name\": \"mcp-server-chatsum-bot\",\n  \"version\": \"1.0.0\",\n  \"description\": \"chatbot to save chat messages.\",\n  \"main\": \"index.ts\",\n  \"scripts\": {\n    \"start\": \"ts-node src/index.ts\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/mcpservers/mcp-server-chatsum.git\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"bugs\": {\n    \"url\": \"https://github.com/mcpservers/mcp-server-chatsum/issues\"\n  },\n  \"homepage\": \"https://github.com/mcpservers/mcp-server-chatsum#readme\",\n  \"dependencies\": {\n    \"dotenv\": \"^16.4.7\",\n    \"qrcode-terminal\": \"^0.12.0\",\n    \"sqlite3\": \"^5.1.6\",\n    \"ts-node\": \"^10.9.2\",\n    \"wechaty\": \"^1.20.2\",\n    \"wechaty-puppet\": \"^1.20.2\",\n    \"wechaty-puppet-padlocal\": \"^1.20.1\"\n  },\n  \"devDependencies\": {\n    \"@types/qrcode-terminal\": \"^0.12.0\"\n  }\n}\n"
+}

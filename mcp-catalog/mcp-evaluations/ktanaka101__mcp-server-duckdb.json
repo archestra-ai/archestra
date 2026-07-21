@@ -1,0 +1,113 @@
+{
+  "name": "ktanaka101__mcp-server-duckdb",
+  "display_name": "mcp-server-duckdb",
+  "description": "A Model Context Protocol (MCP) server implementation for DuckDB, providing database interaction capabilities",
+  "author": {
+    "name": "ktanaka101"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-server-duckdb", "--db-path", "${user_config.db_path}"],
+    "env": {
+      "READ_ONLY": "${user_config.readonly}",
+      "KEEP_CONNECTION": "${user_config.keep_connection}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "db_path": {
+      "type": "file",
+      "title": "Database Path",
+      "description": "Path to the DuckDB database file",
+      "required": true,
+      "default": "${HOME}/mcp-server-duckdb/data/data.db"
+    },
+    "readonly": {
+      "type": "boolean",
+      "title": "Read-only Mode",
+      "description": "Run server in read-only mode",
+      "required": false,
+      "default": false
+    },
+    "keep_connection": {
+      "type": "boolean",
+      "title": "Keep Connection",
+      "description": "Re-uses a single DuckDB connection for the entire server lifetime.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# mcp-server-duckdb\n\n[![PyPI - Version](https://img.shields.io/pypi/v/mcp-server-duckdb)](https://pypi.org/project/mcp-server-duckdb/)\n[![PyPI - License](https://img.shields.io/pypi/l/mcp-server-duckdb)](LICENSE)\n[![smithery badge](https://smithery.ai/badge/mcp-server-duckdb)](https://smithery.ai/server/mcp-server-duckdb)\n\nA Model Context Protocol (MCP) server implementation for DuckDB, providing database interaction capabilities through MCP tools.\nIt would be interesting to have LLM analyze it. DuckDB is suitable for local analysis.\n\n<a href=\"https://glama.ai/mcp/servers/fwggl49w22\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/fwggl49w22/badge\" alt=\"mcp-server-duckdb MCP server\" /></a>\n\n## Overview\n\nThis server enables interaction with a DuckDB database through the Model Context Protocol, allowing for database operations like querying, table creation, and schema inspection.\n\n## Components\n\n### Resources\n\nCurrently, no custom resources are implemented.\n\n### Prompts\n\nCurrently, no custom prompts are implemented.\n\n### Tools\n\nThe server implements the following database interaction tool:\n\n- **query**: Execute any SQL query on the DuckDB database\n  - **Input**: `query` (string) - Any valid DuckDB SQL statement\n  - **Output**: Query results as text (or success message for operations like CREATE/INSERT)\n\n> [!NOTE]\n> The server provides a single unified `query` function rather than separate specialized functions, as modern LLMs can generate appropriate SQL for any database operation (SELECT, CREATE TABLE, JOIN, etc.) without requiring separate endpoints.\n\n> [!NOTE]\n> When the server is running in `readonly` mode, DuckDB's native readonly protection is enforced.\n> This ensures that the Language Model (LLM) cannot perform any write operations (CREATE, INSERT, UPDATE, DELETE), maintaining data integrity and preventing unintended changes.\n\n## Configuration\n\n### Required Parameters\n\n- **db-path** (string): Path to the DuckDB database file\n  - The server will automatically create the database file and parent directories if they don't exist\n  - If `--readonly` is specified and the database file doesn't exist, the server will fail to start with an error\n\n### Optional Parameters\n\n- **--readonly**: Run server in read-only mode (default: `false`)\n  - **Description**: When this flag is set, the server operates in read-only mode. This means:\n    - The DuckDB database will be opened with `read_only=True`, preventing any write operations.\n    - If the specified database file does not exist, it **will not** be created.\n    - **Security Benefit**: Prevents the Language Model (LLM) from performing any write operations, ensuring that the database remains unaltered.\n  - **Reference**: For more details on read-only connections in DuckDB, see the [DuckDB Python API documentation](https://duckdb.org/docs/api/python/dbapi.html#read_only-connections).\n- **--keep-connection**: Re-uses a single DuckDB connection mode (default: `false`)\n  - **Description**: When this flag is set, Re-uses a single DuckDB connection for the entire server lifetime. Enables TEMP objects & slightly faster queries, but can hold an exclusive lock on the file.\n\n## Installation\n\n### Installing via Smithery\n\nTo install DuckDB Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-server-duckdb):\n\n```bash\nnpx -y @smithery/cli install mcp-server-duckdb --client claude\n```\n\n### Claude Desktop Integration\n\nConfigure the MCP server in Claude Desktop's configuration file:\n\n#### MacOS\nLocation: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\n#### Windows\nLocation: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"duckdb\": {\n      \"command\": \"uvx\",\n      \"args\": [\n        \"mcp-server-duckdb\",\n        \"--db-path\",\n        \"~/mcp-server-duckdb/data/data.db\"\n      ]\n    }\n  }\n}\n```\n\n* Note: `~/mcp-server-duckdb/data/data.db` should be replaced with the actual path to the DuckDB database file.\n\n## Development\n\n### Prerequisites\n\n- Python with `uv` package manager\n- DuckDB Python package\n- MCP server dependencies\n\n### Debugging\n\nDebugging MCP servers can be challenging due to their stdio-based communication. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) for the best debugging experience.\n\n#### Using MCP Inspector\n\n1. Install the inspector using npm:\n```bash\nnpx @modelcontextprotocol/inspector uv --directory ~/codes/mcp-server-duckdb run mcp-server-duckdb --db-path ~/mcp-server-duckdb/data/data.db\n```\n\n2. Open the provided URL in your browser to access the debugging interface\n\nThe inspector provides visibility into:\n- Request/response communication\n- Tool execution\n- Server state\n- Error messages\n",
+  "category": "AI Tools",
+  "quality_score": 58,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-duckdb": {
+        "command": "uvx",
+        "args": ["mcp-server-duckdb", "--db-path", "~/mcp-server-duckdb/data/data.db"],
+        "env": {}
+      },
+      "mcp-server-duckdb-inspector": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "~/codes/mcp-server-duckdb",
+          "run",
+          "mcp-server-duckdb",
+          "--db-path",
+          "~/mcp-server-duckdb/data/data.db"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ktanaka101",
+    "repo": "mcp-server-duckdb",
+    "url": "https://github.com/ktanaka101/mcp-server-duckdb",
+    "name": "ktanaka101__mcp-server-duckdb",
+    "path": null,
+    "stars": 159,
+    "contributors": 4,
+    "issues": 9,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "2cc7c29e22b5300e310ba38f86a1105c0dd7ff6d"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.612Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "duckdb",
+      "importance": 9
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-duckdb\"\nversion = \"1.1.0\"\ndescription = \"A DuckDB MCP server\"\nreadme = \"README.md\"\nlicense = { file = \"LICENSE\" }\nclassifiers = [\n  \"License :: OSI Approved :: MIT License\",\n  \"Operating System :: OS Independent\",\n  \"Programming Language :: Python :: 3\",\n  \"Programming Language :: Python :: 3.10\",\n  \"Programming Language :: Python :: 3.11\",\n  \"Programming Language :: Python :: 3.12\",\n  \"Programming Language :: Python :: 3.13\",\n  \"Programming Language :: Python :: 3.14\",\n]\nrequires-python = \">=3.10\"\ndependencies = [\"duckdb>=1.1.3\", \"mcp>=1.0.0\"]\n\n[project.urls]\n\"Homepage\" = \"https://github.com/ktanaka101/mcp-server-duckdb\"\n\"Bug Tracker\" = \"https://github.com/ktanaka101/mcp-server-duckdb/issues\"\n\n[[project.authors]]\nname = \"ktanaka101\"\nemail = \"kentanaka101@gmail.com\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-server-duckdb = \"mcp_server_duckdb:main\"\n\n[tool.ruff]\nline-length = 120\n\n[tool.ruff.format]\ndocstring-code-format = true\n\n[tool.ruff.lint]\nselect = [\"E\", \"F\", \"I\"]\n\n[dependency-groups]\ndev = [\"pytest>=8.3.4\"]\n"
+}

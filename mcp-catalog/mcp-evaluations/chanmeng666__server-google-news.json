@@ -1,0 +1,101 @@
+{
+  "name": "chanmeng666__server-google-news",
+  "display_name": "server-google-news",
+  "description": "【Star-crossed coders unite!⭐️】Model Context Protocol (MCP) server implementation providing Google News search capabilities via SerpAPI, with automatic news categorization and multi-language support.",
+  "author": {
+    "name": "ChanMeng666"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"],
+    "env": {
+      "SERP_API_KEY": "${user_config.serp_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "serp_api_key": {
+      "type": "string",
+      "title": "SerpApi Key",
+      "description": "Your API key for SerpApi integration to access Google News search capabilities. New users get 250 free API calls.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/chanmeng666-server-google-news-badge.png)](https://mseep.ai/app/chanmeng666-server-google-news)\n\n<div align=\"center\">\n <h1><img src=\"public/server-google-news.svg\" width=\"80px\"><br/>Google News MCP Server</h1>\n <a href=\"https://github.com/ChanMeng666/server-google-news/stargazers\"><img src=\"https://img.shields.io/github/stars/ChanMeng666/server-google-news.svg?style=social\"></a>\n <img src=\"https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white\"/>\n <img src=\"https://img.shields.io/badge/Node.js-43853D?style=flat&logo=node.js&logoColor=white\"/>\n <img src=\"https://img.shields.io/badge/MCP-Server-blue?style=flat\"/>\n <img src=\"https://img.shields.io/badge/License-MIT-brightgreen?style=flat\"/>\n</div>\n\n<br/>\n\n<div align=\"center\">\n  <a href=\"https://www.pulsemcp.com/servers/chanmeng666-google-news\"><img src=\"https://www.pulsemcp.com/badge/top-pick/chanmeng666-google-news\" width=\"400\" alt=\"PulseMCP Badge\"></a>\n</div>\n\n\n<br/>\n\nA Model Context Protocol (MCP) server implementation that provides Google News search capabilities via SerpAPI integration. Automatically categorizes news results and supports multiple languages and regions.\n\n<a href=\"https://glama.ai/mcp/servers/dbx6imq4ef\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/dbx6imq4ef/badge\" alt=\"Google News Server MCP server\" /></a>\n\n<br/>\n\n[![👉Try It Now!👈](https://gradient-svg-generator.vercel.app/api/svg?text=%F0%9F%91%89Try%20It%20Now!%F0%9F%91%88&color=000000&height=60&gradientType=radial&duration=6s&color0=ffffff&template=pride-rainbow)](https://smithery.ai/server/@chanmeng666/google-news-server)\n\n<br/>\n\nhttps://github.com/user-attachments/assets/1cc71c27-f840-4c94-9ab5-460d84ba4779\n\n\n![屏幕截图 2024-12-30 021446](https://github.com/user-attachments/assets/34985fac-a529-4aac-a77d-b0b93f70d0f7)\n\n![屏幕截图 2024-12-30 021524](https://github.com/user-attachments/assets/6d1d3069-db04-421e-83b9-6ecdbce4847e)\n\n![屏幕截图 2024-12-30 021914](https://github.com/user-attachments/assets/16889a09-c05d-47dc-b3fe-5ea3771e059d)\n\n![屏幕截图 2024-12-30 021941](https://github.com/user-attachments/assets/da20e7a6-f2e8-4aec-bab9-f19322d0f798)\n\n\n# ✨ Features\n\n### 🔍 Flexible Search Options\nComprehensive search capabilities including query-based search, topic search, publication filtering and story coverage.\n\n### 🌐 Global Coverage\nSupports multiple languages and regions through configurable language and country codes.\n\n### 📊 Smart Categorization \nAutomatically categorizes news results into topics like AI & Technology, Business, Science & Research, and Healthcare.\n\n### 🔀 Multiple Result Types\nHandles various news result types including headlines, stories, related topics and menu links.\n\n### 🛠️ Robust Error Handling\nComprehensive error handling for API failures and invalid inputs, with helpful error messages.\n\n### 🌍 Language Support\nAutomatic fallback to English for unsupported language codes with appropriate user notifications.\n\n# 🔑 SerpApi Setup Guide\n\nBefore getting started, you'll need to obtain a SerpApi key. Here's how:\n\n1. Visit [SerpApi website](https://serpapi.com/) and create an account\n\n2. After registration, go to your Dashboard:\n   - Locate the \"API Key\" section\n   - Copy your API key\n   - New users get 250 free API calls\n\n3. API Usage Details:\n   - Free tier: 250 searches per month\n   - Paid plans start at $75/month for 5000 searches\n   - Billing based on successful API calls\n   - Multiple payment methods: Credit Card, PayPal, etc.\n\n4. Usage Limits:\n   - Request Rate: 2 requests/second\n   - IP Restrictions: None\n   - Concurrent Requests: 5\n   - Response Cache Time: 1 hour\n\n# 👩‍🔧 Solution for MCP Servers Connection Issues with NVM/NPM\n\nClick to view my configuration solution 👉 https://github.com/modelcontextprotocol/servers/issues/76\n\n# 🚀 Quick Start\n\n1. Install dependencies:\n```bash\nnpm install\n```\n\n2. Build the server:\n```bash\nnpm run build\n```\n\n3. Configure environment:\nModify your `claude_desktop_config.json` with the following content (adjust paths according to your system):\n```json\n    \"google-news\": {\n      \"command\": \"D:\\\\Program\\\\nvm\\\\node.exe\",\n      \"args\": [\n        \"D:\\\\github_repository\\\\path_to\\\\dist\\\\index.js\"\n      ],\n      \"env\": {\n        \"SERP_API_KEY\": \"your-api-key\"\n      }\n    }\n```\n\n4. Start the server:\n```bash\nnpm start\n```\n\n## Troubleshooting\n\n1. Invalid API Key\n- Verify API key configuration in `claude_desktop_config.json`\n- Confirm API key is active in SERP API dashboard\n\n2. Request Failures\n- Check network connectivity\n- Verify API call quota hasn't been exceeded\n- Validate request parameter format\n\n\n\n## Running evals\n\nThe evals package loads an mcp client that then runs the index.ts file, so there is no need to rebuild between tests. You can load environment variables by prefixing the npx command. Full documentation can be found [here](https://www.mcpevals.io/docs).\n\n```bash\nOPENAI_API_KEY=your-key  npx mcp-eval src/evals/evals.ts src/index.ts\n```\n# 📦 Installation\n\n## Installing via Smithery\n\nTo install Google News for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@chanmeng666/google-news-server):\n\n```bash\nnpx -y @smithery/cli install @chanmeng666/google-news-server --client claude\n```\n\n[![smithery badge](https://smithery.ai/badge/@chanmeng666/google-news-server)](https://smithery.ai/server/@chanmeng666/google-news-server)\n\n## Installing via mcp-get\n\n```bash\nnpx @michaellatman/mcp-get@latest install @chanmeng666/google-news-server\n```\n\n> If you are using an old version of Windows PowerShell, you may need to run `Set-ExecutionPolicy Bypass -Scope Process` before this command.\n\n## Manual Installation\n\n<img src=\"https://cdn.simpleicons.org/npm/CB3837\" height=\"14\"/> <a href=\"https://www.npmjs.com/package/@chanmeng666/google-news-server\">@chanmeng666/google-news-server</a>\n\n```bash\n# Using npm\nnpm i @chanmeng666/google-news-server\n# or\nnpm install @chanmeng666/google-news-server\n\n# Using yarn\nyarn add @chanmeng666/google-news-server\n\n# Using pnpm\npnpm add @chanmeng666/google-news-server\n```\n\n# 💻 Tech Stack\n![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)\n![NodeJS](https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white)\n![MCP](https://img.shields.io/badge/MCP-SDK-blue?style=for-the-badge)\n\n# 📖 API Documentation\n\nThe server implements the Model Context Protocol and exposes a Google News search tool with the following parameters:\n\n- `q`: Search query string\n- `gl`: Country code (e.g., 'us', 'uk')\n- `hl`: Language code (e.g., 'en', 'es')\n- `topic_token`: Token for specific news topics\n- `publication_token`: Token for specific publishers\n- `story_token`: Token for full coverage of a story\n- `section_token`: Token for specific sections\n\n# 🔧 Development\n\n```bash\n# Run in development mode with hot reload\nnpm run dev\n\n# Run linting\nnpm run lint\n\n# Run tests\nnpm run test\n```\n\n# 📝 License\n\nThis project is [MIT licensed](./LICENSE).\n\n# 🙋‍♀ Author\n\nCreated and maintained by [Chan Meng](https://chanmeng.live/).\n[![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=normal&logo=github&logoColor=white)](https://github.com/ChanMeng666)\n[![LinkedIn](https://img.shields.io/badge/linkedin-%230077B5.svg?style=normal&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/chanmeng666/)\n\n",
+  "category": "Aggregators",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "google-news": {
+        "command": "node",
+        "args": ["dist/index.js"],
+        "env": {
+          "SERP_API_KEY": "your-api-key"
+        }
+      },
+      "chanmeng666-google-news-server": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {
+          "SERP_API_KEY": "your-api-key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ChanMeng666",
+    "repo": "server-google-news",
+    "url": "https://github.com/ChanMeng666/server-google-news",
+    "name": "server-google-news",
+    "path": null,
+    "stars": 73,
+    "contributors": 8,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "75684bbe61088d64eb6701d51752850dfc130458"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.230Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    },
+    {
+      "name": "mcp-evals",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@chanmeng666/google-news-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"MCP server for Google News search via SerpAPI\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"google-news-server\": \"./dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"ts-node-dev --respawn src/index.ts\",\n    \"lint\": \"eslint src/**/*.ts\",\n    \"test\": \"jest\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.0.0\",\n    \"axios\": \"^1.7.9\",\n    \"dotenv\": \"^17.0.0\",\n    \"mcp-evals\": \"^2.0.0\"\n  },\n  \"devDependencies\": {\n    \"@types/axios\": \"^0.14.0\",\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/node\": \"^22.0.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.0.0\",\n    \"@typescript-eslint/parser\": \"^8.0.0\",\n    \"eslint\": \"^9.0.0\",\n    \"jest\": \"^30.0.0\",\n    \"ts-jest\": \"^29.1.2\",\n    \"ts-node-dev\": \"^2.0.0\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

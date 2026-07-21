@@ -1,0 +1,126 @@
+{
+  "name": "promptexecution__just-mcp",
+  "display_name": "just-mcp",
+  "description": "mcp server for just",
+  "author": {
+    "name": "promptexecution"
+  },
+  "server": {
+    "command": "${__dirname}/just-mcp",
+    "args": ["--stdio", "--directory", "${user_config.project_directory}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "project_directory": {
+      "type": "directory",
+      "title": "Project Directory",
+      "description": "The root directory of the project containing the Justfile that just-mcp will manage. If not provided, just-mcp will use the extension's root directory as the default.",
+      "required": false,
+      "default": "${__dirname}"
+    }
+  },
+  "readme": "# just-mcp\n\n[![CI](https://github.com/PromptExecution/just-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/PromptExecution/just-mcp/actions/workflows/ci.yml)\n[![Release](https://github.com/PromptExecution/just-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/PromptExecution/just-mcp/actions/workflows/release.yml)\n[![Crates.io](https://img.shields.io/crates/v/just-mcp.svg)](https://crates.io/crates/just-mcp)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\n**👋 A way to let LLMs speak Just**\n\nA production-ready MCP server that provides seamless integration with [Just](https://github.com/casey/just) command runner, enabling AI assistants to discover, execute, and introspect Justfile recipes through the standardized MCP protocol.\n\n## 🎯 **Why Just + MCP = Better Agent Execution**\n\n### **Context-Saving Abstraction**\nIf it isn't immediately obvious, the benefit of having LLMs use Just vs. bash is that running Just commands (via MCP) provides a context-saving abstraction where they don't need to waste context opening/reading bash files, Python scripts, or other build artifacts. The LLM via MCP simply gets the command, parameters, and hints - it's in their memory as \"these are commands available to you.\"\n\n### **Eliminates the Justfile Learning Curve**\nNo more watching LLMs execute `just -l` to get command lists, inevitably start reading the justfile, then try to write justfile syntax (like it's a Makefile), corrupt the justfile, and create a bad experience. Just's evolving syntax simply doesn't have a large enough corpus in frontier models today - we need more popular repos with justfiles in the training dataset.\n\n### **Safer Than Raw Bash Access**\nJust-mcp is fundamentally safer than bash. If you read HackerNews, there's a story at least once daily about operators whose LLMs start forgetting, hallucinating, and eventually breaking down - deleting files and doing nasty unwanted things. Giving LLMs unsupervised, unrestricted bash access without carefully monitoring context consumption is a recipe for disaster.\n\n**Using Justfile fixes that.** Even if the LLM modifies its own justfile, the next context is memoized by the justfile (hopefully in an idempotent git repo).  This abstraction shields the llm from the command line complexity where hallucinations or attention tracking the current working directory cause it to go over the rails and off the cliff.  \n\n### **Powerful Agent Execution Tool**\nJust-mcp is perfect for anybody doing agent execution:\n- **Ultra-low overhead** - probably better than every other tool\n- **Human-friendly** - justfiles are easy for humans and low overhead for LLMs  \n- **Quick and dirty** - while some prefer full Python FastAPI servers, just-mcp is just easy-as\n- **sm0l model friendly** - works great with self-hostable GPU/CPU open source models with 8k-32k context limits\n\n### **Built-in Safety Patterns**\nJust has useful patterns for introducing:\n- **Transparent logging** without distracting the agent\n- **Secondary model inspection** - use sm0l models to scan commands asking \"is this harmful?\" before execution\n- **Python decorator-like patterns** for command validation\n- **Idempotent execution** backed by git repos\n\n## b00t\n```\nb00t mcp create just-mcp -- bash just-mcp --stdio \"${REPO_ROOT}\"\nb00t mcp export just-mcp\n```\n\n## 🚀 Current Status: **67% Complete** (8/12 core tasks)\n\n### ✅ **Implemented Features**\n- **🏗️ Complete MCP Server** - Full rmcp 0.3.0 integration with MCP 2024-11-05 protocol\n- **📋 Recipe Discovery** - Parse and list all available Justfile recipes\n- **⚡ Recipe Execution** - Execute recipes with parameters and capture structured output\n- **🔍 Recipe Introspection** - Get detailed recipe information, parameters, and documentation\n- **✅ Justfile Validation** - Syntax and semantic validation with error reporting\n- **🌍 Environment Management** - Comprehensive .env file support and variable expansion\n- **🧪 Full Test Coverage** - 33 passing tests across integration and unit test suites\n\n### 🎯 **MCP Tools Available**\n1. **`list_recipes`** - List all available recipes in the justfile\n2. **`run_recipe`** - Execute a specific recipe with optional arguments  \n3. **`get_recipe_info`** - Get detailed information about a specific recipe\n4. **`validate_justfile`** - Validate the justfile for syntax and semantic errors\n\n## 🏃 **Quick Start**\n\n### Installation & Setup\n```bash\n# Clone and build\ngit clone <repository-url>\ncd just-mcp\ncargo build --release\n\n# Test the server\ncargo run -- --stdio\n```\n\n### Claude Desktop Integration\nAdd to your Claude Desktop MCP configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"just-mcp\": {\n      \"command\": \"/path/to/just-mcp\",\n      \"args\": [\"--stdio\"]\n    }\n  }\n}\n```\n\n### Usage Examples\n```bash\n# Run as MCP server\njust-mcp --stdio\n\n# Run in specific directory  \njust-mcp --directory /path/to/project --stdio\n```\n\n## 🧪 **Testing**\n\n### Comprehensive Test Suite\n```bash\n# Run all tests (33 tests)\ncargo test\n\n# Run specific test suites\ncargo test --test basic_mcp_test      # Protocol compliance testing\ncargo test --test mcp_integration_working  # SDK integration testing\n```\n\n### Test Architecture\n- **`basic_mcp_test.rs`** - Direct protocol compliance testing using raw JSON-RPC\n- **`mcp_integration_working.rs`** - Type-safe SDK integration testing with rmcp client\n- **Unit tests** - 25+ tests covering parser, executor, validator, and environment modules\n\n## 📚 **Architecture**\n\n### Project Structure\n```\njust-mcp/\n├── src/main.rs              # CLI binary\n├── just-mcp-lib/           # Core library\n│   ├── parser.rs           # Justfile parsing\n│   ├── executor.rs         # Recipe execution  \n│   ├── validator.rs        # Validation logic\n│   ├── environment.rs      # Environment management\n│   └── mcp_server.rs       # MCP protocol implementation\n├── tests/                  # Integration tests\n└── justfile               # Demo recipes\n```\n\n### Tech Stack\n- **Rust 1.82+** with async/await support\n- **rmcp 0.3.0** - Official MCP SDK for Rust\n- **serde/serde_json** - JSON serialization  \n- **snafu** - Structured error handling\n- **tokio** - Async runtime\n\n## 🔄 **Development Roadmap**\n\n### 🎯 **Next Priority Tasks** (Remaining 33%)\n1. **LSP-Style Completion System** - Intelligent autocompletion for recipes and parameters\n2. **Enhanced Diagnostics** - Advanced syntax error reporting and suggestions  \n3. **Virtual File System** - Support for stdin, remote sources, and in-memory buffers\n4. **Release Preparation** - Documentation, CI/CD, and crate publication\n\n### 🚀 **Future Enhancements**\n- Plugin system for custom recipe types\n- Integration with other build tools\n- Performance optimizations for large justfiles\n- Advanced dependency visualization\n\n## 📖 **Usage Patterns**\n\n### Recipe Execution\n```javascript\n// List available recipes\nawait client.callTool(\"list_recipes\", {});\n\n// Execute recipe with parameters  \nawait client.callTool(\"run_recipe\", {\n  \"recipe_name\": \"build\",\n  \"args\": \"[\\\"--release\\\"]\"\n});\n\n// Get recipe information\nawait client.callTool(\"get_recipe_info\", {\n  \"recipe_name\": \"test\"\n});\n```\n\n### Validation\n```javascript\n// Validate justfile\nawait client.callTool(\"validate_justfile\", {\n  \"justfile_path\": \"./custom.justfile\"  \n});\n```\n\n## 🤝 **Contributing**\n\nThis project follows the [_b00t_ development methodology](AGENTS.md):\n- **TDD Approach** - Tests first, implementation second\n- **Feature Branches** - Never work directly on main branch\n- **Structured Errors** - Use snafu for error management\n- **Git Workflow** - Clean commits with descriptive messages\n\n### Development Commands\n```bash\njust build    # Build the project\njust test     # Run tests  \njust server   # Start MCP server\njust clean    # Clean build artifacts\n```\n\n## 📄 **License**\n\nThis project is licensed under [LICENSE](LICENSE).\n\n## 🚀 **Release Setup & CI/CD**\n\n### ✅ **Completed Setup**\n\n#### **Cocogitto & Conventional Commits**\n- Installed cocogitto for conventional commit enforcement\n- Configured `cog.toml` with proper commit types and changelog settings\n- Set up git hooks for commit message linting (`commit-msg`) and pre-push testing\n\n#### **GitHub Actions CI/CD**\n- **CI Pipeline** (`ci.yml`): Multi-platform testing (Ubuntu, Windows, macOS), formatting, clippy, commit linting\n- **Release Pipeline** (`release.yml`): Automated versioning, changelog generation, GitHub releases, and crates.io publishing\n\n#### **Crates.io Preparation**\n- Updated both `Cargo.toml` files with complete metadata (description, keywords, categories, license, etc.)\n- Added proper exclusions for development-only files\n- Verified MIT license is in place\n\n#### **Documentation & Structure**\n- README.md is production-ready with installation and usage instructions\n- Created initial `CHANGELOG.md` for release tracking\n- Updated `.gitignore` with Rust-specific entries\n\n### 🚀 **Production Deployment**\n\n#### **Development Workflow:**\n- All commits must follow conventional commit format (enforced by git hooks)\n- Use `feat:`, `fix:`, `docs:`, etc. prefixes for automatic versioning\n- Push to `main` branch triggers automated releases and crates.io publishing\n- Library tests pass ✅ (25/25) with comprehensive test coverage\n\n#### **Release Process:**\n- **Automated Versioning**: Cocogitto analyzes commit messages for semantic versioning\n- **GitHub Releases**: Automatic changelog generation and GitHub release creation\n- **Crates.io Publishing**: Library crate (`just-mcp-lib`) publishes first, then binary crate (`just-mcp`)\n- **CI/CD Pipeline**: Multi-platform testing (Ubuntu, Windows, macOS) with formatting and clippy checks\n\n#### **Installation:**\n```bash\n# Install from crates.io\ncargo install just-mcp\n\n# Or download from GitHub releases\nwget https://github.com/promptexecution/just-mcp/releases/latest/download/just-mcp\n```\n\n## 🔗 **Related Projects**\n\n- [Just](https://github.com/casey/just) - The command runner this integrates with\n- [Model Context Protocol](https://modelcontextprotocol.io/) - The protocol specification\n- [rmcp](https://github.com/modelcontextprotocol/rust-sdk) - Official Rust MCP SDK\n\n### **Friends of just-mcp**\n\n- [just-vscode](https://github.com/promptexecution/just-vscode) - VSCode extension with LSP integration for enhanced Just authoring\n- [just-awesome-agents](https://github.com/promptexecution/just-awesome-agents) - Collection of patterns and tools for agent execution with Just# Test change to trigger pre-push hook\n",
+  "category": "AI Tools",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "just-mcp-cargo-run": {
+        "command": "cargo",
+        "args": ["run", "--", "--stdio"],
+        "env": {}
+      },
+      "just-mcp-stdio": {
+        "command": "just-mcp",
+        "args": ["--stdio"],
+        "env": {}
+      },
+      "just-mcp-directory": {
+        "command": "just-mcp",
+        "args": ["--directory", "/path/to/project", "--stdio"],
+        "env": {}
+      },
+      "just-mcp-claude-desktop": {
+        "command": "/path/to/just-mcp",
+        "args": ["--stdio"],
+        "env": {}
+      },
+      "just-mcp-just-server": {
+        "command": "just",
+        "args": ["server"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "promptexecution",
+    "repo": "just-mcp",
+    "url": "https://github.com/promptexecution/just-mcp",
+    "name": "promptexecution__just-mcp",
+    "path": null,
+    "stars": 16,
+    "contributors": 1,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e590cb90f43ac465a84b0269b1eb6e3a30d7c859"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.063Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "just-mcp-lib",
+      "importance": 10
+    },
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 8
+    },
+    {
+      "name": "clap",
+      "importance": 7
+    },
+    {
+      "name": "snafu",
+      "importance": 7
+    },
+    {
+      "name": "dotenvy",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[workspace]\nmembers = [\"just-mcp-lib\"]\n\n[package]\nname = \"just-mcp\"\nversion = \"0.1.0\"\nedition = \"2024\"\nauthors = [\"Brian Horakh <brian@promptexecution.com>\"]\ndescription = \"Production-ready MCP (Model Context Protocol) server for Justfile integration\"\ndocumentation = \"https://docs.rs/just-mcp\"\nhomepage = \"https://github.com/promptexecution/just-mcp\"\nrepository = \"https://github.com/promptexecution/just-mcp\"\nlicense = \"MIT\"\nkeywords = [\"mcp\", \"justfile\", \"build-tool\", \"automation\", \"llm\"]\ncategories = [\"command-line-utilities\", \"development-tools\", \"development-tools::build-utils\"]\nreadme = \"README.md\"\nexclude = [\n    \".git*\",\n    \".cursor/\",\n    \".roo/\", \n    \".taskmaster/\",\n    \"logs/\",\n    \"cache/\",\n    \"integration_test/\",\n    \"test-fixtures/\",\n    \"TODO.pm\",\n    \".windsurfrules\",\n    \".roomodes\",\n    \".rooignore\",\n    \"RMCP_SYNTAX_FIXES.md\",\n    \"AGENTS.md\"\n]\n\n[[bin]]\nname = \"just-mcp\"\npath = \"src/main.rs\"\n\n[dependencies]\nclap = { version = \"4.5.41\", features = [\"derive\"] }\njust-mcp-lib = { version = \"0.1.0\", path = \"just-mcp-lib\" }\nrmcp = { version = \"0.3.0\", features = [\"client\", \"transport-child-process\"] }\nserde = { version = \"1.0.219\", features = [\"derive\"] }\nserde_json = \"1.0.141\"\nsnafu = \"0.8.6\"\ntokio = { version = \"1.46.1\", features = [\"full\"] }\n\n[dev-dependencies]\ntempfile = \"3.20.0\"\n\n\n=== integration_test/pyproject.toml ===\n[project]\nname = \"integration-test\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = []\n\n\n=== just-mcp-lib/Cargo.toml ===\n[package]\nname = \"just-mcp-lib\"\nversion = \"0.1.0\"\nedition = \"2024\"\nauthors = [\"Brian Horakh <brian@promptexecution.com>\"]\ndescription = \"Core library for just-mcp: MCP server for Justfile integration\"\ndocumentation = \"https://docs.rs/just-mcp-lib\"\nhomepage = \"https://github.com/promptexecution/just-mcp\"\nrepository = \"https://github.com/promptexecution/just-mcp\"\nlicense = \"MIT\"\nkeywords = [\"mcp\", \"justfile\", \"parser\", \"executor\", \"llm\"]\ncategories = [\"parser-implementations\", \"development-tools\", \"development-tools::build-utils\"]\nreadme = \"../README.md\"\n\n[dependencies]\ndotenvy = \"0.15.7\"\nrmcp = { version = \"0.3.0\", features = [\"server\", \"macros\", \"transport-io\", \"schemars\", \"uuid\"] }\nserde = { version = \"1.0.219\", features = [\"derive\"] }\nserde_json = \"1.0.141\"\nsnafu = \"0.8.6\"\ntokio = { version = \"1.46.1\", features = [\"full\"] }\n\n[dev-dependencies]\ntempfile = \"3.20.0\"\n"
+}

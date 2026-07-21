@@ -1,0 +1,98 @@
+{
+  "name": "kukapay__whale-tracker-mcp",
+  "display_name": "whale-tracker-mcp",
+  "description": "A mcp server for tracking cryptocurrency whale transactions.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "mcp",
+    "args": ["run", "whale_tracker.py"],
+    "env": {
+      "WHALE_ALERT_API_KEY": "${user_config.whale_alert_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "whale_alert_api_key": {
+      "type": "string",
+      "title": "Whale Alert API Key",
+      "description": "Your API key for accessing the Whale Alert API. Sign up at whale-alert.io to obtain one.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Whale Tracker MCP Server\n\n\n**A Model Context Protocol (MCP) server for tracking cryptocurrency whale transactions using the Whale Alert API**\n\n[![mit license](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/license/mit/)\n[![python versions](https://img.shields.io/pypi/pyversions/mcp)](https://www.python.org/downloads/)\n[![smithery badge](https://smithery.ai/badge/@kukapay/whale-tracker-mcp)](https://smithery.ai/server/@kukapay/whale-tracker-mcp)\n\n<!-- omit in toc -->\n## Table of Contents\n\n- [Overview](#overview)\n- [Features](#features)\n- [Prerequisites](#prerequisites)\n- [Installation](#installation)\n- [Usage](#usage)\n  - [Running in Development Mode](#running-in-development-mode)\n  - [Integrating with Claude Desktop](#integrating-with-claude-desktop)\n  - [Direct Execution](#direct-execution)\n- [Examples](#examples)\n- [API Key Configuration](#api-key-configuration)\n- [License](#license)\n- [Acknowledgements](#acknowledgements)\n\n\n## Overview\n\nThe `whale-tracker-mcp` server is a Python-based implementation of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) that integrates with the [Whale Alert API](https://docs.whale-alert.io/#endpoints). It enables real-time tracking and analysis of large cryptocurrency transactions (\"whale\" movements) by exposing tools, resources, and prompts to MCP-compatible clients like Claude Desktop.\n\nThis server is designed for cryptocurrency enthusiasts, developers, and analysts who want to monitor whale activity directly within their LLM-powered workflows.\n\n## Features\n\n- **Tools**:\n  - `get_recent_transactions`: Fetch recent whale transactions with optional filters for blockchain, minimum value, and limit.\n  - `get_transaction_details`: Retrieve detailed information about a specific transaction by its ID.\n- **Resources**:\n  - `whale://transactions/{blockchain}`: Expose recent transactions for a specified blockchain as contextual data.\n- **Prompts**:\n  - `query_whale_activity`: A reusable template for analyzing whale transaction patterns, optionally filtered by blockchain.\n- **Asynchronous API Calls**: Uses `httpx` for efficient, non-blocking requests to the Whale Alert API.\n- **Environment Variable Support**: Securely manage your API key via a `.env` file.\n\n## Prerequisites\n\n- **Python**: Version 3.10 or higher.\n- **Whale Alert API Key**: Sign up at [whale-alert.io](https://whale-alert.io/) to obtain an API key.\n- **MCP Client**: Compatible with MCP clients like Claude Desktop or the MCP Inspector.\n\n## Installation\n\n### Installing via Smithery\n\nTo install Whale Tracker for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kukapay/whale-tracker-mcp):\n\n```bash\nnpx -y @smithery/cli install @kukapay/whale-tracker-mcp --client claude\n```\n\n1. **Clone the repository**:\n```bash\ngit clone https://github.com/kukapay/whale-tracker-mcp.git\ncd whale-tracker-mcp\n```\n2. Install dependencies: We recommend using uv for dependency management:\n```bash\nuv add \"mcp[cli]\" httpx python-dotenv\n```   \nAlternatively, use pip:\n```bash\npip install mcp httpx python-dotenv\n```\n3. Set up your API key: Create a .env file in the project root and add your Whale Alert API key:\n```\nWHALE_ALERT_API_KEY=your_api_key_here\n```\n\n## Usage\n### Running in Development Mode\n\nTest the server locally with the MCP Inspector:\n\n```bash\nmcp dev whale_tracker.py --with-editable .\n```\n\nThis opens a web interface where you can explore the server's tools, resources, and prompts.\n\n### Integrating with Claude Desktop\n\nInstall the server into Claude Desktop for seamless integration:\n\n```bash\nmcp install whale_tracker.py --name \"WhaleTracker\" -f .env\n```\n\n- `--name \"WhaleTracker\"`: Sets a custom name for the server in Claude Desktop.\n- `-f .env`: Loads the API key from the .env file.\n\nRestart Claude Desktop after installation. Look for the hammer icon in the input box to confirm the server is loaded, then try commands like:\n\n- \"Show me recent whale transactions on Bitcoin.\"\n- \"Get details for transaction ID 123456789.\"\n- \"Analyze whale activity on Ethereum.\"\n\n### Direct Execution\n\nRun the server standalone for custom deployments:\n\n```bash\npython whale_tracker.py\n```\n\nOr use the MCP CLI:\n\n```bash\nmcp run whale_tracker.py\n```\n\n## Examples\n\nHere’s how you might interact with the server in Claude Desktop:\n\n### Fetch Recent Transactions:\n\n```text\nWhat are the latest whale transactions on Ethereum with a minimum value of $1,000,000?\n```\nThe server calls `get_recent_transactions` with `blockchain=\"ethereum\"` and `min_value=1000000`.\n\n### Get Transaction Details:\n\n```text\nTell me about transaction ID 123456789.\n```\n\nThe server uses `get_transaction_details` to fetch and display the transaction data.\n\n### Analyze Whale Activity:\n\n```text\nAnalyze recent whale transactions on Bitcoin.\n```\n\nThe `query_whale_activity` prompt triggers an analysis based on the `whale://transactions/bitcoin` resource.\n\n## API Key Configuration\n\nThe server requires a Whale Alert API key, which is loaded from the `WHALE_ALERT_API_KEY` environment variable. To configure it:\n\n- Create a .env file:\n```text\nWHALE_ALERT_API_KEY=your_api_key_here\n```\n- Ensure `python-dotenv` is installed (included in the dependencies).\n- The server will automatically load the key at startup.\n\nAlternatively, pass the key directly when running the server:\n\n```bash\nmcp install whale_tracker.py -v WHALE_ALERT_API_KEY=your_api_key_here\n```\n\n## License\n\nThis project is licensed under the MIT License. See the LICENSE file for details.\n\n## Acknowledgements\n\n- Whale Alert for providing the API to track cryptocurrency whale transactions.\n- Model Context Protocol team for the MCP specification and Python SDK.\n- httpx for a robust HTTP client library.\n\nHappy whale tracking! 🐳\n",
+  "category": "Finance",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kukapay-whale-tracker-mcp-dev": {
+        "command": "mcp",
+        "args": ["dev", "whale_tracker.py", "--with-editable", "."],
+        "env": {}
+      },
+      "kukapay-whale-tracker-mcp-python": {
+        "command": "python",
+        "args": ["whale_tracker.py"],
+        "env": {}
+      },
+      "kukapay-whale-tracker-mcp-mcp-run": {
+        "command": "mcp",
+        "args": ["run", "whale_tracker.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "whale-tracker-mcp",
+    "url": "https://github.com/kukapay/whale-tracker-mcp",
+    "name": "whale-tracker-mcp",
+    "path": null,
+    "stars": 34,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "96218364c99e6e40c2965744ef93f8ad54236ece"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.593Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"whale-tracker-mcp\"\nversion = \"0.1.0\"\ndescription = \"A mcp server for tracking cryptocurrency whale transactions using the Whale Alert API\"\nreadme = \"README.md\"\nrequires-python = \">=3.13\"\ndependencies = [\n    \"httpx>=0.28.1\",\n    \"mcp[cli]>=1.4.0\",\n]\n"
+}

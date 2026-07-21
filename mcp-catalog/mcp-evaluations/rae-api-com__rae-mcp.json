@@ -1,0 +1,97 @@
+{
+  "name": "rae-api-com__rae-mcp",
+  "display_name": "rae-mcp",
+  "description": "MPC Server to connect your preferred model with rae-api.com",
+  "author": {
+    "name": "rae-api-com"
+  },
+  "server": {
+    "command": "./rae-mpc",
+    "args": ["--transport", "${user_config.transport}", "--port", "${user_config.port}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "transport": {
+      "type": "string",
+      "title": "Server Transport Protocol",
+      "description": "The communication protocol for the MCP server. Use 'stdio' for integration with LLMs or 'sse' to run as an HTTP SSE server.",
+      "required": true,
+      "default": "stdio"
+    },
+    "port": {
+      "type": "number",
+      "title": "SSE Server Port",
+      "description": "The port number for the SSE server. This field is required if 'Server Transport Protocol' is set to 'sse'.",
+      "required": false
+    }
+  },
+  "readme": "# RAE Model Context Protocol (MCP) Server\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/rae-api-com/rae-mcp)](https://archestra.ai/mcp-catalog/rae-api-com__rae-mcp)\n\nThis repository contains an implementation of a Model Context Protocol (MCP) server for the Royal Spanish Academy (RAE) API. It allows language models to interact with RAE's dictionary and linguistic resources.\n\n## Requirements\n\n- Go 1.21+\n\n## Installation\n\n```bash\ngit clone https://github.com/rae-api-com/rae-mpc.git\ncd rae-mpc\ngo build\n```\n\n## Usage\n\n### Command Line Arguments\n\nRun the server with stdio transport (for integration with LLMs):\n\n```bash\n./rae-mpc --transport stdio\n```\n\nOr run it as an SSE server:\n\n```bash\n./rae-mpc --transport sse --port 8080\n```\n\n### Available Tools\n\nThe MCP server exposes the following tools to LLMs:\n\n1. `search` - Search RAE API for information\n   - Parameters:\n     - `query` (required): The search query\n     - `lang` (optional): Language code (default: \"es\")\n\n2. `get_word_info` - Get detailed information about a word\n   - Parameters:\n     - `word` (required): The word to look up\n     - `lang` (optional): Language code (default: \"es\")\n\n## Integration with LLMs\n\nThis MCP server can be integrated with language models that support the Model Context Protocol, allowing them to access RAE's linguistic resources for improved Spanish language capabilities.\n",
+  "category": "AI Tools",
+  "quality_score": 55,
+  "archestra_config": {
+    "client_config_permutations": {
+      "rae-mpc-stdio": {
+        "command": "./rae-mpc",
+        "args": ["--transport", "stdio"],
+        "env": {}
+      },
+      "rae-mpc-sse": {
+        "command": "./rae-mpc",
+        "args": ["--transport", "sse", "--port", "8080"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "rae-api-com",
+    "repo": "rae-mcp",
+    "url": "https://github.com/rae-api-com/rae-mcp",
+    "name": "rae-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "e6bd71b2b45854927fd8abc6f86018db53132537"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:51.979Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "rae-api-com/go-rae",
+      "importance": 8
+    },
+    {
+      "name": "rs/zerolog",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/rae-api-com/rae-mpc\n\ngo 1.23.2\n\ntoolchain go1.23.5\n\nrequire (\n\tgithub.com/mark3labs/mcp-go v0.32.0\n\tgithub.com/rae-api-com/go-rae v0.3.0\n\tgithub.com/rs/zerolog v1.34.0\n)\n\nrequire (\n\tgithub.com/andybalholm/brotli v1.2.0 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/klauspost/compress v1.18.0 // indirect\n\tgithub.com/mattn/go-colorable v0.1.14 // indirect\n\tgithub.com/mattn/go-isatty v0.0.20 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/sonirico/vago v0.5.0 // indirect\n\tgithub.com/sonirico/withttp v0.8.0 // indirect\n\tgithub.com/spf13/cast v1.9.2 // indirect\n\tgithub.com/valyala/bytebufferpool v1.0.0 // indirect\n\tgithub.com/valyala/fasthttp v1.62.0 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n)\n"
+}

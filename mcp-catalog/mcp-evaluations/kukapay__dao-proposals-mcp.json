@@ -1,0 +1,70 @@
+{
+  "name": "kukapay__dao-proposals-mcp",
+  "display_name": "dao-proposals-mcp",
+  "description": "An MCP server that aggregates live governance proposals from major DAOs.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# DAO Proposals MCP\n\nAn MCP server that aggregates live governance proposals from major DAOs enabling AI agents to track, analyze, and act on decentralized decision-making in real time, powered by [Snapshot](https://snapshot.box/).\n\n![GitHub License](https://img.shields.io/github/license/kukapay/dao-proposals-mcp) \n![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Tools**:\n  - `list_spaces`: Fetches a list of up to 10 recent Snapshot spaces, including their IDs, names, and descriptions.\n  - `list_proposals`: Retrieves up to 10 recent proposals for a given Snapshot space, including proposal IDs, titles, states, creation dates, and end dates.\n  - `get_proposal_details`: Fetches detailed information about a specific proposal, including its title, body, state, choices, scores, and vote counts.\n- **Prompt**:\n  - `summarize_proposals`: Generates a prompt to summarize recent proposals for a specified Snapshot space, leveraging the `list_proposals` tool.\n\n## Prerequisites\n\n- Python 3.10+\n- [uv](https://docs.astral.sh/uv/) (recommended) or pip for dependency management\n\n## Installation\n\n1. Clone the repository:\n   ```bash\n   git clone https://github.com/kukapay/dao-proposals-mcp.git\n   cd dao-proposals-mcp\n   ```\n\n2. Install dependencies:\n   ```bash\n   uv sync\n   ```\n\n3. **Installing to Claude Desktop**:\n\n    Install the server as a Claude Desktop application:\n    ```bash\n    uv run mcp install main.py --name \"DAO Proposals\"\n    ```\n\n    Configuration file as a reference:\n\n    ```json\n    {\n       \"mcpServers\": {\n           \"DAO Proposals\": {\n               \"command\": \"uv\",\n               \"args\": [ \"--directory\", \"/path/to/dao-proposals-mcp\", \"run\", \"main.py\" ]\n           }\n       }\n    }\n    ```\n    Replace `/path/to/dao-proposals-mcp` with your actual installation path.\n   \n## Usage\n\n### Example Interactions\n\n1. **List Available Spaces**:\n   - **Prompt**:\n     ```plaintext\n     Can you show me a list of the most recent Snapshot spaces?\n     ```\n   - **Output**:\n     ```plaintext\n     Space ID: ens.eth\n     Name: ENS\n     About: Ethereum Name Service (ENS) is a decentralized naming system...\n     ---\n     Space ID: aave.eth\n     Name: Aave\n     About: Aave is a decentralized lending protocol...\n     ---\n     ```\n\n2. **List Proposals for a Space**:\n   - **Prompt**:\n     ```plaintext\n     Please list the recent proposals for the ENS DAO (space ID: ens.eth).\n     ```\n   - **Output**:\n     ```plaintext\n     Proposal ID: 0x123...\n     Title: Proposal to Update ENS Governance\n     State: Active\n     Created: 2025-07-01 12:00:00\n     End: 2025-07-08 12:00:00\n     ---\n     ```\n\n3. **Get Proposal Details**:\n   - **Prompt**:\n     ```plaintext\n     Can you give me detailed information about the proposal with ID 0x123...?\n     ```\n   - **Output**:\n     ```plaintext\n     Proposal ID: 0x123...\n     Title: Proposal to Update ENS Governance\n     State: Active\n     Created: 2025-07-01 12:00:00\n     End: 2025-07-08 12:00:00\n     Choices: Yes, No\n     Scores: [1500, 500]\n     Votes: 2000\n     ------\n     This proposal aims to update the governance structure of ENS...\n     ```\n\n4. **Summarize Proposals**:\n   - **Prompt**:\n     ```plaintext\n     Summarize the recent proposals for the DAO with space ID 'ens.eth'.\n     ```\n   - **Output**:\n     ```plaintext\n     I'll use the list_proposals tool to fetch the proposals for ens.eth and provide a concise summary of their key points.\n     ```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Aggregators",
+  "quality_score": 45,
+  "archestra_config": {
+    "client_config_permutations": {
+      "DAO Proposals": {
+        "command": "uv",
+        "args": ["--directory", "/path/to/dao-proposals-mcp", "run", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "dao-proposals-mcp",
+    "url": "https://github.com/kukapay/dao-proposals-mcp",
+    "name": "dao-proposals-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "2945b90718804c5bbb7ff04cd0253c0876234698"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.830Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"dao-proposals-mcp\"\nversion = \"0.1.0\"\ndescription = \"Add your description here\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.12.3\",\n]\n"
+}

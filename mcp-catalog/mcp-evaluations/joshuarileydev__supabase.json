@@ -1,0 +1,98 @@
+{
+  "name": "joshuarileydev__supabase",
+  "display_name": "supabase",
+  "description": "MCP server from joshuarileydev/supabase",
+  "author": {
+    "name": "joshuarileydev"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@joshuarileydev/supabase-mcp-server"],
+    "env": {
+      "SUPABASE_API_KEY": "${user_config.supabase_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "supabase_api_key": {
+      "type": "string",
+      "title": "Supabase API Key",
+      "description": "Your Supabase Management API key.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Supabase MCP Server\n\nA Model Context Protocol (MCP) server that provides programmatic access to the Supabase Management API. This server allows AI models and other clients to manage Supabase projects and organizations through a standardized interface.\n\n## Features\n\n### Project Management\n- List all projects\n- Get project details\n- Create new projects\n- Delete projects\n- Retrieve project API keys\n\n### Organization Management\n- List all organizations\n- Get organization details\n- Create new organizations\n\n## Installation\nAdd the following to your Claude Config JSON file\n```\n{\n  \"mcpServers\": {\n    \"supabase\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"y\",\n        \"@joshuarileydev/supabase-mcp-server\"\n      ],\n      \"env\": {\n        \"SUPABASE_API_KEY\": \"API_KEY_HERE\"\n      }\n    }\n  }\n}\n```",
+  "category": "Development",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "joshuarileydev-supabase-mcp-server": {
+        "command": "npx",
+        "args": ["y", "@joshuarileydev/supabase-mcp-server"],
+        "env": {
+          "SUPABASE_API_KEY": "API_KEY_HERE"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "joshuarileydev",
+    "repo": "supabase",
+    "url": "https://github.com/joshuarileydev/supabase",
+    "name": "joshuarileydev__supabase",
+    "path": null,
+    "stars": 46,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "78289d06a9ae6301843b2edde82aa0ef0beddd77"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:30.468Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 5
+    },
+    {
+      "name": "@types/node-fetch",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@joshuarileydev/supabase-mcp-server\",\n  \"version\": \"0.0.2\",\n  \"description\": \"An MCP server for using the Supabase API\",\n  \"license\": \"MIT\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"node-fetch\": \"^3.3.2\",\n    \"zod\": \"^3.22.4\",\n    \"zod-to-json-schema\": \"^3.23.5\"\n  },\n  \"devDependencies\": {\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

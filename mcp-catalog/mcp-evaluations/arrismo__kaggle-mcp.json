@@ -1,0 +1,107 @@
+{
+  "name": "arrismo__kaggle-mcp",
+  "display_name": "kaggle-mcp",
+  "description": "MCP server for Kaggle",
+  "author": {
+    "name": "arrismo"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/server.py"],
+    "env": {
+      "KAGGLE_USERNAME": "${user_config.kaggle_username}",
+      "KAGGLE_KEY": "${user_config.kaggle_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "kaggle_username": {
+      "type": "string",
+      "title": "Kaggle Username",
+      "description": "Your Kaggle username for API authentication.",
+      "sensitive": false,
+      "required": true
+    },
+    "kaggle_key": {
+      "type": "string",
+      "title": "Kaggle API Key",
+      "description": "Your Kaggle API key for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "[![smithery badge](https://smithery.ai/badge/@arrismo/kaggle-mcp)](https://smithery.ai/server/@arrismo/kaggle-mcp)\n<a href=\"https://glama.ai/mcp/servers/arwswog1el\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/arwswog1el/badge\" alt=\"Kaggle MCP Server\" /></a>\n\n# Kaggle MCP (Model Context Protocol) Server\nThis repository contains an MCP (Model Context Protocol) server (`server.py`) built using the `fastmcp` library. It interacts with the Kaggle API to provide tools for searching and downloading datasets, and a prompt for generating EDA notebooks.\n\n## Project Structure\n\n-   `server.py`: The FastMCP server application. It defines resources, tools, and prompts for interacting with Kaggle.\n-   `.env.example`: An example file for environment variables (Kaggle API credentials). Rename to `.env` and fill in your details.\n-   `requirements.txt`: Lists the necessary Python packages.\n-   `pyproject.toml` & `uv.lock`: Project metadata and locked dependencies for `uv` package manager.\n-   `datasets/`: Default directory where downloaded Kaggle datasets will be stored.\n\n## Setup\n\n1.  **Clone the repository:**\n    ```bash\n    git clone <repository-url>\n    cd <repository-directory>\n    ```\n\n2.  **Create a virtual environment (recommended):**\n    ```bash\n    python -m venv venv\n    source venv/bin/activate  # On Windows use `venv\\Scripts\\activate`\n    # Or use uv: uv venv\n    ```\n\n3.  **Install dependencies:**\n    Using pip:\n    ```bash\n    pip install -r requirements.txt\n    ```\n    Or using uv:\n    ```bash\n    uv sync\n    ```\n\n4.  **Set up Kaggle API credentials:**\n    -   **Method 1 (Recommended): Environment Variables**\n        -   Create `.env` file\n        -   Open the `.env` file and add your Kaggle username and API key:\n            ```dotenv\n            KAGGLE_USERNAME=your_kaggle_username\n            KAGGLE_KEY=your_kaggle_api_key\n            ```\n        -   You can obtain your API key from your Kaggle account page (`Account` > `API` > `Create New API Token`). This will download a `kaggle.json` file containing your username and key.\n    -   **Method 2: `kaggle.json` file**\n        -   Download your `kaggle.json` file from your Kaggle account.\n        -   Place the `kaggle.json` file in the expected location (usually `~/.kaggle/kaggle.json` on Linux/macOS or `C:\\Users\\<Your User Name>\\.kaggle\\kaggle.json` on Windows). The `kaggle` library will automatically detect this file if the environment variables are not set.\n\n## Running the Server\n\n1.  **Ensure your virtual environment is active.**\n2.  **Run the MCP server:**\n    ```bash\n    uv run kaggle-mcp\n    ```\n    The server will start and register its resources, tools, and prompts. You can interact with it using an MCP client or compatible tools.\n\n## Running the Docker Container\n\n### 1. Set up Kaggle API credentials\n\nThis project requires Kaggle API credentials to access Kaggle datasets.\n\n- Go to https://www.kaggle.com/settings and click \"Create New API Token\" to download your `kaggle.json` file.\n- Open the `kaggle.json` file and copy your username and key into a new `.env` file in the project root:\n\n```\nKAGGLE_USERNAME=your_username\nKAGGLE_KEY=your_key\n```\n\n### 2. Build the Docker image\n\n```sh\ndocker build -t kaggle-mcp-test .\n```\n\n### 3. Run the Docker container using your .env file\n\n```sh\ndocker run --rm -it --env-file .env kaggle-mcp-test\n```\n\nThis will automatically load your Kaggle credentials as environment variables inside the container.\n\n---\n\n\n## Server Features\n\nThe server exposes the following capabilities through the Model Context Protocol:\n### Tools\n\n*   **`search_kaggle_datasets(query: str)`**:\n    *   Searches for datasets on Kaggle matching the provided query string.\n    *   Returns a JSON list of the top 10 matching datasets with details like reference, title, download count, and last updated date.\n*   **`download_kaggle_dataset(dataset_ref: str, download_path: str | None = None)`**:\n    *   Downloads and unzips files for a specific Kaggle dataset.\n    *   `dataset_ref`: The dataset identifier in the format `username/dataset-slug` (e.g., `kaggle/titanic`).\n    *   `download_path` (Optional): Specifies where to download the dataset. If omitted, it defaults to `./datasets/<dataset_slug>/` relative to the server script's location.\n\n### Prompts\n\n*   **`generate_eda_notebook(dataset_ref: str)`**:\n    *   Generates a prompt message suitable for an AI model (like Gemini) to create a basic Exploratory Data Analysis (EDA) notebook for the specified Kaggle dataset reference.\n    *   The prompt asks for Python code covering data loading, missing value checks, visualizations, and basic statistics.\n\n## Connecting to Claude Desktop \nGo to Claude > Settings > Developer > Edit Config > claude_desktop_config.json to include the following:\n\n```\n{\n  \"mcpServers\": {\n    \"kaggle-mcp\": {\n      \"command\": \"kaggle-mcp\",\n      \"cwd\": \"<path-to-their-cloned-repo>/kaggle-mcp\"\n    }\n  }\n}\n```\n\n## Usage Example\n\nAn AI agent or MCP client could interact with this server like this:\n\n1.  **Agent:** \"Search Kaggle for datasets about 'heart disease'\"\n    *   *Server executes `search_kaggle_datasets(query='heart disease')`*\n2.  **Agent:** \"Download the dataset 'user/heart-disease-dataset'\"\n    *   *Server executes `download_kaggle_dataset(dataset_ref='user/heart-disease-dataset')`*\n3.  **Agent:** \"Generate an EDA notebook prompt for 'user/heart-disease-dataset'\"\n    *   *Server executes `generate_eda_notebook(dataset_ref='user/heart-disease-dataset')`*\n    *   *Server returns a structured prompt message.*\n4.  **Agent:** (Sends the prompt to a code-generating model) -> Receives EDA Python code.\n",
+  "category": "Data Science",
+  "quality_score": 53,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kaggle-mcp": {
+        "command": "uv",
+        "args": ["run", "kaggle-mcp"],
+        "env": {}
+      },
+      "kaggle-mcp-test-docker": {
+        "command": "docker",
+        "args": ["run", "--rm", "-it", "--env-file", ".env", "kaggle-mcp-test"],
+        "env": {},
+        "docker_image": ".env"
+      },
+      "kaggle-mcp-configured": {
+        "command": "kaggle-mcp",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "arrismo",
+    "repo": "kaggle-mcp",
+    "url": "https://github.com/arrismo/kaggle-mcp",
+    "name": "arrismo__kaggle-mcp",
+    "path": null,
+    "stars": 21,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "3584f0449db65ba345dbb3ef060290d4938dad73"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:04.828Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp-server",
+      "importance": 10
+    },
+    {
+      "name": "kaggle",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"kaggle-mcp\"\nversion = \"0.1.0\"\ndescription = \"MCP Server for interacting with Kaggle API\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"kaggle\",\n    \"python-dotenv\",\n    \"mcp-server\",\n    # \"uvicorn[standard]\", # Removed dependency\n]\nscripts = { kaggle-mcp = \"server:run_server\" }\n\n[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[tool.setuptools]\n# Correct structure for automatic package discovery\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n# Exclude the 'datasets' directory if found within 'src'\nexclude = [\"datasets*\"]\n\n\n=== requirements.txt ===\nkaggle\npython-dotenv\nmcp-server\n"
+}

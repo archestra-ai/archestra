@@ -1,0 +1,109 @@
+{
+  "name": "conechoai__openai-websearch-mcp",
+  "display_name": "openai-websearch-mcp",
+  "description": "openai websearch tool as mcp server",
+  "author": {
+    "name": "ConechoAI"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "openai_websearch_mcp"],
+    "env": {
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your API key for OpenAI's websearch functionality.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# OpenAI WebSearch MCP Server\n\nThis MCP server provides access to OpenAI's websearch functionality through the Model Context Protocol. It allows AI assistants to search the web during conversations with users, providing up-to-date information that may not be available in the assistant's training data. The server can be installed and configured for use with Claude.app or Zed editor.\n\n## One click installation & Configuration\n\n### Claude \n\n!!Can using this command auto update configure file（Recommend）\n```bash\nOPENAI_API_KEY=sk-xxxx uv run --with uv --with openai-websearch-mcp openai-websearch-mcp-install\n```\nsk-xxxx is your API key. You can get it from [openai's open platform](https://platform.openai.com/)\n\n### Cursor\nConming soon\n\n### Windsurf\nConming soon\n\n\n## Available Tools\n\n- `web_search` - Call openai websearch as tool.\n  - Required arguments:\n    - `type` (string): web_search_preview\n    - `search_context_size` (string): High level guidance for the amount of context window space to use for the search. One of low, medium, or high. medium is the default.\n    - `user_location` (object or null)\n      - `type` (string): The type of location > approximation. Always approximate.\n      - `city` (string): Free text input for the city of the user, e.g. San Francisco.\n      - `country` (string): The two-letter ISO country code of the user, e.g. US.\n      - `region` (string): Free text input for the region of the user, e.g. California.\n      - `timezone` (string): The IANA timezone of the user, e.g. America/Los_Angeles.\n\n\n## Manual installation and configuration\n\nPlease make sure `uvx` is installed before installation\n\nAdd to your Claude settings:\n\n\n1、Using uvx\n\n```json\n\"mcpServers\": {\n  \"openai-websearch-mcp\": {\n    \"command\": \"uvx\",\n    \"args\": [\"openai-websearch-mcp\"],\n    \"env\": {\n        \"OPENAI_API_KEY\": \"your-api-key-here\"\n    }\n  }\n}\n```\n\n2、Using pip installation\n\n1）install `openai-websearch-mcp` via pip:\n\n```bash\npip install openai-websearch-mcp\n```\n\n2）modify your Claude settings\n\n```json\n\"mcpServers\": {\n  \"openai-websearch-mcp\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"openai_websearch_mcp\"],\n    \"env\": {\n        \"OPENAI_API_KEY\": \"your-api-key-here\"\n    }\n  }\n}\n```\n\n### Configure for Zed\n\nAdd to your Zed settings.json:\n\nUsing uvx\n\n```json\n\"context_servers\": [\n  \"openai-websearch-mcp\": {\n    \"command\": \"uvx\",\n    \"args\": [\"openai-websearch-mcp\"],\n    \"env\": {\n        \"OPENAI_API_KEY\": \"your-api-key-here\"\n    }\n  }\n],\n```\n\nUsing pip installation\n\n```json\n\"context_servers\": {\n  \"openai-websearch-mcp\": {\n    \"command\": \"python\",\n    \"args\": [\"-m\", \"openai_websearch_mcp\"],\n    \"env\": {\n        \"OPENAI_API_KEY\": \"your-api-key-here\"\n    }\n  }\n},\n```\n\n## Debugging\n\nYou can use the MCP inspector to debug the server. For uvx installations:\n\n```bash\nnpx @modelcontextprotocol/inspector uvx openai-websearch-mcp\n```\n",
+  "category": "Search",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "openai-websearch-mcp-uvx": {
+        "command": "uvx",
+        "args": ["openai-websearch-mcp"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key-here"
+        }
+      },
+      "openai-websearch-mcp-python": {
+        "command": "python",
+        "args": ["-m", "openai_websearch_mcp"],
+        "env": {
+          "OPENAI_API_KEY": "your-api-key-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "ConechoAI",
+    "repo": "openai-websearch-mcp",
+    "url": "https://github.com/ConechoAI/openai-websearch-mcp",
+    "name": "openai-websearch-mcp",
+    "path": null,
+    "stars": 57,
+    "contributors": 2,
+    "issues": 4,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "5bc0872a2e462c92203b08f16c01c404649e147c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.241Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 9
+    },
+    {
+      "name": "typer",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "pydantic_extra_types",
+      "importance": 7
+    },
+    {
+      "name": "tzdata",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"openai-websearch-mcp\"\nversion = \"0.4.0\"\ndescription = \"using openai websearch as mcp server\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"pydantic_extra_types==2.10.3\",\n    \"pydantic==2.10.6\",\n    \"mcp==1.3.0\",\n    \"tzdata==2025.1\",\n    \"openai==1.66.2\",\n    \"typer==0.15.2\"\n]\n\n\n[project.scripts]\nopenai-websearch-mcp = \"openai_websearch_mcp:main\"\nopenai-websearch-mcp-install = \"openai_websearch_mcp.cli:app\"\n\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\n    \"pydantic_extra_types==2.10.3\",\n    \"pydantic==2.10.6\",\n    \"mcp==1.3.0\",\n    \"tzdata==2025.1\",\n    \"openai==1.66.2\",\n    \"typer==0.15.2\"\n]\n"
+}

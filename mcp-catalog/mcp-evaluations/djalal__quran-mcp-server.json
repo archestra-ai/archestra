@@ -1,0 +1,149 @@
+{
+  "name": "djalal__quran-mcp-server",
+  "display_name": "quran-mcp-server",
+  "description": "Quran.com API integration for verse search, translation and tafsir",
+  "author": {
+    "name": "djalal"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/dist/src/server.js"],
+    "env": {
+      "API_KEY": "${user_config.api_key}",
+      "PORT": "${user_config.port}",
+      "VERBOSE_MODE": "${user_config.verbose_mode}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "API key for authentication with the Quran.com API, if required.",
+      "sensitive": true,
+      "required": false
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port for the MCP server to listen on. Defaults to 8000 or 3000 if not set.",
+      "required": false
+    },
+    "verbose_mode": {
+      "type": "boolean",
+      "title": "Verbose Mode",
+      "description": "Enable verbose logging of API requests and responses for debugging.",
+      "required": false,
+      "default": false
+    }
+  },
+  "readme": "# MCP Server for Quran.com API\n\nMCP server to interact with Quran.com corpus via the official [REST API v4](https://api-docs.quran.com/docs/content_apis_versioned/4.0.0/content-apis).\n\n## Overview\n\nThis is a Model Context Protocol (MCP) server generated from the [OpenAPI specification](v4.json).\n\n## Endpoints\n\nThe following endpoints from the API have been made available as tools, that LLMs can use via compatible clients.\n\n### Chapters\n* GET /chapters - List Chapters\n* GET /chapters/{id} - Get Chapter\n* GET /chapters/{chapter_id}/info - Get Chapter Info\n\n### Verses\n* GET /verses/by_chapter/{chapter_number} - Get verses by Chapter / Surah number\n* GET /verses/by_page/{page_number} - Get all verses of a specific Madani Mushaf page\n* GET /verses/by_juz/{juz_number} - Get verses by Juz number\n* GET /verses/by_hizb/{hizb_number} - Get verses by Hizb number\n* GET /verses/by_rub/{rub_el_hizb_number} - Get verses by Rub el Hizb number\n* GET /verses/by_key/{verse_key} - Get verse by key\n* GET /verses/random - Get a random verse\n\n### Juzs\n* GET /juzs - Get list of all juzs\n\n### Search\n* GET /search - Search the Quran for specific terms\n\n### Translations\n* GET /resources/translations - Get list of available translations\n* GET /resources/translations/{translation_id}/info - Get information of a specific translation\n\n### Tafsirs\n* GET /resources/tafsirs - Get list of available tafsirs\n* GET /resources/tafsirs/{tafsir_id}/info - Get the information of a specific tafsir\n* GET /quran/tafsirs/{tafsir_id} - Get a single tafsir\n\n### Audio\n* GET /resources/chapter_reciters - List of Chapter Reciters\n* GET /resources/recitation_styles - Get the available recitation styles\n\n### Languages\n* GET /resources/languages - Get all languages\n\n## Setup\n\n### Requirements\n\n* Node.js 22+\n* Docker\n\n### Building the Docker Image\n\nBefore using the Docker-based production mode, you need to build the Docker image:\n\n```bash\n# Build the Docker image\ndocker build -t quran-mcp-server .\n```\n\n## Claude Desktop Integration\n\nTo use this MCP server with Claude Desktop, add the following configuration to your `claude_desktop_config.json` file (typically located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\\Claude\\claude_desktop_config.json` on Windows):\n\n### Docker-based Production Mode\n\n```json\n{\n  \"mcpServers\": {\n    \"quran-api\": {\n      \"command\": \"docker\",\n      \"args\": [\"run\", \"-i\", \"--rm\", \"--init\", \"-e\", \"API_KEY=your_api_key_if_needed\", \"-e\", \"VERBOSE_MODE=true\", \"quran-mcp-server\"],\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n### Production Mode (Node.js)\n\n```json\n{\n  \"mcpServers\": {\n    \"quran-api\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/quran-mcp-server/dist/src/server.js\"],\n      \"env\": {\n        \"API_KEY\": \"your_api_key_if_needed\",\n        \"VERBOSE_MODE\": \"true\" // Set to \"true\" to enable verbose logging\n      },\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n### Development Mode\n\n```json\n{\n  \"mcpServers\": {\n    \"quran-api\": {\n      \"command\": \"npx\",\n      \"args\": [\"ts-node\", \"/path/to/quran-mcp-server/src/server.ts\"],\n      \"env\": {\n        \"API_KEY\": \"your_api_key_if_needed\",\n        \"VERBOSE_MODE\": \"true\" // Set to \"true\" to enable verbose logging\n      },\n      \"disabled\": false,\n      \"autoApprove\": []\n    }\n  }\n}\n```\n\n**Important Notes:**\n- Replace `/path/to/quran-mcp-server` with the actual path to this repository on your system\n- You'll need to build the project first with `npm run build` or `docker build -t quran-mcp-server .` if using the production mode configuration\n- Replace `your_api_key_if_needed` with an actual API key if required by the Quran.com API\n- If you already have other MCP servers configured, add this configuration to the existing `mcpServers` object\n- After updating the configuration, restart Claude Desktop for the changes to take effect\n\n## Environment Variables\n\n* `API_KEY`: API key for authentication\n* `PORT`: Server port (default: 8000 or 3000 depending on language)\n* `VERBOSE_MODE`: Set to 'true' to enable verbose logging of API requests and responses (default: false)\n\n## Verbose Mode\n\nWhen `VERBOSE_MODE` is set to 'true', the server will log detailed information about API requests and responses to the console. This is useful for debugging and monitoring API interactions.\n\nThe verbose logging includes:\n\n* **Requests**: Logs the tool name and arguments for each incoming request\n* **Responses**: Logs the tool name and result data for each response\n* **Errors**: Logs detailed error information including error name, message, and stack trace when available\n\nEach log entry is timestamped and prefixed with the log type (REQUEST, RESPONSE, or ERROR) for easy identification.\n\n## Testing\n\n```bash\n# Run tests\nnpm test\n```\n\n## License\n\nThis project is licensed under the MIT License.\n",
+  "category": "Art & Culture",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "quran-mcp-server-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "--init",
+          "-e",
+          "API_KEY=your_api_key_if_needed",
+          "-e",
+          "VERBOSE_MODE=true",
+          "quran-mcp-server"
+        ],
+        "env": {
+          "API_KEY": "your_api_key_if_needed",
+          "VERBOSE_MODE": "true"
+        },
+        "docker_image": "quran-mcp-server"
+      },
+      "quran-mcp-server-node": {
+        "command": "node",
+        "args": ["/path/to/quran-mcp-server/dist/src/server.js"],
+        "env": {
+          "API_KEY": "your_api_key_if_needed",
+          "VERBOSE_MODE": "true"
+        }
+      },
+      "quran-mcp-server-dev": {
+        "command": "npx",
+        "args": ["ts-node", "/path/to/quran-mcp-server/src/server.ts"],
+        "env": {
+          "API_KEY": "your_api_key_if_needed",
+          "VERBOSE_MODE": "true"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "djalal",
+    "repo": "quran-mcp-server",
+    "url": "https://github.com/djalal/quran-mcp-server",
+    "name": "djalal__quran-mcp-server",
+    "path": null,
+    "stars": 49,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "f49b3c96dc906b0d9483205ec8b80a51adcada98"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.258Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 6
+    },
+    {
+      "name": "body-parser",
+      "importance": 5
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"quran-mcp-server\",\n  \"version\": \"v4\",\n  \"description\": \"Quran.com v4 MCP server\",\n  \"main\": \"dist/server.js\",\n  \"type\": \"commonjs\",\n  \"scripts\": {\n    \"start\": \"node dist/server.js\",\n    \"build\": \"npm run security-audit && tsc && chmod +x dist/server.js\",\n    \"dev\": \"ts-node ./server.ts\",\n    \"test\": \"jest\",\n    \"security-audit\": \"npm audit --production\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.8.0\",\n    \"axios\": \"1.8.4\",\n    \"body-parser\": \"^2.2.0\",\n    \"dotenv\": \"16.4.7\",\n    \"express\": \"^4.21.2\",\n    \"zod\": \"3.24.2\",\n    \"zod-to-json-schema\": \"3.24.5\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"5.0.1\",\n    \"@types/jest\": \"29.5.14\",\n    \"@types/node\": \"22.13.14\",\n    \"@types/supertest\": \"6.0.3\",\n    \"jest\": \"29.7.0\",\n    \"supertest\": \"7.1.0\",\n    \"ts-jest\": \"29.3.0\",\n    \"ts-node\": \"10.9.2\",\n    \"typescript\": \"5.8.2\"\n  }\n}\n"
+}

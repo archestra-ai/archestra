@@ -1,0 +1,85 @@
+{
+  "name": "abhiemj__manim-mcp-server",
+  "display_name": "manim-mcp-server",
+  "description": "MCP server from abhiemj/manim-mcp-server",
+  "author": {
+    "name": "abhiemj"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/src/manim_server.py"],
+    "env": {
+      "MANIM_EXECUTABLE": "${user_config.manim_executable}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "manim_executable": {
+      "type": "file",
+      "title": "Manim Executable Path",
+      "description": "The absolute path to your Manim executable (e.g., manim.exe on Windows).",
+      "required": true
+    }
+  },
+  "readme": "# Manim MCP Server\n\n![Manim MCP Demo](Demo-manim-mcp.gif)\n\n\n## Overview\n\nThis is an MCP (Model Context Protocol) server that executes Manim animation code and returns the generated video. It allows users to send Manim scripts and receive the rendered animation.\n\n## Features\n\n- Executes Manim Python scripts.\n- Saves animation output in a visible media folder.\n- Allows users to clean up temporary files after execution.\n- Portable and configurable via environment variables.\n\n## Installation\n\n### Prerequisites\n\nEnsure you have the following installed:\n\n- Python 3.8+\n- Manim (Community Version)\n- MCP\n\n### Install Manim\n\n```sh\npip install manim\n```\n\n### Install MCP\n\n```sh\npip install mcp\n```\n\n### Clone the Repository\n\n```sh\ngit clone https://github.com/abhiemj/manim-mcp-server.git\ncd manim-mcp-server\n```\n\n## Integration with Claude\n\nTo integrate the Manim MCP server with Claude, add the following to your `claude_desktop_config.json` file:\n\n```json\n{\n  \"mcpServers\": {\n     \"manim-server\": {\n      \"command\": \"/absolute/path/to/python\",\n      \"args\": [\n        \"/absolute/path/to/manim-mcp-server/src/manim_server.py\"\n      ],\n      \"env\": {\n        \"MANIM_EXECUTABLE\": \"/Users/[Your_username]/anaconda3/envs/manim2/Scripts/manim.exe\"\n      }\n    }\n  }\n}\n```\n\n### Finding Your Python Path\n\nTo find your Python executable path, use the following command:\n\n#### Windows (PowerShell):\n```sh\n(Get-Command python).Source\n```\n\n#### Windows (Command Prompt/Terminal):\n```sh\nwhere python\n```\n\n#### Linux/macOS (Terminal):\n```sh\nwhich python\n```\n\nThis ensures that Claude can communicate with the Manim MCP server to generate animations dynamically.\n\n## Contributing\n\n1. Fork the repository.\n2. Create a new branch:\n   ```sh\n   git checkout -b add-feature\n   ```\n3. Make changes and commit:\n   ```sh\n   git commit -m \"Added a new feature\"\n   ```\n4. Push to your fork:\n   ```sh\n   git push origin add-feature\n   ```\n5. Open a pull request.\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n\n## Author\n\nCreated by **[abhiemj](https://github.com/abhiemj)**. Contributions welcome! 🚀\n\n### **Listed in Awesome MCP Servers**  \nThis repository is featured in the [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers) repository under the **Animation & Video** category. Check it out along with other great MCP server implementations!\n\n\n## **Acknowledgments**  \n- Thanks to the [Manim Community](https://www.manim.community/) for their amazing animation library.  \n- Inspired by the open-source MCP ecosystem.\n\n## Find me at\n<a href=\"https://www.instagram.com/aiburner_official\" target=\"blank\"><img align=\"center\" src=\"https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/instagram.svg\" alt=\"aiburner_official\" height=\"30\" width=\"40\" /></a>\n@aiburner_official\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "manim-mcp-server": {
+        "command": "/absolute/path/to/python",
+        "args": ["/absolute/path/to/manim-mcp-server/src/manim_server.py"],
+        "env": {
+          "MANIM_EXECUTABLE": "/Users/[Your_username]/anaconda3/envs/manim2/Scripts/manim.exe"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "abhiemj",
+    "repo": "manim-mcp-server",
+    "url": "https://github.com/abhiemj/manim-mcp-server",
+    "name": "abhiemj__manim-mcp-server",
+    "path": null,
+    "stars": 459,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "da23214426a56ce3ba4da39b0718d64cf97cd23c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:11.208Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "manim",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

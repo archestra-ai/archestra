@@ -1,0 +1,175 @@
+{
+  "name": "vertexstudio__developer",
+  "display_name": "developer",
+  "description": "MCP server from VertexStudio/developer",
+  "author": {
+    "name": "VertexStudio"
+  },
+  "server": {
+    "command": "${__dirname}/target/release/developer",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Developer MCP Server\n\nA general purpose Model Context Protocol (MCP) server that provides comprehensive developer tools for file editing, shell command execution, and screen capture capabilities. Built using the [rmcp](https://github.com/modelcontextprotocol/rmcp) crate.\n\n## 🚀 Features\n\n### 📝 Text Editor\n- **View files** with language detection for markdown formatting\n- **Write/create files** with automatic directory creation\n- **String replacement** with precise matching\n- **Undo functionality** with edit history\n- **File size protection** (400KB limit for text files)\n\n### 🖥️ Shell Integration\n- **Cross-platform command execution** (PowerShell on Windows, bash/zsh on Unix)\n- **Combined stdout/stderr output** as it appears in terminal\n- **Output size protection** (400KB limit)\n- **Platform-specific optimizations**\n\n### 📸 Screen Capture\n- **Full display screenshots** with monitor selection\n- **Window-specific capture** by title\n- **Automatic image optimization** (768px max width)\n- **Base64 encoded PNG output**\n\n### 🖼️ Image Processing\n- **Image file processing** from disk\n- **Automatic resizing** while maintaining aspect ratio\n- **Format conversion** to PNG\n- **macOS screenshot filename handling**\n\n### 🔄 Workflow Management\n- **Multi-step problem solving** with sequential progression\n- **Branching workflows** for alternative solution paths\n- **Step revision** capability to update previous steps\n- **Context preservation** across complex reasoning processes\n\n### 🔒 Security Features\n- **Gitignore integration** - respects `.gitignore` patterns for file access control\n- **Path validation** - requires absolute paths to prevent directory traversal\n- **File size limits** - prevents memory exhaustion attacks\n- **Access pattern filtering** - blocks access to sensitive files\n\n## 📋 Requirements\n\n- **Rust** 1.70+ (for building from source)\n- **Claude Desktop** or compatible MCP client\n- **Operating System**: macOS, Linux, or Windows\n\n## 🛠️ Installation\n\n### Option 1: Build from Source (Recommended)\n\n1. **Clone the repository:**\n   ```bash\n   git clone git@github.com:VertexStudio/developer.git\n   cd developer\n   ```\n\n2. **Build the project:**\n   ```bash\n   cargo build --release\n   ```\n\n3. **The binary will be available at:**\n   ```\n   target/release/developer\n   ```\n\n### Option 2: Development Build\n\nFor development/testing purposes:\n```bash\ncargo build\n# Binary at: target/debug/developer\n```\n\n## ⚙️ Configuration\n\n### Claude Desktop Setup\n\n1. **Open Claude Desktop configuration file:**\n\n   **macOS/Linux:**\n   ```bash\n   code ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n   ```\n\n   **Windows:**\n   ```bash\n   code %APPDATA%\\Claude\\claude_desktop_config.json\n   ```\n\n2. **Add the developer server configuration:**\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"developer\": {\n         \"command\": \"/path/to/your/developer/target/release/developer\",\n         \"args\": []\n       }\n     }\n   }\n   ```\n\n   **Example configurations:**\n\n   **Development build:**\n   ```json\n   {\n     \"mcpServers\": {\n       \"developer\": {\n         \"command\": \"/Users/rozgo/vertex/developer/target/debug/developer\",\n         \"args\": []\n       }\n     }\n   }\n   ```\n\n   **Production build:**\n   ```json\n   {\n     \"mcpServers\": {\n       \"developer\": {\n         \"command\": \"/Users/rozgo/vertex/developer/target/release/developer\",\n         \"args\": []\n       }\n     }\n   }\n   ```\n\n3. **Restart Claude Desktop** to load the new configuration.\n\n### File Access Control (Optional)\n\nCreate a `.gitignore` file in your working directory to control which files the server can access:\n\n```gitignore\n# Sensitive files\n.env\n.env.*\nsecrets.*\nprivate/\n*.key\n*.pem\n\n# Build artifacts\ntarget/\nnode_modules/\ndist/\n```\n\nThe server will automatically respect these patterns and block access to matching files.\n\n## 🎯 Usage Examples\n\nOnce configured, you can use these tools directly in Claude Desktop:\n\n### Text Editing\n```\n\"Can you view the contents of /path/to/my/file.rs?\"\n\n\"Please create a new file at /path/to/hello.py with a simple hello world script\"\n\n\"Replace the line 'old_function()' with 'new_function()' in /path/to/main.rs\"\n\n\"Undo the last edit to /path/to/main.rs\"\n```\n\n### Shell Commands\n```\n\"Run 'ls -la' to show me the current directory contents\"\n\n\"Execute 'cargo test' to run the test suite\"\n\n\"Run 'git status' to check the repository status\"\n```\n\n### Screen Capture\n```\n\"Take a screenshot of my main display\"\n\n\"Capture a screenshot of the window titled 'VS Code'\"\n\n\"Show me what windows are available for capture\"\n```\n\n### Image Processing\n```\n\"Process the image at /path/to/screenshot.png and show it to me\"\n\n\"Load and display the image from /Users/me/Desktop/diagram.jpg\"\n```\n\n### Workflow Management\n```\n\"Start a workflow to implement a new feature with 5 steps\"\n\n\"Create a branch from step 3 to explore an alternative approach\"\n\n\"Revise step 2 to use a different algorithm\"\n```\n\n## 🏗️ Architecture\n\n```\nDeveloper MCP Server\n├── Text Editor     → File viewing, editing, string replacement, undo\n├── Shell           → Cross-platform command execution  \n├── Screen Capture  → Display and window screenshots\n├── Image Processor → File-based image processing\n├── Workflow        → Multi-step problem solving with branching\n└── Security Layer  → Gitignore integration, path validation\n```\n\n## 🔧 Tool Reference\n\n### text_editor\n- **Commands:** `view`, `write`, `str_replace`, `undo_edit`\n- **Parameters:** `path` (required), `file_text`, `old_str`, `new_str`\n- **Limits:** 400KB file size, absolute paths only\n\n### shell  \n- **Parameters:** `command` (required)\n- **Features:** Platform detection, output redirection, size limits\n- **Limits:** 400KB output size\n\n### screen_capture\n- **Parameters:** `display` (optional), `window_title` (optional)\n- **Output:** Base64 PNG image, 768px max width\n\n### list_windows\n- **Parameters:** None\n- **Output:** List of capturable window titles\n\n### image_processor\n- **Parameters:** `path` (required)\n- **Features:** Auto-resize, format conversion, macOS compatibility\n- **Limits:** 10MB file size\n\n### workflow\n- **Parameters:** `step_description`, `step_number`, `total_steps`, `next_step_needed` (required), `is_step_revision`, `revises_step`, `branch_from_step`, `branch_id`, `needs_more_steps` (optional)\n- **Features:** Sequential progression, branching, step revision\n- **Output:** JSON workflow status\n\n## 🐛 Troubleshooting\n\n### Common Issues\n\n**\"Tool not found\" errors:**\n- Ensure the binary path in your configuration is correct\n- Verify the binary exists and is executable\n- Check Claude Desktop logs for detailed error messages\n\n**\"File access denied\" errors:**\n- Check if the file is blocked by `.gitignore` patterns\n- Ensure you're using absolute paths (not relative paths)\n- Verify file permissions\n\n**\"Command failed\" errors:**\n- Ensure the command exists and is in your system PATH\n- Check if the command requires special permissions\n- Verify the command syntax for your operating system\n\n### Debug Mode\n\nBuild with debug info for troubleshooting:\n```bash\ncargo build\n# Use target/debug/developer in your configuration\n```\n\n### MCP Inspector\n\nUse the official MCP inspector to debug and test tools:\n```bash\nnpx @modelcontextprotocol/inspector target/debug/developer\n```\n\nThis will open a web interface where you can:\n- Inspect available tools and their schemas\n- Test tool calls interactively\n- Debug server responses\n- Validate MCP protocol compliance\n\n### Tools Schema Export\n\nExport the tools JSON schema for debugging or integration:\n```bash\n# Save tools schema to file\ncargo run toolbox > tools.json\n\n# Pretty print tools schema\ncargo run toolbox | jq .\n```\n\n## 🤝 Contributing\n\n1. Fork the repository\n2. Create a feature branch\n3. Add tests for new functionality\n4. Ensure all tests pass: `cargo test`\n5. Submit a pull request\n\n## 📝 License\n\n[MIT](LICENSE)\n\n## 🔗 Related Projects\n\n- [Model Context Protocol](https://modelcontextprotocol.io/) - The protocol specification\n- [Claude Desktop](https://claude.ai/download) - Official Claude desktop application\n- [MCP Servers](https://github.com/modelcontextprotocol/servers) - Official MCP server implementations\n",
+  "category": "Development",
+  "quality_score": 22,
+  "archestra_config": {
+    "client_config_permutations": {
+      "developer-release": {
+        "command": "/path/to/your/developer/target/release/developer",
+        "args": [],
+        "env": {}
+      },
+      "developer-debug": {
+        "command": "/path/to/your/developer/target/debug/developer",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "VertexStudio",
+    "repo": "developer",
+    "url": "https://github.com/VertexStudio/developer",
+    "name": "vertexstudio__developer",
+    "path": null,
+    "stars": 14,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "86b7ebf60428dbf6c9bdf75c92631ce3a7040049"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:21.418Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "rmcp",
+      "importance": 10
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "axum",
+      "importance": 9
+    },
+    {
+      "name": "rig-core",
+      "importance": 8
+    },
+    {
+      "name": "anyhow",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 8
+    },
+    {
+      "name": "toml",
+      "importance": 8
+    },
+    {
+      "name": "tracing",
+      "importance": 7
+    },
+    {
+      "name": "tracing-subscriber",
+      "importance": 7
+    },
+    {
+      "name": "tracing-appender",
+      "importance": 7
+    },
+    {
+      "name": "tokio-util",
+      "importance": 7
+    },
+    {
+      "name": "futures",
+      "importance": 7
+    },
+    {
+      "name": "clap",
+      "importance": 7
+    },
+    {
+      "name": "image",
+      "importance": 7
+    },
+    {
+      "name": "xcap",
+      "importance": 7
+    },
+    {
+      "name": "core-foundation",
+      "importance": 7
+    },
+    {
+      "name": "core-foundation-sys",
+      "importance": 7
+    },
+    {
+      "name": "include_dir",
+      "importance": 6
+    },
+    {
+      "name": "ignore",
+      "importance": 6
+    },
+    {
+      "name": "url",
+      "importance": 5
+    },
+    {
+      "name": "shellexpand",
+      "importance": 5
+    },
+    {
+      "name": "base64",
+      "importance": 5
+    },
+    {
+      "name": "regex",
+      "importance": 5
+    },
+    {
+      "name": "tempfile",
+      "importance": 4
+    },
+    {
+      "name": "serial_test",
+      "importance": 2
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[workspace]\nmembers = [\".\", \"rig\"]\nresolver = \"2\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nlicense = \"MIT\"\nauthors = [\"Alex Rozgo <alex.rozgo@gmail.com>\"]\nrepository = \"https://github.com/VertexStudio/developer.git\"\ndescription = \"MCP Developer tools server\"\nkeywords = [\"developer\", \"tools\", \"mcp\"]\nhomepage = \"https://github.com/VertexStudio/developer.git\"\ncategories = [\"development-tools\"]\nreadme = \"README.md\"\n\n[workspace.dependencies]\n# Core async and error handling\nanyhow = \"1\"\ntokio = { version = \"1\", features = [\"full\"] }\ntokio-util = \"0.7\"\nfutures = \"0.3\"\n\n# Serialization\nserde = { version = \"1\", features = [\"derive\"] }\nserde_json = \"1\"\ntoml = \"0.8\"\n\n# Logging and tracing\ntracing = \"0.1\"\ntracing-subscriber = { version = \"0.3\", features = [\n    \"env-filter\",\n    \"std\",\n    \"fmt\",\n] }\ntracing-appender = \"0.2\"\n\n# MCP SDK\nrmcp = { version = \"0.2.1\", features = [\n    \"client\",\n    \"schemars\",\n    \"transport-io\",\n    \"transport-child-process\",\n    \"transport-sse-client\",\n    \"reqwest\",\n] }\n\n[package]\nname = \"developer\"\nversion = { workspace = true }\nedition = { workspace = true }\nlicense = { workspace = true }\nauthors = { workspace = true }\nrepository = { workspace = true }\ndescription = { workspace = true }\nkeywords = { workspace = true }\nhomepage = { workspace = true }\ncategories = { workspace = true }\nreadme = { workspace = true }\n\n[dependencies]\n# Workspace dependencies\nanyhow = { workspace = true }\nserde = { workspace = true }\nserde_json = { workspace = true }\ntokio = { workspace = true }\ntracing = { workspace = true }\ntracing-subscriber = { workspace = true }\nrmcp = { workspace = true }\n\n# Package-specific dependencies\nclap = { version = \"4.5\", features = [\"derive\"] }\ntokio-util = { workspace = true }\naxum = \"0.8\"\n\n# Additional dependencies for developer module\ninclude_dir = \"0.7\"\nignore = \"0.4\"\nurl = \"2.5\"\nshellexpand = \"3.1\"\nbase64 = \"0.22\"\nimage = \"0.25\"\nserial_test = \"3.2\"\ntempfile = \"3.20\"\nregex = \"1.11\"\n\n# These dependencis are unstable, pinning for now\nxcap = \"0.0.14\"\ncore-foundation = \"=0.10.0\"\ncore-foundation-sys = \"0.8.7\"\n\n\n=== rig/Cargo.toml ===\n[package]\nname = \"rig\"\nedition = { workspace = true }\nversion = { workspace = true }\nauthors = { workspace = true }\nlicense = { workspace = true }\nrepository = { workspace = true }\ndescription = { workspace = true }\nkeywords = { workspace = true }\nhomepage = { workspace = true }\ncategories = { workspace = true }\nreadme = { workspace = true }\n\n[[bin]]\nname = \"rig\"\npath = \"src/main.rs\"\n\n[dependencies]\n# Workspace dependencies\nanyhow = { workspace = true }\nserde = { workspace = true }\nserde_json = { workspace = true }\ntokio = { workspace = true }\ntracing = { workspace = true }\ntracing-subscriber = { workspace = true }\nrmcp = { workspace = true }\n\n# Package-specific dependencies\nrig-core = \"0.14.0\"\ntoml = { workspace = true }\nfutures = { workspace = true }\ntracing-appender = { workspace = true }\n"
+}

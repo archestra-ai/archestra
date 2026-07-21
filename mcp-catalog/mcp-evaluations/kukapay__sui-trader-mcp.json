@@ -1,0 +1,98 @@
+{
+  "name": "kukapay__sui-trader-mcp",
+  "display_name": "sui-trader-mcp",
+  "description": "An MCP server designed for AI agents to perform optimal token swaps on the Sui blockchain.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/index.js"],
+    "env": {
+      "PRIVATE_KEY": "${user_config.private_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "private_key": {
+      "type": "string",
+      "title": "Sui Private Key",
+      "description": "Your Bech32-formatted Sui private key (starts with `suiprivkey`)",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Sui Trader MCP\n\nAn MCP server designed for AI agents to perform optimal token swaps on the Sui blockchain.\n\n![License](https://img.shields.io/badge/license-MIT-blue.svg)\n![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Token Swaps**: Execute token swaps on Sui mainnet via the Cetus Aggregator.\n- **Bech32 Private Key Support**: Securely load a Sui private key (starting with `suiprivkey`) from environment variables.\n\n## Prerequisites\n\n- **Node.js**: Version 18.x or higher.\n- **npm**: For dependency management.\n- **Sui Wallet**: A Sui private key in bech32 format (starts with `suiprivkey`).\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/sui-trader-mcp.git\n   cd sui-trader-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   npm install\n   ```\n\n3. **Configure MCP Client**:\n    ```json\n    {\n      \"mcpServers\": {\n        \"sui-trader\": {\n          \"command\": \"node\",\n          \"args\": [\"/absolute/path/to/sui-trader-mcp/index.js\"],\n          \"env\": { \"PRIVATE_KEY\": \"your_private_key\" }\n          }\n        }\n      }\n    }\n    ```\n    Replace `/absolute/path/to/sui-trader-mcp/` with the actual installation path, and `your_private_key` with your Bech32-formatted private key..\n    \n## Usage\n\nUse an MCP-compatible client to invoke the `swap` tool. \n\n### Example\n\nPrompt:\n```\nSwap 1.5 SUI to USDC with 2% slippage, using a fixed input amount.\n```\n\nOutput:\n```\nTransaction ID: zjGekhLBfMYzGqu57fTeu3K1NX5jC5wNUy8rpdPcLyv. Status: success\n```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 36,
+  "archestra_config": {
+    "client_config_permutations": {
+      "sui-trader": {
+        "command": "node",
+        "args": ["/absolute/path/to/sui-trader-mcp/index.js"],
+        "env": {
+          "PRIVATE_KEY": "your_private_key"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "sui-trader-mcp",
+    "url": "https://github.com/kukapay/sui-trader-mcp",
+    "name": "sui-trader-mcp",
+    "path": null,
+    "stars": 4,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "900210af303ab68342199d33a9fa4b8524decb86"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.084Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@cetusprotocol/aggregator-sdk",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "bn.js",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"sui-trader-mcp\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"homepage\": \"https://github.com/kukapay/sui-trader-mcp\",\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"An MCP server designed for AI agents to perform optimal token swaps on the Sui blockchain.\",\n  \"dependencies\": {\n    \"@cetusprotocol/aggregator-sdk\": \"^0.9.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.11.1\",\n    \"bn.js\": \"^5.2.2\",\n    \"dotenv\": \"^16.5.0\",\n    \"zod\": \"^3.24.4\"\n  }\n}\n"
+}

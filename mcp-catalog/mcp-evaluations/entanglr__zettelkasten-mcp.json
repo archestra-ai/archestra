@@ -1,0 +1,128 @@
+{
+  "name": "entanglr__zettelkasten-mcp",
+  "display_name": "zettelkasten-mcp",
+  "description": "A Model Context Protocol (MCP) server that implements the Zettelkasten knowledge management methodology, allowing you to create, link, explore and synthesize atomic notes through Claude and other MCP-compatible clients.",
+  "author": {
+    "name": "entanglr"
+  },
+  "server": {
+    "command": "${__dirname}/.venv/bin/python",
+    "args": ["-m", "zettelkasten_mcp.main"],
+    "env": {
+      "ZETTELKASTEN_NOTES_DIR": "${user_config.zettelkasten_notes_dir}",
+      "ZETTELKASTEN_DATABASE_PATH": "${user_config.zettelkasten_database_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "zettelkasten_notes_dir": {
+      "type": "directory",
+      "title": "Zettelkasten Notes Directory",
+      "description": "The directory where your Zettelkasten notes are stored.",
+      "required": true,
+      "default": "${__dirname}/data/notes"
+    },
+    "zettelkasten_database_path": {
+      "type": "file",
+      "title": "Zettelkasten Database Path",
+      "description": "The path to the SQLite database file for indexing notes.",
+      "required": true,
+      "default": "${__dirname}/data/db/zettelkasten.db"
+    }
+  },
+  "readme": "# Zettelkasten MCP Server\n\nA Model Context Protocol (MCP) server that implements the Zettelkasten knowledge management methodology, allowing you to create, link, explore and synthesize atomic notes through Claude and other MCP-compatible clients.\n\n## What is Zettelkasten?\n\nThe Zettelkasten method is a knowledge management system developed by German sociologist Niklas Luhmann, who used it to produce over 70 books and hundreds of articles. It consists of three core principles:\n\n1. **Atomicity**: Each note contains exactly one idea, making it a discrete unit of knowledge\n2. **Connectivity**: Notes are linked together to create a network of knowledge, with meaningful relationships between ideas\n3. **Emergence**: As the network grows, new patterns and insights emerge that weren't obvious when the individual notes were created\n\nWhat makes the Zettelkasten approach powerful is how it enables exploration in multiple ways:\n\n- **Vertical exploration**: dive deeper into specific topics by following connections within a subject area.\n- **Horizontal exploration**: discover unexpected relationships between different fields by traversing links that cross domains.\n\nThis structure invites serendipitous discoveries as you follow trails of thought from note to note, all while keeping each piece of information easily accessible through its unique identifier. Luhmann called his system his \"second brain\" or \"communication partner\" - this digital implementation aims to provide similar benefits through modern technology.\n\n## Features\n\n- Create atomic notes with unique timestamp-based IDs\n- Link notes bidirectionally to build a knowledge graph\n- Tag notes for categorical organization\n- Search notes by content, tags, or links\n- Use markdown format for human readability and editing\n- Integrate with Claude through MCP for AI-assisted knowledge management\n- Dual storage architecture (see below)\n- Synchronous operation model for simplified architecture\n\n## Examples\n\n- Knowledge creation: [A small Zettelkasten knowledge network about the Zettelkasten method itself](https://github.com/entanglr/zettelkasten-mcp/discussions/5)\n\n## Note Types\n\nThe Zettelkasten MCP server supports different types of notes:\n\n|Type|Handle|Description|\n|---|---|---|\n|**Fleeting notes**|`fleeting`|Quick, temporary notes for capturing ideas|\n|**Literature notes**|`literature`|Notes from reading material|\n|**Permanent notes**|`permanent`|Well-formulated, evergreen notes|\n|**Structure notes**|`structure`|Index or outline notes that organize other notes|\n|**Hub notes**|`hub`|Entry points to the Zettelkasten on key topics|\n\n## Link Types\n\nThe Zettelkasten MCP server uses a comprehensive semantic linking system that creates meaningful connections between notes. Each link type represents a specific relationship, allowing for a rich, multi-dimensional knowledge graph.\n\n| Primary Link Type | Inverse Link Type | Relationship Description |\n|-------------------|-------------------|--------------------------|\n| `reference` | `reference` | Simple reference to related information (symmetric relationship) |\n| `extends` | `extended_by` | One note builds upon or develops concepts from another |\n| `refines` | `refined_by` | One note clarifies or improves upon another |\n| `contradicts` | `contradicted_by` | One note presents opposing views to another |\n| `questions` | `questioned_by` | One note poses questions about another |\n| `supports` | `supported_by` | One note provides evidence for another |\n| `related` | `related` | Generic relationship (symmetric relationship) |\n\n## Prompting\n\nTo ensure maximum effectiveness, we recommend using a system prompt (\"project instructions\"), project knowledge, and an appropriate chat prompt when asking the LLM to process information, or explore or synthesize your Zettelkasten notes. The `docs` directory in this repository contains the necessary files to get you started:\n\n### System prompts\n\nPick one:\n\n- [system-prompt.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/prompts/system/system-prompt.md)\n- [system-prompt-with-protocol.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/prompts/system/system-prompt-with-protocol.md)\n\n### Project knowledge\n\nFor end users:\n\n- [zettelkasten-methodology-technical.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/project-knowledge/user/zettelkasten-methodology-technical.md)\n- [link-types-in-zettelkasten-mcp-server.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/project-knowledge/user/link-types-in-zettelkasten-mcp-server.md)\n- (more info relevant to your project)\n\n### Chat Prompts\n\n- [chat-prompt-knowledge-creation.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/prompts/chat/chat-prompt-knowledge-creation.md)\n- [chat-prompt-knowledge-creation-batch.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/prompts/chat/chat-prompt-knowledge-creation-batch.md)\n- [chat-prompt-knowledge-exploration.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/prompts/chat/chat-prompt-knowledge-exploration.md)\n- [chat-prompt-knowledge-synthesis.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/prompts/chat/chat-prompt-knowledge-synthesis.md)\n\n### Project knowledge (dev)\n\nFor developers and contributors:\n\n- [Example - A simple MCP server.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/project-knowledge/dev/Example%20-%20A%20simple%20MCP%20server%20that%20exposes%20a%20website%20fetching%20tool.md)\n- [MCP Python SDK-README.md](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/project-knowledge/dev/MCP%20Python%20SDK-README.md)\n- [llms-full.txt](https://github.com/entanglr/zettelkasten-mcp/blob/main/docs/project-knowledge/dev/llms-full.txt)\n\nNB: Optionally include the source code with a tool like [repomix](https://github.com/yamadashy/repomix).\n\n## Storage Architecture\n\nThis system uses a dual storage approach:\n\n1. **Markdown Files**: All notes are stored as human-readable Markdown files with YAML frontmatter for metadata. These files are the **source of truth** and can be:\n   - Edited directly in any text editor\n   - Placed under version control (Git, etc.)\n   - Backed up using standard file backup procedures\n   - Shared or transferred like any other text files\n\n2. **SQLite Database**: Functions as an indexing layer that:\n   - Facilitates efficient querying and search operations\n   - Enables Claude to quickly traverse the knowledge graph\n   - Maintains relationship information for faster link traversal\n   - Is automatically rebuilt from Markdown files when needed\n\nIf you edit Markdown files directly outside the system, you'll need to run the `zk_rebuild_index` tool to update the database. The database itself can be deleted at any time - it will be regenerated from your Markdown files.\n\n## Installation\n\n```bash\n# Clone the repository\ngit clone https://github.com/entanglr/zettelkasten-mcp.git\ncd zettelkasten-mcp\n\n# Create a virtual environment with uv\nuv venv\nsource .venv/bin/activate  # On Windows: .venv\\Scripts\\activate\n\n# Install dependencies\nuv add \"mcp[cli]\"\n\n# Install dev dependencies\nuv sync --all-extras\n```\n\n## Configuration\n\nCreate a `.env` file in the project root by copying the example:\n\n```bash\ncp .env.example .env\n```\n\nThen edit the file to configure your connection parameters.\n\n## Usage\n\n### Starting the Server\n\n```bash\npython -m zettelkasten_mcp.main\n```\n\nOr with explicit configuration:\n\n```bash\npython -m zettelkasten_mcp.main --notes-dir ./data/notes --database-path ./data/db/zettelkasten.db\n```\n\n### Connecting to Claude Desktop\n\nAdd the following configuration to your Claude Desktop:\n\n```json\n{\n  \"mcpServers\": {\n    \"zettelkasten\": {\n      \"command\": \"/absolute/path/to/zettelkasten-mcp/.venv/bin/python\",\n      \"args\": [\n        \"-m\",\n        \"zettelkasten_mcp.main\"\n      ],\n      \"env\": {\n        \"ZETTELKASTEN_NOTES_DIR\": \"/absolute/path/to/zettelkasten-mcp/data/notes\",\n        \"ZETTELKASTEN_DATABASE_PATH\": \"/absolute/path/to/zettelkasten-mcp/data/db/zettelkasten.db\",\n        \"ZETTELKASTEN_LOG_LEVEL\": \"INFO\"\n      }\n    }\n  }\n}\n```\n\n## Available MCP Tools\n\nAll tools have been prefixed with `zk_` for better organization:\n\n| Tool | Description |\n|---|---|\n| `zk_create_note` | Create a new note with a title, content, and optional tags |\n| `zk_get_note` | Retrieve a specific note by ID or title |\n| `zk_update_note` | Update an existing note's content or metadata |\n| `zk_delete_note` | Delete a note |\n| `zk_create_link` | Create links between notes |\n| `zk_remove_link` | Remove links between notes |\n| `zk_search_notes` | Search for notes by content, tags, or links |\n| `zk_get_linked_notes` | Find notes linked to a specific note |\n| `zk_get_all_tags` | List all tags in the system |\n| `zk_find_similar_notes` | Find notes similar to a given note |\n| `zk_find_central_notes` | Find notes with the most connections |\n| `zk_find_orphaned_notes` | Find notes with no connections |\n| `zk_list_notes_by_date` | List notes by creation/update date |\n| `zk_rebuild_index` | Rebuild the database index from Markdown files |\n\n## Project Structure\n\n```\nzettelkasten-mcp/\n├── src/\n│   └── zettelkasten_mcp/\n│       ├── models/       # Data models\n│       ├── storage/      # Storage layer\n│       ├── services/     # Business logic\n│       └── server/       # MCP server implementation\n├── data/\n│   ├── notes/            # Note storage (Markdown files)\n│   └── db/               # Database for indexing\n├── tests/                # Test suite\n├── .env.example          # Environment variable template\n└── README.md\n```\n\n## Tests\n\nComprehensive test suite for Zettelkasten MCP covering all layers of the application from models to the MCP server implementation.\n\n### How to Run the Tests\n\nFrom the project root directory, run:\n\n#### Using pytest directly\n```bash\npython -m pytest -v tests/\n```\n\n#### Using UV\n```bash\nuv run pytest -v tests/\n```\n\n#### With coverage report\n```bash\nuv run pytest --cov=zettelkasten_mcp --cov-report=term-missing tests/\n```\n\n#### Running a specific test file\n```bash\nuv run pytest -v tests/test_models.py\n```\n\n#### Running a specific test class\n```bash\nuv run pytest -v tests/test_models.py::TestNoteModel\n```\n\n#### Running a specific test function\n```bash\nuv run pytest -v tests/test_models.py::TestNoteModel::test_note_validation\n```\n\n### Tests Directory Structure\n\n```\ntests/\n├── conftest.py - Common fixtures for all tests\n├── test_integration.py - Integration tests for the entire system\n├── test_mcp_server.py - Tests for MCP server tools\n├── test_models.py - Tests for data models\n├── test_note_repository.py - Tests for note repository\n├── test_search_service.py - Tests for search service\n├── test_semantic_links.py - Tests for semantic linking\n└── test_zettel_service.py - Tests for zettel service\n```\n\n## Important Notice\n\n**⚠️ USE AT YOUR OWN RISK**: This software is experimental and provided as-is without warranty of any kind. While efforts have been made to ensure data integrity, it may contain bugs that could potentially lead to data loss or corruption. Always back up your notes regularly and use caution when testing with important information.\n\n## Credit Where Credit's Due\n\nThis MCP server was crafted with the assistance of Claude, who helped organize the atomic thoughts of this project into a coherent knowledge graph. Much like a good Zettelkasten system, Claude connected the dots between ideas that might otherwise have remained isolated. Unlike Luhmann's paper-based system, however, Claude didn't require 90,000 index cards to be effective.\n\n## License\n\nMIT License\n",
+  "category": "Knowledge",
+  "quality_score": 66,
+  "archestra_config": {
+    "client_config_permutations": {
+      "zettelkasten_mcp": {
+        "command": "python",
+        "args": ["-m", "zettelkasten_mcp.main"],
+        "env": {}
+      },
+      "zettelkasten_mcp-configured": {
+        "command": "python",
+        "args": [
+          "-m",
+          "zettelkasten_mcp.main",
+          "--notes-dir",
+          "./data/notes",
+          "--database-path",
+          "./data/db/zettelkasten.db"
+        ],
+        "env": {}
+      },
+      "zettelkasten_mcp-claude-desktop": {
+        "command": "/absolute/path/to/zettelkasten-mcp/.venv/bin/python",
+        "args": ["-m", "zettelkasten_mcp.main"],
+        "env": {
+          "ZETTELKASTEN_NOTES_DIR": "/absolute/path/to/zettelkasten-mcp/data/notes",
+          "ZETTELKASTEN_DATABASE_PATH": "/absolute/path/"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "entanglr",
+    "repo": "zettelkasten-mcp",
+    "url": "https://github.com/entanglr/zettelkasten-mcp",
+    "name": "zettelkasten-mcp",
+    "path": null,
+    "stars": 71,
+    "contributors": 1,
+    "issues": 5,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "0e674eabf6c50e8edffa0fdbee49b68ca5a11b80"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:19.932Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "sqlalchemy",
+      "importance": 9
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "python-frontmatter",
+      "importance": 8
+    },
+    {
+      "name": "markdown",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"setuptools>=42\", \"wheel\"]\nbuild-backend = \"setuptools.build_meta\"\n\n[project]\nname = \"zettelkasten-mcp\"\nversion = \"1.2.1\"\ndescription = \"A Zettelkasten knowledge management system as an MCP server\"\nauthors = [\n    {name = \"Peter J. Herrel\", email = \"peterherrel@protonmail.com\"}\n]\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: OS Independent\",\n]\ndependencies = [\n    \"mcp[cli]>=1.2.0\",\n    \"sqlalchemy>=2.0.0\",\n    \"pydantic>=2.0.0\",\n    \"python-frontmatter>=1.0.0\",\n    \"markdown>=3.4.0\",\n    \"python-dotenv>=1.0.0\",\n]\n\n[project.optional-dependencies]\ndev = [\n    \"pytest>=7.0.0\",\n    \"pytest-cov>=4.0.0\",\n    \"black>=23.0.0\",\n    \"isort>=5.12.0\",\n    \"mypy>=1.0.0\",\n]\n\n[tool.setuptools]\npackage-dir = {\"\" = \"src\"}\n\n[tool.isort]\nprofile = \"black\"\nline_length = 88\n\n[tool.black]\nline-length = 88\ntarget-version = [\"py310\"]\n\n[tool.mypy]\npython_version = \"3.10\"\nwarn_return_any = true\nwarn_unused_configs = true\ndisallow_untyped_defs = true\ndisallow_incomplete_defs = true\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\npython_files = \"test_*.py\"\npython_functions = \"test_*\"\n\n\n=== setup.py ===\nfrom setuptools import find_packages, setup\nsetup(\n    name=\"zettelkasten_mcp\",\n    version=\"1.2.1\",\n    package_dir={\"\": \"src\"},\n    packages=find_packages(where=\"src\"),\n    python_requires=\">=3.10\",\n    include_package_data=True,\n    install_requires=[\n        \"mcp[cli]>=1.2.0\",\n        \"sqlalchemy>=2.0.0\",\n        \"pydantic>=2.0.0\",\n        \"python-frontmatter>=1.0.0\",\n        \"markdown>=3.4.0\",\n        \"python-dotenv>=1.0.0\",\n    ],\n    extras_require={\n        \"dev\": [\n            \"pytest>=7.0.0\",\n            \"pytest-cov>=4.0.0\",\n            \"black>=23.0.0\",\n            \"isort>=5.12.0\",\n            \"mypy>=1.0.0\",\n        ],\n    },\n    entry_points={\n        \"console_scripts\": [\n            \"zettelkasten-mcp=zettelkasten_mcp.main:main\",\n        ],\n    },\n)\n"
+}

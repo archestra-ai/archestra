@@ -1,0 +1,109 @@
+{
+  "name": "sirmews__mcp-pinecone",
+  "display_name": "mcp-pinecone",
+  "description": "Model Context Protocol server to allow for reading and writing from Pinecone. Rudimentary RAG",
+  "author": {
+    "name": "sirmews"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["mcp-pinecone", "--index-name", "${user_config.index_name}", "--api-key", "${user_config.api_key}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "index_name": {
+      "type": "string",
+      "title": "Pinecone Index Name",
+      "description": "The name of your Pinecone index.",
+      "required": true
+    },
+    "api_key": {
+      "type": "string",
+      "title": "Pinecone API Key",
+      "description": "Your secret API key for Pinecone.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Pinecone Model Context Protocol Server for Claude Desktop.\n\n[![smithery badge](https://smithery.ai/badge/mcp-pinecone)](https://smithery.ai/server/mcp-pinecone)\n\n[![PyPI - Downloads](https://img.shields.io/pypi/dd/mcp-pinecone?style=flat)](https://pypi.org/project/mcp-pinecone/)\n\nRead and write to a Pinecone index.\n\n\n## Components\n\n```mermaid\nflowchart TB\n    subgraph Client[\"MCP Client (e.g., Claude Desktop)\"]\n        UI[User Interface]\n    end\n\n    subgraph MCPServer[\"MCP Server (pinecone-mcp)\"]\n        Server[Server Class]\n        \n        subgraph Handlers[\"Request Handlers\"]\n            ListRes[list_resources]\n            ReadRes[read_resource]\n            ListTools[list_tools]\n            CallTool[call_tool]\n            GetPrompt[get_prompt]\n            ListPrompts[list_prompts]\n        end\n        \n        subgraph Tools[\"Implemented Tools\"]\n            SemSearch[semantic-search]\n            ReadDoc[read-document]\n            ListDocs[list-documents]\n            PineconeStats[pinecone-stats]\n            ProcessDoc[process-document]\n        end\n    end\n\n    subgraph PineconeService[\"Pinecone Service\"]\n        PC[Pinecone Client]\n        subgraph PineconeFunctions[\"Pinecone Operations\"]\n            Search[search_records]\n            Upsert[upsert_records]\n            Fetch[fetch_records]\n            List[list_records]\n            Embed[generate_embeddings]\n        end\n        Index[(Pinecone Index)]\n    end\n\n    %% Connections\n    UI --> Server\n    Server --> Handlers\n    \n    ListTools --> Tools\n    CallTool --> Tools\n    \n    Tools --> PC\n    PC --> PineconeFunctions\n    PineconeFunctions --> Index\n    \n    %% Data flow for semantic search\n    SemSearch --> Search\n    Search --> Embed\n    Embed --> Index\n    \n    %% Data flow for document operations\n    UpsertDoc --> Upsert\n    ReadDoc --> Fetch\n    ListRes --> List\n\n    classDef primary fill:#2563eb,stroke:#1d4ed8,color:white\n    classDef secondary fill:#4b5563,stroke:#374151,color:white\n    classDef storage fill:#059669,stroke:#047857,color:white\n    \n    class Server,PC primary\n    class Tools,Handlers secondary\n    class Index storage\n```\n\n### Resources\n\nThe server implements the ability to read and write to a Pinecone index.\n\n### Tools\n\n- `semantic-search`: Search for records in the Pinecone index.\n- `read-document`: Read a document from the Pinecone index.\n- `list-documents`: List all documents in the Pinecone index.\n- `pinecone-stats`: Get stats about the Pinecone index, including the number of records, dimensions, and namespaces.\n- `process-document`: Process a document into chunks and upsert them into the Pinecone index. This performs the overall steps of chunking, embedding, and upserting.\n\nNote: embeddings are generated via Pinecone's inference API and chunking is done with a token-based chunker. Written by copying a lot from langchain and debugging with Claude.\n## Quickstart\n\n### Installing via Smithery\n\nTo install Pinecone MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-pinecone):\n\n```bash\nnpx -y @smithery/cli install mcp-pinecone --client claude\n```\n\n### Install the server\n\nRecommend using [uv](https://docs.astral.sh/uv/getting-started/installation/) to install the server locally for Claude.\n\n```\nuvx install mcp-pinecone\n```\nOR\n```\nuv pip install mcp-pinecone\n```\n\nAdd your config as described below.\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\nNote: You might need to use the direct path to `uv`. Use `which uv` to find the path.\n\n\n__Development/Unpublished Servers Configuration__\n  \n```json\n\"mcpServers\": {\n  \"mcp-pinecone\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"{project_dir}\",\n      \"run\",\n      \"mcp-pinecone\"\n    ]\n  }\n}\n```\n\n\n__Published Servers Configuration__\n  \n```json\n\"mcpServers\": {\n  \"mcp-pinecone\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"--index-name\",\n      \"{your-index-name}\",\n      \"--api-key\",\n      \"{your-secret-api-key}\",\n      \"mcp-pinecone\"\n    ]\n  }\n}\n```\n\n#### Sign up to Pinecone\n\nYou can sign up for a Pinecone account [here](https://www.pinecone.io/).\n\n#### Get an API key\n\nCreate a new index in Pinecone, replacing `{your-index-name}` and get an API key from the Pinecone dashboard, replacing `{your-secret-api-key}` in the config.\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n2. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n3. Publish to PyPI:\n```bash\nuv publish\n```\n\nNote: You'll need to set PyPI credentials via environment variables or command flags:\n- Token: `--token` or `UV_PUBLISH_TOKEN`\n- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory {project_dir} run mcp-pinecone\n```\n\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n## Source Code\n\nThe source code is available on [GitHub](https://github.com/sirmews/mcp-pinecone).\n\n## Contributing\n\nSend your ideas and feedback to me on [Bluesky](https://bsky.app/profile/perfectlycromulent.bsky.social) or by opening an issue.\n",
+  "category": "AI Tools",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-pinecone": {
+        "command": "uv",
+        "args": ["--directory", "{project_dir}", "run", "mcp-pinecone"],
+        "env": {}
+      },
+      "mcp-pinecone-configured": {
+        "command": "uvx",
+        "args": ["--index-name", "{your-index-name}", "--api-key", "{your-secret-api-key}", "mcp-pinecone"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "sirmews",
+    "repo": "mcp-pinecone",
+    "url": "https://github.com/sirmews/mcp-pinecone",
+    "name": "sirmews__mcp-pinecone",
+    "path": null,
+    "stars": 143,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "5477b421bace738621653ca659f2301ad03fa37a"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:31.951Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "httpx",
+      "importance": 6
+    },
+    {
+      "name": "jsonschema",
+      "importance": 7
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pinecone",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "tiktoken",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-pinecone\"\nversion = \"0.1.8\"\ndescription = \"Read and write to Pinecone from Claude Desktop with Model Context Protocol.\"\nreadme = \"README.md\"\nrequires-python = \">=3.12\"\ndependencies = [\n \"httpx>=0.28.0\",\n \"jsonschema>=4.23.0\",\n \"mcp>=1.0.0\",\n \"pinecone>=5.4.1\",\n \"python-dotenv>=1.0.1\",\n \"tiktoken>=0.8.0\",\n]\nclassifiers = [\n    \"Programming Language :: Python :: 3\",\n    \"License :: OSI Approved :: MIT License\",\n    \"Operating System :: MacOS\",\n]\n[[project.authors]]\nname = \"Navishkar Rao\"\nemail = \"nav@perfectlycromulent.dev\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nmcp-pinecone = \"mcp_pinecone:main\"\n\n[tool.mcp-pinecone]\nserver_name = \"mcp-pinecone\"\n\n[project.urls]\nHomepage = \"https://sirmews.github.io/mcp-pinecone/\"\nIssues = \"https://github.com/sirmews/mcp-pinecone/issues\"\n"
+}

@@ -1,0 +1,142 @@
+{
+  "name": "aiven-open__mcp-aiven",
+  "display_name": "mcp-aiven",
+  "description": "Model Context Protocol server for Aiven",
+  "author": {
+    "name": "Aiven-Open"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}", "run", "--with-editable", "${__dirname}", "--python", "3.13", "mcp-aiven"],
+    "env": {
+      "AIVEN_BASE_URL": "${user_config.aiven_base_url}",
+      "AIVEN_TOKEN": "${user_config.aiven_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "aiven_base_url": {
+      "type": "string",
+      "title": "Aiven Base URL",
+      "description": "The Aiven API url",
+      "required": true,
+      "default": "https://api.aiven.io"
+    },
+    "aiven_token": {
+      "type": "string",
+      "title": "Aiven Token",
+      "description": "The authentication token",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Aiven MCP Server\n\nA [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server for Aiven.\n\nThis provides access to the Aiven for PostgreSQL, Kafka, ClickHouse, Valkey and OpenSearch services running in Aiven and the wider Aiven ecosystem of native connectors. Enabling LLMs to build full stack solutions for all use-cases.\n\n## Features\n\n### Tools\n\n* `list_projects`\n  - List all projects on your Aiven account.\n\n* `list_services`\n  - List all services in a specific Aiven project.\n\n* `get_service_details`\n  - Get the detail of your service in a specific Aiven project.\n\n## Configuration for Claude Desktop\n\n1. Open the Claude Desktop configuration file located at:\n   - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - On Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n2. Add the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"mcp-aiven\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"$REPOSITORY_DIRECTORY\",\n        \"run\",\n        \"--with-editable\",\n        \"$REPOSITORY_DIRECTORY\",\n        \"--python\",\n        \"3.13\",\n        \"mcp-aiven\"\n      ],\n      \"env\": {\n        \"AIVEN_BASE_URL\": \"https://api.aiven.io\",\n        \"AIVEN_TOKEN\": \"$AIVEN_TOKEN\"\n      }\n    }\n  }\n}\n```\n\nUpdate the environment variables:\n* `$REPOSITORY_DIRECTORY` to point to the folder cointaining the repository\n* `AIVEN_TOKEN` to the [Aiven login token](https://aiven.io/docs/platform/howto/create_authentication_token).\n\n\n3. Locate the command entry for `uv` and replace it with the absolute path to the `uv` executable. This ensures that the correct version of `uv` is used when starting the server. On a mac, you can find this path using `which uv`.\n\n4. Restart Claude Desktop to apply the changes.\n\n## Configuration for Cursor\n\n1. Navigate to Cursor -> Settings -> Cursor Settings\n\n2. Select \"MCP Servers\"\n\n3. Add a new server with \n\n    * Name: `mcp-aiven`\n    * Type: `command`\n    * Command: `uv --directory $REPOSITORY_DIRECTORY run --with-editable $REPOSITORY_DIRECTORY --python 3.13 mcp-aiven`\n\nWhere `$REPOSITORY_DIRECTORY` is the path to the repository. You might need to add the `AIVEN_BASE_URL`, `AIVEN_PROJECT_NAME` and `AIVEN_TOKEN` as variables\n\n## Development\n\n1. Add the following variables to a `.env` file in the root of the repository.\n\n```\nAIVEN_BASE_URL=https://api.aiven.io\nAIVEN_TOKEN=$AIVEN_TOKEN\n```\n\n2. Run `uv sync` to install the dependencies. To install `uv` follow the instructions [here](https://docs.astral.sh/uv/). Then do `source .venv/bin/activate`.\n\n3. For easy testing, you can run `mcp dev mcp_aiven/mcp_server.py` to start the MCP server.\n\n### Environment Variables\n\nThe following environment variables are used to configure the Aiven connection:\n\n#### Required Variables\n* `AIVEN_BASE_URL`: The Aiven API url\n* `AIVEN_TOKEN`: The authentication token\n\n## Developer Considerations for Model Context Protocols (MCPs) and AI Agents\n\nThis section outlines key developer responsibilities and security considerations when working with Model Context Protocols (MCPs) and AI Agents within this system.\n**Self-Managed MCPs:**\n\n* **Customer Responsibility:** MCPs are executed within the user's environment, not hosted by Aiven. Therefore, users are solely responsible for their operational management, security, and compliance, adhering to the shared responsibility model. (https://aiven.io/responsibility-matrix)\n* **Deployment and Maintenance:** Developers must handle all aspects of MCP deployment, updates, and maintenance.\n\n**AI Agent Security:**\n\n* **Permission Control:** Access and capabilities of AI Agents are strictly governed by the permissions granted to the API token used for their authentication. Developers must meticulously manage these permissions.\n* **Credential Handling:** Be acutely aware that AI Agents may require access credentials (e.g., database connection strings, streaming service tokens) to perform actions on your behalf. Exercise extreme caution when providing such credentials to AI Agents.\n* **Risk Assessment:** Adhere to your organization's security policies and conduct thorough risk assessments before granting AI Agents access to sensitive resources.\n\n**API Token Best Practices:**\n\n* **Principle of Least Privilege:** Always adhere to the principle of least privilege. API tokens should be scoped and restricted to the minimum permissions necessary for their intended function.\n* **Token Management:** Implement robust token management practices, including regular rotation and secure storage.\n\n**Key Takeaways:**\n\n* Users retain full control and responsibility for MCP execution and security.\n* AI Agent permissions are directly tied to API token permissions.\n* Exercise extreme caution when providing credentials to AI Agents.\n* Strictly adhere to the principle of least privilege when managing API tokens.\n",
+  "category": "AI Tools",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-aiven": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "$REPOSITORY_DIRECTORY",
+          "run",
+          "--with-editable",
+          "$REPOSITORY_DIRECTORY",
+          "--python",
+          "3.13",
+          "mcp-aiven"
+        ],
+        "env": {
+          "AIVEN_BASE_URL": "https://api.aiven.io",
+          "AIVEN_TOKEN": "$AIVEN_TOKEN"
+        }
+      },
+      "mcp-aiven-cursor": {
+        "command": "uv",
+        "args": [
+          "--directory",
+          "$REPOSITORY_DIRECTORY",
+          "run",
+          "--with-editable",
+          "$REPOSITORY_DIRECTORY",
+          "--python",
+          "3.13",
+          "mcp-aiven"
+        ],
+        "env": {
+          "AIVEN_BASE_URL": "https://api.aiven.io",
+          "AIVEN_PROJECT_NAME": "$AIVEN_PROJECT_NAME",
+          "AIVEN_TOKEN": "$AIVEN_TOKEN"
+        }
+      },
+      "mcp-aiven-dev": {
+        "command": "mcp",
+        "args": ["dev", "mcp_aiven/mcp_server.py"],
+        "env": {
+          "AIVEN_BASE_URL": "https://api.aiven.io",
+          "AIVEN_TOKEN": "$AIVEN_TOKEN"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Aiven-Open",
+    "repo": "mcp-aiven",
+    "url": "https://github.com/Aiven-Open/mcp-aiven",
+    "name": "aiven-open__mcp-aiven",
+    "path": null,
+    "stars": 10,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "297e5bd5ee93517f53e4f779d4eb6d52721794a0"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:26.277Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "uvicorn",
+      "importance": 8
+    },
+    {
+      "name": "aiven-client",
+      "importance": 9
+    },
+    {
+      "name": "pip-system-certs",
+      "importance": 3
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-aiven\"\nversion = \"0.1.4\"\ndescription = \"An MCP server for Aiven.\"\nreadme = \"README.md\"\nlicense = \"Apache-2.0\"\nlicense-files = [\"LICENSE\"]\nrequires-python = \">=3.13\"\ndependencies = [\n     \"mcp[cli]>=1.3.0\",\n     \"python-dotenv>=1.0.1\",\n     \"uvicorn>=0.34.0\",\n     \"aiven-client>=4.5.1\",\n     \"pip-system-certs>=4.0\",\n]\n\n[project.scripts]\nmcp-aiven = \"mcp_aiven.main:main\"\n\n[project.urls]\nHome = \"https://github.com/Aiven-Open/mcp-aiven\"\n\n[project.optional-dependencies]\ndev = [\n    \"ruff\",\n    \"pytest\",\n]\n\n[tool.hatch.build.targets.wheel]\npackages = [\"mcp_aiven\"]\n\n[tool.ruff]\nline-length = 101\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

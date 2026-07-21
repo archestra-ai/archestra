@@ -1,0 +1,190 @@
+{
+  "name": "influxdata__influxdb3_mcp_server",
+  "display_name": "influxdb3_mcp_server",
+  "description": "MCP Server for InfluxDB 3",
+  "author": {
+    "name": "influxdata"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-influxdb"],
+    "env": {
+      "INFLUX_DB_INSTANCE_URL": "${user_config.influx_db_instance_url}",
+      "INFLUX_DB_TOKEN": "${user_config.influx_db_token}",
+      "INFLUX_DB_PRODUCT_TYPE": "${user_config.influx_db_product_type}",
+      "INFLUX_DB_CLUSTER_ID": "${user_config.influx_db_cluster_id}",
+      "INFLUX_DB_ACCOUNT_ID": "${user_config.influx_db_account_id}",
+      "INFLUX_DB_MANAGEMENT_TOKEN": "${user_config.influx_db_management_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "influx_db_instance_url": {
+      "type": "string",
+      "title": "InfluxDB Instance URL",
+      "description": "The URL of your InfluxDB 3 instance (e.g., http://localhost:8181/). Required for Core/Enterprise product types.",
+      "required": false,
+      "sensitive": false,
+      "default": "http://localhost:8181/"
+    },
+    "influx_db_token": {
+      "type": "string",
+      "title": "InfluxDB Token",
+      "description": "Your InfluxDB token for authentication. This can be a database token for Cloud Dedicated, or the main token for Core/Enterprise. Required for query/write operations.",
+      "required": false,
+      "sensitive": true
+    },
+    "influx_db_product_type": {
+      "type": "string",
+      "title": "InfluxDB Product Type",
+      "description": "The type of InfluxDB instance: 'core', 'enterprise', or 'cloud-dedicated'.",
+      "required": true,
+      "sensitive": false,
+      "default": "core"
+    },
+    "influx_db_cluster_id": {
+      "type": "string",
+      "title": "InfluxDB Cloud Dedicated Cluster ID",
+      "description": "Your InfluxDB Cloud Dedicated Cluster ID. Required for 'cloud-dedicated' product type.",
+      "required": false,
+      "sensitive": false
+    },
+    "influx_db_account_id": {
+      "type": "string",
+      "title": "InfluxDB Cloud Dedicated Account ID",
+      "description": "Your InfluxDB Cloud Dedicated Account ID. Required when using a management token for Cloud Dedicated.",
+      "required": false,
+      "sensitive": false
+    },
+    "influx_db_management_token": {
+      "type": "string",
+      "title": "InfluxDB Cloud Dedicated Management Token",
+      "description": "Your InfluxDB Cloud Dedicated management token. Required for database management operations on Cloud Dedicated.",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "readme": "# InfluxDB MCP Server\n\nModel Context Protocol (MCP) server for InfluxDB 3 integration. Provides tools, resources, and prompts for interacting with InfluxDB v3 (Core/Enterprise/Cloud Dedicated) via MCP clients.\n\n---\n\n## Prerequisites\n\n- **InfluxDB 3 Instance**: URL and token (Core/Enterprise) or Cluster ID and tokens (Cloud Dedicated)\n- **Node.js**: v18 or newer (for npm/npx usage)\n- **npm**: v9 or newer (for npm/npx usage)\n- **Docker**: (for Docker-based setup)\n\n---\n\n## Available Tools\n\n| Tool Name                     | Description                                                    | Availability         |\n| ----------------------------- | -------------------------------------------------------------- | -------------------- |\n| `get_help`                    | Get help and troubleshooting guidance for InfluxDB operations  | All versions         |\n| `write_line_protocol`         | Write data using InfluxDB line protocol                        | All versions         |\n| `create_database`             | Create a new database (with Cloud Dedicated config options)    | All versions         |\n| `update_database`             | Update database configuration (maxTables, retention, etc.)     | Cloud Dedicated only |\n| `delete_database`             | Delete a database by name (irreversible)                       | All versions         |\n| `execute_query`               | Run a SQL query against a database (supports multiple formats) | All versions         |\n| `get_measurements`            | List all measurements (tables) in a database                   | All versions         |\n| `get_measurement_schema`      | Get schema (columns/types) for a measurement/table             | All versions         |\n| `create_admin_token`          | Create a new admin token (full permissions)                    | Core/Enterprise only |\n| `list_admin_tokens`           | List all admin tokens (with optional filtering)                | Core/Enterprise only |\n| `create_resource_token`       | Create a resource token for specific DBs and permissions       | Core/Enterprise only |\n| `list_resource_tokens`        | List all resource tokens (with filtering and ordering)         | Core/Enterprise only |\n| `delete_token`                | Delete a token by name                                         | Core/Enterprise only |\n| `regenerate_operator_token`   | Regenerate the operator token (dangerous/irreversible)         | Core/Enterprise only |\n| `cloud_list_database_tokens`  | List all database tokens for Cloud-Dedicated cluster           | Cloud Dedicated only |\n| `cloud_get_database_token`    | Get details of a specific database token by ID                 | Cloud Dedicated only |\n| `cloud_create_database_token` | Create a new database token for Cloud-Dedicated cluster        | Cloud Dedicated only |\n| `cloud_update_database_token` | Update an existing database token                              | Cloud Dedicated only |\n| `cloud_delete_database_token` | Delete a database token from Cloud-Dedicated cluster           | Cloud Dedicated only |\n| `list_databases`              | List all available databases in the instance                   | All versions         |\n| `health_check`                | Check InfluxDB connection and health status                    | All versions         |\n\n---\n\n## Available Resources\n\n| Resource Name      | Description                                |\n| ------------------ | ------------------------------------------ |\n| `influx-config`    | Read-only access to InfluxDB configuration |\n| `influx-status`    | Real-time connection and health status     |\n| `influx-databases` | List of all databases in the instance      |\n\n---\n\n## Setup & Integration Guide\n\n### 1. Environment Variables\n\n#### For Core/Enterprise InfluxDB:\n\nYou must provide:\n\n- `INFLUX_DB_INSTANCE_URL` (e.g. `http://localhost:8181/`)\n- `INFLUX_DB_TOKEN`\n- `INFLUX_DB_PRODUCT_TYPE` (`core` or `enterprise`)\n\nExample `.env`:\n\n```env\nINFLUX_DB_INSTANCE_URL=http://localhost:8181/\nINFLUX_DB_TOKEN=your_influxdb_token_here\nINFLUX_DB_PRODUCT_TYPE=core\n```\n\n#### For Cloud Dedicated InfluxDB:\n\nYou must provide `INFLUX_DB_PRODUCT_TYPE=cloud-dedicated` and `INFLUX_DB_CLUSTER_ID`, plus one of these token combinations:\n\n**Option 1: Database Token Only** (Query/Write operations only):\n\n```env\nINFLUX_DB_PRODUCT_TYPE=cloud-dedicated\nINFLUX_DB_CLUSTER_ID=your_cluster_id_here\nINFLUX_DB_TOKEN=your_database_token_here\n```\n\n**Option 2: Management Token Only** (Database management only):\n\n```env\nINFLUX_DB_PRODUCT_TYPE=cloud-dedicated\nINFLUX_DB_CLUSTER_ID=your_cluster_id_here\nINFLUX_DB_ACCOUNT_ID=your_account_id_here\nINFLUX_DB_MANAGEMENT_TOKEN=your_management_token_here\n```\n\n**Option 3: Both Tokens** (Full functionality):\n\n```env\nINFLUX_DB_PRODUCT_TYPE=cloud-dedicated\nINFLUX_DB_CLUSTER_ID=your_cluster_id_here\nINFLUX_DB_ACCOUNT_ID=your_account_id_here\nINFLUX_DB_TOKEN=your_database_token_here\nINFLUX_DB_MANAGEMENT_TOKEN=your_management_token_here\n```\n\nSee `env.cloud-dedicated.example` for detailed configuration options and comments.\n\n---\n\n### 2. Integration with MCP Clients\n\n#### A. Local (npm install & run)\n\n1. **Install dependencies:**\n   ```bash\n   npm install\n   ```\n2. **Build the server:**\n   ```bash\n   npm run build\n   ```\n3. **Configure your MCP client** to use the built server. Example (see `example-local.mcp.json`):\n   ```json\n   {\n     \"mcpServers\": {\n       \"influxdb\": {\n         \"command\": \"node\",\n         \"args\": [\"/path/to/influx-mcp-standalone/build/index.js\"],\n         \"env\": {\n           \"INFLUX_DB_INSTANCE_URL\": \"http://localhost:8181/\",\n           \"INFLUX_DB_TOKEN\": \"<YOUR_INFLUXDB_TOKEN>\",\n           \"INFLUX_DB_PRODUCT_TYPE\": \"core\"\n         }\n       }\n     }\n   }\n   ```\n\n#### B. Local (npx, no install/build required)\n\n1. **Run directly with npx** (after publishing to npm, won't work yet):\n   ```json\n   {\n     \"mcpServers\": {\n       \"influxdb\": {\n         \"command\": \"npx\",\n         \"args\": [\"-y\", \"@modelcontextprotocol/server-influxdb\"],\n         \"env\": {\n           \"INFLUX_DB_INSTANCE_URL\": \"http://localhost:8181/\",\n           \"INFLUX_DB_TOKEN\": \"<YOUR_INFLUXDB_TOKEN>\",\n           \"INFLUX_DB_PRODUCT_TYPE\": \"core\"\n         }\n       }\n     }\n   }\n   ```\n\n#### C. Docker\n\nBefore running the Docker integration, you must build the Docker image:\n\n```bash\n# Option 1: Use docker compose (recommended)\ndocker compose build\n# Option 2: Use npm script\nnpm run docker:build\n```\n\n**a) Docker with remote InfluxDB instance** (see `example-docker.mcp.json`):\n\n```json\n{\n  \"mcpServers\": {\n    \"influxdb\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"-e\",\n        \"INFLUX_DB_INSTANCE_URL\",\n        \"-e\",\n        \"INFLUX_DB_TOKEN\",\n        \"-e\",\n        \"INFLUX_DB_PRODUCT_TYPE\",\n        \"mcp/influxdb\"\n      ],\n      \"env\": {\n        \"INFLUX_DB_INSTANCE_URL\": \"http://remote-influxdb-host:8181/\",\n        \"INFLUX_DB_TOKEN\": \"<YOUR_INFLUXDB_TOKEN>\",\n        \"INFLUX_DB_PRODUCT_TYPE\": \"core\"\n      }\n    }\n  }\n}\n```\n\n**b) Docker with InfluxDB running in Docker on the same machine** (see `example-docker.mcp.json`):\n\nUse `host.docker.internal` as the InfluxDB URL so the MCP server container can reach the InfluxDB container:\n\n```json\n{\n  \"mcpServers\": {\n    \"influxdb\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"--add-host=host.docker.internal:host-gateway\",\n        \"-e\",\n        \"INFLUX_DB_INSTANCE_URL\",\n        \"-e\",\n        \"INFLUX_DB_TOKEN\",\n        \"-e\",\n        \"INFLUX_DB_PRODUCT_TYPE\",\n        \"influxdb-mcp-server\"\n      ],\n      \"env\": {\n        \"INFLUX_DB_INSTANCE_URL\": \"http://host.docker.internal:8181/\",\n        \"INFLUX_DB_TOKEN\": \"<YOUR_INFLUXDB_TOKEN>\",\n        \"INFLUX_DB_PRODUCT_TYPE\": \"enterprise\"\n      }\n    }\n  }\n}\n```\n\n---\n\n## Example Usage\n\n- Use your MCP client to call tools, resources, or prompts as described above.\n- See the `example-*.mcp.json` files for ready-to-use configuration templates:\n  - `example-local.mcp.json` - Local development setup\n  - `example-npx.mcp.json` - NPX-based setup\n  - `example-docker.mcp.json` - Docker-based setup\n  - `example-cloud-dedicated.mcp.json` - Cloud Dedicated with all variables\n- See the `env.example` and `env.cloud-dedicated.example` files for environment variable templates.\n\n---\n\n## Support & Troubleshooting\n\n- Use the `get_help` tool for built-in help and troubleshooting.\n- For connection issues, check your environment variables and InfluxDB instance status.\n- For advanced configuration, see the comments in the example `.env` and MCP config files.\n\n---\n\n## License\n\n[MIT](LICENSE)\n",
+  "category": "Development",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "influx-mcp-standalone": {
+        "command": "node",
+        "args": ["/path/to/influx-mcp-standalone/build/index.js"],
+        "env": {
+          "INFLUX_DB_INSTANCE_URL": "http://localhost:8181/",
+          "INFLUX_DB_TOKEN": "<YOUR_INFLUXDB_TOKEN>",
+          "INFLUX_DB_PRODUCT_TYPE": "core"
+        }
+      },
+      "modelcontextprotocol-server-influxdb": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-influxdb"],
+        "env": {
+          "INFLUX_DB_INSTANCE_URL": "http://localhost:8181/",
+          "INFLUX_DB_TOKEN": "<YOUR_INFLUXDB_TOKEN>",
+          "INFLUX_DB_PRODUCT_TYPE": "core"
+        }
+      },
+      "mcp-influxdb-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "-e",
+          "INFLUX_DB_INSTANCE_URL",
+          "-e",
+          "INFLUX_DB_TOKEN",
+          "-e",
+          "INFLUX_DB_PRODUCT_TYPE",
+          "mcp/influxdb"
+        ],
+        "env": {
+          "INFLUX_DB_INSTANCE_URL": "http://remote-influxdb-host:8181/",
+          "INFLUX_DB_TOKEN": "<YOUR_INFLUXDB_TOKEN>",
+          "INFLUX_DB_PRODUCT_TYPE": "core"
+        },
+        "docker_image": "mcp/influxdb"
+      },
+      "influxdb-mcp-server-docker-host-gateway": {
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "-i",
+          "--add-host=host.docker.internal:host-gateway",
+          "-e",
+          "INFLUX_DB_INSTANCE_URL",
+          "-e",
+          "INFLUX_DB_TOKEN",
+          "-e",
+          "INFLUX_DB_PRODUCT_TYPE",
+          "influxdb-mcp-server"
+        ],
+        "env": {
+          "INFLUX_DB_INSTANCE_URL": "http://host.docker.internal:8181/",
+          "INFLUX_DB_TOKEN": "<YOUR_INFLUXDB_TOKEN>",
+          "INFLUX_DB_PRODUCT_TYPE": "enterprise"
+        },
+        "docker_image": "influxdb-mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "influxdata",
+    "repo": "influxdb3_mcp_server",
+    "url": "https://github.com/influxdata/influxdb3_mcp_server",
+    "name": "influxdata__influxdb3_mcp_server",
+    "path": null,
+    "stars": 17,
+    "contributors": 5,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "3fb86fe505f76fddcab4c7740ad62987beb02c45"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:29.050Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@influxdata/influxdb3-client",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"influxdb-mcp-server\",\n  \"version\": \"1.0.0\",\n  \"description\": \"Official InfluxDB MCP server for Model Context Protocol integration\",\n  \"license\": \"(Apache-2.0 OR MIT)\",\n  \"private\": false,\n  \"type\": \"module\",\n  \"main\": \"./build/index.js\",\n  \"bin\": {\n    \"influxdb-mcp-server\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc && node build/index.js\",\n    \"clean\": \"rm -rf build\",\n    \"lint\": \"eslint . --ext .ts,.js\",\n    \"format\": \"prettier --write .\",\n    \"prepublishOnly\": \"npm run clean && npm run build\",\n    \"test\": \"npm run build && node build/index.js --help || echo 'Build test completed'\",\n    \"MCP inspector\": \"npx @modelcontextprotocol/inspector node build/index.js\",\n    \"docker:up\": \"docker compose up -d\",\n    \"docker:down\": \"docker compose down\",\n    \"docker:build\": \"docker compose build\",\n    \"docker:logs\": \"docker compose logs -f\",\n    \"docker:inspector\": \"npx @modelcontextprotocol/inspector docker run --rm -i --env-file .env.docker --add-host=host.docker.internal:host-gateway influxdb-mcp-server\"\n  },\n  \"files\": [\n    \"build\",\n    \"package.json\",\n    \"README.md\",\n    \"CHANGELOG.md\",\n    \"LICENSE-APACHE.txt\",\n    \"LICENSE-MIT.txt\",\n    \"example-*.mcp.json\",\n    \"env.example\",\n    \".env.docker\",\n    \"Dockerfile\"\n  ],\n  \"keywords\": [\n    \"mcp\",\n    \"model-context-protocol\",\n    \"influxdb\",\n    \"time-series\",\n    \"database\",\n    \"ai\",\n    \"llm\",\n    \"influxdata\"\n  ],\n  \"dependencies\": {\n    \"@influxdata/influxdb3-client\": \"^1.1.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"axios\": \"^1.9.0\",\n    \"dotenv\": \"^16.5.0\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^9.28.0\",\n    \"@types/node\": \"^24.0.1\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.15.0\",\n    \"@typescript-eslint/parser\": \"^8.15.0\",\n    \"eslint\": \"^9.28.0\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.0.0\",\n    \"zod\": \"^3.25.63\"\n  }\n}\n"
+}

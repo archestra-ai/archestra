@@ -1,0 +1,101 @@
+{
+  "name": "k-jarzyna__mcp-miro",
+  "display_name": "mcp-miro",
+  "description": "Miro integration for Model Context Protocol",
+  "author": {
+    "name": "k-jarzyna"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@k-jarzyna/mcp-miro"],
+    "env": {
+      "MIRO_ACCESS_TOKEN": "${user_config.miro_access_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "miro_access_token": {
+      "type": "string",
+      "title": "Miro Access Token",
+      "description": "Your Miro access token generated from the Miro Developer Portal with required permissions.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# MCP Miro Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/k-jarzyna/mcp-miro)](https://archestra.ai/mcp-catalog/k-jarzyna__mcp-miro)\n[![smithery badge](https://smithery.ai/badge/@k-jarzyna/mcp-miro)](https://smithery.ai/server/@k-jarzyna/mcp-miro)\n\nModel Context Protocol (MCP) server integrating with the [Miro](https://miro.com/) platform. It enables AI assistants (like Claude) to access Miro boards and manage their content through a standardized interface.\n\n---\n### Requirements\n\n- Node.js v16 or newer installed\n- Miro account with API token\n\n### Generate Miro Access Token\n\n1. Go to the [Miro Developer Portal](https://developers.miro.com/docs)\n2. Create a new app or use an existing one\n3. Make sure to create token with permission selected below\n4. Generate OAuth token by selecting `Install app and get OAuth token`\n\n| Permission        | Required |\n|-------------------|:--------:|\n| boards:read       |    ✅     |\n| boards:write      |    ✅     |\n| identity:read     |    ✅     |\n| identity:write    |    ✅     |\n| team:read         |    ✅     |\n| team:write        |    ✅     |\n| microphone:listen |    ❌     |\n| screen:record     |    ❌     |\n| webcam:record     |    ❌     |\n| auditlogs:read    |    ❌     |\n| sessions:delete   |    ❌     |\n\n### Connecting with Claude Desktop\n\n1. Install [Claude Desktop](https://claude.ai/download)\n2. Open or create the configuration file:\n   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n3. Update it to include this server:\n\n```json\n{\n   \"mcpServers\":{\n      \"miro\":{\n         \"command\":\"npx\",\n         \"args\":[\n            \"-y\",\n            \"@k-jarzyna/mcp-miro\"\n         ],\n         \"env\":{\n            \"MIRO_ACCESS_TOKEN\":\"your_miro_access_token\"\n         }\n      }\n   }\n}\n```\n\n4. Restart Claude Desktop\n\n---\n## Available Tools and Resources\n\n#### Tools\n| Miro SDK Function | MCP Tool | Available |\n|-------------------|----------|-----------|\n| List boards | list-boards | ✅ |\n| Create board | create-board | ✅ |\n| Update board | update-board | ✅ |\n| Delete board | delete-board | ✅ |\n| Copy board | copy-board | ✅ |\n| Get specific board | get-specific-board | ✅ |\n| Get items on board | get-items-on-board | ✅ |\n| Get specific item | get-specific-item | ✅ |\n| Update item position | update-item-position | ✅ |\n| Delete item | delete-item | ✅ |\n| Create app card item | create-app-card-item | ✅ |\n| Get app card item | get-app-card-item | ✅ |\n| Update app card item | update-app-card-item | ✅ |\n| Delete app card item | delete-app-card-item | ✅ |\n| Create card item | create-card-item | ✅ |\n| Get card item | get-card-item | ✅ |\n| Update card item | update-card-item | ✅ |\n| Delete card item | delete-card-item | ✅ |\n| Create connector | create-connector | ✅ |\n| Get connectors | get-connectors | ✅ |\n| Get specific connector | get-specific-connector | ✅ |\n| Update connector | update-connector | ✅ |\n| Delete connector | delete-connector | ✅ |\n| Create sticky note item | create-sticky-note-item | ✅ |\n| Get sticky note item | get-sticky-note-item | ✅ |\n| Update sticky note item | update-sticky-note-item | ✅ |\n| Delete sticky note item | delete-sticky-note-item | ✅ |\n| Create frame | create-frame | ✅ |\n| Get frame item | get-frame-item | ✅ |\n| Update frame item | update-frame-item | ✅ |\n| Delete frame item | delete-frame-item | ✅ |\n| Create document item | create-document-item | ✅ |\n| Get document item | get-document-item | ✅ |\n| Update document item | update-document-item | ✅ |\n| Delete document item | delete-document-item | ✅ |\n| Create text item | create-text-item | ✅ |\n| Get text item | get-text-item | ✅ |\n| Update text item | update-text-item | ✅ |\n| Delete text item | delete-text-item | ✅ |\n| Create items in bulk | create-items-in-bulk | ✅ |\n| Create image item using URL | create-image-item-using-url | ✅ |\n| Create image item using file | create-image-item-using-file | ✅ |\n| Get image item | get-image-item | ✅ |\n| Update image item | update-image-item | ✅ |\n| Update image item using file | update-image-item-using-file | ✅ |\n| Delete image item | delete-image-item | ✅ |\n| Create shape item | create-shape-item | ✅ |\n| Get shape item | get-shape-item | ✅ |\n| Update shape item | update-shape-item | ✅ |\n| Delete shape item | delete-shape-item | ✅ |\n| Create embed item | create-embed-item | ✅ |\n| Get embed item | get-embed-item | ✅ |\n| Update embed item | update-embed-item | ✅ |\n| Delete embed item | delete-embed-item | ✅ |\n| Create tag | create-tag | ✅ |\n| Get tag | get-tag | ✅ |\n| Get all tags | get-all-tags | ✅ |\n| Update tag | update-tag | ✅ |\n| Delete tag | delete-tag | ✅ |\n| Attach tag | attach-tag | ✅ |\n| Detach tag | detach-tag | ✅ |\n| Get item tags | get-item-tags | ✅ |\n| Get all board members | get-all-board-members | ✅ |\n| Get specific board member | get-specific-board-member | ✅ |\n| Remove board member | remove-board-member | ✅ |\n| Share board | share-board | ✅ |\n| Update board member | update-board-member | ✅ |\n| Create group | create-group | ✅ |\n| Get all groups | get-all-groups | ✅ |\n| Get group | get-group | ✅ |\n| Get group items | get-group-items | ✅ |\n| Update group | update-group | ✅ |\n| Ungroup items | ungroup-items | ✅ |\n| Delete group | delete-group | ✅ |\n| Create items in bulk using file | create-items-in-bulk-using-file | ✅ |\n| Create mindmap node | create-mindmap-node | ✅ |\n| Get mindmap node | get-mindmap-node | ✅ |\n| Get mindmap nodes | get-mindmap-nodes | ✅ |\n| Delete mindmap node | delete-mindmap-node | ✅ |\n| Add project member | add-project-member | ✅ |\n| Create board export job | create-board-export-job | ✅ |\n| Get all cases | get-all-cases | ✅ |\n| Get all legal holds | get-all-legal-holds | ✅ |\n| Get audit logs | get-audit-logs | ✅ |\n| Get board classification | get-board-classification | ✅ |\n| Get board content logs | get-board-content-logs | ✅ |\n| Get board export job results | get-board-export-job-results | ✅ |\n| Get board export job status | get-board-export-job-status | ✅ |\n| Get case | get-case | ✅ |\n| Get legal hold | get-legal-hold | ✅ |\n| Get legal hold content items | get-legal-hold-content-items | ✅ |\n| Get organization info | get-organization-info | ✅ |\n| Get organization member | get-organization-member | ✅ |\n| Get organization members | get-organization-members | ✅ |\n| Get project member | get-project-member | ✅ |\n| Remove project member | remove-project-member | ✅ |\n| Update board classification | update-board-classification | ✅ |\n\n\n---\n## Local Development\n\n1. Install dependencies:\n\n```bash\nnpm install\n```\n\n2. Create a `.env` file based on the template:\n\n```bash\ncp .env.template .env\n```\n\n3. Edit the `.env` file and add your Miro access token\n\n4. Build the server:\n\n```bash\nnpm run build\n```\n\n### Running the Server\n\nTo run the server:\n\n```bash\nnode build/index.js\n```\n\n---\n## License\n\nApache License 2.0\n\nThis project is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "k-jarzyna-mcp-miro": {
+        "command": "npx",
+        "args": ["-y", "@k-jarzyna/mcp-miro"],
+        "env": {
+          "MIRO_ACCESS_TOKEN": "your_miro_access_token"
+        }
+      },
+      "k-jarzyna-mcp-miro-node": {
+        "command": "node",
+        "args": ["build/index.js"],
+        "env": {
+          "MIRO_ACCESS_TOKEN": "your_miro_access_token"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "k-jarzyna",
+    "repo": "mcp-miro",
+    "url": "https://github.com/k-jarzyna/mcp-miro",
+    "name": "mcp-miro",
+    "path": null,
+    "stars": 32,
+    "contributors": 4,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "b6de1890ca73cc43dcf54de19c8dc495e5038bcd"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:48.826Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@mirohq/miro-api",
+      "importance": 9
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@k-jarzyna/mcp-miro\",\n  \"version\": \"1.0.8\",\n  \"main\": \"build/index.js\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"clean\": \"rm -rf build/\",\n    \"prebuild\": \"npm run clean\",\n    \"postbuild\": \"chmod +x build/index.js\"\n  },\n  \"bin\": {\n    \"mcp-miro\": \"build/index.js\"\n  },\n  \"keywords\": [],\n  \"author\": \"Konrad Jarzyna\",\n  \"license\": \"Apache-2.0\",\n  \"description\": \"Miro integration for Model Context Protocol\",\n  \"dependencies\": {\n    \"@mirohq/miro-api\": \"^2.2.4\",\n    \"@modelcontextprotocol/sdk\": \"^1.8.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.14.0\",\n    \"typescript\": \"^5.8.2\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/k-jarzyna/mcp-miro\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"homepage\": \"https://github.com/k-jarzyna/mcp-miro\"\n}\n"
+}

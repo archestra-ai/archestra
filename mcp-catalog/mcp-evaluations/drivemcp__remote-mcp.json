@@ -1,0 +1,80 @@
+{
+  "name": "drivemcp__remote-mcp",
+  "display_name": "Google Drive",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxLjEyZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDIyOSI+PHBhdGggZmlsbD0iIzAwNjZkYSIgZD0ibTE5LjM1NCAxOTYuMDM0bDExLjI5IDE5LjVjMi4zNDYgNC4xMDYgNS43MTggNy4zMzIgOS42NzcgOS42NzhxMTcuMDA5LTIxLjU5MSAyMy42OC0zMy4xMzdxNi43Ny0xMS43MTcgMTYuNjQxLTM2LjY1NXEtMjYuNjA0LTMuNTAyLTQwLjMyLTMuNTAycS0xMy4xNjUgMC00MC4zMjIgMy41MDJjMCA0LjU0NSAxLjE3MyA5LjA5IDMuNTE5IDEzLjE5NnoiLz48cGF0aCBmaWxsPSIjZWE0MzM1IiBkPSJNMjE1LjY4MSAyMjUuMjEyYzMuOTYtMi4zNDYgNy4zMzItNS41NzIgOS42NzctOS42NzdsNC42OTItOC4wNjRsMjIuNDM0LTM4Ljg1NWEyNi41NyAyNi41NyAwIDAgMCAzLjUxOC0xMy4xOTZxLTI3LjMxNS0zLjUwMi00MC4yNDctMy41MDJxLTEzLjg5OSAwLTQwLjI0OCAzLjUwMnE5Ljc1NCAyNS4wNzUgMTYuNDIyIDM2LjY1NXE2LjcyNCAxMS42ODMgMjMuNzUyIDMzLjEzNyIvPjxwYXRoIGZpbGw9IiMwMDgzMmQiIGQ9Ik0xMjguMDAxIDczLjMxMXExOS42OC0yMy43NjggMjcuMTI1LTM2LjY1NXE1Ljk5Ni0xMC4zNzcgMTMuMTk2LTMzLjEzN0MxNjQuMzYzIDEuMTczIDE1OS44MTggMCAxNTUuMTI2IDBoLTU0LjI1Qzk2LjE4NCAwIDkxLjY0IDEuMzIgODcuNjggMy41MTlxOS4xNiAyNi4xMDMgMTUuNTQ0IDM3LjE1NHE3LjA1NiAxMi4yMTMgMjQuNzc3IDMyLjYzOCIvPjxwYXRoIGZpbGw9IiMyNjg0ZmMiIGQ9Ik0xNzUuMzYgMTU1LjQySDgwLjY0MmwtNDAuMzIgNjkuNzkyYzMuOTU4IDIuMzQ2IDguNTAzIDMuNTE5IDEzLjE5NSAzLjUxOWgxNDguOTY4YzQuNjkyIDAgOS4yMzgtMS4zMiAxMy4xOTYtMy41MnoiLz48cGF0aCBmaWxsPSIjMDBhYzQ3IiBkPSJNMTI4LjAwMSA3My4zMTFMODcuNjgxIDMuNTJjLTMuOTYgMi4zNDYtNy4zMzIgNS41NzEtOS42NzggOS42NzdMMy41MTkgMTQyLjIyNEEyNi41NyAyNi41NyAwIDAgMCAwIDE1NS40Mmg4MC42NDJ6Ii8+PHBhdGggZmlsbD0iI2ZmYmEwMCIgZD0ibTIxNS4yNDIgNzcuNzFsLTM3LjI0My02NC41MTRjLTIuMzQ1LTQuMTA2LTUuNzE4LTcuMzMxLTkuNjc3LTkuNjc3bC00MC4zMiA2OS43OTJsNDcuMzU4IDgyLjEwOWg4MC40OTZjMC00LjU0Ni0xLjE3My05LjA5LTMuNTE5LTEzLjE5NnoiLz48L3N2Zz4=",
+  "description": "Official Google remote MCP server for Google Drive. Search, read, copy, and create files, and inspect metadata and sharing permissions. OAuth 2.0.",
+  "homepage": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "instructions": "**⚠️ Apply for the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview) first.** The Google Drive MCP server (`drivemcp.googleapis.com`) is preview-only. You can enable the API and list its tools without enrollment, but every tool call fails with \"The caller does not have permission\" until your Google Workspace organization is accepted into the program. A Workspace super-admin must enroll and wait for acceptance before this connection will work.\n\n**Requires your own Google Cloud OAuth client** — these servers do not support dynamic client registration.\n\n1. Enable the APIs in your Google Cloud project:\n   ```\n   gcloud services enable drive.googleapis.com drivemcp.googleapis.com\n   ```\n2. Configure the OAuth consent screen, then add these scopes:\n- `https://www.googleapis.com/auth/drive.readonly`\n- `https://www.googleapis.com/auth/drive.file`\n3. Create an OAuth client (**Web application**) and register this redirect URI:\n   `http://localhost:3000/oauth-callback`\n4. Paste the **Client ID** and **Client Secret** into this form.\n\nEndpoints (if not auto-discovered from the server URL):\n- Authorization Server URL — `https://accounts.google.com`\n- Authorization Endpoint — `https://accounts.google.com/o/oauth2/v2/auth`\n- Token Endpoint — `https://oauth2.googleapis.com/token`\n\nSetup guide: https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "tools": [
+    {
+      "name": "copy_file",
+      "description": "Duplicate files within Drive"
+    },
+    {
+      "name": "create_file",
+      "description": "Generate new documents"
+    },
+    {
+      "name": "download_file_content",
+      "description": "Retrieve file data"
+    },
+    {
+      "name": "get_file_metadata",
+      "description": "Access file information and properties"
+    },
+    {
+      "name": "get_file_permissions",
+      "description": "View sharing settings"
+    },
+    {
+      "name": "list_recent_files",
+      "description": "Display recently accessed items"
+    },
+    {
+      "name": "read_file_content",
+      "description": "Extract and display file text"
+    },
+    {
+      "name": "search_files",
+      "description": "Locate files by name or attributes"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["google", "google-workspace", "google-drive", "drive", "files", "documents", "storage", "oauth"],
+  "user_config": {},
+  "oauth_config": {
+    "name": "Google Drive",
+    "server_url": "https://drivemcp.googleapis.com/mcp/v1",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.file"],
+    "description": "Google Drive MCP Server (Google OAuth 2.0)",
+    "default_scopes": ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.file"],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "File Management",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "Google"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://drivemcp.googleapis.com/mcp/v1",
+    "docs_url": "https://developers.google.com/workspace/guides/configure-mcp-servers"
+  },
+  "github_info": null,
+  "programming_language": null
+}

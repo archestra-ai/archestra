@@ -1,0 +1,95 @@
+{
+  "name": "kelvin6365__plane-mcp-server",
+  "display_name": "plane-mcp-server",
+  "description": "MCP server from kelvin6365/plane-mcp-server",
+  "author": {
+    "name": "kelvin6365"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/build/index.js"],
+    "env": {
+      "PLANE_API_KEY": "${user_config.plane_api_key}",
+      "PLANE_WORKSPACE_SLUG": "${user_config.plane_workspace_slug}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "plane_api_key": {
+      "type": "string",
+      "title": "Plane API Key",
+      "description": "Your Plane.so API key, required for authentication with the Plane API.",
+      "sensitive": true,
+      "required": true
+    },
+    "plane_workspace_slug": {
+      "type": "string",
+      "title": "Plane Workspace Slug",
+      "description": "The slug (identifier) of your Plane.so workspace.",
+      "sensitive": false,
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/kelvin6365-plane-mcp-server-badge.png)](https://mseep.ai/app/kelvin6365-plane-mcp-server)\n\n# Plane MCP Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/kelvin6365/plane-mcp-server)](https://archestra.ai/mcp-catalog/kelvin6365__plane-mcp-server)\n[![smithery badge](https://smithery.ai/badge/@kelvin6365/plane-mcp-server)](https://smithery.ai/server/@kelvin6365/plane-mcp-server)\n\n[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/kelvin6365-plane-mcp-server-badge.png)](https://mseep.ai/app/kelvin6365-plane-mcp-server)\n\nA Model Context Protocol (MCP) server that enables LLMs to interact with [Plane.so](https://plane.so), allowing them to manage projects and issues through Plane's API. Using this server, LLMs like Claude can directly interact with your project management workflows while maintaining user control and security.\n\n<a href=\"https://glama.ai/mcp/servers/@kelvin6365/plane-mcp-server\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kelvin6365/plane-mcp-server/badge\" />\n</a>\n\n## Features\n\n- List all projects in your Plane workspace\n- Get detailed information about specific projects\n- Create new issues with customizable properties\n- List and filter issues from projects\n- Get detailed information about specific issues\n- Update existing issues with new information\n\n## Prerequisites\n\n- Node.js 22.x or higher\n- A Plane.so API key\n- A Plane.so workspace\n\n## Installation\n\n### Option 1: Using Smithery\n\nThe quickest way to get started is to use Smithery to install the server directly:\n\n```bash\n# Install to Claude for Desktop\nnpx -y @smithery/cli install @kelvin6365/plane-mcp-server --client claude\n```\n\nThis command will automatically set up the Plane MCP Server for use with Claude. After installation, you'll need to configure the server with your Plane API key and workspace slug through the Claude settings.\n\nValid client options are: claude, cline, windsurf, roo-cline, witsy, enconvo, cursor\n\nExample for installing with Cursor:\n\n```bash\nnpx -y @smithery/cli install @kelvin6365/plane-mcp-server --client cursor\n```\n\n### Option 2: Manual Setup\n\nIf you prefer to set up the server manually, follow these steps:\n\n1. Clone this repository:\n\n```bash\ngit clone https://github.com/kelvin6365/plane-mcp-server.git\ncd plane-mcp-server\n```\n\n2. Install dependencies:\n\n```bash\nnpm install\n```\n\n3. Build the server:\n\n```bash\nnpm run build\n```\n\n## Usage with Claude for Desktop\n\n> **Note:** If you used Option 1 (Smithery) above, you can skip this section. Smithery automatically configures the MCP server for you.\n\n1. Open your Claude for Desktop configuration file:\n\n   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`\n\n2. Add the Plane MCP server configuration:\n\n```json\n{\n  \"mcpServers\": {\n    \"plane\": {\n      \"command\": \"node\",\n      \"args\": [\"path/to/plane-mcp-server/build/index.js\"],\n      \"env\": {\n        \"PLANE_API_KEY\": \"your_plane_api_key_here\",\n        \"PLANE_WORKSPACE_SLUG\": \"your_workspace_slug_here\"\n      }\n    }\n  }\n}\n```\n\n3. Restart Claude for Desktop\n\n## Available Tools\n\n> **Note:** Tool names use hyphens (e.g., `list-projects`), not underscores. The server will automatically convert underscores to hyphens for compatibility.\n\n### list-projects\n\nLists all projects in your Plane workspace.\n\nParameters: None\n\nExample:\n\n```json\n{}\n```\n\n### get-project\n\nGets detailed information about a specific project.\n\nParameters:\n\n- `project_id`: ID of the project to retrieve\n\nExample:\n\n```json\n{\n  \"project_id\": \"01abc123-4567-89de-0123-456789abcdef\"\n}\n```\n\n### create-issue\n\nCreates a new issue in a specified project.\n\nParameters:\n\n- `project_id`: ID of the project where the issue should be created\n- `name`: Title of the issue\n- `description_html`: HTML description of the issue (required by Plane API)\n- `priority` (optional): Priority of the issue (\"urgent\", \"high\", \"medium\", \"low\", \"none\")\n- `state_id` (optional): ID of the state for this issue\n- `assignees` (optional): Array of user IDs to assign to this issue\n\n> **Note:** The `assignees` parameter must be an array of user ID strings. Common errors include providing a dictionary/object instead of an array, or accidentally nesting the entire issue data inside the assignees field. The server will attempt to handle these cases, but it's best to use the correct format.\n\nExample:\n\n```json\n{\n  \"project_id\": \"01abc123-4567-89de-0123-456789abcdef\",\n  \"name\": \"Implement new feature\",\n  \"description_html\": \"<p>We need to implement the new reporting feature</p>\",\n  \"priority\": \"high\",\n  \"assignees\": [\"user-id-1\", \"user-id-2\"]\n}\n```\n\n### list-issues\n\nLists issues from a specified project with optional filtering.\n\nParameters:\n\n- `project_id`: ID of the project to get issues from\n- `state_id` (optional): Filter by state ID\n- `priority` (optional): Filter by priority\n- `assignee_id` (optional): Filter by assignee ID\n- `limit` (optional): Maximum number of issues to return (default: 50)\n\nExample:\n\n```json\n{\n  \"project_id\": \"01abc123-4567-89de-0123-456789abcdef\",\n  \"priority\": \"high\",\n  \"limit\": 10\n}\n```\n\n### get-issue\n\nGets detailed information about a specific issue.\n\nParameters:\n\n- `project_id`: ID of the project containing the issue\n- `issue_id`: ID of the issue to retrieve\n\nExample:\n\n```json\n{\n  \"project_id\": \"01abc123-4567-89de-0123-456789abcdef\",\n  \"issue_id\": \"01def456-7890-12gh-3456-789ijklmnopq\"\n}\n```\n\n### update-issue\n\nUpdates an existing issue in a project.\n\nParameters:\n\n- `project_id`: ID of the project containing the issue\n- `issue_id`: ID of the issue to update\n- `name` (optional): Updated title of the issue\n- `description_html` (optional): HTML description of the issue (required by Plane API)\n- `priority` (optional): Updated priority of the issue\n- `state_id` (optional): Updated state ID of the issue\n- `assignees` (optional): Updated array of user IDs to assign to this issue\n\n> **Note:** The `assignees` parameter must be an array of user ID strings, following the same format guidelines as the create-issue tool.\n\nExample:\n\n```json\n{\n  \"project_id\": \"01abc123-4567-89de-0123-456789abcdef\",\n  \"issue_id\": \"01def456-7890-12gh-3456-789ijklmnopq\",\n  \"priority\": \"urgent\",\n  \"description_html\": \"<p>Updated description with <strong>more details</strong></p>\"\n}\n```\n\n## Development\n\n1. Install development dependencies:\n\n```bash\nnpm install --save-dev typescript @types/node\n```\n\n2. Start the server in development mode:\n\n```bash\nnpm run dev\n```\n\n## Testing\n\nYou can test the server using the MCP Inspector:\n\n```bash\nnpx @modelcontextprotocol/inspector node dist/index.js\n```\n\n## Examples\n\nHere are some example interactions you can try with Claude after setting up the Plane MCP server:\n\n1. \"Can you list all the projects in my Plane workspace?\"\n2. \"Please create a new high-priority issue in the Marketing project titled 'Update social media strategy'\"\n3. \"What are all the high-priority issues in the Development project?\"\n4. \"Update issue #123 in the QA project to change its priority to urgent\"\n\nClaude will use the appropriate tools to interact with Plane while asking for your approval before creating or modifying any issues.\n\n## Security Considerations\n\n- The API key requires proper Plane permissions to function\n- All operations that modify data require explicit user approval\n- Environment variables should be properly secured\n- API keys should never be committed to version control\n\n## Contributing\n\n1. Fork the repository\n2. Create your feature branch (`git checkout -b feature/amazing-feature`)\n3. Commit your changes (`git commit -m 'Add some amazing feature'`)\n4. Push to the branch (`git push origin feature/amazing-feature`)\n5. Open a Pull Request\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n\n## Support\n\nIf you encounter any issues or have questions:\n\n1. Check the GitHub Issues section\n2. Consult the MCP documentation at [modelcontextprotocol.io](https://modelcontextprotocol.io)\n3. Open a new issue with detailed reproduction steps\n\n## Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=kelvin6365/plane-mcp-server&type=Date)](https://www.star-history.com/#kelvin6365/plane-mcp-server&Date)\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kelvin6365-plane-mcp-server-configured": {
+        "command": "node",
+        "args": ["path/to/plane-mcp-server/build/index.js"],
+        "env": {
+          "PLANE_API_KEY": "your_plane_api_key_here",
+          "PLANE_WORKSPACE_SLUG": "your_workspace_slug_here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kelvin6365",
+    "repo": "plane-mcp-server",
+    "url": "https://github.com/kelvin6365/plane-mcp-server",
+    "name": "plane-mcp-server",
+    "path": null,
+    "stars": 27,
+    "contributors": 3,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "8acb1ff462ddbb02c04ca3b4848740028b1ef204"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:48.803Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"plane-mcp-server\",\n  \"version\": \"0.1.0\",\n  \"description\": \"MCP Server for Plane\",\n  \"license\": \"MIT\",\n  \"author\": \"Kelvin Kwong\",\n  \"homepage\": \"https://github.com/kelvin6365/plane-mcp-server\",\n  \"bugs\": \"https://github.com/kelvin6365/plane-mcp-server/issues\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"dotenv\": \"^16.3.1\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.8.2\",\n    \"shx\": \"^0.3.4\",\n    \"@types/node\": \"^20.11.0\"\n  },\n  \"bin\": {\n    \"plane-mcp-server\": \"dist/index.js\"\n  },\n  \"main\": \"dist/index.js\",\n  \"files\": [\n    \"dist\"\n  ]\n}\n"
+}

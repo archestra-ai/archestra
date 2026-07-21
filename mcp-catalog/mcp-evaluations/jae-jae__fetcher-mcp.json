@@ -1,0 +1,128 @@
+{
+  "name": "jae-jae__fetcher-mcp",
+  "display_name": "fetcher-mcp",
+  "description": "MCP server for fetch web page content using Playwright headless browser.",
+  "author": {
+    "name": "jae-jae"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "fetcher-mcp"],
+    "env": {
+      "NODE_ENV": "${user_config.node_env}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "node_env": {
+      "type": "string",
+      "title": "Node Environment",
+      "description": "Sets the Node.js environment (e.g., production, development).",
+      "default": "production",
+      "required": false
+    }
+  },
+  "readme": "<div align=\"center\">\n  <img src=\"https://raw.githubusercontent.com/jae-jae/fetcher-mcp/refs/heads/main/icon.svg\" width=\"100\" height=\"100\" alt=\"Fetcher MCP Icon\" />\n</div>\n\n\n[中文](https://www.readme-i18n.com/jae-jae/fetcher-mcp?lang=zh) |\n[Deutsch](https://www.readme-i18n.com/jae-jae/fetcher-mcp?lang=de) | \n[Español](https://www.readme-i18n.com/jae-jae/fetcher-mcp?lang=es) | \n[français](https://www.readme-i18n.com/jae-jae/fetcher-mcp?lang=fr) | \n[日本語](https://www.readme-i18n.com/jae-jae/fetcher-mcp?lang=ja) | \n[한국어](https://www.readme-i18n.com/jae-jae/fetcher-mcp?lang=ko) | \n[Português](https://www.readme-i18n.com/jae-jae/fetcher-mcp?lang=pt) | \n[Русский](https://www.readme-i18n.com/jae-jae/fetcher-mcp?lang=ru) \n\n# Fetcher MCP\n\nMCP server for fetch web page content using Playwright headless browser.\n\n> 🌟 **Recommended**: [OllaMan](https://ollaman.com/) - Powerful Ollama AI Model Manager.\n\n## Advantages\n\n- **JavaScript Support**: Unlike traditional web scrapers, Fetcher MCP uses Playwright to execute JavaScript, making it capable of handling dynamic web content and modern web applications.\n\n- **Intelligent Content Extraction**: Built-in Readability algorithm automatically extracts the main content from web pages, removing ads, navigation, and other non-essential elements.\n\n- **Flexible Output Format**: Supports both HTML and Markdown output formats, making it easy to integrate with various downstream applications.\n\n- **Parallel Processing**: The `fetch_urls` tool enables concurrent fetching of multiple URLs, significantly improving efficiency for batch operations.\n\n- **Resource Optimization**: Automatically blocks unnecessary resources (images, stylesheets, fonts, media) to reduce bandwidth usage and improve performance.\n\n- **Robust Error Handling**: Comprehensive error handling and logging ensure reliable operation even when dealing with problematic web pages.\n\n- **Configurable Parameters**: Fine-grained control over timeouts, content extraction, and output formatting to suit different use cases.\n\n## Quick Start\n\nRun directly with npx:\n\n```bash\nnpx -y fetcher-mcp\n```\n\nFirst time setup - install the required browser by running the following command in your terminal:\n\n```bash\nnpx playwright install chromium\n```\n\n### HTTP and SSE Transport\n\nUse the `--transport=http` parameter to start both Streamable HTTP endpoint and SSE endpoint services simultaneously:\n\n```bash\nnpx -y fetcher-mcp --log --transport=http --host=0.0.0.0 --port=3000\n```\n\nAfter startup, the server provides the following endpoints:\n\n- `/mcp` - Streamable HTTP endpoint (modern MCP protocol)\n- `/sse` - SSE endpoint (legacy MCP protocol)\n\nClients can choose which method to connect based on their needs.\n\n### Debug Mode\n\nRun with the `--debug` option to show the browser window for debugging:\n\n```bash\nnpx -y fetcher-mcp --debug\n```\n\n## Configuration MCP\n\nConfigure this MCP server in Claude Desktop:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n```json\n{\n  \"mcpServers\": {\n    \"fetcher\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"fetcher-mcp\"]\n    }\n  }\n}\n```\n\n## Docker Deployment\n\n### Running with Docker\n\n```bash\ndocker run -p 3000:3000 ghcr.io/jae-jae/fetcher-mcp:latest\n```\n\n### Deploying with Docker Compose\n\nCreate a `docker-compose.yml` file:\n\n```yaml\nversion: \"3.8\"\n\nservices:\n  fetcher-mcp:\n    image: ghcr.io/jae-jae/fetcher-mcp:latest\n    container_name: fetcher-mcp\n    restart: unless-stopped\n    ports:\n      - \"3000:3000\"\n    environment:\n      - NODE_ENV=production\n    # Using host network mode on Linux hosts can improve browser access efficiency\n    # network_mode: \"host\"\n    volumes:\n      # For Playwright, may need to share certain system paths\n      - /tmp:/tmp\n    # Health check\n    healthcheck:\n      test: [\"CMD\", \"wget\", \"--spider\", \"-q\", \"http://localhost:3000\"]\n      interval: 30s\n      timeout: 10s\n      retries: 3\n```\n\nThen run:\n\n```bash\ndocker-compose up -d\n```\n\n## Features\n\n- `fetch_url` - Retrieve web page content from a specified URL\n\n  - Uses Playwright headless browser to parse JavaScript\n  - Supports intelligent extraction of main content and conversion to Markdown\n  - Supports the following parameters:\n    - `url`: The URL of the web page to fetch (required parameter)\n    - `timeout`: Page loading timeout in milliseconds, default is 30000 (30 seconds)\n    - `waitUntil`: Specifies when navigation is considered complete, options: 'load', 'domcontentloaded', 'networkidle', 'commit', default is 'load'\n    - `extractContent`: Whether to intelligently extract the main content, default is true\n    - `maxLength`: Maximum length of returned content (in characters), default is no limit\n    - `returnHtml`: Whether to return HTML content instead of Markdown, default is false\n    - `waitForNavigation`: Whether to wait for additional navigation after initial page load (useful for sites with anti-bot verification), default is false\n    - `navigationTimeout`: Maximum time to wait for additional navigation in milliseconds, default is 10000 (10 seconds)\n    - `disableMedia`: Whether to disable media resources (images, stylesheets, fonts, media), default is true\n    - `debug`: Whether to enable debug mode (showing browser window), overrides the --debug command line flag if specified\n\n- `fetch_urls` - Batch retrieve web page content from multiple URLs in parallel\n  - Uses multi-tab parallel fetching for improved performance\n  - Returns combined results with clear separation between webpages\n  - Supports the following parameters:\n    - `urls`: Array of URLs to fetch (required parameter)\n    - Other parameters are the same as `fetch_url`\n\n## Tips\n\n### Handling Special Website Scenarios\n\n#### Dealing with Anti-Crawler Mechanisms\n\n- **Wait for Complete Loading**: For websites using CAPTCHA, redirects, or other verification mechanisms, include in your prompt:\n\n  ```\n  Please wait for the page to fully load\n  ```\n\n  This will use the `waitForNavigation: true` parameter.\n\n- **Increase Timeout Duration**: For websites that load slowly:\n  ```\n  Please set the page loading timeout to 60 seconds\n  ```\n  This adjusts both `timeout` and `navigationTimeout` parameters accordingly.\n\n#### Content Retrieval Adjustments\n\n- **Preserve Original HTML Structure**: When content extraction might fail:\n\n  ```\n  Please preserve the original HTML content\n  ```\n\n  Sets `extractContent: false` and `returnHtml: true`.\n\n- **Fetch Complete Page Content**: When extracted content is too limited:\n\n  ```\n  Please fetch the complete webpage content instead of just the main content\n  ```\n\n  Sets `extractContent: false`.\n\n- **Return Content as HTML**: When HTML format is needed instead of default Markdown:\n  ```\n  Please return the content in HTML format\n  ```\n  Sets `returnHtml: true`.\n\n### Debugging and Authentication\n\n#### Enabling Debug Mode\n\n- **Dynamic Debug Activation**: To display the browser window during a specific fetch operation:\n  ```\n  Please enable debug mode for this fetch operation\n  ```\n  This sets `debug: true` even if the server was started without the `--debug` flag.\n\n#### Using Custom Cookies for Authentication\n\n- **Manual Login**: To login using your own credentials:\n\n  ```\n  Please run in debug mode so I can manually log in to the website\n  ```\n\n  Sets `debug: true` or uses the `--debug` flag, keeping the browser window open for manual login.\n\n- **Interacting with Debug Browser**: When debug mode is enabled:\n\n  1. The browser window remains open\n  2. You can manually log into the website using your credentials\n  3. After login is complete, content will be fetched with your authenticated session\n\n- **Enable Debug for Specific Requests**: Even if the server is already running, you can enable debug mode for a specific request:\n  ```\n  Please enable debug mode for this authentication step\n  ```\n  Sets `debug: true` for this specific request only, opening the browser window for manual login.\n\n## Development\n\n### Install Dependencies\n\n```bash\nnpm install\n```\n\n### Install Playwright Browser\n\nInstall the browsers needed for Playwright:\n\n```bash\nnpm run install-browser\n```\n\n### Build the Server\n\n```bash\nnpm run build\n```\n\n## Debugging\n\nUse MCP Inspector for debugging:\n\n```bash\nnpm run inspector\n```\n\nYou can also enable visible browser mode for debugging:\n\n```bash\nnode build/index.js --debug\n```\n\n## Related Projects\n\n- [g-search-mcp](https://github.com/jae-jae/g-search-mcp): A powerful MCP server for Google search that enables parallel searching with multiple keywords simultaneously. Perfect for batch search operations and data collection.\n\n## License\n\nLicensed under the [MIT License](https://choosealicense.com/licenses/mit/)\n\n[![Powered by DartNode](https://dartnode.com/branding/DN-Open-Source-sm.png)](https://dartnode.com \"Powered by DartNode - Free VPS for Open Source\")\n",
+  "category": "Browser Automation",
+  "quality_score": 63,
+  "archestra_config": {
+    "client_config_permutations": {
+      "fetcher-mcp": {
+        "command": "npx",
+        "args": ["-y", "fetcher-mcp"],
+        "env": {}
+      },
+      "fetcher-mcp-http": {
+        "command": "npx",
+        "args": ["-y", "fetcher-mcp", "--log", "--transport=http", "--host=0.0.0.0", "--port=3000"],
+        "env": {}
+      },
+      "fetcher-mcp-debug": {
+        "command": "npx",
+        "args": ["-y", "fetcher-mcp", "--debug"],
+        "env": {}
+      },
+      "fetcher": {
+        "command": "npx",
+        "args": ["-y", "fetcher-mcp"],
+        "env": {}
+      },
+      "fetcher-mcp-docker": {
+        "command": "docker",
+        "args": ["run", "-p", "3000:3000", "ghcr.io/jae-jae/fetcher-mcp:latest"],
+        "env": {},
+        "docker_image": "ghcr.io/jae-jae/fetcher-mcp:latest"
+      },
+      "fetcher-mcp-docker-compose": {
+        "command": "docker-compose",
+        "args": ["up", "-d"],
+        "env": {
+          "NODE_ENV": "production"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jae-jae",
+    "repo": "fetcher-mcp",
+    "url": "https://github.com/jae-jae/fetcher-mcp",
+    "name": "fetcher-mcp",
+    "path": null,
+    "stars": 796,
+    "contributors": 3,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "652ec7b4f79020fea4924d1edb916d1dbf8755fe"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:28.821Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@mozilla/readability",
+      "importance": 9
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "jsdom",
+      "importance": 8
+    },
+    {
+      "name": "playwright",
+      "importance": 10
+    },
+    {
+      "name": "turndown",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"fetcher-mcp\",\n  \"version\": \"0.3.0\",\n  \"description\": \"MCP server for fetching web content using Playwright browser\",\n  \"private\": false,\n  \"type\": \"module\",\n  \"bin\": {\n    \"fetcher-mcp\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\",\n    \"icon.svg\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npm run build && npx @modelcontextprotocol/inspector build/index.js --debug\",\n    \"install-browser\": \"npx playwright install chromium\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"@mozilla/readability\": \"^0.5.0\",\n    \"express\": \"^4.18.2\",\n    \"jsdom\": \"^24.0.0\",\n    \"playwright\": \"^1.42.1\",\n    \"turndown\": \"^7.1.2\"\n  },\n  \"devDependencies\": {\n    \"@types/express\": \"^4.17.21\",\n    \"@types/jsdom\": \"^21.1.6\",\n    \"@types/node\": \"^20.17.24\",\n    \"@types/turndown\": \"^5.0.4\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"main\": \"index.js\",\n  \"keywords\": [\n    \"mcp\",\n    \"playwright\",\n    \"web-scraping\",\n    \"readability\",\n    \"content-extraction\"\n  ],\n  \"author\": \"\",\n  \"license\": \"ISC\"\n}"
+}

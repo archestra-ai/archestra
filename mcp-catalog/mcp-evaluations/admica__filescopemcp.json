@@ -1,0 +1,94 @@
+{
+  "name": "admica__filescopemcp",
+  "display_name": "FileScopeMCP",
+  "description": "Analyzes your codebase identifying important files based on dependency relationships. Generates diagrams and importance scores per file, helping AI assistants understand the codebase. Automatically parses popular programming languages such as Python, C, C++, Rust, Zig, Lua.",
+  "author": {
+    "name": "admica"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/mcp-server.js", "--base-dir=${user_config.base_directory}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "base_directory": {
+      "type": "directory",
+      "title": "Project Base Directory",
+      "description": "The root directory of your project to be analyzed by FileScopeMCP. This directory will be scanned for files and dependencies.",
+      "required": true
+    }
+  },
+  "readme": "# FileScopeMCP (Model Context Protocol) Server\n\n**✨ Instantly understand and visualize your codebase structure & dependencies! ✨**\n\n<!-- Add Badges Here (e.g., License, Version, Build Status) -->\n[![Build Status](https://github.com/admica/FileScopeMCP/actions/workflows/build.yml/badge.svg)](https://github.com/admica/FileScopeMCP/actions)\n[![Node.js](https://img.shields.io/badge/node-%3E%3D18.x-green)](https://nodejs.org/)\n[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)\n<!-- Add other badges -->\n\nA TypeScript-based tool for ranking files in your codebase by importance, tracking dependencies, and providing summaries to help understand code structure.\n\n## Overview\n\nThis MCP server analyzes your codebase to identify the most important files based on dependency relationships. It generates importance scores (0-10) for each file, tracks bidirectional dependencies, and allows you to add custom summaries for files. All this information is made available to AI tools through Cursor's Model Context Protocol.\n\n## Features\n\n🚀 **Supercharge your Code Understanding!** FileScopeMCP provides insights directly to your AI assistant:\n\n- **🎯 File Importance Analysis**\n  - Rank files on a 0-10 scale based on their role in the codebase.\n  - Calculate importance using incoming/outgoing dependencies.\n  - Instantly pinpoint the most critical files in your project.\n  - Smart calculation considers file type, location, and name significance.\n\n- **🔗 Dependency Tracking**\n  - Map bidirectional dependency relationships between files.\n  - Identify which files import a given file (dependents).\n  - See which files are imported by a given file (dependencies).\n  - Distinguish between local and package dependencies.\n  - Multi-language support: Python, JavaScript, TypeScript, C/C++, Rust, Lua, Zig, C#, Java.\n\n- **📊 Visualization**\n  - Generate Mermaid diagrams to visualize file relationships.\n  - Color-coded visualization based on importance scores.\n  - Support for dependency graphs, directory trees, or hybrid views.\n  - HTML output with embedded rendering including theme toggle and responsive design.\n  - Customize diagram depth, filter by importance, and adjust layout options.\n\n- **📝 File Summaries**\n  - Add human or AI-generated summaries to any file.\n  - Retrieve stored summaries to quickly grasp file purpose.\n  - Summaries persist across server restarts.\n\n- **📚 Multiple Project Support**\n  - Create and manage multiple file trees for different project areas.\n  - Configure separate trees with distinct base directories.\n  - Switch between different file trees effortlessly.\n  - Cached trees for faster subsequent operations.\n\n- **💾 Persistent Storage**\n  - All data automatically saved to disk in JSON format.\n  - Load existing file trees without rescanning the filesystem.\n  - Track when file trees were last updated.\n\n## Installation\n\n1. Clone this repository\n2. Build the project:\n\n   The build script will install all node dependencies and generate mcp.json for you.\n\n   Windows:\n   ```bash\n   build.bat\n   ```\n\n   Copy the generated mcp.json configuration to your project's `.cursor` directory:\n\n   ```json\n   {\n     \"mcpServers\": {\n       \"FileScopeMCP\": {\n         \"command\": \"node\",\n         \"args\": [\"<build script sets this>/mcp-server.js\",\"--base-dir=C:/Users/admica/my/project/base\"],\n         \"transport\": \"stdio\",\n         \"disabled\": false,\n         \"alwaysAllow\": []\n       }\n     }\n   }\n   ```\n   \n   Linux: (Cursor in Windows, but your project is in Linux WSL, then put the MCP in Linux and build)\n   ```bash\n   build.sh\n   ```\n   \n   ```json\n   {\n     \"mcpServers\": {\n       \"FileScopeMCP\": {\n       \"command\": \"wsl\",\n       \"args\": [\"-d\", \"Ubuntu-24.04\", \"/home/admica/FileScopeMCP/run.sh\"],\n       \"transport\": \"stdio\",\n       \"disabled\": false,\n       \"alwaysAllow\": []\n       }\n     }\n    }\n    ```\n4. Update the arg path --base-dir to your project's base path.\n\n## How It Works\n\n### Dependency Detection\n\nThe tool scans source code for import statements and other language-specific patterns:\n- Python: `import` and `from ... import` statements\n- JavaScript/TypeScript: `import` statements and `require()` calls\n- C/C++: `#include` directives\n- Rust: `use` and `mod` statements\n- Lua: `require` statements\n- Zig: `@import` directives\n- C#: `using` directives\n- Java: `import` statements\n\n### Importance Calculation\n\nFiles are assigned importance scores (0-10) based on a weighted formula that considers:\n- Number of files that import this file (dependents)\n- Number of files this file imports (dependencies)\n- File type and extension (with TypeScript/JavaScript files getting higher base scores)\n- Location in the project structure (files in `src/` are weighted higher)\n- File naming (files like 'index', 'main', 'server', etc. get additional points)\n\nA file that is central to the codebase (imported by many files) will have a higher score.\n\n### Diagram Generation\n\nThe system uses a three-phase approach to generate valid Mermaid syntax:\n1. Collection Phase: Register all nodes and relationships\n2. Node Definition Phase: Generate definitions for all nodes before any references\n3. Edge Generation Phase: Create edges between defined nodes\n\nThis ensures all diagrams have valid syntax and render correctly. HTML output includes:\n- Responsive design that works on any device\n- Light/dark theme toggle with system preference detection\n- Client-side Mermaid rendering for optimal performance\n- Timestamp of generation\n\n### Path Normalization\n\nThe system handles various path formats to ensure consistent file identification:\n- Windows and Unix path formats\n- Absolute and relative paths\n- URL-encoded paths\n- Cross-platform compatibility\n\n### File Storage\n\nAll file tree data is stored in JSON files with the following structure:\n- Configuration metadata (filename, base directory, last updated timestamp)\n- Complete file tree with dependencies, dependents, importance scores, and summaries\n\n## Technical Details\n\n- **TypeScript/Node.js**: Built with TypeScript for type safety and modern JavaScript features\n- **Model Context Protocol**: Implements the MCP specification for integration with Cursor\n- **Mermaid.js**: Uses Mermaid syntax for diagram generation\n- **JSON Storage**: Uses simple JSON files for persistence\n- **Path Normalization**: Cross-platform path handling to support Windows and Unix\n- **Caching**: Implements caching for faster repeated operations\n\n## Available Tools\n\nThe MCP server exposes the following tools:\n\n### File Tree Management\n\n- **list_saved_trees**: List all saved file trees\n- **create_file_tree**: Create a new file tree configuration for a specific directory\n- **select_file_tree**: Select an existing file tree to work with\n- **delete_file_tree**: Delete a file tree configuration\n\n### File Analysis\n\n- **list_files**: List all files in the project with their importance rankings\n- **get_file_importance**: Get detailed information about a specific file, including dependencies and dependents\n- **find_important_files**: Find the most important files in the project based on configurable criteria\n- **read_file_content**: Read the content of a specific file\n- **recalculate_importance**: Recalculate importance values for all files based on dependencies\n\n### File Summaries\n\n- **get_file_summary**: Get the stored summary of a specific file\n- **set_file_summary**: Set or update the summary of a specific file\n\n### File Watching\n\n- **toggle_file_watching**: Toggle file watching on/off\n- **get_file_watching_status**: Get the current status of file watching\n- **update_file_watching_config**: Update file watching configuration\n\n### Diagram Generation\n\n- **generate_diagram**: Create Mermaid diagrams with customizable options\n  - Output formats: Mermaid text (`.mmd`) or HTML with embedded rendering\n  - Diagram styles: default, dependency, directory, or hybrid views\n  - Filter options: max depth, minimum importance threshold\n  - Layout options: direction (TB, BT, LR, RL), node spacing, rank spacing\n\n## Usage Examples\n\nThe easiest way to get started is to enable this mcp in cursor and tell cursor to figure it out and use it. As soon as the mcp starts, it builds an initial json tree. Tell an LLM to make summaries of all your important files and use the mcp's set_file_summary to add them.\n\n### Analyzing a Project\n\n1. Create a file tree for your project:\n   ```\n   create_file_tree(filename: \"my-project.json\", baseDirectory: \"/path/to/project\")\n   ```\n\n2. Find the most important files:\n   ```\n   find_important_files(limit: 5, minImportance: 5)\n   ```\n\n3. Get detailed information about a specific file:\n   ```\n   get_file_importance(filepath: \"/path/to/project/src/main.ts\")\n   ```\n\n### Working with Summaries\n\n1. Read a file's content to understand it:\n   ```\n   read_file_content(filepath: \"/path/to/project/src/main.ts\")\n   ```\n\n2. Add a summary to the file:\n   ```\n   set_file_summary(filepath: \"/path/to/project/src/main.ts\", summary: \"Main entry point that initializes the application, sets up routing, and starts the server.\")\n   ```\n\n3. Retrieve the summary later:\n   ```\n   get_file_summary(filepath: \"/path/to/project/src/main.ts\")\n   ```\n\n### Generating Diagrams\n\n1. Create a basic project structure diagram:\n   ```\n   generate_diagram(style: \"directory\", maxDepth: 3, outputPath: \"diagrams/project-structure\", outputFormat: \"mmd\")\n   ```\n\n2. Generate an HTML diagram with dependency relationships:\n   ```\n   generate_diagram(style: \"hybrid\", maxDepth: 2, minImportance: 5, showDependencies: true, outputPath: \"diagrams/important-files\", outputFormat: \"html\")\n   ```\n\n3. Customize the diagram layout:\n   ```\n   generate_diagram(style: \"dependency\", layout: { direction: \"LR\", nodeSpacing: 50, rankSpacing: 70 }, outputPath: \"diagrams/dependencies\", outputFormat: \"html\")\n   ```\n\n### Using File Watching\n\n1. Enable file watching for your project:\n   ```\n   toggle_file_watching()\n   ```\n\n2. Check the current file watching status:\n   ```\n   get_file_watching_status()\n   ```\n\n3. Update file watching configuration:\n   ```\n   update_file_watching_config(config: { \n     debounceMs: 500, \n     autoRebuildTree: true,\n     watchForNewFiles: true,\n     watchForDeleted: true,\n     watchForChanged: true\n   })\n   ```\n\n### Testing\n\nA testing framework (Vitest) is now included. Initial unit tests cover path normalization, glob-to-regexp conversion, and platform-specific path handling.\n\nTo run tests and check coverage:\n\n```bash\nnpm test\nnpm run coverage\n```\n\n### Recent Improvements\n\n- Improved exclusions logic, ignoring hidden virtual environments (e.g., `.venv`) and other common unwanted directories. This helps keep dependency graphs clean and relevant.\n- Testing framework\n- Added more programming languages\n\n## Future Improvements\n\n- Add more sophisticated importance calculation algorithms\n- Enhance diagram customization options\n- Support for exporting diagrams to additional formats\n\n## License\n\nThis project is licensed under the GNU General Public License v3 (GPL-3.0). See the [LICENSE](LICENSE) file for the full license text.\n",
+  "category": "Development",
+  "quality_score": 69,
+  "archestra_config": {
+    "client_config_permutations": {
+      "FileScopeMCP-windows": {
+        "command": "node",
+        "args": ["<build script sets this>/mcp-server.js", "--base-dir=C:/Users/admica/my/project/base"],
+        "env": {}
+      },
+      "FileScopeMCP-linux": {
+        "command": "wsl",
+        "args": ["-d", "Ubuntu-24.04", "/home/admica/FileScopeMCP/run.sh"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "admica",
+    "repo": "FileScopeMCP",
+    "url": "https://github.com/admica/FileScopeMCP",
+    "name": "admica__filescopemcp",
+    "path": null,
+    "stars": 224,
+    "contributors": 4,
+    "issues": 9,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "a75a4c7e21d74c5da4a06e1c1fcbf0ba66a234c1"
+  },
+  "programming_language": "HTML",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:34.579Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "chokidar",
+      "importance": 8
+    },
+    {
+      "name": "mermaid",
+      "importance": 8
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\r\n  \"name\": \"FileScopeMCP\",\r\n  \"version\": \"1.0.0\",\r\n  \"description\": \"MCP server for file hierarchy and dependency tracking\",\r\n  \"main\": \"dist/mcp-server.js\",\r\n  \"type\": \"module\",\r\n  \"scripts\": {\r\n    \"build\": \"tsc\",\r\n    \"start\": \"node dist/mcp-server.js\",\r\n    \"test\": \"vitest\",\r\n    \"coverage\": \"vitest run --coverage\"\r\n  },\r\n  \"dependencies\": {\r\n    \"@modelcontextprotocol/sdk\": \"^1.12.0\",\r\n    \"chokidar\": \"^3.6.0\",\r\n    \"mermaid\": \"^11.6.0\",\r\n    \"zod\": \"^3.25.28\"\r\n  },\r\n  \"devDependencies\": {\r\n    \"@types/node\": \"^22.15.21\",\r\n    \"@vitest/coverage-v8\": \"^3.1.4\",\r\n    \"typescript\": \"^5.8.3\",\r\n    \"vitest\": \"^3.1.4\"\r\n  }\r\n}\r\n"
+}

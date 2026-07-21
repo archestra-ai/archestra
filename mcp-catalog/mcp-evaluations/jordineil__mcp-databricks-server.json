@@ -1,0 +1,133 @@
+{
+  "name": "jordineil__mcp-databricks-server",
+  "display_name": "mcp-databricks-server",
+  "description": "MCP Server for Databricks",
+  "author": {
+    "name": "JordiNeil"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {
+      "DATABRICKS_HOST": "${user_config.databricks_host}",
+      "DATABRICKS_TOKEN": "${user_config.databricks_token}",
+      "DATABRICKS_HTTP_PATH": "${user_config.databricks_http_path}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "databricks_host": {
+      "type": "string",
+      "title": "Databricks Host",
+      "description": "Your Databricks instance URL (e.g., your-instance.cloud.databricks.com). Ensure it does not include 'https://' prefix.",
+      "required": true,
+      "sensitive": false
+    },
+    "databricks_token": {
+      "type": "string",
+      "title": "Databricks Personal Access Token",
+      "description": "Create a personal access token in Databricks: Go to User Settings -> Developer tab -> Manage under Access tokens -> Generate a new token.",
+      "sensitive": true,
+      "required": true
+    },
+    "databricks_http_path": {
+      "type": "string",
+      "title": "Databricks SQL Warehouse HTTP Path",
+      "description": "For your SQL warehouse: Go to SQL Warehouses in Databricks -> Select your warehouse -> Find the connection details and copy the HTTP Path.",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "readme": "# Databricks MCP Server\n\nA Model Context Protocol (MCP) server that connects to Databricks API, allowing LLMs to run SQL queries, list jobs, and get job status.\n\n## Features\n\n- Run SQL queries on Databricks SQL warehouses\n- List all Databricks jobs \n- Get status of specific Databricks jobs\n- Get detailed information about Databricks jobs\n\n## Prerequisites\n\n- Python 3.7+\n- Databricks workspace with:\n  - Personal access token\n  - SQL warehouse endpoint\n  - Permissions to run queries and access jobs\n\n## Setup\n\n1. Clone this repository\n2. Create and activate a virtual environment (recommended):\n   ```\n   python -m venv .venv\n   source .venv/bin/activate  # On Windows: .venv\\Scripts\\activate\n   ```\n3. Install dependencies:\n   ```\n   pip install -r requirements.txt\n   ```\n4. Create a `.env` file in the root directory with the following variables:\n   ```\n   DATABRICKS_HOST=your-databricks-instance.cloud.databricks.com\n   DATABRICKS_TOKEN=your-personal-access-token\n   DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/your-warehouse-id\n   ```\n5. Test your connection (optional but recommended):\n   ```\n   python test_connection.py\n   ```\n\n### Obtaining Databricks Credentials\n\n1. **Host**: Your Databricks instance URL (e.g., `your-instance.cloud.databricks.com`)\n2. **Token**: Create a personal access token in Databricks:\n   - Go to User Settings (click your username in the top right)\n   - Select \"Developer\" tab\n   - Click \"Manage\" under \"Access tokens\"\n   - Generate a new token, and save it immediately\n3. **HTTP Path**: For your SQL warehouse:\n   - Go to SQL Warehouses in Databricks\n   - Select your warehouse\n   - Find the connection details and copy the HTTP Path\n\n## Running the Server\n\nStart the MCP server:\n```\npython main.py\n```\n\nYou can test the MCP server using the inspector by running \n\n```\nnpx @modelcontextprotocol/inspector python3 main.py\n```\n\n## Available MCP Tools\n\nThe following MCP tools are available:\n\n1. **run_sql_query(sql: str)** - Execute SQL queries on your Databricks SQL warehouse\n2. **list_jobs()** - List all Databricks jobs in your workspace\n3. **get_job_status(job_id: int)** - Get the status of a specific Databricks job by ID\n4. **get_job_details(job_id: int)** - Get detailed information about a specific Databricks job\n\n## Example Usage with LLMs\n\nWhen used with LLMs that support the MCP protocol, this server enables natural language interaction with your Databricks environment:\n\n- \"Show me all tables in the database\"\n- \"Run a query to count records in the customer table\"\n- \"List all my Databricks jobs\"\n- \"Check the status of job #123\"\n- \"Show me details about job #456\"\n\n## Troubleshooting\n\n### Connection Issues\n\n- Ensure your Databricks host is correct and doesn't include `https://` prefix\n- Check that your SQL warehouse is running and accessible\n- Verify your personal access token has the necessary permissions\n- Run the included test script: `python test_connection.py`\n\n## Security Considerations\n\n- Your Databricks personal access token provides direct access to your workspace\n- Secure your `.env` file and never commit it to version control\n- Consider using Databricks token with appropriate permission scopes only\n- Run this server in a secure environment\n",
+  "category": "AI Tools",
+  "quality_score": 38,
+  "archestra_config": {
+    "client_config_permutations": {
+      "databricks-mcp-server": {
+        "command": "python",
+        "args": ["main.py"],
+        "env": {}
+      },
+      "modelcontextprotocol-inspector": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/inspector", "python3", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "JordiNeil",
+    "repo": "mcp-databricks-server",
+    "url": "https://github.com/JordiNeil/mcp-databricks-server",
+    "name": "jordineil__mcp-databricks-server",
+    "path": null,
+    "stars": 41,
+    "contributors": 1,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "dfa3da0a2c058840f06c7bb007bcf3fe3c3fb87c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:33.367Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "importance": 10
+    },
+    {
+      "name": "uvicorn",
+      "importance": 9
+    },
+    {
+      "name": "databricks-sql-connector",
+      "importance": 9
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 7
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "pyarrow",
+      "importance": 7
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    },
+    {
+      "name": "packaging",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\nfastapi>=0.95.0\nuvicorn>=0.22.0\ndatabricks-sql-connector>=2.4.0\npython-dotenv>=1.0.0\npydantic>=2.0.0\nmcp>=0.1.0\npyarrow>=14.0.1\nrequests>=2.31.0\npackaging>=23.0"
+}

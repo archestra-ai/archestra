@@ -1,0 +1,70 @@
+{
+  "name": "kukapay__crypto-projects-mcp",
+  "display_name": "crypto-projects-mcp",
+  "description": "An MCP server that provides cryptocurrency project data to AI agents",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["${__dirname}/main.py"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Crypto Projects MCP Server\n\nAn MCP server that provides cryptocurrency project data from [Mobula.io](https://mobula.io/) to AI agents.\n\n<a href=\"https://glama.ai/mcp/servers/@kukapay/crypto-projects-mcp\">\n  <img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/@kukapay/crypto-projects-mcp/badge\" alt=\"crypto-projects-mcp MCP server\" />\n</a>\n\n![License](https://img.shields.io/badge/license-MIT-green)\n![Python](https://img.shields.io/badge/python-3.10%2B-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n\n## Features\n\n- **Fetch Project Data**: Retrieve comprehensive project details (e.g., market data, tokenomics, and links) from Mobula.\n- **Structured Output**: Format project data into a well-organized Markdown document with sections for overview, market data, investors, exchanges, token distribution, and release schedules.\n- **Language Support**: Customize output language based on system locale or user-specified settings.\n\n## Installation\n\n### Prerequisites\n\n- Python 3.10 or higher\n- [uv](https://docs.astral.sh/uv/) for package management and running the project\n- Mobula API access (no authentication required for public endpoints)\n\n### Setup\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/crypto-projects-mcp.git\n   cd crypto-projects-mcp\n   ```\n\n2. **Install Dependencies**:\n   ```bash\n   uv sync\n   ```\n\n## Usage\n\n### Running in Development Mode\n\nTest the server using the MCP Inspector:\n```bash\nuv run mcp dev main.py\n```\n\n### Integrating with Claude Desktop\n\nInstall the server in Claude Desktop for LLM interaction:\n```bash\nuv run mcp install main.py --name \"Crypto Projects\"\n```\n\n### Example Interaction\n\nThe server provides two primary interfaces: a **tool** to fetch raw data and a **prompt** to format it into a structured Markdown document. \n\n#### 1. Using the `get_project_data` Tool\n\nThe `get_project_data` tool retrieves raw JSON data for a specified cryptocurrency project. This is useful for applications needing unprocessed data.\n\n```python\nawait get_project_data(\"avalanche\")\n```\n\nThis returns a dictionary containing details like price, market cap, blockchain, and social links for Avalanche. Example output:\n```json\n{\n  \"name\": \"Avalanche\",\n  \"symbol\": \"AVAX\",\n  \"blockchains\":  [\"Avalanche C-Chain\"],\n  \"price\": 35.12,\n  \"market_cap\": 1234567890,\n  ...\n}\n```\n\n#### 2. Using the `format_project_data` Prompt\n\nThe `format_project_data` prompt fetches data using the `get_project_data` tool and formats it into a comprehensive Markdown document. This prompt is designed for LLM applications to present structured, human-readable information about a cryptocurrency project.\n\n```python\n# format_project_data(\"avalanche\")                 # use system locale\nformat_project_data(\"avalanche\", lang=\"en_US\")     # use en_US\n```\n\nThis generates a Markdown document with detailed sections. Example output for Avalanche:\n\n```markdown\n# Avalanche Project Information\n\n## Overview\n- **Name**: Avalanche\n- **Symbol**: AVAX\n- **Chain**: Avalanche C-Chain\n- **Contract Address**: 0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7\n- **Audit Report**: https://quantstamp.com/blog/quantstamp-enhancing-the-security-of-avalanche\n- **Description**: Avalanche is a high throughput smart contract blockchain platform. Validators secure the network through a proof-of-stake consensus protocol. It is said to be fast, low cost, and environmental friendly.\n\n## Market Data\n- **Price**: $19.45\n- **Market Cap**: $8,130,398,992\n- **Volume (24h)**: $48,238,792\n- **Total Supply**: 454,405,245\n- **Circulating Supply**: 417,951,478\n\n## Links\n- **Website**: https://www.avax.network\n- **Twitter**: https://twitter.com/avax\n- **Discord**: https://www.avax.network/\n\n## Investors\n- **Lead Investor**: Yes\n- **Name**: Polychain Capital\n- **Type**: Ventures Capital\n- **Description**: Polychain Capital is a cryptocurrency-focused investment management firm and hedge fund.\n- **Lead Investor**: Yes\n- **Name**: Dragonfly Capital\n- **Type**: Ventures Capital\n- **Description**: Dragonfly Capital Partners is a venture capital firm that focuses on investments in the blockchain and cryptocurrency space.\n- **Lead Investor**: Yes\n- **Name**: Bitmain\n- **Type**: Ventures Capital\n- **Description**: Bitmain is a China-based technology company that specializes in the design and manufacture of hardware for cryptocurrency mining.\n- **Lead Investor**: Yes\n- **Name**: Galaxy\n- **Type**: Ventures Capital\n- **Description**: Galaxy is a digital asset and blockchain leader helping institutions, startups, and qualified individuals shape a changing economy.\n- **Lead Investor**: Yes\n- **Name**: NGC Ventures (NEO Global Capital)\n- **Type**: Ventures Capital\n- **Description**: NGC Ventures is one of the largest institutional investors of blockchain technologies.\n- **Lead Investor**: Yes\n- **Name**: Initialized Capital\n- **Type**: Ventures Capital\n- **Description**: Not available\n- **Lead Investor**: Yes\n- **Name**: Three Arrows Capital\n- **Type**: Ventures Capital\n- **Description**: Not available\n- **Lead Investor**: No\n- **Name**: a16z (Andreessen Horowitz)\n- **Type**: Ventures Capital\n- **Description**: Andreessen Horowitz is a prominent venture capital firm based in Menlo Park, California.\n- **Lead Investor**: No\n- **Name**: Fundamental Labs\n- **Type**: Ventures Capital\n- **Description**: An investment company specialized in Blockchain sector.\n- **Lead Investor**: No\n- **Name**: Lemniscap\n- **Type**: Ventures Capital\n- **Description**: Lemniscap is an investment firm specializing in investments in emerging cryptoassets and blockchain companies.\n- **Lead Investor**: No\n- **Name**: Naval Ravikant\n- **Type**: Angel Investor\n- **Description**: Naval Ravikant is the CEO and a co-founder of AngelList.\n- **Lead Investor**: No\n- **Name**: MetaStable Capital\n- **Type**: Ventures Capital\n- **Description**: Manage Crypto Asset Hedge Funds.\n- **Lead Investor**: No\n- **Name**: LedgerPrime\n- **Type**: Ventures Capital\n- **Description**: LedgerPrime is a quantitative and systematic digital asset investment firm.\n- **Lead Investor**: No\n- **Name**: Digital Asset Capital Management (DACM)\n- **Type**: Ventures Capital\n- **Description**: Specialist, global investment manager in the digital asset sector.\n- **Lead Investor**: No\n- **Name**: HashKey Capital\n- **Type**: Ventures Capital\n- **Description**: HashKey Capital is a blockchain and cryptocurrency-focused venture capital and investment firm.\n- **Lead Investor**: No\n- **Name**: Balaji Srinivasan\n- **Type**: Angel Investor\n- **Description**: Balaji S. Srinivasan is the CTO of Coinbase and cofounder of Counsyl, Earn, Teleport, and Coin Center.\n\n## Exchanges\n- Binance: AVAX/USDT\n- Coinbase: AVAX/USD\n- OKX: AVAX/USDT\n- Bybit: AVAX/USDT\n- Kraken: AVAX/EUR\n- WhiteBIT: Not available\n- HTX: Not available\n- P2B: Not available\n- KuCoin: Not available\n- Bitunix: Not available\n\n## Token Distribution\n- Foundation: 9.26%\n- Airdrop: 2.5%\n- Team: 10%\n- Public Sale Option A1: 1%\n- Public Sale Option A2: 8.3%\n- Public Sale Option B: 0.67%\n- Community and Development Endowment: 7%\n- Testnet Incentive Program: 0.31%\n- Strategic Partners: 5%\n- Staking Rewards: 50%\n- Private Sale: 3.46%\n- Seed Sale: 2.5%\n\n## Token Release Schedule\n- Sep 2020: 40,466,016 tokens (Seed Round, Private Sale, Public Sales, etc.)\n- Dec 2020: 45,188,596.8 tokens (Team, Airdrop, Foundation, etc.)\n- Mar 2021: 45,188,596.8 tokens (Team, Airdrop, Foundation, etc.)\n- Jun 2021: 45,188,596.8 tokens (Team, Airdrop, Foundation, etc.)\n- Sep 2021: 19,502,596.8 tokens (Team, Airdrop, Foundation, etc.)\n- Dec 2021: 19,502,596.8 tokens (Team, Airdrop, Foundation, etc.)\n- Mar 2022: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Jun 2022: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Sep 2022: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Dec 2022: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Mar 2023: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Jun 2023: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Sep 2023: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Dec 2023: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Mar 2024: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Jun 2024: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Sep 2024: 9,541,800 tokens (Team, Airdrop, Foundation, Strategic Partners)\n- Dec 2024: 1,666,800 tokens (Foundation)\n- Mar 2025: 1,666,800 tokens (Foundation)\n- Jun 2025: 1,666,800 tokens (Foundation)\n- Sep 2025: 1,666,800 tokens (Foundation)\n- Dec 2025: 1,666,800 tokens (Foundation)\n- Mar 2026: 1,666,800 tokens (Foundation)\n- Jun 2026: 1,666,800 tokens (Foundation)\n- Sep 2026: 1,666,800 tokens (Foundation)\n- Dec 2026: 1,666,800 tokens (Foundation)\n- Mar 2027: 1,666,800 tokens (Foundation)\n- Jun 2027: 1,666,800 tokens (Foundation)\n- Sep 2027: 1,666,800 tokens (Foundation)\n- Dec 2027: 1,666,800 tokens (Foundation)\n- Mar 2028: 1,666,800 tokens (Foundation)\n- Jun 2028: 1,666,800 tokens (Foundation)\n- Sep 2028: 1,666,800 tokens (Foundation)\n- Dec 2028: 1,666,800 tokens (Foundation)\n- Mar 2029: 1,666,800 tokens (Foundation)\n- Jun 2029: 1,666,800 tokens (Foundation)\n- Sep 2029: 1,666,800 tokens (Foundation)\n- Dec 2029: 1,666,800 tokens (Foundation)\n- Mar 2030: 1,666,800 tokens (Foundation)\n```\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.",
+  "category": "Finance",
+  "quality_score": 52,
+  "archestra_config": {
+    "client_config_permutations": {
+      "kukapay-crypto-projects-mcp": {
+        "command": "uv",
+        "args": ["run", "mcp", "dev", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "crypto-projects-mcp",
+    "url": "https://github.com/kukapay/crypto-projects-mcp",
+    "name": "crypto-projects-mcp",
+    "path": null,
+    "stars": 0,
+    "contributors": 2,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": null
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:11.784Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

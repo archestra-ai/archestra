@@ -1,0 +1,79 @@
+{
+  "name": "jimfilippou__things-mcp",
+  "display_name": "things-mcp",
+  "description": "A Model Context Protocol (MCP) server that provides seamless integration with the Things productivity app.",
+  "author": {
+    "name": "jimfilippou"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "things-mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Things MCP Server\n\nA Model Context Protocol (MCP) server that provides seamless integration with the [Things](https://culturedcode.com/things/) productivity app. This server enables AI assistants to create, update, and manage your todos and projects in Things using its comprehensive URL scheme.\n\n## Features\n\n- ✅ **Full Things URL Scheme Support** - Complete implementation of all Things URL commands\n- ✅ **Create Todos** - Add single or multiple todos with rich metadata\n- ✅ **Create Projects** - Build projects with nested todos and organization\n- ✅ **Update Items** - Modify existing todos and projects\n- ✅ **Smart Scheduling** - Support for natural language dates and times\n- ✅ **Advanced Organization** - Tags, areas, headings, and checklist items\n- ✅ **JSON Operations** - Complex batch operations via JSON\n- ✅ **Search & Navigation** - Find and show specific items or lists\n- ✅ **Proper URL Encoding** - Handles special characters and spaces correctly\n\n## Prerequisites\n\n- **macOS** - Required for Things app integration\n- **Things 3** - The Things app must be installed and running\n- **Node.js** - Version 16 or higher\n- **MCP Client** - Such as Claude Desktop app or any MCP-compatible client\n\n## Installation\n\n### Using npx (Recommended)\n\nNo installation required! Use directly with:\n\n```bash\nnpx things-mcp\n```\n\n### Global Installation\n\n```bash\nnpm install -g things-mcp\n```\n\n## Configuration\n\n### Claude Desktop\n\nAdd the server to your Claude Desktop configuration file:\n\n**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\n**Using npx (recommended):**\n\n```json\n{\n  \"mcpServers\": {\n    \"things\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"things-mcp\"]\n    }\n  }\n}\n```\n\n**Using global installation:**\n\n```json\n{\n  \"mcpServers\": {\n    \"things\": {\n      \"command\": \"things-mcp\"\n    }\n  }\n}\n```\n\n## Usage\n\nOnce configured, you can interact with Things through your MCP client using natural language. Here are some examples:\n\n### Creating Todos\n\n```\n\"Create a todo to buy groceries for tonight\"\n\"Add a todo 'Call dentist' with a deadline of next Friday\"\n\"Create multiple todos: milk, bread, eggs in my Shopping project\"\n```\n\n### Creating Projects\n\n```\n\"Create a project called 'Website Redesign' in my Work area\"\n\"Make a project 'Vacation Planning' with todos: book flights, reserve hotel, research activities\"\n```\n\n### Updating Items\n\n```\n\"Update my 'Call dentist' todo to be due tomorrow\"\n\"Add notes to my website project about the new color scheme\"\n\"Mark the groceries todo as completed\"\n```\n\n### Organization\n\n```\n\"Show my Today list\"\n\"Search for all todos tagged with 'urgent'\"\n\"Open the Someday list filtered by work tags\"\n```\n\n## Available Commands\n\n### add-todo\n\nCreate a new todo with extensive customization options:\n\n- **title/titles** - Single title or multiple titles separated by newlines\n- **notes** - Rich text notes (max 10,000 characters)\n- **when** - Natural language scheduling (today, tomorrow, evening, specific dates)\n- **deadline** - Due dates with natural language support\n- **tags** - Array of tag names for organization\n- **checklist-items** - Subtasks within the todo\n- **list/list-id** - Project or area assignment\n- **heading/heading-id** - Specific heading within projects\n- **completed/canceled** - Set completion status\n- **show-quick-entry** - Show quick entry dialog\n- **reveal** - Navigate to created todo\n\n### add-project\n\nCreate a new project with full configuration:\n\n- **title** - Project name\n- **notes** - Project description\n- **when** - Scheduling options\n- **deadline** - Project due date\n- **tags** - Organization tags\n- **area/area-id** - Area assignment\n- **to-dos** - Array of todo titles to create within project\n- **completed/canceled** - Project status\n- **reveal** - Navigate to created project\n\n### update\n\nModify existing todos:\n\n- **id** - Todo ID (required)\n- **auth-token** - Authorization token (required)\n- **title** - New title\n- **notes/prepend-notes/append-notes** - Note modifications\n- **when** - Reschedule\n- **deadline** - Change due date\n- **tags/add-tags** - Tag management\n- **checklist-items** - Modify checklist\n- **list/heading** - Move to different location\n- **completed/canceled** - Status changes\n- **duplicate** - Create copy before updating\n\n### update-project\n\nModify existing projects with similar options to update command.\n\n### show\n\nNavigate to specific items or lists:\n\n- **id** - Specific item ID or built-in list (inbox, today, anytime, etc.)\n- **query** - Search by name\n- **filter** - Filter by tags\n\n### search\n\nSearch across all Things data:\n\n- **query** - Search terms\n\n### json\n\nAdvanced batch operations using JSON format for complex project structures.\n\n### version\n\nGet Things app and URL scheme version information.\n\n## Authorization\n\nSome operations (updates) require an authorization token from Things:\n\n1. **macOS**: Things → Settings → General → Enable Things URLs → Manage\n2. **iOS**: Settings → General → Things URLs\n\nCopy your unique token and use it with update operations.\n\n## Getting Item IDs\n\nTo update specific items, you need their IDs:\n\n### macOS\n\n- Control-click on todo/project → Share → Copy Link\n- Control-click on list in sidebar → Share → Copy Link\n\n### iOS\n\n- Tap todo/project → toolbar → Share → Copy Link\n- Navigate to list → top right → Share → Copy Link\n\n## Error Handling\n\nThe server includes comprehensive error handling:\n\n- Invalid parameters are caught by Zod validation\n- Things URL failures are reported with clear messages\n- Missing authorization tokens are detected\n- Network and system errors are handled gracefully\n\n## Examples\n\n### Basic Todo Creation\n\n```javascript\n// Creates a simple todo\n{\n  \"title\": \"Buy milk\",\n  \"when\": \"today\",\n  \"tags\": [\"groceries\"]\n}\n```\n\n### Complex Project Creation\n\n```javascript\n// Creates a project with multiple todos and organization\n{\n  \"title\": \"Plan Birthday Party\",\n  \"area\": \"Personal\",\n  \"when\": \"next week\",\n  \"to-dos\": [\n    \"Send invitations\",\n    \"Order cake\",\n    \"Buy decorations\",\n    \"Plan menu\"\n  ],\n  \"tags\": [\"family\", \"celebration\"],\n  \"reveal\": true\n}\n```\n\n### JSON Batch Operation\n\n```javascript\n// Complex structure with headings and nested todos\n{\n  \"data\": JSON.stringify([\n    {\n      \"type\": \"project\",\n      \"attributes\": {\n        \"title\": \"Website Redesign\",\n        \"area\": \"Work\",\n        \"items\": [\n          {\n            \"type\": \"heading\",\n            \"attributes\": { \"title\": \"Design Phase\" }\n          },\n          {\n            \"type\": \"to-do\",\n            \"attributes\": {\n              \"title\": \"Create wireframes\",\n              \"when\": \"today\"\n            }\n          }\n        ]\n      }\n    }\n  ])\n}\n```\n\n## Troubleshooting\n\n### Things Not Opening\n\n- Ensure Things 3 is installed and updated\n- Check that Things URLs are enabled in settings\n- Verify the MCP server is running correctly\n\n### Authorization Errors\n\n- Get your auth token from Things settings\n- Include auth-token parameter for update operations\n- Ensure token is copied correctly without extra spaces\n\n### Connection Issues\n\n- Restart Claude Desktop or your MCP client\n- Check the configuration file syntax\n- Look for errors in client logs\n\n## Contributing\n\nContributions are welcome! Please:\n\n1. Fork the repository\n2. Create a feature branch\n3. Submit a pull request\n\n## License\n\nMIT License - see LICENSE file for details.\n\n## Related\n\n- [Things URL Scheme Documentation](https://culturedcode.com/things/support/articles/2803573/)\n- [Model Context Protocol](https://modelcontextprotocol.io/)\n- [Claude Desktop](https://claude.ai/desktop)\n\n## Support\n\n- 🐛 **Bug Reports**: Open an issue on GitHub\n- 💡 **Feature Requests**: Open an issue with enhancement label\n- 📚 **Documentation**: Check the Things URL scheme docs\n- 💬 **Questions**: Open a discussion on GitHub\n",
+  "category": "Development",
+  "quality_score": 40,
+  "archestra_config": {
+    "client_config_permutations": {
+      "things-mcp": {
+        "command": "npx",
+        "args": ["-y", "things-mcp"],
+        "env": {}
+      },
+      "things-mcp-configured": {
+        "command": "things-mcp",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jimfilippou",
+    "repo": "things-mcp",
+    "url": "https://github.com/jimfilippou/things-mcp",
+    "name": "things-mcp",
+    "path": null,
+    "stars": 1,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "996c33d77c2f5d44dfae91ae2f3730993f81f7a5"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:47.958Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"things-mcp\",\n  \"version\": \"0.1.0\",\n  \"description\": \"A Model Context Protocol (MCP) server that provides seamless integration with the Things productivity app.\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"private\": false,\n  \"bin\": {\n    \"things-mcp\": \"dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"start\": \"node dist/index.js\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"things\",\n    \"culturedcode\",\n    \"culturedcode.com\",\n    \"culturedcode.com/things\",\n    \"culturedcode.com/things/mcp\"\n  ],\n  \"author\": \"Dimitrios Filippou <info@jimfilippou.com>\",\n  \"license\": \"ISC\",\n  \"packageManager\": \"pnpm@10.11.1\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.12.1\",\n    \"zod\": \"^3.25.56\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.15.30\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

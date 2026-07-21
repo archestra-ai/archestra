@@ -1,0 +1,85 @@
+{
+  "name": "calclavia__mcp-obsidian",
+  "display_name": "mcp-obsidian",
+  "description": "A connector for Claude Desktop to read and search an Obsidian vault.",
+  "author": {
+    "name": "calclavia"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-obsidian", "${user_config.vault_path}"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "vault_path": {
+      "type": "directory",
+      "title": "Obsidian Vault Path",
+      "description": "Path to Obsidian vault",
+      "required": true
+    }
+  },
+  "readme": "# Obsidian Model Context Protocol\n\n[![smithery badge](https://smithery.ai/badge/mcp-obsidian)](https://smithery.ai/server/mcp-obsidian)\n\nThis is a connector to allow Claude Desktop (or any MCP client) to read and search any directory containing Markdown notes (such as an Obsidian vault).\n\n## Installation\n\nMake sure Claude Desktop and `npm` is installed.\n\n### Installing via Smithery\n\nTo install Obsidian Model Context Protocol for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp-obsidian):\n\n```bash\nnpx -y @smithery/cli install mcp-obsidian --client claude\n```\n\nThen, restart Claude Desktop and you should see the following MCP tools listed:\n\n![image](./images/mcp-tools.png)\n\n### Usage with VS Code\n\nFor quick installation, use one of the one-click install buttons below:\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=obsidian&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22vaultPath%22%2C%22description%22%3A%22Path%20to%20Obsidian%20vault%22%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22mcp-obsidian%22%2C%22%24%7Binput%3AvaultPath%7D%22%5D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=obsidian&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22vaultPath%22%2C%22description%22%3A%22Path%20to%20Obsidian%20vault%22%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22mcp-obsidian%22%2C%22%24%7Binput%3AvaultPath%7D%22%5D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> Note that the `mcp` key is not needed in the `.vscode/mcp.json` file.\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"vaultPath\",\n        \"description\": \"Path to Obsidian vault\"\n      }\n    ],\n    \"servers\": {\n      \"obsidian\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"mcp-obsidian\", \"${input:vaultPath}\"]\n      }\n    }\n  }\n}\n```\n",
+  "category": "Local files",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-obsidian": {
+        "command": "npx",
+        "args": ["-y", "mcp-obsidian", "${input:vaultPath}"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "calclavia",
+    "repo": "mcp-obsidian",
+    "url": "https://github.com/calclavia/mcp-obsidian",
+    "name": "mcp-obsidian",
+    "path": null,
+    "stars": 1041,
+    "contributors": 5,
+    "issues": 14,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "429998f72c065ebdac0fdbb5305eeb5594a80ce6"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:46.026Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "glob",
+      "importance": 8
+    },
+    {
+      "name": "zod-to-json-schema",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"mcp-obsidian\",\n\t\"version\": \"1.0.0\",\n\t\"description\": \"Model Context Protocol server for Obsidian Vaults\",\n\t\"author\": \"Henry Mao (https://calclavia.com)\",\n\t\"main\": \"main.js\",\n\t\"type\": \"module\",\n\t\"bin\": {\n\t\t\"mcp-obsidian\": \"dist/index.js\"\n\t},\n\t\"files\": [\n\t\t\"dist\"\n\t],\n\t\"scripts\": {\n\t\t\"build\": \"tsc && shx chmod +x dist/*.js\",\n\t\t\"prepare\": \"npm run build\",\n\t\t\"watch\": \"tsc --watch\"\n\t},\n\t\"dependencies\": {\n\t\t\"@modelcontextprotocol/sdk\": \"0.5.0\",\n\t\t\"glob\": \"^10.3.10\",\n\t\t\"zod-to-json-schema\": \"^3.23.5\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@types/node\": \"^20.11.0\",\n\t\t\"shx\": \"^0.3.4\",\n\t\t\"typescript\": \"^5.3.3\"\n\t}\n}\n"
+}

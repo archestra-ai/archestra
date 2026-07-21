@@ -1,0 +1,109 @@
+{
+  "name": "modelcontextprotocol__servers-archived__src__google-maps",
+  "display_name": "google-maps",
+  "description": "Reference MCP servers that are no longer maintained",
+  "author": {
+    "name": "modelcontextprotocol"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-google-maps"],
+    "env": {
+      "GOOGLE_MAPS_API_KEY": "${user_config.google_maps_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "google_maps_api_key": {
+      "type": "string",
+      "title": "Google Maps API Key",
+      "description": "Your Google Maps API Key for authentication.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Google Maps MCP Server\n\nMCP Server for the Google Maps API.\n\n## Tools\n\n1. `maps_geocode`\n\n   - Convert address to coordinates\n   - Input: `address` (string)\n   - Returns: location, formatted_address, place_id\n\n2. `maps_reverse_geocode`\n\n   - Convert coordinates to address\n   - Inputs:\n     - `latitude` (number)\n     - `longitude` (number)\n   - Returns: formatted_address, place_id, address_components\n\n3. `maps_search_places`\n\n   - Search for places using text query\n   - Inputs:\n     - `query` (string)\n     - `location` (optional): { latitude: number, longitude: number }\n     - `radius` (optional): number (meters, max 50000)\n   - Returns: array of places with names, addresses, locations\n\n4. `maps_place_details`\n\n   - Get detailed information about a place\n   - Input: `place_id` (string)\n   - Returns: name, address, contact info, ratings, reviews, opening hours\n\n5. `maps_distance_matrix`\n\n   - Calculate distances and times between points\n   - Inputs:\n     - `origins` (string[])\n     - `destinations` (string[])\n     - `mode` (optional): \"driving\" | \"walking\" | \"bicycling\" | \"transit\"\n   - Returns: distances and durations matrix\n\n6. `maps_elevation`\n\n   - Get elevation data for locations\n   - Input: `locations` (array of {latitude, longitude})\n   - Returns: elevation data for each point\n\n7. `maps_directions`\n   - Get directions between points\n   - Inputs:\n     - `origin` (string)\n     - `destination` (string)\n     - `mode` (optional): \"driving\" | \"walking\" | \"bicycling\" | \"transit\"\n   - Returns: route details with steps, distance, duration\n\n## Setup\n\n### API Key\n\nGet a Google Maps API key by following the instructions [here](https://developers.google.com/maps/documentation/javascript/get-api-key#create-api-keys).\n\n### Usage with Claude Desktop\n\nAdd the following to your `claude_desktop_config.json`:\n\n#### Docker\n\n```json\n{\n  \"mcpServers\": {\n    \"google-maps\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-i\",\n        \"--rm\",\n        \"-e\",\n        \"GOOGLE_MAPS_API_KEY\",\n        \"mcp/google-maps\"\n      ],\n      \"env\": {\n        \"GOOGLE_MAPS_API_KEY\": \"<YOUR_API_KEY>\"\n      }\n    }\n  }\n}\n```\n\n### NPX\n\n```json\n{\n  \"mcpServers\": {\n    \"google-maps\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-google-maps\"],\n      \"env\": {\n        \"GOOGLE_MAPS_API_KEY\": \"<YOUR_API_KEY>\"\n      }\n    }\n  }\n}\n```\n\n### Usage with VS Code\n\nFor quick installation, use one of the one-click install buttons below...\n\n[![Install with NPX in VS Code](https://img.shields.io/badge/VS_Code-NPM-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=google-maps&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22maps_api_key%22%2C%22description%22%3A%22Google%20Maps%20API%20Key%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-google-maps%22%5D%2C%22env%22%3A%7B%22GOOGLE_MAPS_API_KEY%22%3A%22%24%7Binput%3Amaps_api_key%7D%22%7D%7D) [![Install with NPX in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-NPM-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=google-maps&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22maps_api_key%22%2C%22description%22%3A%22Google%20Maps%20API%20Key%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40modelcontextprotocol%2Fserver-google-maps%22%5D%2C%22env%22%3A%7B%22GOOGLE_MAPS_API_KEY%22%3A%22%24%7Binput%3Amaps_api_key%7D%22%7D%7D&quality=insiders)\n\n[![Install with Docker in VS Code](https://img.shields.io/badge/VS_Code-Docker-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=google-maps&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22maps_api_key%22%2C%22description%22%3A%22Google%20Maps%20API%20Key%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Fgoogle-maps%22%5D%2C%22env%22%3A%7B%22GOOGLE_MAPS_API_KEY%22%3A%22%24%7Binput%3Amaps_api_key%7D%22%7D%7D) [![Install with Docker in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Docker-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=google-maps&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22maps_api_key%22%2C%22description%22%3A%22Google%20Maps%20API%20Key%22%2C%22password%22%3Atrue%7D%5D&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22mcp%2Fgoogle-maps%22%5D%2C%22env%22%3A%7B%22GOOGLE_MAPS_API_KEY%22%3A%22%24%7Binput%3Amaps_api_key%7D%22%7D%7D&quality=insiders)\n\nFor manual installation, add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.\n\nOptionally, you can add it to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.\n\n> Note that the `mcp` key is not needed in the `.vscode/mcp.json` file.\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"maps_api_key\",\n        \"description\": \"Google Maps API Key\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"google-maps\": {\n        \"command\": \"npx\",\n        \"args\": [\"-y\", \"@modelcontextprotocol/server-google-maps\"],\n        \"env\": {\n          \"GOOGLE_MAPS_API_KEY\": \"${input:maps_api_key}\"\n        }\n      }\n    }\n  }\n}\n```\n\nFor Docker installation:\n\n```json\n{\n  \"mcp\": {\n    \"inputs\": [\n      {\n        \"type\": \"promptString\",\n        \"id\": \"maps_api_key\",\n        \"description\": \"Google Maps API Key\",\n        \"password\": true\n      }\n    ],\n    \"servers\": {\n      \"google-maps\": {\n        \"command\": \"docker\",\n        \"args\": [\"run\", \"-i\", \"--rm\", \"mcp/google-maps\"],\n        \"env\": {\n          \"GOOGLE_MAPS_API_KEY\": \"${input:maps_api_key}\"\n        }\n      }\n    }\n  }\n}\n```\n\n## Build\n\nDocker build:\n\n```bash\ndocker build -t mcp/google-maps -f src/google-maps/Dockerfile .\n```\n\n## License\n\nThis MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.\n",
+  "category": "Location",
+  "quality_score": 57,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-google-maps-docker": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-e", "GOOGLE_MAPS_API_KEY", "mcp/google-maps"],
+        "env": {
+          "GOOGLE_MAPS_API_KEY": "<YOUR_API_KEY>"
+        },
+        "docker_image": "mcp/google-maps"
+      },
+      "modelcontextprotocol-server-google-maps": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-google-maps"],
+        "env": {
+          "GOOGLE_MAPS_API_KEY": "<YOUR_API_KEY>"
+        }
+      },
+      "modelcontextprotocol-server-google-maps-vscode-configured": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-google-maps"],
+        "env": {
+          "GOOGLE_MAPS_API_KEY": "${input:maps_api_key}"
+        }
+      },
+      "mcp-google-maps-docker-vscode-configured": {
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "mcp/google-maps"],
+        "env": {
+          "GOOGLE_MAPS_API_KEY": "${input:maps_api_key}"
+        },
+        "docker_image": "mcp/google-maps"
+      }
+    },
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "modelcontextprotocol",
+    "repo": "servers-archived",
+    "url": "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/google-maps",
+    "name": "servers-archived",
+    "path": "src/google-maps",
+    "stars": 123,
+    "contributors": 595,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9be4674d1ddf8c469e6461a27a337eeb65f76c2e"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.283Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "node-fetch",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@modelcontextprotocol/server-google-maps\",\n  \"version\": \"0.6.2\",\n  \"description\": \"MCP server for using the Google Maps API\",\n  \"license\": \"MIT\",\n  \"author\": \"Anthropic, PBC (https://anthropic.com)\",\n  \"homepage\": \"https://modelcontextprotocol.io\",\n  \"bugs\": \"https://github.com/modelcontextprotocol/servers/issues\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-server-google-maps\": \"dist/index.js\"\n  },\n  \"files\": [\n    \"dist\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && shx chmod +x dist/*.js\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\",\n    \"@types/node-fetch\": \"^2.6.12\",\n    \"node-fetch\": \"^3.3.2\"\n  },\n  \"devDependencies\": {\n    \"shx\": \"^0.3.4\",\n    \"typescript\": \"^5.6.2\"\n  }\n}"
+}

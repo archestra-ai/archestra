@@ -1,0 +1,131 @@
+{
+  "name": "stackloklabs__ocireg-mcp",
+  "display_name": "ocireg-mcp",
+  "description": "An MCP (Model Context Protocol) server that provides tools for querying OCI registries and image references.",
+  "author": {
+    "name": "StacklokLabs"
+  },
+  "server": {
+    "command": "./ocireg-mcp",
+    "args": ["-port", "${user_config.mcp_port}"],
+    "env": {
+      "OCI_TOKEN": "${user_config.oci_token}",
+      "OCI_USERNAME": "${user_config.oci_username}",
+      "OCI_PASSWORD": "${user_config.oci_password}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "oci_token": {
+      "type": "string",
+      "title": "OCI Bearer Token",
+      "description": "Bearer token for OCI registry authentication",
+      "sensitive": true,
+      "required": false
+    },
+    "oci_username": {
+      "type": "string",
+      "title": "OCI Username",
+      "description": "Username for OCI registry authentication",
+      "sensitive": true,
+      "required": false
+    },
+    "oci_password": {
+      "type": "string",
+      "title": "OCI Password",
+      "description": "Password for OCI registry authentication",
+      "sensitive": true,
+      "required": false
+    },
+    "mcp_port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "The port number for the MCP server to listen on (0-65535)",
+      "default": 8080,
+      "min": 0,
+      "max": 65535,
+      "required": false
+    }
+  },
+  "readme": "# OCI Registry MCP Server\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/StacklokLabs/ocireg-mcp)](https://archestra.ai/mcp-catalog/stackloklabs__ocireg-mcp)\nAn MCP (Model Context Protocol) server that provides tools for querying OCI\nregistries and image references.\n\n## Overview\n\nThis project implements an SSE-based MCP server that allows LLM-powered\napplications to interact with OCI registries. It provides tools for retrieving\ninformation about container images, listing tags, and more.\n\n## Features\n\n- Get information about OCI images\n- List tags for repositories\n- Get image manifests\n- Get image configs\n\n## MCP Tools\n\nThe server provides the following MCP tools:\n\n### get_image_info\n\nGet information about an OCI image.\n\n**Input:**\n\n- `image_ref`: The image reference (e.g., docker.io/library/alpine:latest)\n\n**Output:**\n\n- Image information including digest, size, architecture, OS, creation date, and\n  number of layers\n\n### list_tags\n\nList tags for a repository.\n\n**Input:**\n\n- `repository`: The repository name (e.g., docker.io/library/alpine)\n\n**Output:**\n\n- List of tags for the repository\n\n### get_image_manifest\n\nGet the manifest for an OCI image.\n\n**Input:**\n\n- `image_ref`: The image reference (e.g., docker.io/library/alpine:latest)\n\n**Output:**\n\n- The image manifest\n\n### get_image_config\n\nGet the config for an OCI image.\n\n**Input:**\n\n- `image_ref`: The image reference (e.g., docker.io/library/alpine:latest)\n\n**Output:**\n\n- The image config\n\n## Usage\n\n### Running with ToolHive (Recommended)\n\nThe easiest way to run the OCI Registry MCP server is using\n[ToolHive](https://github.com/stacklok/toolhive), which provides secure,\ncontainerized deployment of MCP servers:\n\n```bash\n# Install ToolHive (if not already installed)\n# See: https://docs.stacklok.com/toolhive/guides-cli/install\n\n# Register a supported client so ToolHive can auto-configure your environment\nthv client setup\n# Run the OCI Registry MCP server (packaged as 'oci-registry' in ToolHive)\nthv run oci-registry\n\n# List running servers\nthv list\n\n# Get detailed information about the server\nthv registry info oci-registry\n```\n\nThe server will be available to your MCP-compatible clients and can query OCI\nregistries for image information.\n\n#### Authentication with ToolHive\n\nIf you need to access private registries, you can provide authentication\ncredentials using ToolHive's secret management:\n\n```bash\n# For bearer token authentication\nthv secret set oci-token\n# Enter your bearer token when prompted\n\nthv run --secret oci-token,target=OCI_TOKEN oci-registry\n\n# For username/password authentication\nthv secret set oci-username\nthv secret set oci-password\n# Enter your credentials when prompted\n\nthv run --secret oci-username,target=OCI_USERNAME --secret oci-password,target=OCI_PASSWORD oci-registry\n```\n\n## Development\n\n### Prerequisites\n\n- Go 1.21 or later\n- Access to OCI registries\n\n### Authentication\n\nThe server supports the following authentication methods for accessing private\nOCI registries:\n\n1. **Bearer Token**: Set the following environment variable:\n\n   - `OCI_TOKEN`: Bearer token for registry authentication\n\n2. **Username and Password**: Set the following environment variables:\n\n   - `OCI_USERNAME`: Username for registry authentication\n   - `OCI_PASSWORD`: Password for registry authentication\n\n3. **Docker Config**: If no token or username/password is provided, the server\n   will use the default Docker keychain, which reads credentials from\n   `~/.docker/config.json`.\n\nExamples:\n\n```bash\n# Bearer token authentication\nexport OCI_TOKEN=mytoken\n\n# Username/password authentication\nexport OCI_USERNAME=myuser\nexport OCI_PASSWORD=mypassword\n```\n\n### Port Configuration\n\nThe server can be configured to listen on a specific port using either:\n\n1. **Environment Variable**:\n\n   - `MCP_PORT`: The port number to listen on (must be between 0 and 65535)\n   - If not set or invalid, defaults to port 8080\n\n2. **Command-line Flag**:\n   - `-port`: Overrides the environment variable setting (must be between 0\n     and 65535)\n   - If invalid port provided it defaults to port 8080\n   - Example: `./ocireg-mcp -port 9090`\n\n### Testing\n\n```bash\ngo test ./...\n```\n\n### Linting\n\n```bash\ngolangci-lint run\n```\n\n## Contributing\n\nWe welcome contributions to this MCP server! If you'd like to contribute, please\nreview the [CONTRIBUTING guide](./CONTRIBUTING.md) for details on how to get\nstarted.\n\nIf you run into a bug or have a feature request, please\n[open an issue](https://github.com/StacklokLabs/ocireg-mcp/issues) in the\nrepository or join us in the `#mcp-servers` channel on our\n[community Discord server](https://discord.gg/stacklok).\n\n## License\n\nThis project is licensed under the Apache v2 License - see the LICENSE file for\ndetails.\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "oci-registry": {
+        "command": "thv",
+        "args": ["run", "oci-registry"],
+        "env": {}
+      },
+      "oci-registry-with-token": {
+        "command": "thv",
+        "args": ["run", "--secret", "oci-token,target=OCI_TOKEN", "oci-registry"],
+        "env": {}
+      },
+      "oci-registry-with-user-pass": {
+        "command": "thv",
+        "args": [
+          "run",
+          "--secret",
+          "oci-username,target=OCI_USERNAME",
+          "--secret",
+          "oci-password,target=OCI_PASSWORD",
+          "oci-registry"
+        ],
+        "env": {}
+      },
+      "ocireg-mcp-configured": {
+        "command": "./ocireg-mcp",
+        "args": ["-port", "9090"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "StacklokLabs",
+    "repo": "ocireg-mcp",
+    "url": "https://github.com/StacklokLabs/ocireg-mcp",
+    "name": "stackloklabs__ocireg-mcp",
+    "path": null,
+    "stars": 10,
+    "contributors": 9,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "25e8efe74b2950f8e30a9cbf989a5d1da219b2da"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:17.601Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 10
+    },
+    {
+      "name": "google/go-containerregistry",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== go.mod ===\nmodule github.com/StacklokLabs/ocireg-mcp\n\ngo 1.24.2\n\nrequire (\n\tgithub.com/google/go-containerregistry v0.20.6\n\tgithub.com/mark3labs/mcp-go v0.39.1\n\tgithub.com/stretchr/testify v1.11.1\n)\n\nrequire (\n\tgithub.com/bahlo/generic-list-go v0.2.0 // indirect\n\tgithub.com/buger/jsonparser v1.1.1 // indirect\n\tgithub.com/containerd/stargz-snapshotter/estargz v0.16.3 // indirect\n\tgithub.com/davecgh/go-spew v1.1.1 // indirect\n\tgithub.com/docker/cli v28.2.2+incompatible // indirect\n\tgithub.com/docker/distribution v2.8.3+incompatible // indirect\n\tgithub.com/docker/docker-credential-helpers v0.9.3 // indirect\n\tgithub.com/google/uuid v1.6.0 // indirect\n\tgithub.com/invopop/jsonschema v0.13.0 // indirect\n\tgithub.com/klauspost/compress v1.18.0 // indirect\n\tgithub.com/mailru/easyjson v0.7.7 // indirect\n\tgithub.com/mitchellh/go-homedir v1.1.0 // indirect\n\tgithub.com/opencontainers/go-digest v1.0.0 // indirect\n\tgithub.com/opencontainers/image-spec v1.1.1 // indirect\n\tgithub.com/pkg/errors v0.9.1 // indirect\n\tgithub.com/pmezard/go-difflib v1.0.0 // indirect\n\tgithub.com/sirupsen/logrus v1.9.3 // indirect\n\tgithub.com/spf13/cast v1.7.1 // indirect\n\tgithub.com/vbatts/tar-split v0.12.1 // indirect\n\tgithub.com/wk8/go-ordered-map/v2 v2.1.8 // indirect\n\tgithub.com/yosida95/uritemplate/v3 v3.0.2 // indirect\n\tgolang.org/x/sync v0.15.0 // indirect\n\tgolang.org/x/sys v0.33.0 // indirect\n\tgopkg.in/yaml.v3 v3.0.1 // indirect\n)\n"
+}

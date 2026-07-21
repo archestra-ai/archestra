@@ -1,0 +1,80 @@
+{
+  "name": "pearch-ai__mcp_pearch",
+  "display_name": "mcp_pearch",
+  "description": "The most accurate people search API/MCP. Natural language in, high-quality candidates out. Built for ATSs and AI Agents.",
+  "author": {
+    "name": "Pearch-ai"
+  },
+  "server": {
+    "command": "fastmcp",
+    "args": ["dev", "pearch_mcp.py"],
+    "env": {
+      "PEARCH_API_KEY": "${user_config.pearch_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "pearch_api_key": {
+      "type": "string",
+      "title": "Pearch.ai API Key",
+      "description": "Your API key for Pearch.ai.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Pearch.ai MCP\n\n[![smithery badge](https://smithery.ai/badge/@Pearch-ai/mcp_pearch)](https://smithery.ai/server/@Pearch-ai/mcp_pearch)\n\nOur people search API and MCP deliver the most precise results on the market. You simply ask in natural language, and we provide top-quality candidates. Designed for seamless integration with any ATS or hiring platform, our solution is backed by scientific methods, trusted by recruiters, and consistently rated the highest-quality sourcing tool.\n\n[Evaluating AI Recruitment Sourcing Tools by Human Preference](https://arxiv.org/abs/2504.02463v1)\n\n\n## Prerequisites\n\n- Python 3.7 or newer\n- Pearch.ai API key\n- FastMCP package\n\n## API Key Setup\n\n1. Visit [Pearch.ai Dashboard](https://s.pearch.ai/settings) to obtain your API key\n2. Set your API key as an environment variable:\n   ```bash\n   export PEARCH_API_KEY='your-api-key-here'\n   ```\n\n## Installation\n\n### Installing via Smithery\n\nTo install mcp_pearch for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@Pearch-ai/mcp_pearch):\n\n```bash\nnpx -y @smithery/cli install @Pearch-ai/mcp_pearch --client claude\n```\n\n### Option 1: macOS[uv] \n\n```bash\n# Install Python and uv\nbrew install python\nbrew install uv\n\n# Create and activate virtual environment\nuv venv\nsource .venv/bin/activate\n\n# Install FastMCP\nuv pip install fastmcp\n```\n\n### Option 2: Linux[pip] \n\n```bash\n# Install system dependencies\nsudo apt update\nsudo apt install python3 python3-venv python3-pip\n\n# Create and activate virtual environment\npython3 -m venv .venv\nsource .venv/bin/activate\n\n# Install FastMCP\npip install fastmcp\n```\n\n## Usage\n\n### Standard Installation\n\n```bash\nfastmcp install pearch_mcp.py --name \"Pearch.ai\" --env-var PEARCH_API_KEY=pearch_mcp_key\n```\n\n### Development Mode\n\nFor local development and testing:\n\n```bash\n# Set your API key\nexport PEARCH_API_KEY='your-api-key-here'\n\n# Start development server\nfastmcp dev pearch_mcp.py\n```\n\n## Support\n\nIf you encounter any issues or have questions:\n- Open an issue in the repository\n- Contact support at [f@pearch.ai](mailto:f@pearch.ai)\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 47,
+  "archestra_config": {
+    "client_config_permutations": {
+      "pearch_mcp-dev": {
+        "command": "fastmcp",
+        "args": ["dev", "pearch_mcp.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Pearch-ai",
+    "repo": "mcp_pearch",
+    "url": "https://github.com/Pearch-ai/mcp_pearch",
+    "name": "mcp_pearch",
+    "path": null,
+    "stars": 2,
+    "contributors": 3,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "a76e74f108162e09640649181f3e3aa35de9e407"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:32.009Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "fastmcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": null
+}

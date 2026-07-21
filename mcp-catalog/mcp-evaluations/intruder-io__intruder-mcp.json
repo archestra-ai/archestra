@@ -1,0 +1,107 @@
+{
+  "name": "intruder-io__intruder-mcp",
+  "display_name": "intruder-mcp",
+  "description": "An MCP server to let AI agents control Intruder",
+  "author": {
+    "name": "intruder-io"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["--directory", "${__dirname}/intruder_mcp", "run", "server.py"],
+    "env": {
+      "INTRUDER_API_KEY": "${user_config.intruder_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "intruder_api_key": {
+      "type": "string",
+      "title": "Intruder API Key",
+      "description": "Your API key for authentication with Intruder.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Intruder MCP\n\nLet MCP clients like Claude and Cursor control [Intruder](https://www.intruder.io/). For more information and sample use cases, please see [our blog post](https://www.intruder.io/blog/claude-intruder-mcp#intruder-mcp-use-cases).\n\n## Installation\nThere are three ways to use the MCP server:\n- Through [smithery](https://smithery.ai/server/@intruder-io/intruder-mcp)\n- Locally on your machine with Python\n- In a Docker container\n\nAll of these methods require you to provide an Intruder API key. To generate a key, see [the documentation](https://developers.intruder.io/docs/creating-an-access-token).\n\n### Smithery\nFollow the instructions on [smithery](https://smithery.ai/server/@intruder-io/intruder-mcp).\n\n### Running Locally\nInstall [uv](https://github.com/astral-sh/uv) if it isn't already present, and then clone this repository and run the following from the root directory:\n\n```bash\nuv venv\nuv pip install -e .\n```\n\nThen, add the following to your MCP client configuration, making sure to fill in your API key, and update the path to where you have cloned this repository:\n\n```json\n{\n  \"mcpServers\": {\n    \"intruder\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"path/to/intruder-mcp/intruder_mcp\",\n        \"run\",\n        \"server.py\"\n      ],\n      \"env\": {\n        \"INTRUDER_API_KEY\": \"your-api-key\"\n      }\n    }\n  }\n}\n```\n\n### Running in a Container\n\nAdd the following to your MCP client configuration, making sure to fill in your API key:\n\n```json\n{\n  \"mcpServers\": {\n    \"intruder\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"container\",\n        \"run\",\n        \"--interactive\",\n        \"--rm\",\n        \"--init\",\n        \"--env\",\n        \"INTRUDER_API_KEY=<your-api-key>\",\n        \"ghcr.io/intruder-io/intruder-mcp\"\n      ]\n    }\n  }\n}\n```\n",
+  "category": "Security",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "intruder": {
+        "command": "uv",
+        "args": ["--directory", "path/to/intruder-mcp/intruder_mcp", "run", "server.py"],
+        "env": {
+          "INTRUDER_API_KEY": "your-api-key"
+        }
+      },
+      "intruder-mcp-docker": {
+        "command": "docker",
+        "args": [
+          "container",
+          "run",
+          "--interactive",
+          "--rm",
+          "--init",
+          "--env",
+          "INTRUDER_API_KEY=<your-api-key>",
+          "ghcr.io/intruder-io/intruder-mcp"
+        ],
+        "env": {
+          "INTRUDER_API_KEY": "<your-api-key>"
+        },
+        "docker_image": "container"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "intruder-io",
+    "repo": "intruder-mcp",
+    "url": "https://github.com/intruder-io/intruder-mcp",
+    "name": "intruder-mcp",
+    "path": null,
+    "stars": 17,
+    "contributors": 3,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e3991507094e04e98790ed1905f35b1d579404cd"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:34.387Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    },
+    {
+      "name": "pydantic",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"intruder-mcp\"\nversion = \"0.1.0\"\ndescription = \"MCP server for Intruder API\"\ndependencies = [\n    \"mcp>=0.1.0\",\n    \"httpx>=0.24.0\",\n    \"pydantic>=2.0.0\",\n]\n\n[project.scripts]\nintruder-mcp = \"intruder_mcp.server:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"intruder_mcp\"] "
+}

@@ -1,0 +1,107 @@
+{
+  "name": "fatwang2__search1api-mcp",
+  "display_name": "Search1API",
+  "description": "MCP server from fatwang2/search1api-mcp",
+  "author": {
+    "name": "fatwang2"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "search1api-mcp"],
+    "env": {
+      "SEARCH1API_KEY": "${user_config.search1api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "search1api_key": {
+      "type": "string",
+      "title": "Search1API Key",
+      "description": "Your API key for Search1API",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Search1API MCP Server\n\n[中文文档](./README_zh.md)\n\nA Model Context Protocol (MCP) server that provides search and crawl functionality using Search1API.\n\n## Prerequisites\n\n- Node.js >= 18.0.0\n- A valid Search1API API key (See **Setup Guide** below on how to obtain and configure)\n\n## Installation (Standalone / General)\n\n1.  **Clone the repository:**\n    ```bash\n    git clone https://github.com/fatwang2/search1api-mcp.git\n    cd search1api-mcp\n    ```\n\n2.  **Configure API Key:** Before building, you need to provide your Search1API key. See the **Setup Guide** section below for different methods (e.g., using a `.env` file or environment variables).\n\n3.  **Install dependencies and build:**\n    ```bash\n    npm install\n    npm run build\n    ```\n    *Note: If using the project's `.env` file method for the API key, ensure it exists before this step.*\n\n## Usage (Standalone / General)\n\nEnsure your API key is configured (see **Setup Guide**).\n\nStart the server:\n```bash\nnpm start\n```\n\nThe server will then be ready to accept connections from MCP clients.\n\n## Setup Guide\n\n### 1. Get Search1API Key\n\n1.  Register at [Search1API](https://www.search1api.com/?utm_source=mcp)\n2.  Get your API key from your dashboard.\n\n### 2. Configure API Key\n\nYou need to make your API key available to the server. Choose **one** of the following methods:\n\n**Method A: Project `.env` File (Recommended for Standalone or LibreChat)**\n\nThis method is required if integrating with the current version of LibreChat (see specific section below).\n\n1.  In the `search1api-mcp` project root directory, create a file named `.env`:\n    ```bash\n    # In the search1api-mcp directory\n    echo \"SEARCH1API_KEY=your_api_key_here\" > .env\n    ```\n2.  Replace `your_api_key_here` with your actual key.\n3.  Make sure this file exists **before** running `npm install && npm run build`.\n\n**Method B: Environment Variable (Standalone Only)**\n\nSet the `SEARCH1API_KEY` environment variable before starting the server.\n\n```bash\nexport SEARCH1API_KEY=\"your_api_key_here\"\nnpm start\n```\n\n**Method C: MCP Client Configuration (Advanced)**\n\nSome MCP clients allow specifying environment variables directly in their configuration. This is useful for clients like Cursor, VS Code extensions, etc.\n\n```json\n{\n  \"mcpServers\": {\n    \"search1api\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"-y\",\n        \"search1api-mcp\"\n      ],\n      \"env\": {\n        \"SEARCH1API_KEY\": \"YOUR_SEARCH1API_KEY\"\n      }\n    }\n  }\n}\n```\n\n**Note for LibreChat Users:** Due to current limitations in LibreChat, Method A (Project `.env` File) is the **required** method. See the dedicated integration section below for full instructions.\n\n## Integration with LibreChat (Docker)\n\nThis section details the required steps for integrating with LibreChat via Docker.\n\n**Overview:**\n\n1.  Clone this server's repository into a location accessible by your LibreChat `docker-compose.yml`.\n2.  Configure the required API key using the **Project `.env` File method** within this server's directory.\n3.  Build this server.\n4.  Tell LibreChat how to run this server by editing `librechat.yaml`.\n5.  Make sure the built server code is available inside the LibreChat container via a Docker volume bind.\n6.  Restart LibreChat.\n\n**Step-by-Step:**\n\n1.  **Clone the Repository:**\n    Navigate to the directory on your host machine where you manage external services for LibreChat (this is often alongside your `docker-compose.yml`). A common location is a dedicated `mcp-server` directory.\n    ```bash\n    # Example: Navigate to where docker-compose.yml lives, then into mcp-server\n    cd /path/to/your/librechat/setup/mcp-server\n    git clone https://github.com/fatwang2/search1api-mcp.git\n    ```\n\n2.  **Navigate into the Server Directory:**\n    ```bash\n    cd search1api-mcp\n    ```\n\n3.  **Configure API Key (Project `.env` File Method - Required for LibreChat):**\n    ```bash\n    # Create the .env file\n    echo \"SEARCH1API_KEY=your_api_key_here\" > .env\n    # IMPORTANT: Replace 'your_api_key_here' with your actual Search1API key\n    ```\n\n4.  **Install Dependencies and Build:**\n    This step compiles the server code into the `build` directory.\n    ```bash\n    npm install\n    npm run build\n    ```\n\n5.  **Configure `librechat.yaml`:**\n    Edit your main `librechat.yaml` file to tell LibreChat how to execute this MCP server. Add an entry under `mcp_servers`:\n    ```yaml\n    # In your main librechat.yaml\n    mcp_servers:\n      # You can add other MCP servers here too\n      search1api:\n        # Optional: Display name for the server in LibreChat UI\n        # name: Search1API Tools\n\n        # Command tells LibreChat to use 'node'\n        command: node\n\n        # Args specify the script for 'node' to run *inside the container*\n        args:\n          - /app/mcp-server/search1api-mcp/build/index.js\n    ```\n    *   The `args` path (`/app/...`) is the location *inside* the LibreChat API container where the built server will be accessed (thanks to the volume bind in the next step).\n\n6.  **Configure Docker Volume Bind:**\n    Edit your `docker-compose.yml` (or more likely, your `docker-compose.override.yml`) to map the `search1api-mcp` directory from your host machine into the LibreChat API container. Find the `volumes:` section for the `api:` service:\n    ```yaml\n    # In your docker-compose.yml or docker-compose.override.yml\n    services:\n      api:\n        # ... other service config ...\n        volumes:\n          # ... other volumes likely exist here ...\n\n          # Add this volume bind:\n          - ./mcp-server/search1api-mcp:/app/mcp-server/search1api-mcp\n    ```\n    *   **Host Path (`./mcp-server/search1api-mcp`):** This is the path on your host machine *relative* to where your `docker-compose.yml` file is located. Adjust it if you cloned the repo elsewhere.\n    *   **Container Path (`:/app/mcp-server/search1api-mcp`):** This is the path *inside* the container. It **must match** the directory structure used in the `librechat.yaml` `args` path.\n\n7.  **Restart LibreChat:**\n    Apply the changes by rebuilding (if you modified `docker-compose.yml`) and restarting your LibreChat stack.\n    ```bash\n    docker compose down && docker compose up -d --build\n    # Or: docker compose restart api (if only librechat.yaml changed)\n    ```\n\nNow, the Search1API server should be available as a tool provider within LibreChat.\n\n## Features\n\n- Web search functionality\n- News search functionality\n- Web page content extraction\n- Website sitemap extraction\n- Deep thinking and complex problem solving with DeepSeek R1\n- Seamless integration with Claude Desktop, Cursor, Windsurf, Cline and other MCP clients\n\n## Tools\n\n### 1. Search Tool\n- Name: `search`\n- Description: Search the web using Search1API\n- Parameters:\n  * `query` (required): Search query in natural language. Be specific and concise for better results\n  * `max_results` (optional, default: 10): Number of results to return\n  * `search_service` (optional, default: \"google\"): Search service to use (google, bing, duckduckgo, yahoo, x, reddit, github, youtube, arxiv, wechat, bilibili, imdb, wikipedia)\n  * `crawl_results` (optional, default: 0): Number of results to crawl for full webpage content\n  * `include_sites` (optional): List of sites to include in search\n  * `exclude_sites` (optional): List of sites to exclude from search\n  * `time_range` (optional): Time range for search results (\"day\", \"month\", \"year\")\n\n### 2. News Tool\n- Name: `news`\n- Description: Search for news articles using Search1API\n- Parameters:\n  * `query` (required): Search query in natural language. Be specific and concise for better results\n  * `max_results` (optional, default: 10): Number of results to return\n  * `search_service` (optional, default: \"bing\"): Search service to use (google, bing, duckduckgo, yahoo, hackernews)\n  * `crawl_results` (optional, default: 0): Number of results to crawl for full webpage content\n  * `include_sites` (optional): List of sites to include in search\n  * `exclude_sites` (optional): List of sites to exclude from search\n  * `time_range` (optional): Time range for search results (\"day\", \"month\", \"year\")\n\n### 3. Crawl Tool\n- Name: `crawl`\n- Description: Extract content from a URL using Search1API\n- Parameters:\n  * `url` (required): URL to crawl\n\n### 4. Sitemap Tool\n- Name: `sitemap`\n- Description: Get all related links from a URL\n- Parameters:\n  * `url` (required): URL to get sitemap\n\n### 5. Reasoning Tool\n- Name: `reasoning`\n- Description: A tool for deep thinking and complex problem solving with fast deepseek r1 model and web search ability(You can change to any other model in search1api website but the speed is not guaranteed)\n- Parameters:\n  * `content` (required): The question or problem that needs deep thinking\n\n### 6. Trending Tool\n- Name: `trending`\n- Description: Get trending topics from popular platforms\n- Parameters:\n  * `search_service` (required): Specify the platform to get trending topics from (github, hackernews)\n  * `max_results` (optional, default: 10): Maximum number of trending items to return\n\n## Version History\n\n- v0.2.0: Added fallback `.env` support for LibreChat integration and updated dependencies.\n- v0.1.8: Added X(Twitter) and Reddit search services\n- v0.1.7: Added Trending tool for GitHub and Hacker News\n- v0.1.6: Added Wikipedia search service\n- v0.1.5: Added new search parameters (include_sites, exclude_sites, time_range) and new search services (arxiv, wechat, bilibili, imdb)\n- v0.1.4: Added reasoning tool with deepseek r1 and updated the Cursor and Windsurf configuration guide\n- v0.1.3: Added news search functionality\n- v0.1.2: Added sitemap functionality\n- v0.1.1: Added web crawling functionality\n- v0.1.0: Initial release with search functionality\n\n## License\n\nThis project is licensed under the MIT License - see the LICENSE file for details.\n",
+  "category": "Search",
+  "quality_score": 60,
+  "archestra_config": {
+    "client_config_permutations": {
+      "search1api-mcp": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {}
+      },
+      "search1api-mcp-configured": {
+        "command": "npm",
+        "args": ["start"],
+        "env": {
+          "SEARCH1API_KEY": "your_api_key_here"
+        }
+      },
+      "search1api-mcp-npx-configured": {
+        "command": "npx",
+        "args": ["-y", "search1api-mcp"],
+        "env": {
+          "SEARCH1API_KEY": "YOUR_SEARCH1API_KEY"
+        }
+      },
+      "search1api-mcp-librechat-node": {
+        "command": "node",
+        "args": ["/app/mcp-server/search1api-mcp/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "fatwang2",
+    "repo": "search1api-mcp",
+    "url": "https://github.com/fatwang2/search1api-mcp",
+    "name": "search1api-mcp",
+    "path": null,
+    "stars": 147,
+    "contributors": 2,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "0ab32d5919aea0a6d9925b1a0a63373916fb7b9f"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:27.866Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "dotenv",
+      "importance": 7
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"search1api-mcp\",\n  \"version\": \"0.2.0\",\n  \"description\": \"A Model Context Protocol (MCP) server that provides search and crawl functionality using Search1API\",\n  \"private\": false,\n  \"type\": \"module\",\n  \"bin\": {\n    \"search1api-mcp\": \"build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\" && node -e \\\"if (!require('fs').existsSync('.env.example')) { require('fs').writeFileSync('.env.example', '# Search1API Configuration\\\\n# Get your API key from https://www.search1api.com/?utm_source=mcp\\\\nSEARCH1API_KEY=your_api_key_here\\\\n') }\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.7.0\",\n    \"axios\": \"1.8.4\",\n    \"dotenv\": \"^16.4.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"claude\",\n    \"search\",\n    \"crawl\",\n    \"google\",\n    \"search1api\"\n  ],\n  \"author\": \"fatwang2\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/fatwang2/search1api-mcp.git\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0.0\"\n  }\n}\n"
+}

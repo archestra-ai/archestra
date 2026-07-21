@@ -1,0 +1,127 @@
+{
+  "name": "incentivai__quickchat-ai-mcp",
+  "display_name": "quickchat-ai-mcp",
+  "description": "The Quickchat AI MCP server",
+  "author": {
+    "name": "incentivai"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["quickchat-ai-mcp"],
+    "env": {
+      "SCENARIO_ID": "${user_config.scenario_id}",
+      "API_KEY": "${user_config.api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "scenario_id": {
+      "type": "string",
+      "title": "Quickchat AI Scenario ID",
+      "description": "The ID of your Quickchat AI scenario, found in the Quickchat AI app > MCP > Integration page.",
+      "required": true
+    },
+    "api_key": {
+      "type": "string",
+      "title": "Quickchat AI API Key",
+      "description": "Your Quickchat AI API key for authentication, found in the Quickchat AI app > MCP > Integration page. This can be disabled on the MCP page by turning off 'Require API key'.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "<p align=\"center\">\n  <img src=\"https://raw.githubusercontent.com/incentivai/quickchat-ai-mcp/main/img/background.jpg\"/>\n</p>\n\n# Quickchat AI MCP server\n\nThe [Quickchat AI](https://quickchat.ai) MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server allows you to let anyone plug in your Quickchat AI Agent into their favourite AI app such as Claude Desktop, Cursor, VS Code, Windsurf and [more](https://modelcontextprotocol.io/clients#feature-support-matrix).\n\n## Quickstart\n1. Create a [Quickchat AI account](https://app.quickchat.ai) and start a 7-day trial of any plan.\n2. Set up your AI's Knowledge Base, capabilities and settings.\n3. Go to the MCP page to activate your MCP. Give it **Name**, **Description** and (optional) **Command**. They are important - AI apps need to understand when to contact your AI, what its capabilities and knowledge are.\n4. That's it! Now you're ready to test your Quickchat AI via any AI app and show it to the world!\n\n<p align=\"center\">\n  <img src=\"https://raw.githubusercontent.com/incentivai/quickchat-ai-mcp/main/img/claude_tool_anatomy.png\" alt=\"Claude tool anatomy\" width=\"600\"/>\n  <br/>\n  <sub>Claude tool anatomy</sub>\n</p>\n\n<p align=\"center\">\n  <img src=\"https://raw.githubusercontent.com/incentivai/quickchat-ai-mcp/main/img/cursor_tool_anatomy.png\" alt=\"Cursor tool anatomy\" width=\"600\"/>\n  <br/>\n  <sub>Cursor tool anatomy</sub>\n</p>\n\n## Useful links\n- Quickstart video [youtube.com/watch?v=JE3dNiyZO8w](https://www.youtube.com/watch?v=JE3dNiyZO8w)\n- Quickstart blog post: [quickchat.ai/post/how-to-launch-your-quickchat-ai-mcp](https://www.quickchat.ai/post/how-to-launch-your-quickchat-ai-mcp)\n- MCP (Model Context Protocol) explained: [quickchat.ai/post/mcp-explained](https://www.quickchat.ai/post/mcp-explained)\n- The Quickchat AI MCP package on PyPI: [pypi.org/project/quickchat-ai-mcp](https://pypi.org/project/quickchat-ai-mcp)\n- The Quickchat AI MCP GitHub repo: [github.com/quickchatai/quickchat-ai-mcp](https://github.com/quickchatai/quickchat-ai-mcp)\n\n## Prerequisite\nInstall `uv` using:\n```commandline\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\nor read more [here](https://docs.astral.sh/uv/getting-started/installation/).\n\n## Test with Claude Desktop\n\n### Configuration\nGo to `Settings > Developer > Edit` Config. Open the _claude_desktop_config.json_ file in a text editor. If you're just starting out, the file is going to look like this:\n\n```JSON\n{\n  \"mcpServers\": {}\n}\n```\n\nThis is where you can define all the MCPs your Claude Desktop has access to. Here is how you add your Quickchat AI MCP:\n\n```JSON\n{\n  \"mcpServers\": {\n    \"< QUICKCHAT AI MCP NAME >\": {\n      \"command\": \"uvx\",\n      \"args\": [\"quickchat-ai-mcp\"],\n      \"env\": {\n        \"SCENARIO_ID\": \"< QUICKCHAT AI SCENARIO ID >\",\n        \"API_KEY\": \"< QUICKCHAT AI API KEY >\"\n      }\n    }\n  }\n}\n```\n\nGo to the `Quickchat AI app > MCP > Integration` to find the above snippet with the values of MCP Name, SCENARIO_ID and API_KEY filled out.\n\n## Test with Cursor\n\n### Configuration\nGo to `Settings > Cursor Settings > MCP > Add new global MCP server` and include the Quickchat AI MCP snippet:\n\n```JSON\n{\n  \"mcpServers\": {\n    \"< QUICKCHAT AI MCP NAME >\": {\n      \"command\": \"uvx\",\n      \"args\": [\"quickchat-ai-mcp\"],\n      \"env\": {\n        \"SCENARIO_ID\": \"< QUICKCHAT AI SCENARIO ID >\",\n        \"API_KEY\": \"< QUICKCHAT AI API KEY >\"\n      }\n    }\n  }\n}\n```\n\nAs before, you can find values for MCP Name, SCENARIO_ID and API_KEY at `Quickchat AI app > MCP > Integration`.\n\n## Test with other AI apps\n\nOther AI apps will most likely require the same configuration but the actual steps to include it in the App itself will be different. We will be expanding this README as we go along.\n\n## Launch your Quickchat AI MCP to the world! \n\n```\n⛔️ Do not publish your Quickchat API key to your users!\n```\n\nOnce you're ready to let other users connect your Quickchat AI MCP to their AI apps, share configuration snippet with them! However, you need to make sure they can use your Quickchat AI MCP **without your Quickchat API key**. Here is how to do that:\n1. On the Quickchat App MCP page, turn the **Require API key** toggle **OFF**.\n2. Share the configuration snippet _without the API key_:\n\n```JSON\n{\n  \"mcpServers\": {\n    \"< QUICKCHAT AI MCP NAME >\": {\n      \"command\": \"uvx\",\n      \"args\": [\"quickchat-ai-mcp\"],\n      \"env\": {\n        \"SCENARIO_ID\": \"< QUICKCHAT AI SCENARIO ID >\"\n      }\n    }\n  }\n}\n```\n---\n\n## Cool features\n- You can control all aspects of your MCP from the Quickchat AI dashboard. _One click and your change is deployed_. That includes the MCP name and description - all your users need to do is refresh their MCP connection.\n- View all conversations in the Quickchat Inbox. Remember: those won't be the exact messages your users send to their AI app but rather the transcript of the AI <> AI interaction between their AI app and your Quickchat AI. 🤯\n- Unlike most MCP implementations, this isn't a static tool handed to an AI. It's an open-ended way to send messages to Quickchat AI Agents you create. 🙌 \n\n---\n\n## Running from source\n\n### Debugging with the [MCP inspector](https://modelcontextprotocol.io/docs/tools/inspector)\n\n```commandline\nuv run mcp dev src/__main__.py\n```\n\n### Debugging with Claude Desktop, Cursor or other AI apps\n\nUse the following JSON configuration:\n\n```JSON\n{\n  \"mcpServers\": {\n    \"< QUICKCHAT AI MCP NAME >\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"run\",\n        \"--with\",\n        \"mcp[cli]\",\n        \"--with\",\n        \"requests\",\n        \"mcp\",\n        \"run\",\n        \"< YOUR PATH>/quickchat-ai-mcp/src/__main__.py\"\n      ],\n      \"env\": {\n        \"SCENARIO_ID\": \"< QUICKCHAT AI SCENARIO ID >\",\n        \"API_KEY\": \"< QUICKCHAT AI API KEY >\"\n      }\n    }\n  }\n}\n```\n\n### Testing\n\nMake sure your code is properly formatted and all tests are passing:\n\n```commandline\nruff check --fix\nruff format\nuv run pytest\n```\n\n## GitHub Star History\n\n[![Star History Chart](https://api.star-history.com/svg?repos=quickchatai/quickchat-ai-mcp&type=Date)](https://www.star-history.com/#quickchatai/quickchat-ai-mcp&Date)",
+  "category": "AI Tools",
+  "quality_score": 65,
+  "archestra_config": {
+    "client_config_permutations": {
+      "quickchat-ai-mcp-configured": {
+        "command": "uvx",
+        "args": ["quickchat-ai-mcp"],
+        "env": {
+          "SCENARIO_ID": "< QUICKCHAT AI SCENARIO ID >",
+          "API_KEY": "< QUICKCHAT AI API KEY >"
+        }
+      },
+      "quickchat-ai-mcp-public": {
+        "command": "uvx",
+        "args": ["quickchat-ai-mcp"],
+        "env": {
+          "SCENARIO_ID": "< QUICKCHAT AI SCENARIO ID >"
+        }
+      },
+      "quickchat-ai-mcp-dev-inspector": {
+        "command": "uv",
+        "args": ["run", "mcp", "dev", "src/__main__.py"],
+        "env": {}
+      },
+      "quickchat-ai-mcp-dev-client-configured": {
+        "command": "uv",
+        "args": [
+          "run",
+          "--with",
+          "mcp[cli]",
+          "--with",
+          "requests",
+          "mcp",
+          "run",
+          "< YOUR PATH>/quickchat-ai-mcp/src/__main__.py"
+        ],
+        "env": {
+          "SCENARIO_ID": "< QUICKCHAT AI SCENARIO ID >",
+          "API_KEY": "< QUICKCHAT AI API KEY >"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "incentivai",
+    "repo": "quickchat-ai-mcp",
+    "url": "https://github.com/incentivai/quickchat-ai-mcp",
+    "name": "quickchat-ai-mcp",
+    "path": null,
+    "stars": 20,
+    "contributors": 1,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "9931bb7e1c42d0883bc9320cfa08ffd7278c1cc4"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:39.057Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "requests",
+      "importance": 8
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 5
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"quickchat-ai-mcp\"\nversion = \"0.0.11\"\ndescription = \"Quickchat AI MCP Server\"\nauthors = [\n    { name = \"Piotr Grudzien\", email = \"piotr@quickchat.ai\" },\n    { name = \"Mateusz Jakubczak\", email = \"mateusz@quickchat.ai\" }\n]\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n    \"requests>=2.31.0\",\n    \"mcp>=1.0.0\",\n    \"python-dotenv>=1.1.0\",\n]\nkeywords = [\n    \"quickchat\",\n    \"mcp\",\n    \"ai-agent\"\n]\n\n[project.optional-dependencies]\ntest = [\n    \"pytest\",\n    \"pytest-asyncio\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src\"]\n\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n\n[project.scripts]\nquickchat-ai-mcp = \"src.__main__:run\"\n\n"
+}

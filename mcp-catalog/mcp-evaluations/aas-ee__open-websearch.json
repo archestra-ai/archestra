@@ -1,0 +1,204 @@
+{
+  "name": "aas-ee__open-websearch",
+  "display_name": "open-webSearch",
+  "description": "Web search mcp using free multi-engine search (NO API KEYS REQUIRED) — Supports Bing, Baidu, DuckDuckGo, Brave, Exa, Github, Juejin and CSDN.",
+  "author": {
+    "name": "Aas-ee"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "open-websearch@latest"],
+    "env": {
+      "ENABLE_CORS": "${user_config.enable_cors}",
+      "CORS_ORIGIN": "${user_config.cors_origin}",
+      "DEFAULT_SEARCH_ENGINE": "${user_config.default_search_engine}",
+      "USE_PROXY": "${user_config.use_proxy}",
+      "PROXY_URL": "${user_config.proxy_url}",
+      "PORT": "${user_config.port}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "enable_cors": {
+      "type": "boolean",
+      "title": "Enable CORS",
+      "description": "Enable CORS",
+      "default": false,
+      "required": false
+    },
+    "cors_origin": {
+      "type": "string",
+      "title": "CORS Origin",
+      "description": "CORS origin configuration",
+      "default": "*",
+      "required": false
+    },
+    "default_search_engine": {
+      "type": "string",
+      "title": "Default Search Engine",
+      "description": "Default search engine",
+      "default": "bing",
+      "required": false
+    },
+    "use_proxy": {
+      "type": "boolean",
+      "title": "Enable HTTP Proxy",
+      "description": "Enable HTTP proxy",
+      "default": false,
+      "required": false
+    },
+    "proxy_url": {
+      "type": "string",
+      "title": "Proxy Server URL",
+      "description": "Proxy server URL",
+      "default": "http://127.0.0.1:7890",
+      "required": false
+    },
+    "port": {
+      "type": "number",
+      "title": "Server Port",
+      "description": "Server port",
+      "default": 3000,
+      "min": 1,
+      "max": 65535,
+      "required": false
+    }
+  },
+  "readme": "<div align=\"center\">\n\n# Open-WebSearch MCP Server\n\n[![ModelScope](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/Aas-ee/3af09e0f4c7821fb2e9acb96483a5ff0/raw/badge.json&color=%23de5a16)](https://www.modelscope.cn/mcp/servers/Aasee1/open-webSearch)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/Aas-ee/open-webSearch)](https://archestra.ai/mcp-catalog/aas-ee__open-websearch)\n[![smithery badge](https://smithery.ai/badge/@Aas-ee/open-websearch)](https://smithery.ai/server/@Aas-ee/open-websearch)\n![Version](https://img.shields.io/github/v/release/Aas-ee/open-websearch)\n![License](https://img.shields.io/github/license/Aas-ee/open-websearch)\n![Issues](https://img.shields.io/github/issues/Aas-ee/open-websearch)\n\n**[🇨🇳 中文](./README-zh.md) | 🇺🇸 English**\n\n</div>\n\nA Model Context Protocol (MCP) server based on multi-engine search results, supporting free web search without API keys.\n\n## Features\n\n- Web search using multi-engine results\n    - bing\n    - baidu\n    - ~~linux.do~~ temporarily unsupported\n    - csdn\n    - duckduckgo\n    - exa\n    - brave\n    - juejin\n- HTTP proxy configuration support for accessing restricted resources\n- No API keys or authentication required\n- Returns structured results with titles, URLs, and descriptions\n- Configurable number of results per search\n- Customizable default search engine\n- Support for fetching individual article content\n    - csdn\n    - github (README files)\n\n## TODO\n- Support for ~~Bing~~ (already supported), ~~DuckDuckGo~~ (already supported), ~~Exa~~ (already supported), ~~Brave~~ (already supported), Google and other search engines\n- Support for more blogs, forums, and social platforms\n- Optimize article content extraction, add support for more sites\n- ~~Support for GitHub README fetching~~ (already supported)\n\n## Installation Guide\n\n### NPX Quick Start (Recommended)\n\nThe fastest way to get started:\n\n```bash\n# Basic usage\nnpx open-websearch@latest\n\n# With environment variables (Linux/macOS)\nDEFAULT_SEARCH_ENGINE=duckduckgo ENABLE_CORS=true npx open-websearch@latest\n\n# Windows PowerShell\n$env:DEFAULT_SEARCH_ENGINE=\"duckduckgo\"; $env:ENABLE_CORS=\"true\"; npx open-websearch@latest\n\n# Windows CMD\nset MODE=stdio && set DEFAULT_SEARCH_ENGINE=duckduckgo && npx open-websearch@latest\n\n# Cross-platform (requires cross-env, Used for local development)\nnpm install -g open-websearch\nnpx cross-env DEFAULT_SEARCH_ENGINE=duckduckgo ENABLE_CORS=true open-websearch\n```\n\n**Environment Variables:**\n\n| Variable | Default                 | Options | Description |\n|----------|-------------------------|---------|-------------|\n| `ENABLE_CORS` | `false`                 | `true`, `false` | Enable CORS |\n| `CORS_ORIGIN` | `*`                     | Any valid origin | CORS origin configuration |\n| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave`, `baidu`, `csdn`, `juejin` | Default search engine |\n| `USE_PROXY` | `false`                 | `true`, `false` | Enable HTTP proxy |\n| `PROXY_URL` | `http://127.0.0.1:7890` | Any valid URL | Proxy server URL |\n| `MODE` | `both`                  | `both`, `http`, `stdio` | Server mode: both HTTP+STDIO, HTTP only, or STDIO only |\n| `PORT` | `3000`                  | 1-65535 | Server port |\n| `ALLOWED_SEARCH_ENGINES` | empty (all available) | Comma-separated engine names | Limit which search engines can be used; if the default engine is not in this list, the first allowed engine becomes the default |\n\n**Common configurations:**\n```bash\n# Enable proxy for restricted regions\nUSE_PROXY=true PROXY_URL=http://127.0.0.1:7890 npx open-websearch@latest\n\n# Full configuration\nDEFAULT_SEARCH_ENGINE=duckduckgo ENABLE_CORS=true USE_PROXY=true PROXY_URL=http://127.0.0.1:7890 PORT=8080 npx open-websearch@latest\n```\n\n### Local Installation\n\n1. Clone or download this repository\n2. Install dependencies:\n```bash\nnpm install\n```\n3. Build the server:\n```bash\nnpm run build\n```\n4. Add the server to your MCP configuration:\n\n**Cherry Studio:**\n```json\n{\n  \"mcpServers\": {\n    \"web-search\": {\n      \"name\": \"Web Search MCP\",\n      \"type\": \"streamableHttp\",\n      \"description\": \"Multi-engine web search with article fetching\",\n      \"isActive\": true,\n      \"baseUrl\": \"http://localhost:3000/mcp\"\n    }\n  }\n}\n```\n\n**VSCode (Claude Dev Extension):**\n```json\n{\n  \"mcpServers\": {\n    \"web-search\": {\n      \"transport\": {\n        \"type\": \"streamableHttp\",\n        \"url\": \"http://localhost:3000/mcp\"\n      }\n    },\n    \"web-search-sse\": {\n      \"transport\": {\n        \"type\": \"sse\",\n        \"url\": \"http://localhost:3000/sse\"\n      }\n    }\n  }\n}\n```\n\n**Claude Desktop:**\n```json\n{\n  \"mcpServers\": {\n    \"web-search\": {\n      \"transport\": {\n        \"type\": \"streamableHttp\",\n        \"url\": \"http://localhost:3000/mcp\"\n      }\n    },\n    \"web-search-sse\": {\n      \"transport\": {\n        \"type\": \"sse\",\n        \"url\": \"http://localhost:3000/sse\"\n      }\n    }\n  }\n}\n```\n\n**NPX Command Line Configuration:**\n```json\n{\n  \"mcpServers\": {\n    \"web-search\": {\n      \"args\": [\n        \"open-websearch@latest\"\n      ],\n      \"command\": \"npx\",\n      \"env\": {\n        \"MODE\": \"stdio\",\n        \"DEFAULT_SEARCH_ENGINE\": \"duckduckgo\",\n        \"ALLOWED_SEARCH_ENGINES\": \"duckduckgo,bing,exa\"\n      }\n    }\n  }\n}\n```\n\n**Local STDIO Configuration for Cherry Studio (Windows):**\n```json\n{\n  \"mcpServers\": {\n    \"open-websearch-local\": {\n      \"command\": \"node\",\n      \"args\": [\"C:/path/to/your/project/build/index.js\"],\n      \"env\": {\n        \"MODE\": \"stdio\",\n        \"DEFAULT_SEARCH_ENGINE\": \"duckduckgo\",\n        \"ALLOWED_SEARCH_ENGINES\": \"duckduckgo,bing,exa\"\n      }\n    }\n  }\n}\n```\n\n### Docker Deployment\n\nQuick deployment using Docker Compose:\n\n```bash\ndocker-compose up -d\n```\n\nOr use Docker directly:\n```bash\ndocker run -d --name web-search -p 3000:3000 -e ENABLE_CORS=true -e CORS_ORIGIN=* ghcr.io/aas-ee/open-web-search:latest\n```\n\nEnvironment variable configuration:\n\n| Variable | Default                 | Options | Description |\n|----------|-------------------------|---------|-------------|\n| `ENABLE_CORS` | `false`                 | `true`, `false` | Enable CORS |\n| `CORS_ORIGIN` | `*`                     | Any valid origin | CORS origin configuration |\n| `DEFAULT_SEARCH_ENGINE` | `bing`                  | `bing`, `duckduckgo`, `exa`, `brave` | Default search engine |\n| `USE_PROXY` | `false`                 | `true`, `false` | Enable HTTP proxy |\n| `PROXY_URL` | `http://127.0.0.1:7890` | Any valid URL | Proxy server URL |\n| `PORT` | `3000`                  | 1-65535 | Server port |\n\nThen configure in your MCP client:\n```json\n{\n  \"mcpServers\": {\n    \"web-search\": {\n      \"name\": \"Web Search MCP\",\n      \"type\": \"streamableHttp\",\n      \"description\": \"Multi-engine web search with article fetching\",\n      \"isActive\": true,\n      \"baseUrl\": \"http://localhost:3000/mcp\"\n    },\n    \"web-search-sse\": {\n      \"transport\": {\n        \"name\": \"Web Search MCP\",\n        \"type\": \"sse\",\n        \"description\": \"Multi-engine web search with article fetching\",\n        \"isActive\": true,\n        \"url\": \"http://localhost:3000/sse\"\n      }\n    }\n  }\n}\n```\n\n## Usage Guide\n\nThe server provides four tools: `search`, `fetchLinuxDoArticle`, `fetchCsdnArticle`, and `fetchGithubReadme`.\n\n### search Tool Usage\n\n```typescript\n{\n  \"query\": string,        // Search query\n  \"limit\": number,        // Optional: Number of results to return (default: 10)\n  \"engines\": string[]     // Optional: Engines to use (bing,baidu,linuxdo,csdn,duckduckgo,exa,brave,juejin) default bing\n}\n```\n\nUsage example:\n```typescript\nuse_mcp_tool({\n  server_name: \"web-search\",\n  tool_name: \"search\",\n  arguments: {\n    query: \"search content\",\n    limit: 3,  // Optional parameter\n    engines: [\"bing\", \"csdn\", \"duckduckgo\", \"exa\", \"brave\", \"juejin\"] // Optional parameter, supports multi-engine combined search\n  }\n})\n```\n\nResponse example:\n```json\n[\n  {\n    \"title\": \"Example Search Result\",\n    \"url\": \"https://example.com\",\n    \"description\": \"Description text of the search result...\",\n    \"source\": \"Source\",\n    \"engine\": \"Engine used\"\n  }\n]\n```\n\n### fetchCsdnArticle Tool Usage\n\nUsed to fetch complete content of CSDN blog articles.\n\n```typescript\n{\n  \"url\": string    // URL from CSDN search results using the search tool\n}\n```\n\nUsage example:\n```typescript\nuse_mcp_tool({\n  server_name: \"web-search\",\n  tool_name: \"fetchCsdnArticle\",\n  arguments: {\n    url: \"https://blog.csdn.net/xxx/article/details/xxx\"\n  }\n})\n```\n\nResponse example:\n```json\n[\n  {\n    \"content\": \"Example search result\"\n  }\n]\n```\n\n### fetchLinuxDoArticle Tool Usage\n\nUsed to fetch complete content of Linux.do forum articles.\n\n```typescript\n{\n  \"url\": string    // URL from linuxdo search results using the search tool\n}\n```\n\nUsage example:\n```typescript\nuse_mcp_tool({\n  server_name: \"web-search\",\n  tool_name: \"fetchLinuxDoArticle\",\n  arguments: {\n    url: \"https://xxxx.json\"\n  }\n})\n```\n\nResponse example:\n```json\n[\n  {\n    \"content\": \"Example search result\"\n  }\n]\n```\n\n### fetchGithubReadme Tool Usage\n\nUsed to fetch README content from GitHub repositories.\n\n```typescript\n{\n  \"url\": string    // GitHub repository URL (supports HTTPS, SSH formats)\n}\n```\n\nUsage example:\n```typescript\nuse_mcp_tool({\n  server_name: \"web-search\",\n  tool_name: \"fetchGithubReadme\",\n  arguments: {\n    url: \"https://github.com/Aas-ee/open-webSearch\"\n  }\n})\n```\n\nSupported URL formats:\n- HTTPS: `https://github.com/owner/repo`\n- HTTPS with .git: `https://github.com/owner/repo.git`\n- SSH: `git@github.com:owner/repo.git`\n- URLs with parameters: `https://github.com/owner/repo?tab=readme`\n\nResponse example:\n```json\n[\n  {\n    \"content\": \"<div align=\\\"center\\\">\\n\\n# Open-WebSearch MCP Server...\"\n  }\n]\n```\n\n### fetchJuejinArticle Tool Usage\n\nUsed to fetch complete content of Juejin articles.\n\n```typescript\n{\n  \"url\": string    // Juejin article URL from search results\n}\n```\n\nUsage example:\n```typescript\nuse_mcp_tool({\n  server_name: \"web-search\",\n  tool_name: \"fetchJuejinArticle\",\n  arguments: {\n    url: \"https://juejin.cn/post/7520959840199360563\"\n  }\n})\n```\n\nSupported URL format:\n- `https://juejin.cn/post/{article_id}`\n\nResponse example:\n```json\n[\n  {\n    \"content\": \"🚀 开源 AI 联网搜索工具：Open-WebSearch MCP 全新升级，支持多引擎 + 流式响应...\"\n  }\n]\n```\n\n## Usage Limitations\n\nSince this tool works by scraping multi-engine search results, please note the following important limitations:\n\n1. **Rate Limiting**:\n    - Too many searches in a short time may cause the used engines to temporarily block requests\n    - Recommendations:\n        - Maintain reasonable search frequency\n        - Use the limit parameter judiciously\n        - Add delays between searches when necessary\n\n2. **Result Accuracy**:\n    - Depends on the HTML structure of corresponding engines, may fail when engines update\n    - Some results may lack metadata like descriptions\n    - Complex search operators may not work as expected\n\n3. **Legal Terms**:\n    - This tool is for personal use only\n    - Please comply with the terms of service of corresponding engines\n    - Implement appropriate rate limiting based on your actual use case\n\n4. **Search Engine Configuration**:\n   - Default search engine can be set via the `DEFAULT_SEARCH_ENGINE` environment variable\n   - Supported engines: bing, duckduckgo, exa, brave\n   - The default engine is used when searching specific websites\n\n5. **Proxy Configuration**:\n   - HTTP proxy can be configured when certain search engines are unavailable in specific regions\n   - Enable proxy with environment variable `USE_PROXY=true`\n   - Configure proxy server address with `PROXY_URL`\n\n## Contributing\n\nWelcome to submit issue reports and feature improvement suggestions!\n\n### Contributor Guide\n\nIf you want to fork this repository and publish your own Docker image, you need to make the following configurations:\n\n#### GitHub Secrets Configuration\n\nTo enable automatic Docker image building and publishing, please add the following secrets in your GitHub repository settings (Settings → Secrets and variables → Actions):\n\n**Required Secrets:**\n- `GITHUB_TOKEN`: Automatically provided by GitHub (no setup needed)\n\n**Optional Secrets (for Alibaba Cloud ACR):**\n- `ACR_REGISTRY`: Your Alibaba Cloud Container Registry URL (e.g., `registry.cn-hangzhou.aliyuncs.com`)\n- `ACR_USERNAME`: Your Alibaba Cloud ACR username\n- `ACR_PASSWORD`: Your Alibaba Cloud ACR password\n- `ACR_IMAGE_NAME`: Your image name in ACR (e.g., `your-namespace/open-web-search`)\n\n#### CI/CD Workflow\n\nThe repository includes a GitHub Actions workflow (`.github/workflows/docker.yml`) that automatically:\n\n1. **Trigger Conditions**:\n    - Push to `main` branch\n    - Push version tags (`v*`)\n    - Manual workflow trigger\n\n2. **Build and Push to**:\n    - GitHub Container Registry (ghcr.io) - always enabled\n    - Alibaba Cloud Container Registry - only enabled when ACR secrets are configured\n\n3. **Image Tags**:\n    - `ghcr.io/your-username/open-web-search:latest`\n    - `your-acr-address/your-image-name:latest` (if ACR is configured)\n\n#### Fork and Publish Steps:\n\n1. **Fork the repository** to your GitHub account\n2. **Configure secrets** (if you need ACR publishing):\n    - Go to Settings → Secrets and variables → Actions in your forked repository\n    - Add the ACR-related secrets listed above\n3. **Push changes** to the `main` branch or create version tags\n4. **GitHub Actions will automatically build and push** your Docker image\n5. **Use your image**, update the Docker command:\n   ```bash\n   docker run -d --name web-search -p 3000:3000 -e ENABLE_CORS=true -e CORS_ORIGIN=* ghcr.io/your-username/open-web-search:latest\n   ```\n\n#### Notes:\n- If you don't configure ACR secrets, the workflow will only publish to GitHub Container Registry\n- Make sure your GitHub repository has Actions enabled\n- The workflow will use your GitHub username (converted to lowercase) as the GHCR image name\n\n<div align=\"center\">\n\n## Star History\nIf you find this project helpful, please consider giving it a ⭐ Star!\n\n[![Star History Chart](https://api.star-history.com/svg?repos=Aas-ee/open-webSearch&type=Date)](https://www.star-history.com/#Aas-ee/open-webSearch&Date)\n\n</div>\n",
+  "category": "Search",
+  "quality_score": 62,
+  "archestra_config": {
+    "client_config_permutations": {
+      "open-websearch": {
+        "command": "npx",
+        "args": ["open-websearch@latest"],
+        "env": {}
+      },
+      "open-websearch-configured": {
+        "command": "npx",
+        "args": ["open-websearch@latest"],
+        "env": {
+          "DEFAULT_SEARCH_ENGINE": "duckduckgo",
+          "ENABLE_CORS": "true"
+        }
+      },
+      "open-websearch-cross-env": {
+        "command": "npx",
+        "args": ["cross-env", "DEFAULT_SEARCH_ENGINE=duckduckgo", "ENABLE_CORS=true", "open-websearch"],
+        "env": {}
+      },
+      "open-websearch-proxy": {
+        "command": "npx",
+        "args": ["open-websearch@latest"],
+        "env": {
+          "USE_PROXY": "true",
+          "PROXY_URL": "http://127.0.0.1:7890"
+        }
+      },
+      "open-websearch-full-config": {
+        "command": "npx",
+        "args": ["open-websearch@latest"],
+        "env": {
+          "DEFAULT_SEARCH_ENGINE": "duckduckgo",
+          "ENABLE_CORS": "true",
+          "USE_PROXY": "true",
+          "PROXY_URL": "http://127.0.0.1:7890",
+          "PORT": "8080"
+        }
+      },
+      "open-websearch-docker-compose": {
+        "command": "docker-compose",
+        "args": ["up", "-d"],
+        "env": {}
+      },
+      "open-web-search-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-d",
+          "--name",
+          "web-search",
+          "-p",
+          "3000:3000",
+          "-e",
+          "ENABLE_CORS=true",
+          "-e",
+          "CORS_ORIGIN=*",
+          "ghcr.io/aas-ee/open-web-search:latest"
+        ],
+        "env": {
+          "ENABLE_CORS": "true",
+          "CORS_ORIGIN": "*"
+        },
+        "docker_image": "ghcr.io/aas-ee/open-web-search:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Aas-ee",
+    "repo": "open-webSearch",
+    "url": "https://github.com/Aas-ee/open-webSearch",
+    "name": "open-webSearch",
+    "path": null,
+    "stars": 194,
+    "contributors": 2,
+    "issues": 1,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "25065030fb21f839dffaa71abbcc8b50640cf348"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:25.451Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 8
+    },
+    {
+      "name": "cheerio",
+      "importance": 8
+    },
+    {
+      "name": "cors",
+      "importance": 7
+    },
+    {
+      "name": "express",
+      "importance": 10
+    },
+    {
+      "name": "https-proxy-agent",
+      "importance": 7
+    },
+    {
+      "name": "jsdom",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"open-websearch\",\n  \"version\": \"1.1.4\",\n  \"description\": \"web search the internet\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"open-websearch\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"start\": \"node build/index.js\",\n    \"dev\": \"tsc && node build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.2\",\n    \"@types/axios\": \"^0.14.4\",\n    \"@types/cheerio\": \"^0.22.35\",\n    \"axios\": \"^1.7.9\",\n    \"cheerio\": \"^1.0.0\",\n    \"cors\": \"^2.8.5\",\n    \"express\": \"^4.18.2\",\n    \"https-proxy-agent\": \"^7.0.6\",\n    \"jsdom\": \"^26.1.0\",\n    \"npx\": \"^10.2.2\"\n  },\n  \"devDependencies\": {\n    \"@types/cors\": \"^2.8.19\",\n    \"@types/express\": \"^4.17.21\",\n    \"@types/jsdom\": \"^21.1.7\",\n    \"@types/node\": \"^20.17.10\",\n    \"typescript\": \"^5.3.3\"\n  }\n}\n"
+}

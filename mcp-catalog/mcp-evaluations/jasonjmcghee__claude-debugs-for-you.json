@@ -1,0 +1,77 @@
+{
+  "name": "jasonjmcghee__claude-debugs-for-you",
+  "display_name": "claude-debugs-for-you",
+  "description": "Enable any LLM (e.g. Claude) to interactively debug any language for you via MCP and a VS Code Extension",
+  "author": {
+    "name": "jasonjmcghee"
+  },
+  "server": {
+    "command": "node",
+    "args": ["${__dirname}/mcp-debug.js"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# <img src=\"./images/claude-debugs-for-you.png\" width=\"64\" height=\"64\" alt=\"description\" align=\"center\"> Claude Debugs For You\n\n[![Badge](https://img.shields.io/badge/Visual%20Studio%20Marketplace-0.1.1-blue.svg)](https://marketplace.visualstudio.com/items?itemName=JasonMcGhee.claude-debugs-for-you)\n\n_aka Vibe Debugging_\n\n### Enable Claude (or any other LLM) to interactively debug your code\n\nThis is an [MCP](https://docs.anthropic.com/en/docs/build-with-claude/mcp) Server and VS Code extension which enables claude to interactively debug and evaluate expressions.\n\nThat means it should also work with other models / clients etc. but I only demonstrate it with Claude Desktop and Continue here.\n\nIt's language-agnostic, assuming debugger console support and valid launch.json for debugging in VSCode.\n\n## Getting Started\n\n1. Download the extension from [releases](https://github.com/jasonjmcghee/claude-debugs-for-you/releases/) or [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=JasonMcGhee.claude-debugs-for-you)\n2. Install the extension\n  - If using `.vsix` directly, go to the three dots in \"Extensions\" in VS Code and choose \"Install from VSIX...\"\n3. You will see a new status menu item \"Claude Debugs For You\" which shows if it is running properly (check) or failed to startup (x)\n\n<img width=\"314\" alt=\"Screenshot 2025-03-22 at 9 51 22 PM\" src=\"https://github.com/user-attachments/assets/2cd65e0d-4c1d-4fb6-b9ea-3995149b4043\" />\n\nYou can click this status menu for the commands available\n\n<img width=\"510\" alt=\"Screenshot 2025-03-22 at 9 59 22 PM\" src=\"https://github.com/user-attachments/assets/54e339e3-81f8-4ef2-a201-6742aa2c97a8\" />\n\n### Follow one of the options below, depending on your setup\n\n<details>\n  <summary>If using stdio (classic, required for Claude Desktop)</summary>\n\n4. Copy the stdio server path to your clipboard by searching vs code commands for \"Copy MCP Debug Server stdio path to clipboard\"\n\n5. Paste the following (BUT UPDATE THE PATH TO THE COPIED ONE!) in your `claude_desktop_config.json` or edit accordingly if you use other MCP servers\n\n```\n{\n  \"mcpServers\": {\n    \"debug\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/mcp-debug.js\"\n      ]\n    }\n  }\n}\n```\n\n6. Start Claude desktop (or other MCP client)\n    1. Note: You may need to restart it, if it was already running.\n    2. You can skip this step if using Continue/Cursor or other built-in to VS Code\n</details>\n\n<details>\n  <summary>If using `/sse` (e.g. Cursor)</summary>\n\n4. Retrieve the MCP server sse address by using the \"Copy MCP Debug Server sse address to clipboard\" command\n    1. You can just write it out server URL of \"http://localhost:4711/sse\", or whatever port you setup in settings.\n5. Add it wherever you need to based on your client\n    1. You may need to hit \"refresh\" depending on client: this is required in Cursor\n6. Start MCP client\n   1. Note: You may need to restart it, if it was already running.\n   2. You can skip this step if using Continue/Cursor or other built-in to VS Code\n\n</details>\n\n### You're ready to debug!\n\n_[VS Code Debugging Documentation](https://code.visualstudio.com/Docs/editor/debugging)_\n\nOpen a project containing a `.vscode/launch.json` with the first configuration setup to debug a specific file with `${file}`.\n\nSee [Run  an Example](#run-an-example) below, and/or watch a demo video.\n\n## Contributing\n\nFind bugs or have an idea that will improve this? Please open a pull request or log an issue.\n\nDoes this readme suck? Help me improve it!\n\n## Demo\n\n### Using [Continue](https://github.com/continuedev/continue)\n\nIt figures out the problem, and then suggests a fix, which we just click to apply\n\nhttps://github.com/user-attachments/assets/3a0a879d-2db7-4a3f-ab43-796c22a0f1ef\n\n<details>\n  <summary>How do I set this up with Continue? / Show MCP Configuration</summary>\n\n  [Read the docs!](https://docs.continue.dev/customize/tools)\n\n  Configuration:\n  \n  ```json\n  {\n    ...\n    \"experimental\": {\n      \"modelContextProtocolServers\": [\n        {\n          \"transport\": {\n            \"type\": \"stdio\",\n            \"command\": \"node\",\n            \"args\": [\n              \"/Users/jason/Library/Application Support/Code/User/globalStorage/jasonmcghee.claude-debugs-for-you/mcp-debug.js\"\n            ]\n          }\n        }\n      ]\n    }\n  }\n  ```\n\n  You'll also need to choose a model capable of using tools.\n\n  When the list of tools pops up, make sure to click \"debug\" in the list of your tools, and set it to be \"Automatic\".\n\n  ### Troubleshooting\n\n  If you are seeing MCP errors in continue, try disabling / re-enabling the continue plugin\n\n</details>\n\nIf helpful, this is what my configuration looks like! But it's nearly the same as Claude Desktop.\n\n\n### Using Claude Desktop\n\nIn this example, I made it intentionally very cautious (make no assumptions etc - same prompt as below) but you can ask it to do whatever.\n\nhttps://github.com/user-attachments/assets/ef6085f7-11a2-4eea-bb60-b5a54873b5d5\n\n## Developing\n\n- Clone / Open this repo with VS Code\n- Run `npm run install` and `npm run compile`\n- Hit \"run\" which will open a new VSCode\n- Otherwise same as \"Getting Started applies\"\n- To rebuild, `npm run compile`\n\n## Package\n\n```bash\nvsce package\n```\n\n\n## Run an Example\n\nOpen `examples/python` in a VS Code window\n\nEnter the prompt:\n\n```\ni am building `longest_substring_with_k_distinct` and for some reason it's not working quite right. can you debug it step by step using breakpoints and evaluating expressions to figure out where it goes wrong? make sure to use the debug tool to get access and debug! don't make any guesses as to the problem up front. DEBUG!\n```\n\n## Other things worth mentioning\n\nWhen you start multiple vs code windows, you'll see a pop-up. You can gracefully hand-off \"Claude Debugs For You\" between windows.\n\nYou can also disable autostart. Then you'll just need to click the status menu and select \"Start Server\".\n\n<img width=\"395\" alt=\"Screenshot 2025-03-22 at 10 08 52 PM\" src=\"https://github.com/user-attachments/assets/2b6d1b61-a2c6-4447-8054-b4dd02a716e8\" />\n\n\n## Short list of ideas\n\n- [ ] It should use ripgrep to find what you ask for, rather than list files + get file content.\n- [x] Add support for conditional breakpoints\n- [ ] Add \"fix\" tool by allowing MCP to insert a CodeLens or \"auto fix\" suggestion so the user can choose to apply a recommended change or not.\n- Your idea here!\n",
+  "category": "Development",
+  "quality_score": 74,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-debug-js-stdio": {
+        "command": "node",
+        "args": ["/path/to/mcp-debug.js"],
+        "env": {}
+      },
+      "jasonmcghee-claude-debugs-for-you-stdio": {
+        "command": "node",
+        "args": [
+          "/Users/jason/Library/Application Support/Code/User/globalStorage/jasonmcghee.claude-debugs-for-you/mcp-debug.js"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "jasonjmcghee",
+    "repo": "claude-debugs-for-you",
+    "url": "https://github.com/jasonjmcghee/claude-debugs-for-you",
+    "name": "jasonjmcghee__claude-debugs-for-you",
+    "path": null,
+    "stars": 422,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": false,
+    "latest_commit_hash": "1ce590f4292278b41cf822b06215092647e327ea"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:38.587Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"claude-debugs-for-you\",\n  \"displayName\": \"Claude Debugs for You\",\n  \"description\": \"Enable an MCP Client, such as Claude Desktop to directly debug code with breakpoints\",\n  \"version\": \"0.1.1\",\n  \"repository\": \"https://github.com/jasonjmcghee/claude-debugs-for-you\",\n  \"author\": \"Jason McGhee\",\n  \"publisher\": \"JasonMcGhee\",\n  \"icon\": \"images/claude-debugs-for-you.png\",\n  \"engines\": {\n    \"vscode\": \"^1.96.0\"\n  },\n  \"categories\": [\n    \"Other\"\n  ],\n  \"activationEvents\": [\n    \"onStartupFinished\"\n  ],\n  \"main\": \"./out/extension.js\",\n  \"contributes\": {\n    \"commands\": [\n      {\n        \"command\": \"claude-debugs-for-you.showCommands\",\n        \"title\": \"Claude Debugs For You: Show All Commands\"\n      },\n      {\n        \"command\": \"vscode-mcp-debug.restart\",\n        \"title\": \"Claude Debugs For You: (Re)Start Server\"\n      },\n      {\n        \"command\": \"vscode-mcp-debug.stop\",\n        \"title\": \"Claude Debugs For You: Stop Server\"\n      },\n      {\n        \"command\": \"vscode-mcp-debug.setPort\",\n        \"title\": \"Claude Debugs For You: Set Port\"\n      },\n      {\n        \"command\": \"vscode-mcp-debug.toggleAutostart\",\n        \"title\": \"Claude Debugs For You: Toggle Autostart\"\n      }\n    ],\n    \"menus\": {\n      \"commandPalette\": [\n        {\n          \"command\": \"vscode-mcp-debug.setPort\",\n          \"when\": \"false\"\n        },\n        {\n          \"command\": \"vscode-mcp-debug.toggleAutostart\",\n          \"when\": \"false\"\n        }\n      ]\n    },\n    \"configuration\": {\n      \"title\": \"Claude Debugs For You\",\n      \"properties\": {\n        \"mcpDebug.port\": {\n          \"type\": \"number\",\n          \"default\": 4711,\n          \"description\": \"Port number for the debug server\"\n        },\n        \"mcpDebug.showServerPathOnStartup\": {\n          \"type\": \"boolean\",\n          \"default\": true,\n          \"description\": \"Whether to show the server path on startup\"\n        },\n        \"mcpDebug.autostart\": {\n          \"type\": \"boolean\",\n          \"default\": true,\n          \"description\": \"Automatically start 'Claude Debugs For You' when opening VS Code\"\n        }\n      }\n    }\n  },\n  \"scripts\": {\n    \"vscode:prepublish\": \"npm run compile\",\n    \"compile\": \"cd mcp && npm run build && cd - && tsc -p ./\",\n    \"watch\": \"tsc -watch -p ./\",\n    \"pretest\": \"npm run compile && npm run lint\",\n    \"lint\": \"eslint src\",\n    \"test\": \"vscode-test\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.4.1\"\n  },\n  \"devDependencies\": {\n    \"@types/mocha\": \"^10.0.10\",\n    \"@types/node\": \"20.x\",\n    \"@types/vscode\": \"^1.96.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.17.0\",\n    \"@typescript-eslint/parser\": \"^8.17.0\",\n    \"@vscode/test-cli\": \"^0.0.10\",\n    \"@vscode/test-electron\": \"^2.4.1\",\n    \"eslint\": \"^9.16.0\",\n    \"typescript\": \"^5.7.2\"\n  }\n}\n\n\n=== mcp/package.json ===\n{\n  \"name\": \"mcp-debug\",\n  \"version\": \"1.0.0\",\n  \"main\": \"index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-debug\": \"./build/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"node build.js\",\n    \"type-check\": \"tsc --noEmit\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"\",\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"1.0.1\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.10.7\",\n    \"esbuild\": \"^0.24.2\",\n    \"typescript\": \"^5.7.3\"\n  }\n}\n"
+}

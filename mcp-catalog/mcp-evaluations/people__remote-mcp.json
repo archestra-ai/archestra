@@ -1,0 +1,68 @@
+{
+  "name": "people__remote-mcp",
+  "display_name": "Google People",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjk4ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI2MiI+PHBhdGggZmlsbD0iIzQyODVmNCIgZD0iTTI1NS44NzggMTMzLjQ1MWMwLTEwLjczNC0uODcxLTE4LjU2Ny0yLjc1Ni0yNi42OUgxMzAuNTV2NDguNDQ4aDcxLjk0N2MtMS40NSAxMi4wNC05LjI4MyAzMC4xNzItMjYuNjkgNDIuMzU2bC0uMjQ0IDEuNjIybDM4Ljc1NSAzMC4wMjNsMi42ODUuMjY4YzI0LjY1OS0yMi43NzQgMzguODc1LTU2LjI4MiAzOC44NzUtOTYuMDI3Ii8+PHBhdGggZmlsbD0iIzM0YTg1MyIgZD0iTTEzMC41NSAyNjEuMWMzNS4yNDggMCA2NC44MzktMTEuNjA1IDg2LjQ1My0zMS42MjJsLTQxLjE5Ni0zMS45MTNjLTExLjAyNCA3LjY4OC0yNS44MiAxMy4wNTUtNDUuMjU3IDEzLjA1NWMtMzQuNTIzIDAtNjMuODI0LTIyLjc3My03NC4yNjktNTQuMjVsLTEuNTMxLjEzbC00MC4yOTggMzEuMTg3bC0uNTI3IDEuNDY1QzM1LjM5MyAyMzEuNzk4IDc5LjQ5IDI2MS4xIDEzMC41NSAyNjEuMSIvPjxwYXRoIGZpbGw9IiNmYmJjMDUiIGQ9Ik01Ni4yODEgMTU2LjM3Yy0yLjc1Ni04LjEyMy00LjM1MS0xNi44MjctNC4zNTEtMjUuODJjMC04Ljk5NCAxLjU5NS0xNy42OTcgNC4yMDYtMjUuODJsLS4wNzMtMS43M0wxNS4yNiA3MS4zMTJsLTEuMzM1LjYzNUM1LjA3NyA4OS42NDQgMCAxMDkuNTE3IDAgMTMwLjU1czUuMDc3IDQwLjkwNSAxMy45MjUgNTguNjAyeiIvPjxwYXRoIGZpbGw9IiNlYjQzMzUiIGQ9Ik0xMzAuNTUgNTAuNDc5YzI0LjUxNCAwIDQxLjA1IDEwLjU4OSA1MC40NzkgMTkuNDM4bDM2Ljg0NC0zNS45NzRDMTk1LjI0NSAxMi45MSAxNjUuNzk4IDAgMTMwLjU1IDBDNzkuNDkgMCAzNS4zOTMgMjkuMzAxIDEzLjkyNSA3MS45NDdsNDIuMjExIDMyLjc4M2MxMC41OS0zMS40NzcgMzkuODkxLTU0LjI1MSA3NC40MTQtNTQuMjUxIi8+PC9zdmc+",
+  "description": "Official Google remote MCP server for the Google People API. Read your profile, search saved contacts, and look up directory members. OAuth 2.0.",
+  "homepage": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "instructions": "**⚠️ Apply for the [Google Workspace Developer Preview Program](https://developers.google.com/workspace/preview) first.** The Google People MCP server (`people.googleapis.com`) is preview-only. You can enable the API and list its tools without enrollment, but every tool call fails with \"The caller does not have permission\" until your Google Workspace organization is accepted into the program. A Workspace super-admin must enroll and wait for acceptance before this connection will work.\n\n**Requires your own Google Cloud OAuth client** — these servers do not support dynamic client registration.\n\n1. Enable the APIs in your Google Cloud project:\n   ```\n   gcloud services enable people.googleapis.com\n   ```\n2. Configure the OAuth consent screen, then add these scopes:\n- `https://www.googleapis.com/auth/directory.readonly`\n- `https://www.googleapis.com/auth/userinfo.profile`\n- `https://www.googleapis.com/auth/contacts.readonly`\n3. Create an OAuth client (**Web application**) and register this redirect URI:\n   `http://localhost:3000/oauth-callback`\n4. Paste the **Client ID** and **Client Secret** into this form.\n\nEndpoints (if not auto-discovered from the server URL):\n- Authorization Server URL — `https://accounts.google.com`\n- Authorization Endpoint — `https://accounts.google.com/o/oauth2/v2/auth`\n- Token Endpoint — `https://oauth2.googleapis.com/token`\n\nSetup guide: https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "tools": [
+    {
+      "name": "get_user_profile",
+      "description": "Retrieve personal account information"
+    },
+    {
+      "name": "search_contacts",
+      "description": "Find saved contact entries"
+    },
+    {
+      "name": "search_directory_people",
+      "description": "Locate organization members in the directory"
+    }
+  ],
+  "prompts": [],
+  "keywords": ["google", "google-workspace", "google-people", "people", "contacts", "directory", "profile", "oauth"],
+  "user_config": {},
+  "oauth_config": {
+    "name": "Google People",
+    "server_url": "https://people.googleapis.com/mcp/v1",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": [
+      "https://www.googleapis.com/auth/directory.readonly",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/contacts.readonly"
+    ],
+    "description": "Google People MCP Server (Google OAuth 2.0)",
+    "default_scopes": [
+      "https://www.googleapis.com/auth/directory.readonly",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/contacts.readonly"
+    ],
+    "supports_resource_metadata": true
+  },
+  "readme": null,
+  "category": "Communication",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": "google",
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "author": {
+    "name": "Google"
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://people.googleapis.com/mcp/v1",
+    "docs_url": "https://developers.google.com/workspace/guides/configure-mcp-servers"
+  },
+  "github_info": null,
+  "programming_language": null
+}

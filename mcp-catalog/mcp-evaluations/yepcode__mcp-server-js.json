@@ -1,0 +1,119 @@
+{
+  "name": "yepcode__mcp-server-js",
+  "display_name": "mcp-server-js",
+  "description": "An MCP (Model Context Protocol) server that enables ✨ AI platforms to interact with 🤖 YepCode's infrastructure.  Turn your YepCode processes into powerful tools that AI assistants can use 🚀",
+  "author": {
+    "name": "yepcode"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@yepcode/mcp-server"],
+    "env": {
+      "YEPCODE_API_TOKEN": "${user_config.yepcode_api_token}",
+      "YEPCODE_MCP_OPTIONS": "${user_config.yepcode_mcp_options}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "yepcode_api_token": {
+      "type": "string",
+      "title": "YepCode API Token",
+      "description": "Your YepCode API token for authentication.",
+      "sensitive": true,
+      "required": true
+    },
+    "yepcode_mcp_options": {
+      "type": "string",
+      "title": "YepCode MCP Options",
+      "description": "Comma-separated list of MCP options (e.g., disableRunCodeTool,runCodeCleanup).",
+      "sensitive": false,
+      "required": false,
+      "default": ""
+    }
+  },
+  "readme": "![YepCode MCP Server Preview](https://yepcode.io/images/cover/yepcode-ultimate-dev-tool-ai-solutions.png)\n\n<div align=\"center\">\n\n[![NPM version](https://img.shields.io/npm/v/@yepcode/mcp-server.svg)](https://npmjs.org/package/@yepcode/mcp-server)\n[![NPM Downloads](https://img.shields.io/npm/dm/@yepcode/mcp-server)](https://www.npmjs.com/package/@yepcode/mcp-server)\n[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/yepcode/mcp-server-js/ci.yml)](https://github.com/yepcode/mcp-server-js/actions)\n\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/yepcode/mcp-server-js)](https://archestra.ai/mcp-catalog/yepcode__mcp-server-js)\n[![smithery badge](https://smithery.ai/badge/@yepcode/mcp-server)](https://smithery.ai/server/@yepcode/mcp-server)\n\n</div>\n\n## What is YepCode MCP Server?\n\nAn MCP ([Model Context Protocol](https://modelcontextprotocol.io/introduction)) server that enables AI platforms to interact with [YepCode](https://yepcode.io)'s infrastructure. Run LLM generated scripts and turn your YepCode processes into powerful tools that AI assistants can use directly.\n\n### Why YepCode MCP Server?\n\n- **Seamless AI Integration**: Convert YepCode processes into AI-ready tools with zero configuration\n- **Real-time Process Control**: Enable direct interaction between AI systems and your workflows\n- **Enterprise-Grade Security**: Execute code in YepCode's isolated, production-ready environments\n- **Universal Compatibility**: Integrate with any AI platform supporting the Model Context Protocol\n\n## Integration Guide\n\nYepCode MCP server can be integrated with AI platforms like [Cursor](https://cursor.sh) or [Claude Desktop](https://www.anthropic.com/news/claude-desktop) using either a remote approach (we offer a hosted version of the MCP server) or a local approach (NPX or Docker installation is required).\n\nFor both approaches, you need to get your YepCode API credentials:\n\n1. Sign up to [YepCode Cloud](https://cloud.yepcode.io)\n2. Visit `Settings` > `API credentials` to create a new API token.\n\n### Remote Approach using SSE Server\n\n- If your MCP Client doesn't support authentication headers, just use the SSE server URL that includes the API Token. Use a configuration similar to the following:\n\n```typescript\n{\n  \"mcpServers\": {\n    \"yepcode-mcp-server\": {\n      \"url\": \"https://cloud.yepcode.io/mcp/sk-c2E....RD/sse\"\n    }\n  }\n}\n```\n\n- If your MCP Client supports authentication headers, you can use the HTTP server URL that includes the API Token. Use a configuration similar to the following:\n\n```typescript\n{\n  \"mcpServers\": {\n    \"yepcode-mcp-server\": {\n      \"url\": \"https://cloud.yepcode.io/mcp/sse\",\n      \"headers\": {\n        \"Authorization\": \"Bearer <sk-c2E....RD>\"\n      }\n    }\n  }\n}\n```\n\n### Local Approach\n\n#### Using NPX\n\nMake sure you have Node.js installed (version 18 or higher), and use a configuration similar to the following:\n\n```typescript\n{\n  \"mcpServers\": {\n    \"yepcode-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@yepcode/mcp-server\"],\n      \"env\": {\n        \"YEPCODE_API_TOKEN\": \"your_api_token_here\"\n      }\n    }\n  }\n}\n```\n\n#### Using Docker\n\n1. Build the container image:\n\n```bash\ndocker build -t yepcode/mcp-server .\n```\n\n2. Use a configuration similar to the following:\n\n```typescript\n{\n  \"mcpServers\": {\n    \"yepcode-mcp-server\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"-d\",\n        \"-e\",\n        \"YEPCODE_API_TOKEN=your_api_token_here\",\n        \"yepcode/mcp-server\"\n      ]\n    }\n  }\n}\n```\n\n## Debugging\n\nDebugging MCP servers can be tricky since they communicate over stdio. To make this easier, we recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which you can run with the following command:\n\n```bash\nnpm run inspector\n```\n\nThis will start a server where you can access debugging tools directly in your browser.\n\n## YepCode MCP Tools Reference\n\nThe MCP server provides several tools to interact with YepCode's infrastructure:\n\n### Code Execution\n\n#### run_code\n\nExecutes code in YepCode's secure environment.\n\n```typescript\n// Input\n{\n  code: string;                          // The code to execute\n  options?: {\n    language?: string;                   // Programming language (default: 'javascript')\n    comment?: string;                    // Execution context\n    settings?: Record<string, unknown>;  // Runtime settings\n  }\n}\n\n// Response\n{\n  returnValue?: unknown;                 // Execution result\n  logs?: string[];                       // Console output\n  error?: string;                        // Error message if execution failed\n}\n```\n\n##### MCP Options\n\nYepCode MCP server supports the following options:\n\n- Disable the run_code tool: In some cases, you may want to disable the `run_code` tool. For example, if you want to use the MCP server as a provider only for the existing tools in your YepCode account.\n- Skip the run_code cleanup: By default, run_code processes source code is removed after execution. If you want to keep it for audit purposes, you can use this option.\n\nOptions can be passed as a comma-separated list in the `YEPCODE_MCP_OPTIONS` environment variable or as a query parameter in the MCP server URL.\n\n```typescript\n// SSE server configuration\n{\n  \"mcpServers\": {\n    \"yepcode-mcp-server\": {\n      \"url\": \"https://cloud.yepcode.io/mcp/sk-c2E....RD/sse?mcpOptions=disableRunCodeTool,runCodeCleanup\"\n    }\n  }\n}\n\n// NPX configuration\n{\n  \"mcpServers\": {\n    \"yepcode-mcp-server\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@yepcode/mcp-server\"],\n      \"env\": {\n        \"YEPCODE_API_TOKEN\": \"your_api_token_here\",\n        \"YEPCODE_MCP_OPTIONS\": \"disableRunCodeTool,runCodeCleanup\"\n      }\n    }\n  }\n}\n```\n\n### Environment Management\n\n#### set_env_var\n\nSets an environment variable in the YepCode workspace.\n\n```typescript\n// Input\n{\n  key: string;                           // Variable name\n  value: string;                         // Variable value\n  isSensitive?: boolean;                 // Whether to mask the value in logs (default: true)\n}\n```\n\n#### remove_env_var\n\nRemoves an environment variable from the YepCode workspace.\n\n```typescript\n// Input\n{\n  key: string;                           // Name of the variable to remove\n}\n```\n\n### Storage Management\n\nYepCode provides a built-in storage system that allows you to upload, list, download, and delete files. These files can be accessed from your code executions using the `yepcode.storage` helper methods.\n\n#### list_files\n\nLists all files in your YepCode storage.\n\n```typescript\n// Input\n{\n  prefix?: string;                       // Optional prefix to filter files\n}\n\n// Response\n{\n  files: Array<{\n    filename: string;                    // File name or path\n    size: number;                        // File size in bytes\n    lastModified: string;                // Last modification date\n  }>;\n}\n```\n\n#### upload_file\n\nUploads a file to YepCode storage.\n\n```typescript\n// Input\n{\n  filename: string;                      // File path (e.g., 'file.txt' or 'folder/file.txt')\n  content: string | {                   // File content\n    data: string;                        // Base64 encoded content for binary files\n    encoding: \"base64\";\n  };\n}\n\n// Response\n{\n  success: boolean;                      // Upload success status\n  filename: string;                      // Uploaded file path\n}\n```\n\n#### download_file\n\nDownloads a file from YepCode storage.\n\n```typescript\n// Input\n{\n  filename: string;                      // File path to download\n}\n\n// Response\n{\n  filename: string;                      // File path\n  content: string;                       // File content (base64 for binary files)\n  encoding?: string;                     // Encoding type if binary\n}\n```\n\n#### delete_file\n\nDeletes a file from YepCode storage.\n\n```typescript\n// Input\n{\n  filename: string;                      // File path to delete\n}\n\n// Response\n{\n  success: boolean;                      // Deletion success status\n  filename: string;                      // Deleted file path\n}\n```\n\n### Process Execution\n\nThe MCP server can expose your YepCode Processes as individual MCP tools, making them directly accessible to AI assistants. This feature is enabled by just adding the `mcp-tool` tag to your process (see our docs to learn more about [process tags](https://yepcode.io/docs/processes/tags)).\n\nThere will be a tool for each exposed process: `run_ycp_<process_slug>` (or `run_ycp_<process_id>` if tool name is longer than 60 characters).\n\n#### run_ycp_<process_slug>\n\n```typescript\n// Input\n{\n  parameters?: any;                      // This should match the input parameters specified in the process\n  options?: {\n    tag?: string;                        // Process version to execute\n    comment?: string;                    // Execution context\n  };\n  synchronousExecution?: boolean;        // Whether to wait for completion (default: true)\n}\n\n// Response (synchronous execution)\n{\n  executionId: string;                   // Unique execution identifier\n  logs: string[];                        // Process execution logs\n  returnValue?: unknown;                 // Process output\n  error?: string;                        // Error message if execution failed\n}\n\n// Response (asynchronous execution)\n{\n  executionId: string;                   // Unique execution identifier\n}\n```\n\n#### get_execution\n\nRetrieves the result of a process execution.\n\n```typescript\n// Input\n{\n  executionId: string;                   // ID of the execution to retrieve\n}\n\n// Response\n{\n  executionId: string;                   // Unique execution identifier\n  logs: string[];                        // Process execution logs\n  returnValue?: unknown;                 // Process output\n  error?: string;                        // Error message if execution failed\n}\n```\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n",
+  "category": "AI Tools",
+  "quality_score": 71,
+  "archestra_config": {
+    "client_config_permutations": {
+      "yepcode-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "@yepcode/mcp-server"],
+        "env": {
+          "YEPCODE_API_TOKEN": "your_api_token_here"
+        }
+      },
+      "yepcode-mcp-server-with-options": {
+        "command": "npx",
+        "args": ["-y", "@yepcode/mcp-server"],
+        "env": {
+          "YEPCODE_API_TOKEN": "your_api_token_here",
+          "YEPCODE_MCP_OPTIONS": "disableRunCodeTool,runCodeCleanup"
+        }
+      },
+      "yepcode-mcp-server-docker": {
+        "command": "docker",
+        "args": ["run", "-d", "-e", "YEPCODE_API_TOKEN=your_api_token_here", "yepcode/mcp-server"],
+        "env": {
+          "YEPCODE_API_TOKEN": "your_api_token_here"
+        },
+        "docker_image": "yepcode/mcp-server"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "yepcode",
+    "repo": "mcp-server-js",
+    "url": "https://github.com/yepcode/mcp-server-js",
+    "name": "yepcode__mcp-server-js",
+    "path": null,
+    "stars": 31,
+    "contributors": 4,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b3586cac645980cee2f6a3aa53f9ab413487c33e"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:19.767Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@yepcode/run",
+      "importance": 9
+    },
+    {
+      "name": "dotenv",
+      "importance": 4
+    },
+    {
+      "name": "zod",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@yepcode/mcp-server\",\n  \"version\": \"0.10.0\",\n  \"description\": \"MCP server for YepCode\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"homepage\": \"https://yepcode.io/\",\n  \"author\": \"YepCode Developers <developers@yepcode.io>\",\n  \"license\": \"MIT\",\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/yepcode/mcp-server-js\"\n  },\n  \"keywords\": [\n    \"yepcode\",\n    \"run\",\n    \"mcp\",\n    \"server\",\n    \"ai\",\n    \"agent\",\n    \"ai-agent\",\n    \"ai-agent-server\"\n  ],\n  \"publishConfig\": {\n    \"access\": \"public\"\n  },\n  \"engines\": {\n    \"node\": \">=18\",\n    \"npm\": \">=9\"\n  },\n  \"files\": [\n    \"dist\",\n    \"dist/**/*.d.ts\"\n  ],\n  \"exports\": {\n    \".\": \"./dist/index.js\",\n    \"./server\": \"./dist/server.js\"\n  },\n  \"bin\": {\n    \"yepcode-mcp-server\": \"dist/index.js\"\n  },\n  \"scripts\": {\n    \"lint\": \"eslint .\",\n    \"lint:fix\": \"eslint . --fix\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"node --loader ts-node/esm src/index.ts\",\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('dist/index.js', '755')\\\"\",\n    \"type-check\": \"tsc --noEmit\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector@0.13.0 node --env-file=.env dist/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.17.0\",\n    \"@yepcode/run\": \"^1.8.0\",\n    \"dotenv\": \"^16.4.7\",\n    \"zod\": \"^3.24.2\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.3.2\"\n  },\n  \"types\": \"dist/index.d.ts\"\n}\n"
+}

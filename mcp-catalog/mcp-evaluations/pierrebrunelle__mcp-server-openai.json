@@ -1,0 +1,98 @@
+{
+  "name": "pierrebrunelle__mcp-server-openai",
+  "display_name": "mcp-server-openai",
+  "description": "Query OpenAI models directly from Claude using MCP protocol.",
+  "author": {
+    "name": "pierrebrunelle"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "src.mcp_server_openai.server"],
+    "env": {
+      "PYTHONPATH": "${user_config.python_path}",
+      "OPENAI_API_KEY": "${user_config.openai_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "python_path": {
+      "type": "directory",
+      "title": "MCP Server OpenAI Directory",
+      "description": "The absolute path to the root directory of your cloned 'mcp-server-openai' repository.",
+      "required": true
+    },
+    "openai_api_key": {
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Your OpenAI API key for authenticating with the OpenAI API.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# OpenAI MCP Server\r\n\r\nQuery OpenAI models directly from Claude using MCP protocol.\r\n\r\n![preview](preview.png)\r\n\r\n## Setup\r\n\r\nAdd to `claude_desktop_config.json`:\r\n\r\n```json\r\n{\r\n  \"mcpServers\": {\r\n    \"openai-server\": {\r\n      \"command\": \"python\",\r\n      \"args\": [\"-m\", \"src.mcp_server_openai.server\"],\r\n      \"env\": {\r\n        \"PYTHONPATH\": \"C:/path/to/your/mcp-server-openai\",\r\n        \"OPENAI_API_KEY\": \"your-key-here\"\r\n      }\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n## Development\r\n```bash\r\ngit clone https://github.com/pierrebrunelle/mcp-server-openai\r\ncd mcp-server-openai\r\npip install -e .\r\n```\r\n\r\n## Testing\r\n```python\r\n# Run tests from project root\r\npytest -v test_openai.py -s\r\n\r\n# Sample test output:\r\nTesting OpenAI API call...\r\nOpenAI Response: Hello! I'm doing well, thank you for asking...\r\nPASSED\r\n```\r\n\r\n## License\r\nMIT License\r\n",
+  "category": "AI Tools",
+  "quality_score": 41,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-server-openai": {
+        "command": "python",
+        "args": ["-m", "src.mcp_server_openai.server"],
+        "env": {
+          "PYTHONPATH": "C:/path/to/your/mcp-server-openai",
+          "OPENAI_API_KEY": "your-key-here"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "pierrebrunelle",
+    "repo": "mcp-server-openai",
+    "url": "https://github.com/pierrebrunelle/mcp-server-openai",
+    "name": "mcp-server-openai",
+    "path": null,
+    "stars": 71,
+    "contributors": 1,
+    "issues": 5,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "67e598884e6fe7f28fc43bec2db8e37f482953ee"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:50.778Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "openai",
+      "importance": 8
+    },
+    {
+      "name": "click",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\r\nname = \"mcp-server-openai\"\r\nversion = \"0.1.0\"\r\ndescription = \"MCP server for OpenAI API integration\"\r\nrequires-python = \">=3.10\"\r\ndependencies = [\r\n    \"mcp>=0.9.1\",\r\n    \"openai>=1.0.0\",\r\n    \"click>=8.0.0\",\r\n    \"pytest-asyncio\"\r\n]\r\n\r\n[build-system]\r\nrequires = [\"hatchling\"]\r\nbuild-backend = \"hatchling.build\"\r\n\r\n[project.scripts]\r\nmcp-server-openai = \"mcp_server_openai.server:main\""
+}

@@ -1,0 +1,145 @@
+{
+  "name": "samuelgursky__davinci-resolve-mcp",
+  "display_name": "davinci-resolve-mcp",
+  "description": "MCP server integration for DaVinci Resolve",
+  "author": {
+    "name": "samuelgursky"
+  },
+  "server": {
+    "command": "${__dirname}/scripts/mcp_resolve_launcher.sh",
+    "args": ["--start-cursor", "--project", "${user_config.project_name}"],
+    "env": {
+      "RESOLVE_SCRIPT_API": "${user_config.resolve_script_api}",
+      "RESOLVE_SCRIPT_LIB": "${user_config.resolve_script_lib}",
+      "PYTHONPATH": "${user_config.resolve_script_api}/Modules/"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "resolve_script_api": {
+      "type": "directory",
+      "title": "Resolve Script API Path",
+      "description": "Path to the DaVinci Resolve Scripting API directory. On macOS, this is typically '/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting'. On Windows, it's 'C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting'.",
+      "required": true
+    },
+    "resolve_script_lib": {
+      "type": "file",
+      "title": "Resolve Script Library File",
+      "description": "Path to the DaVinci Resolve fusionscript library file. On macOS, this is typically '/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so'. On Windows, it's 'C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll'.",
+      "required": true
+    },
+    "project_name": {
+      "type": "string",
+      "title": "Project Name (Optional)",
+      "description": "The name of the DaVinci Resolve project to connect to on startup. If left blank, it may connect to the currently active project.",
+      "required": false
+    }
+  },
+  "readme": "# DaVinci Resolve MCP Server\n\n[![Version](https://img.shields.io/badge/version-1.3.8-blue.svg)](https://github.com/samuelgursky/davinci-resolve-mcp/releases)\n[![DaVinci Resolve](https://img.shields.io/badge/DaVinci%20Resolve-18.5+-darkred.svg)](https://www.blackmagicdesign.com/products/davinciresolve)\n[![Python](https://img.shields.io/badge/python-3.6+-green.svg)](https://www.python.org/downloads/)\n[![macOS](https://img.shields.io/badge/macOS-stable-brightgreen.svg)](https://www.apple.com/macos/)\n[![Windows](https://img.shields.io/badge/Windows-stable-brightgreen.svg)](https://www.microsoft.com/windows)\n[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)\n\nA Model Context Protocol (MCP) server that connects AI coding assistants (Cursor, Claude Desktop) to DaVinci Resolve, enabling them to query and control DaVinci Resolve through natural language.\n\n## Features\n\nFor a comprehensive list of implemented and planned features, see [docs/FEATURES.md](docs/FEATURES.md).\n\n## Requirements\n\n- **macOS** or **Windows** with DaVinci Resolve installed\n- **Python 3.6+**\n- DaVinci Resolve running in the background\n- (Optional) Node.js/npm for some features\n\n## Installation Guide\n\nFor detailed installation instructions, please see [INSTALL.md](INSTALL.md). This guide covers:\n- Prerequisites and system requirements\n- Step-by-step installation process\n- Configuration details\n- Common troubleshooting steps\n\n## Platform Support\n\n| Platform | Status | One-Step Install | Quick Start |\n|----------|--------|------------------|-------------|\n| macOS | ✅ Stable | `./install.sh` | `./run-now.sh` |\n| Windows | ✅ Stable | `install.bat` | `run-now.bat` |\n| Linux | ❌ Not supported | N/A | N/A |\n\n## Quick Start Guide\n\n### New One-Step Installation (Recommended)\n\nThe easiest way to get started is with our new unified installation script. This script does everything automatically:\n\n- Clone the repository:\n   ```bash\n   git clone https://github.com/samuelgursky/davinci-resolve-mcp.git\n   cd davinci-resolve-mcp\n   ```\n\n- Make sure DaVinci Resolve Studio is installed and running\n\n- Run the installation script:\n   **macOS/Linux:**\n   ```bash\n   ./install.sh\n   ```\n   \n   **Windows:**\n   ```batch\n   install.bat\n   ```\n\nThis will:\n1. Automatically detect the correct paths on your system\n2. Create a Python virtual environment\n3. Install the MCP SDK from the official repository\n4. Set up environment variables\n5. Configure Cursor/Claude integration \n6. Verify the installation is correct\n7. Optionally start the MCP server\n\n### Alternative Quick Start\n\nYou can also use the original quick start scripts:\n\n**Windows Users:**\n```bash\nrun-now.bat\n``` \n\n**macOS Users:**\n```bash\nchmod +x run-now.sh\n./run-now.sh\n```\n\n## Configuration\n\nFor configuration of DaVinci Resolve MCP with different AI assistant clients like Cursor or Claude, see the [config-templates](config-templates) directory.\n\n## Troubleshooting\n\nFor detailed troubleshooting guidance, refer to the [INSTALL.md](INSTALL.md#troubleshooting) file which contains solutions to common issues.\n\n### Common Issues\n\n#### Path Resolution\n- The installation scripts now use more robust path resolution, fixing issues with `run-now.sh` looking for files in the wrong locations\n- Always let the scripts determine the correct paths based on their location\n\n#### DaVinci Resolve Detection\n- We've improved the process detection to reliably find DaVinci Resolve regardless of how it appears in the process list\n- Make sure DaVinci Resolve is running before starting the MCP server\n\n#### Environment Variables\n- Make sure all required environment variables are set correctly\n- Review the log file at `scripts/cursor_resolve_server.log` for troubleshooting\n\n### Windows\n- Make sure to use forward slashes (/) in configuration files\n- Python must be installed and paths configured in configs\n- DaVinci Resolve must be running before starting the server\n\n### macOS\n- Make sure scripts have execute permissions\n- Check Console.app for any Python-related errors\n- Verify environment variables are set correctly\n- DaVinci Resolve must be running before starting the server\n\n## Support\n\nFor issues and feature requests, please use the GitHub issue tracker.\n\n## Launch Options\n\nAfter installation, you have several ways to start the server:\n\n### Client-Specific Launch Scripts\n\nThe repository includes dedicated scripts for launching with specific clients:\n\n```bash\n# For Cursor integration (macOS)\nchmod +x scripts/mcp_resolve-cursor_start\n./scripts/mcp_resolve-cursor_start\n\n# For Claude Desktop integration (macOS)\nchmod +x scripts/mcp_resolve-claude_start\n./scripts/mcp_resolve-claude_start\n```\n\nThese specialized scripts:\n- Set up the proper environment for each client\n- Verify DaVinci Resolve is running\n- Configure client-specific settings\n- Start the MCP server with appropriate parameters\n\n### Pre-Launch Check\n\nBefore connecting AI assistants, verify your environment is properly configured:\n\n```bash\n# On macOS\n./scripts/check-resolve-ready.sh\n\n# On Windows\n./scripts/check-resolve-ready.bat\n```\n\nThese scripts will:\n- Verify DaVinci Resolve is running (and offer to start it)\n- Check environment variables are properly set\n- Ensure the Python environment is configured correctly\n- Validate Cursor/Claude configuration\n- Optionally launch Cursor\n\n### Universal Launcher\n\nFor advanced users, our unified launcher provides full control over both Cursor and Claude Desktop servers:\n\n```bash\n# Make the script executable (macOS only)\nchmod +x scripts/mcp_resolve_launcher.sh\n\n# Run in interactive mode\n./scripts/mcp_resolve_launcher.sh\n\n# Or use command line options\n./scripts/mcp_resolve_launcher.sh --start-cursor    # Start Cursor server (uses mcp_resolve-cursor_start)\n./scripts/mcp_resolve_launcher.sh --start-claude    # Start Claude Desktop server (uses mcp_resolve-claude_start)\n./scripts/mcp_resolve_launcher.sh --start-both      # Start both servers\n./scripts/mcp_resolve_launcher.sh --stop-all        # Stop all running servers\n./scripts/mcp_resolve_launcher.sh --status          # Show server status\n```\n\nAdditional options:\n- Force mode (skip Resolve running check): `--force`\n- Project selection: `--project \"Project Name\"`\n\n## Full Installation\n\nFor a complete manual installation:\n\n1. Clone this repository:\n   ```bash\n   git clone https://github.com/samuelgursky/davinci-resolve-mcp.git\n   cd davinci-resolve-mcp\n   ```\n\n2. Create a Python virtual environment:\n   ```bash\n   # Create virtual environment\n   python -m venv venv\n   \n   # Activate it\n   # On macOS/Linux:\n   source venv/bin/activate\n   # On Windows:\n   venv\\Scripts\\activate\n   \n   # Install dependencies from requirements.txt\n   pip install -r requirements.txt\n   \n   # Alternatively, install MCP SDK directly\n   pip install git+https://github.com/modelcontextprotocol/python-sdk.git\n   ```\n\n3. Set up DaVinci Resolve scripting environment variables:\n\n   **For macOS**:\n   ```bash\n   export RESOLVE_SCRIPT_API=\"/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting\"\n   export RESOLVE_SCRIPT_LIB=\"/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so\"\n   export PYTHONPATH=\"$PYTHONPATH:$RESOLVE_SCRIPT_API/Modules/\"\n   ```\n\n   **For Windows**:\n   ```cmd\n   set RESOLVE_SCRIPT_API=C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting\n   set RESOLVE_SCRIPT_LIB=C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll\n   set PYTHONPATH=%PYTHONPATH%;%RESOLVE_SCRIPT_API%\\Modules\n   ```\n   \n   Alternatively, run the pre-launch check script which will set these for you:\n   ```\n   # On macOS\n   ./scripts/check-resolve-ready.sh\n   \n   # On Windows\n   ./scripts/check-resolve-ready.bat\n   ```\n\n4. Configure Cursor to use the server by creating a configuration file:\n\n   **For macOS** (`~/.cursor/mcp.json`):\n   ```json\n   {\n     \"mcpServers\": {\n       \"davinci-resolve\": {\n         \"name\": \"DaVinci Resolve MCP\",\n         \"command\": \"/path/to/your/venv/bin/python\",\n         \"args\": [\n           \"/path/to/your/davinci-resolve-mcp/src/main.py\"\n         ]\n       }\n     }\n   }\n   ```\n\n   **For Windows** (`%APPDATA%\\Cursor\\mcp.json`):\n   ```json\n   {\n     \"mcpServers\": {\n       \"davinci-resolve\": {\n         \"name\": \"DaVinci Resolve MCP\",\n         \"command\": \"C:\\\\path\\\\to\\\\venv\\\\Scripts\\\\python.exe\",\n         \"args\": [\"C:\\\\path\\\\to\\\\davinci-resolve-mcp\\\\src\\\\main.py\"]\n       }\n     }\n   }\n   ```\n\n5. Start the server using one of the client-specific scripts:\n   ```bash\n   # For Cursor\n   ./scripts/mcp_resolve-cursor_start\n   \n   # For Claude Desktop\n   ./scripts/mcp_resolve-claude_start\n   ```\n\n## Usage with AI Assistants\n\n### Using with Cursor\n\n1. Start the Cursor server using the dedicated script:\n   ```bash\n   ./scripts/mcp_resolve-cursor_start\n   ```\n   Or use the universal launcher:\n   ```bash\n   ./scripts/mcp_resolve_launcher.sh --start-cursor\n   ```\n\n2. Start Cursor and open a project.\n\n3. In Cursor's AI chat, you can now interact with DaVinci Resolve. Try commands like:\n   - \"What version of DaVinci Resolve is running?\"\n   - \"List all projects in DaVinci Resolve\"\n   - \"Create a new timeline called 'My Sequence'\"\n   - \"Add a marker at the current position\"\n\n### Using with Claude Desktop\n\n1. Create a `claude_desktop_config.json` file in your Claude Desktop configuration directory using the template in the `config-templates` directory.\n\n2. Run the Claude Desktop server using the dedicated script:\n   ```bash\n   ./scripts/mcp_resolve-claude_start\n   ```\n   Or use the universal launcher:\n   ```bash\n   ./scripts/mcp_resolve_launcher.sh --start-claude\n   ```\n\n3. In Claude Desktop, you can now interact with DaVinci Resolve using the same commands as with Cursor.\n\n## Available Features\n\n### General\n- Get DaVinci Resolve version\n- Get/switch current page (Edit, Color, Fusion, etc.)\n\n### Project Management\n- List available projects\n- Get current project name\n- Open project by name\n- Create new project\n- Save current project\n\n### Timeline Operations\n- List all timelines\n- Get current timeline info\n- Create new timeline\n- Switch to timeline by name\n- Add marker to timeline\n\n### Media Pool Operations\n- List media pool clips\n- Import media file\n- Create media bin\n- Add clip to timeline\n\n## Windows Support Notes\n\nWindows support is stable in v1.3.3 and should not require additional troubleshooting:\n- Ensure DaVinci Resolve is installed in the default location\n- Environment variables are properly set as described above\n- Windows paths may require adjustment based on your installation\n- For issues, please check the logs in the `logs/` directory\n\n## Troubleshooting\n\n### DaVinci Resolve Connection\nMake sure DaVinci Resolve is running before starting the server. If the server can't connect to Resolve, check that:\n\n1. Your environment variables are set correctly\n2. You have the correct paths for your DaVinci Resolve installation\n3. You have restarted your terminal after setting environment variables\n\n## Project Structure\n\n```\ndavinci-resolve-mcp/\n├── README.md               # This file\n├── docs/                   # Documentation\n│   ├── FEATURES.md         # Feature list and status\n│   ├── CHANGELOG.md        # Version history\n│   ├── VERSION.md          # Version information\n│   ├── TOOLS_README.md     # Tools documentation\n│   ├── PROJECT_MCP_SETUP.md # Project setup guide\n│   └── COMMIT_MESSAGE.txt  # Latest commit information\n├── config-templates/       # Configuration templates\n│   ├── sample_config.json  # Example configuration\n│   ├── cursor-mcp-example.json # Cursor config example\n│   └── mcp-project-template.json # MCP project template\n├── scripts/                # Utility scripts\n│   ├── tests/              # Test scripts\n│   │   ├── benchmark_server.py # Performance tests\n│   │   ├── test_improvements.py # Test scripts\n│   │   ├── test_custom_timeline.py # Timeline tests\n│   │   ├── create_test_timeline.py # Create test timeline\n│   │   ├── test-after-restart.sh # Test after restart (Unix)\n│   │   └── test-after-restart.bat # Test after restart (Windows)\n│   ├── batch_automation.py # Batch automation script\n│   ├── restart-server.sh   # Server restart script (Unix)\n│   ├── restart-server.bat  # Server restart script (Windows)\n│   ├── run-now.sh          # Quick start script (Unix)\n│   └── run-now.bat         # Quick start script (Windows)\n├── resolve_mcp_server.py   # Main server implementation\n├── src/                    # Source code\n│   ├── api/                # API implementation\n│   ├── features/           # Feature modules\n│   └── utils/              # Utility functions\n├── logs/                   # Log files\n├── tools/                  # Development tools\n├── assets/                 # Project assets\n└── examples/               # Example code\n```\n\n## License\n\nMIT\n\n## Acknowledgments\n\n- Blackmagic Design for DaVinci Resolve and its API\n- The MCP protocol team for enabling AI assistant integration\n\n## Author\n\nSamuel Gursky (samgursky@gmail.com)\n- GitHub: [github.com/samuelgursky](https://github.com/samuelgursky)\n\n## Future Plans\n\n- Windows and Linux support\n- Additional DaVinci Resolve features\n- Support for Claude Desktop\n\n## Development\n\nIf you'd like to contribute, please check the feature checklist in the repo and pick an unimplemented feature to work on. The code is structured with clear sections for different areas of functionality.\n\n## License\n\nMIT\n\n## Acknowledgments\n\n- Blackmagic Design for DaVinci Resolve and its API\n- The MCP protocol team for enabling AI assistant integration\n\n## Project Structure\n\nAfter cleanup, the project has the following structure:\n\n- `resolve_mcp_server.py` - The main MCP server implementation\n- `run-now.sh` - Quick start script that handles setup and runs the server\n- `setup.sh` - Complete setup script for installation\n- `check-resolve-ready.sh` - Pre-launch check to verify DaVinci Resolve is ready\n- `start-server.sh` - Script to start the server\n- `run-server.sh` - Simplified script to run the server directly\n\n**Key Directories:**\n- `src/` - Source code and modules\n- `assets/` - Project assets and resources\n- `logs/` - Log files directory\n- `scripts/` - Helper scripts\n\nWhen developing, it's recommended to use `./run-now.sh` which sets up the environment and launches the server in one step. \n\n## Changelog\n\nSee [docs/CHANGELOG.md](docs/CHANGELOG.md) for a detailed history of changes. \n\n### Cursor-Specific Setup\n\nWhen integrating with Cursor, follow these specific steps:\n\n1. Make sure DaVinci Resolve is running before starting Cursor\n\n2. Install required dependencies:\n   ```bash\n   # From the davinci-resolve-mcp directory:\n   pip install -r requirements.txt\n   ```\n   Note: This will install the MCP package and other dependencies automatically.\n\n3. Set up the MCP server configuration in Cursor:\n   \n   Create or edit `~/.cursor/mcp.json` on macOS (or `%USERPROFILE%\\.cursor\\mcp.json` on Windows):\n   \n   ```json\n   {\n     \"mcpServers\": {\n       \"davinci-resolve\": {\n         \"name\": \"DaVinci Resolve MCP\",\n         \"command\": \"/path/to/your/venv/bin/python\",\n         \"args\": [\n           \"/path/to/your/davinci-resolve-mcp/src/main.py\"\n         ]\n       }\n     }\n   }\n   ```\n   \n   **Important Notes:**\n   - Use `main.py` as the entry point (not `resolve_mcp_server.py`)\n   - Use absolute paths in the configuration\n\n4. Common issues:\n   - \"Client closed\" error: Check that paths are correct in mcp.json and dependencies are installed\n   - Connection problems: Make sure DaVinci Resolve is running before starting Cursor\n   - Environment variables: The main.py script will handle setting environment variables",
+  "category": "Development",
+  "quality_score": 59,
+  "archestra_config": {
+    "client_config_permutations": {
+      "davinci-resolve-mcp-install-macos": {
+        "command": "./install.sh",
+        "args": [],
+        "env": {}
+      },
+      "davinci-resolve-mcp-install-windows": {
+        "command": "install.bat",
+        "args": [],
+        "env": {}
+      },
+      "davinci-resolve-mcp-quickstart-windows": {
+        "command": "run-now.bat",
+        "args": [],
+        "env": {}
+      },
+      "davinci-resolve-mcp-quickstart-macos": {
+        "command": "./run-now.sh",
+        "args": [],
+        "env": {}
+      },
+      "davinci-resolve-mcp-cursor-start-macos": {
+        "command": "./scripts/mcp_resolve-cursor_start",
+        "args": [],
+        "env": {}
+      },
+      "davinci-resolve-mcp-claude-start-macos": {
+        "command": "./scripts/mcp_resolve-claude_start",
+        "args": [],
+        "env": {}
+      },
+      "davinci-resolve-mcp-launcher-cursor": {
+        "command": "./scripts/mcp_resolve_launcher.sh",
+        "args": ["--start-cursor"],
+        "env": {}
+      },
+      "davinci-resolve-mcp-launcher-claude": {
+        "command": "./scripts/mcp_resolve_launcher.sh",
+        "args": ["--start-claude"],
+        "env": {}
+      },
+      "davinci-resolve-mcp-launcher-both": {
+        "command": "./scripts/mcp_resolve_launcher.sh",
+        "args": ["--start-both"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "samuelgursky",
+    "repo": "davinci-resolve-mcp",
+    "url": "https://github.com/samuelgursky/davinci-resolve-mcp",
+    "name": "samuelgursky__davinci-resolve-mcp",
+    "path": null,
+    "stars": 303,
+    "contributors": 2,
+    "issues": 8,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "19dc53236193de61f79facc731024a75d3c3be5c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:12.221Z",
+  "evaluation_model": "gemini-2.5-pro",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "jsonrpcserver",
+      "importance": 10
+    },
+    {
+      "name": "psutil",
+      "importance": 8
+    },
+    {
+      "name": "requests",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== requirements.txt ===\n# DaVinci Resolve MCP Server Dependencies\n\n# MCP Protocol SDK with CLI support\nmcp[cli]\n\n# Dependencies for testing and automation scripts\nrequests>=2.28.0\npsutil>=5.9.0\n\n# JSON-RPC Server for API\njsonrpcserver>=5.0.0\n\n# Git repository dependencies\ngit+https://github.com/modelcontextprotocol/python-sdk.git "
+}

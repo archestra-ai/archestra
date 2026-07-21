@@ -1,0 +1,89 @@
+{
+  "name": "kukapay__blocknative-mcp",
+  "display_name": "blocknative-mcp",
+  "description": "An MCP server that provides real-time gas price predictions across multiple blockchains.",
+  "author": {
+    "name": "kukapay"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "blocknative_mcp"],
+    "env": {
+      "BLOCKNATIVE_API_KEY": "${user_config.blocknative_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "blocknative_api_key": {
+      "type": "string",
+      "title": "Blocknative API Key",
+      "description": "Your Blocknative API key for high-frequency API access. Low-frequency access is supported without a key. Sign up at Blocknative.com to obtain a free API key.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# Blocknative MCP Server\n\nAn MCP server that provides real-time gas price predictions across multiple blockchains, powered by Blocknative.\n\n![GitHub License](https://img.shields.io/github/license/kukapay/blocknative-mcp)\n![Python Version](https://img.shields.io/badge/python-3.10+-blue)\n![Status](https://img.shields.io/badge/status-active-brightgreen.svg)\n\n## Features\n\n- **Tools**:\n  - `predict_gas_price`: Fetches gas price predictions for a specified chain (default: Ethereum Mainnet, `chain_id=1`), including base fee and a table with confidence levels, price, max priority fee, and max fee.\n  - `estimate_gas_cost`: Estimates transaction costs based on gas limit, confidence level, and chain ID, returning costs in Gwei and ETH.\n  - `get_supported_chains`: Lists supported blockchains in a table with chain ID, system, and network.\n- **Prompt**:\n  - `gas_price_query`: A prompt template for querying gas prices at a specific confidence level and chain ID.\n- **Asynchronous**: Uses `httpx` for non-blocking HTTP requests to Blocknative's Gas Price and Chains APIs.\n- **Optional API Key**: Supports low-frequency access without a Blocknative API key; high-frequency use requires setting `BLOCKNATIVE_API_KEY`.\n\n## Prerequisites\n\n- **Python**: Version 3.10\n- **uv**: For dependency management and running the project ([installation guide](https://github.com/astral-sh/uv))\n- **Blocknative API Key** (optional): Required for high-frequency API access. Sign up at [Blocknative](https://www.blocknative.com/) to obtain a free API key.\n\n## Installation\n\n1. **Clone the Repository**:\n   ```bash\n   git clone https://github.com/kukapay/blocknative-mcp.git\n   cd blocknative-mcp\n   ```\n\n2. **Set Up the Project with `uv`**:\n   ```bash\n   uv sync\n   ```\n\n3. **Set the Blocknative API Key (Optional)**:\n   - For high-frequency access, set the environment variable:\n     ```bash\n     export BLOCKNATIVE_API_KEY=\"your-api-key-here\"\n     ```\n   - For low-frequency access, skip this step.\n\n\n## Usage\n\nThe server provides three tools and one prompt, accessible via the FastMCP framework. You can run the server in development mode, execute it directly, or integrate it with Claude Desktop.\n\n### Running the Server\n\n1. **Development Mode with MCP Inspector**:\n   ```bash\n   uv run mcp dev blocknative-mcp\n   ```\n   This opens the MCP Inspector, a web interface for testing tools and prompts interactively.\n\n2. **Direct Execution**:\n   ```bash\n   uv run blocknative-mcp\n   ```\n\n3. **Claude Desktop Integration**:\n   ```bash\n   uv run mcp install blocknative-mcp --name \"Blocknative MCP Server\"\n   ```\n   This installs the server for use with Claude Desktop.\n\n### Tools\n\n- **`predict_gas_price(chain_id: int = 1) -> str`**:\n  Fetches gas price predictions for a chain (default: Ethereum Mainnet). Returns base fee and a Markdown table with confidence levels, price, max priority fee, and max fee.\n  - Example:\n    ```markdown\n    Gas Price Predictions for Chain ID 1 (ethereum/main):\n    - Base Fee Per Gas: 0.382910791 Gwei\n\n    | Confidence | Price (Gwei) | Max Priority Fee (Gwei) | Max Fee (Gwei) |\n    |------------|--------------|-------------------------|----------------|\n    | 99%        | 0.52         | 0.14                    | 0.9            |\n    | 95%        | 0.48         | 0.094                   | 0.86           |\n    | 90%        | 0.47         | 0.089                   | 0.85           |\n    | 80%        | 0.46         | 0.079                   | 0.84           |\n    | 70%        | 0.45         | 0.069                   | 0.83           |\n    ```\n\n- **`estimate_gas_cost(gas_limit: int, confidence: int = 99, chain_id: int = 1) -> str`**:\n  Estimates transaction costs based on gas limit, confidence level, and chain ID. Returns costs in Gwei and ETH.\n  - Example:\n    ```markdown\n    Estimated Gas Cost (Confidence 90%, Chain ID 1):\n    - Gas Limit: 21000\n    - Max Fee Per Gas: 0.85 Gwei\n    - Total Cost: 17850 Gwei (0.00001785 ETH)\n    ```\n\n- **`get_supported_chains(ctx: Optional[Context] = None) -> str`**:\n  Lists supported chains in a Markdown table with chain ID, system, and network.\n  - Example:\n    ```markdown\n    Supported Chains:\n\n    | Chain ID   | System   | Network   |\n    |------------|----------|-----------|\n    | 1          | ethereum | main      |\n    | 137        | polygon  | mainnet   |\n    | 8453       | base     | mainnet   |\n    | 11155111   | ethereum | sepolia   |\n    ```\n\n### Prompts\n    \n- **`gas_price_query(confidence: int, chain_id: int = 1) -> List[base.Message]`**:\n  A prompt template for querying gas prices at a specific confidence level and chain ID.\n  - Example:\n    ```markdown\n    - User: What is the current gas price for chain ID 1 transactions with 90% confidence?\n    - Assistant: Let me fetch the gas price predictions for chain ID 1.\n    ```\n\n\n## License\n\nThis project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.\n\n",
+  "category": "Finance",
+  "quality_score": 49,
+  "archestra_config": {
+    "client_config_permutations": {
+      "blocknative-mcp-dev": {
+        "command": "uv",
+        "args": ["run", "mcp", "dev", "blocknative-mcp"],
+        "env": {}
+      },
+      "blocknative-mcp": {
+        "command": "uv",
+        "args": ["run", "blocknative-mcp"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "kukapay",
+    "repo": "blocknative-mcp",
+    "url": "https://github.com/kukapay/blocknative-mcp",
+    "name": "blocknative-mcp",
+    "path": null,
+    "stars": 2,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "c219324996189fc1e5d15048682d2049d809144c"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:10.300Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "httpx",
+      "importance": 8
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"blocknative-mcp\"\nversion = \"0.1.0\"\ndescription = \"An MCP server that provides real-time gas price predictions across multiple blockchains.\"\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\ndependencies = [\n    \"mcp[cli]>=1.6.0\",\n]\n\n[project.scripts]\nblocknative-mcp = \"blocknative_mcp.cli:main\"\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n"
+}

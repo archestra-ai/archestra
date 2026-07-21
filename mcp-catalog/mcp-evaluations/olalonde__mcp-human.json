@@ -1,0 +1,89 @@
+{
+  "name": "olalonde__mcp-human",
+  "display_name": "mcp-human",
+  "description": "Human Assistance for AI Assistants",
+  "author": {
+    "name": "olalonde"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP-Human: Human Assistance for AI Assistants\n\nA Model Context Protocol (MCP) server that enables AI assistants to get human input when needed. This tool creates tasks on Amazon Mechanical Turk that let real humans answer questions from AI systems. While primarily a proof-of-concept, it demonstrates how to build human-in-the-loop AI systems using the MCP standard. See [limitations](#limitations) for current constraints.\n\n![we need to go deeper](./deeper.gif)\n\n## Setup\n\n### Prerequisites\n\n- Node.js 16+\n- AWS credentials with MTurk permissions. See [instructions below](#setting-up-aws-user-with-mechanical-turk-access).\n- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (recommended for setting aws credentials)\n\n### Configuring AWS credentials\n\n```sh\n# Configure AWS credentials for profile mcp-human\nexport AWS_ACCESS_KEY_ID=\"your_access_key\"\nexport AWS_SECRET_ACCESS_KEY=\"your_secret_key\"\naws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID} --profile mcp-human\naws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY} --profile mcp-human\n```\n\n### Configuring MCP server with your MCP client\n\n### Claude code\n\nSandbox mode:\n\n```sh\nclaude mcp add human -- npx -y mcp-human@latest\n```\n\nThe server defaults to [sandbox mode](https://workersandbox.mturk.com/) (for testing). If you want to submit real requests, use `MTURK_SANDBOX=false`.\n\n```sh\nclaude mcp add human -e MTURK_SANDBOX=false -- npx -y mcp-human@latest\n```\n\n### Generic\n\nUpdate the configuration of your MCP client to the following:\n\n```json\n{\n  \"mcpServers\": {\n    \"human\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-human@latest\"]\n    }\n  }\n}\n```\n\ne.g.: Claude Desktop (MacOS): `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\n\n## Configuration\n\nThe server can be configured with the following environment variables:\n\n| Variable         | Description                                        | Default                          |\n| ---------------- | -------------------------------------------------- | -------------------------------- |\n| `MTURK_SANDBOX`  | Use MTurk sandbox (`true`) or production (`false`) | `true`                           |\n| `AWS_REGION`     | AWS region for MTurk                               | `us-east-1`                      |\n| `AWS_PROFILE`    | AWS profile to use for credentials                 | `mcp-human`                      |\n| `DEFAULT_REWARD` | The reward amount in USD.                          | `0.05`                           |\n| `FORM_URL`       | URL where the form is hosted. Needs to be https.   | `https://syskall.com/mcp-human/` |\n\n## Setting Up AWS User with Mechanical Turk Access\n\nTo create an AWS user with appropriate permissions for Mechanical Turk:\n\n1. **Log in to the AWS Management Console**:\n\n   - Go to https://aws.amazon.com/console/\n   - Sign in as a root user or an administrator\n\n2. **Create a new IAM User**:\n\n   - Navigate to IAM (Identity and Access Management)\n   - Click \"Users\" > \"Create user\"\n   - Enter a username (e.g., `mturk-api-user`)\n   - Click \"Next\" to proceed to permissions\n\n3. **Set Permissions**:\n\n   - Choose \"Attach existing policies directly\"\n   - Search for and select `AmazonMechanicalTurkFullAccess`\n   - If you need more granular control, you can create a custom policy with specific MTurk permissions\n   - Click \"Next\" and then \"Create user\"\n\n4. **Create Access Keys**:\n\n   - After user creation, click on the username to go to their detail page\n   - Go to the \"Security credentials\" tab\n   - In the \"Access keys\" section, click \"Create access key\"\n   - Choose \"Application running outside AWS\" or appropriate option\n   - Click through the wizard and finally \"Create access key\"\n\n5. **Save Credentials**:\n\n   - Download the CSV file or copy the Access key ID and Secret access key\n   - These will be used as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables\n   - **Important**: This is the only time you'll see the secret access key, so save it securely\n\n6. **Configure MTurk Requester Settings**:\n   - Visit the MTurk Requester website: https://requester.mturk.com/\n   - Set up payment method and other account details\n   - For testing, use the MTurk Sandbox: https://requestersandbox.mturk.com/\n\n> **Note**: Always start with the MTurk Sandbox (`MTURK_SANDBOX=true`) to test your integration without spending real money. Only switch to production when you're confident in your implementation.\n\n## Architecture\n\nThis system consists of two main components:\n\n1. **MCP Server**: A server implementing the Model Context Protocol that integrates with MTurk\n2. **Form**: A static HTML form.\n\nThe AI assistant connects to the MCP server, which creates tasks on MTurk. Human workers complete these tasks through a form, and their responses are made available to the AI assistant.\n\nThe Mechanical Turk form used is hosted on GitHub pages: [https://syskall.com/mcp-human/](https://syskall.com/mcp-human/). It gets populated with data through query parameters.\n\n## MCP Tools\n\n### askHuman\n\nAllows an AI to ask a question to a human worker on Mechanical Turk.\n\nParameters:\n\n- `question`: The question to ask a human worker\n- `reward`: The reward amount in USD (default: $0.05)\n- `title`: Title for the HIT (optional)\n- `description`: Description for the HIT (optional)\n- `hitValiditySeconds`: Time until the HIT expires in seconds (default: 1 hour)\n\nExample usage:\n\n```javascript\n// From the AI assistant's perspective\nconst response = await call(\"askHuman\", {\n  question:\n    \"What's a creative name for a smart home device that adjusts lighting based on mood?\",\n  reward: \"0.25\",\n  title: \"Help with creative product naming\",\n  hitValiditySeconds: 3600, // HIT valid for 1 hour\n});\n```\n\nIf a worker responds within the HIT's validity period, the response will contain their answer. If not, it will return a HIT ID that can be checked later.\n\n### checkHITStatus\n\nCheck the status of a previously created HIT and retrieve any submitted assignments.\n\nParameters:\n\n- `hitId`: The HIT ID to check status for\n\nExample usage:\n\n```javascript\n// From the AI assistant's perspective\nconst status = await call(\"checkHITStatus\", {\n  hitId: \"3XMVN1BINNIXMTM9TTDO1GKMW7SGGZ\",\n});\n```\n\n## Resources\n\n### mturk-account\n\nProvides access to MTurk account information.\n\nURIs:\n\n- `mturk-account://balance` - Get account balance\n- `mturk-account://hits` - List HITs\n- `mturk-account://config` - Get configuration info\n\n## Limitations\n\n- Need to implement [progress notifications](https://github.com/modelcontextprotocol/typescript-sdk/issues/461) to avoid getting timing out.\n- Currently only supports simple text-based questions and answers\n- Limited to one assignment per HIT\n- No support for custom HTML/JS in the form\n- Simple polling for results rather than a webhook approach\n- Uses MTurk's ExternalQuestion format, which requires hosting a form\n",
+  "category": "Development",
+  "quality_score": 51,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-human": {
+        "command": "npx",
+        "args": ["-y", "mcp-human@latest"],
+        "env": {}
+      },
+      "mcp-human-production": {
+        "command": "npx",
+        "args": ["-y", "mcp-human@latest"],
+        "env": {
+          "MTURK_SANDBOX": "false"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "olalonde",
+    "repo": "mcp-human",
+    "url": "https://github.com/olalonde/mcp-human",
+    "name": "mcp-human",
+    "path": null,
+    "stars": 17,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "8ef1bff170813da7fca11c5d08c58dc25085b324"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:50.801Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "@aws-sdk/client-mturk",
+      "importance": 9
+    },
+    {
+      "name": "fast-xml-parser",
+      "importance": 7
+    },
+    {
+      "name": "zod",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"mcp-human\",\n  \"version\": \"0.0.6\",\n  \"main\": \"dist/index.js\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"mcp-human\": \"./dist/index.js\"\n  },\n  \"scripts\": {\n    \"build\": \"tsc\",\n    \"type-check\": \"tsc --noEmit\",\n    \"start\": \"node dist/index.js\",\n    \"dev\": \"node src/index.ts\",\n    \"prettier\": \"prettier --write src/\",\n    \"prepublishOnly\": \"npm run build\",\n    \"test\": \"npm run type-check\"\n  },\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"description\": \"MCP server for using Amazon Mechanical Turk as a human-in-the-loop service\",\n  \"dependencies\": {\n    \"@aws-sdk/client-mturk\": \"^3.804.0\",\n    \"@modelcontextprotocol/sdk\": \"^1.11.0\",\n    \"fast-xml-parser\": \"^5.2.2\",\n    \"zod\": \"^3.24.4\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^22.15.15\",\n    \"prettier\": \"^3.5.3\",\n    \"typescript\": \"^5.8.3\"\n  }\n}\n"
+}

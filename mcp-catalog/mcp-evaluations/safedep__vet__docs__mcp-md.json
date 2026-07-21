@@ -1,0 +1,76 @@
+{
+  "name": "safedep__vet__docs__mcp-md",
+  "display_name": "mcp.md",
+  "description": "Protect against malicious open source packages 🤖",
+  "author": {
+    "name": "safedep"
+  },
+  "server": {
+    "command": "unknown",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": null,
+  "category": "Security",
+  "quality_score": 43,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "safedep",
+    "repo": "vet",
+    "url": "https://github.com/safedep/vet/blob/main/docs/mcp.md",
+    "name": "vet",
+    "path": "docs/mcp.md",
+    "stars": 627,
+    "contributors": 21,
+    "issues": 92,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "47939fafaf2b699964821377ae6e947e69d88263"
+  },
+  "programming_language": "Go",
+  "framework": null,
+  "last_scraped_at": "2025-08-03T20:49:57.762Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": false,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": false,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "express",
+      "importance": 8
+    },
+    {
+      "name": "mark3labs/mcp-go",
+      "importance": 9
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": null
+}

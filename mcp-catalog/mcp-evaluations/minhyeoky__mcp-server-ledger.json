@@ -1,0 +1,105 @@
+{
+  "name": "minhyeoky__mcp-server-ledger",
+  "display_name": "mcp-server-ledger",
+  "description": "A Model Context Protocol server for interacting with Ledger CLI, a powerful double-entry accounting system. This server enables Large Language Models to query and analyze financial data through a standardized interface, making it easy for AI assistants to help with financial reporting, budget analysis, and accounting tasks.",
+  "author": {
+    "name": "minhyeoky"
+  },
+  "server": {
+    "command": "uv",
+    "args": ["run", "--with", "mcp[cli]", "mcp", "run", "${__dirname}/main.py"],
+    "env": {
+      "LEDGER_FILE": "${user_config.ledger_file}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ledger_file": {
+      "type": "file",
+      "title": "Ledger File Path",
+      "description": "The absolute path to your Ledger CLI data file (e.g., /home/user/finances.ledger).",
+      "required": true
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/minhyeoky-mcp-server-ledger-badge.png)](https://mseep.ai/app/minhyeoky-mcp-server-ledger)\n\n# mcp-server-ledger: A Ledger CLI MCP Server\n\n[![smithery badge](https://smithery.ai/badge/@minhyeoky/mcp-ledger)](https://smithery.ai/server/@minhyeoky/mcp-ledger)\n\n## Overview\n\nA Model Context Protocol server for interacting with [Ledger CLI](https://www.ledger-cli.org/), a powerful, double-entry accounting system accessible from the command line. This server allows Large Language Models to query and analyze your financial data through the Ledger CLI tool.\n\nThis MCP server exposes Ledger CLI's functionality through a standardized interface, making it easy for AI assistants to help you with financial reporting, budget analysis, and accounting tasks.\n\n## Features\n\nThe server provides the following tools that map to Ledger CLI commands:\n\n1. `ledger_balance`\n   - Shows account balances with powerful filtering options\n   - Inputs: query pattern, date ranges, display options\n   - Returns: Formatted balance report\n\n2. `ledger_register`\n   - Shows transaction register with detailed history\n   - Inputs: query pattern, date ranges, sorting options\n   - Returns: Formatted register report\n\n3. `ledger_accounts`\n   - Lists all accounts in the ledger file\n   - Input: optional query pattern\n   - Returns: List of matching accounts\n\n4. `ledger_payees`\n   - Lists all payees from transactions\n   - Input: optional query pattern\n   - Returns: List of matching payees\n\n5. `ledger_commodities`\n   - Lists all commodities (currencies) used\n   - Input: optional query pattern\n   - Returns: List of matching commodities\n\n6. `ledger_print`\n   - Prints transactions in ledger format\n   - Inputs: query pattern, date ranges\n   - Returns: Formatted ledger entries\n\n7. `ledger_stats`\n   - Shows statistics about the ledger file\n   - Input: optional query pattern\n   - Returns: Statistical summary of the ledger\n\n8. `ledger_budget`\n   - Shows budget analysis\n   - Inputs: query pattern, date ranges, reporting period\n   - Returns: Budget report\n\n9. `ledger_raw_command`\n   - Runs a raw Ledger CLI command\n   - Input: command arguments as a list of strings\n   - Returns: Command output as text\n\n## Prerequisites\n\n- [Ledger CLI](https://www.ledger-cli.org/) must be installed and available in your PATH\n- A valid Ledger file with your financial data\n\n## Installation\n\n### Using Docker (recommended)\n\nYou can also use the Docker image from the minhyeoky/mcp-ledger repository:\n\n```bash\ndocker pull minhyeoky/mcp-ledger\n```\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n\"mcp-ledger\": {\n  \"command\": \"docker\",\n  \"args\": [\n    \"run\",\n    \"-v\",\n    \"/path/to/your/ledger/file.ledger:/main.ledger\",\n    \"-e\",\n    \"LEDGER_FILE=/main.ledger\",\n    \"-i\",\n    \"--rm\",\n    \"minhyeoky/mcp-ledger\"\n  ]\n}\n```\n\nReplace `/path/to/your/ledger/file.ledger` with the actual path to your ledger file.\n\n### Installing via Smithery\n\nTo install Ledger CLI MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@minhyeoky/mcp-ledger):\n\n```bash\nnpx -y @smithery/cli install @minhyeoky/mcp-ledger --client claude\n```\n\n### Using uv\n\nThe easiest way to install and run this server is with [uv](https://docs.astral.sh/uv/):\n\n```bash\nuv sync\n```\n## Configuration\n\nThe server requires a path to your Ledger file. This can be provided through:\n\n- The `LEDGER_FILE` environment variable\n- Command-line arguments when starting the server\n\n### Using with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n\"mcpServers\": {\n  \"ledger\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"run\",\n      \"--env-file\",\n      \"/path/to/your/.env\",  // Optional: to set LEDGER_FILE\n      \"--with\",\n      \"mcp[cli]\",\n      \"mcp\",\n      \"run\",\n      \"<repo_path>/main.py\"  // Path to the main.py file in this repository\n    ]\n  }\n\n}\n```\n\n## Usage Examples\n\nOnce configured, you can ask your AI assistant questions about your financial data:\n\n- \"Show me my expenses for the last month\"\n- \"What's my current balance in all accounts?\"\n- \"List all transactions with Amazon\"\n- \"How much did I spend on groceries in 2023?\"\n- \"Show me my budget performance for Q1\"\n\nThe AI will use the appropriate Ledger CLI commands through the server to get the information.\n\n## Debugging\n\nFor more detailed local testing:\n\n```bash\nmcp dev main.py\n```\n\n## Development\n\nThis server is built using the [Model Context Protocol Python SDK](https://github.com/modelcontextprotocol/python-sdk). For more information about MCP and how to develop MCP servers, see the [official documentation](https://modelcontextprotocol.io).\n\nTo contribute to this project:\n\n1. Clone the repository\n2. Install development dependencies\n3. Make your changes\n4. Test using the MCP inspector or by integrating with Claude Desktop\n\n## Security Considerations\n\nThis server runs Ledger CLI commands on your financial data. While it includes basic validation to prevent command injection, you should:\n\n- Only use with trusted clients\n- Be careful about which file paths you expose\n- Review all commands before execution\n\n## License\n\nThis MCP server is licensed under the MIT License. Feel free to use, modify, and distribute it according to the license terms.\n",
+  "category": "Finance",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "minhyeoky-mcp-ledger-docker": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-v",
+          "/path/to/your/ledger/file.ledger:/main.ledger",
+          "-e",
+          "LEDGER_FILE=/main.ledger",
+          "-i",
+          "--rm",
+          "minhyeoky/mcp-ledger"
+        ],
+        "env": {
+          "LEDGER_FILE": "/main.ledger"
+        },
+        "docker_image": "minhyeoky/mcp-ledger"
+      },
+      "mcp-server-ledger-uv-configured": {
+        "command": "uv",
+        "args": ["run", "--env-file", "/path/to/your/.env", "--with", "mcp[cli]", "mcp", "run", "<repo_path>/main.py"],
+        "env": {}
+      },
+      "mcp-server-ledger-dev": {
+        "command": "mcp",
+        "args": ["dev", "main.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "minhyeoky",
+    "repo": "mcp-server-ledger",
+    "url": "https://github.com/minhyeoky/mcp-server-ledger",
+    "name": "mcp-server-ledger",
+    "path": null,
+    "stars": 23,
+    "contributors": 3,
+    "issues": 3,
+    "releases": false,
+    "ci_cd": true,
+    "latest_commit_hash": "6000be39bcee22f7ede8b6c610d42d55272eac29"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:15.711Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "click",
+      "importance": 6
+    },
+    {
+      "name": "mcp",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp-server-ledger\"\nversion = \"0.1.0\"\ndescription = \"A Model Context Protocol server providing tools to execute Ledger, a powerful command-line accounting system, commands.\"\nreadme = \"README.md\"\nauthors = [{name = \"Minhyeok Lee\", email = \"minhyeok.lee95@gmail.com\"}]\nrequires-python = \">=3.10\"\ndependencies = [\n    \"click>=8.1.8\",\n    \"mcp>=1.4.1\",\n]\nlicense = \"MIT\"\nkeywords = [\"mcp\", \"ledger\"]\n\n[dependency-groups]\ndev = [\n    \"mcp[cli]>=1.4.1\",\n]\n"
+}

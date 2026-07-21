@@ -1,0 +1,93 @@
+{
+  "name": "marketplaceadpros__amazon-ads-mcp-server",
+  "display_name": "amazon-ads-mcp-server",
+  "description": "MCP Server to interact with Amazon Ads",
+  "author": {
+    "name": "MarketplaceAdPros"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@marketplaceadpros/amazon-ads-mcp-server"],
+    "env": {
+      "BEARER_TOKEN": "${user_config.bearer_token}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "bearer_token": {
+      "type": "string",
+      "title": "MarketplaceAdPros Bearer Token",
+      "description": "The Bearer token you got from MarketplaceAdPros.com",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# amazon-ads-mcp-server\n\nConnect to your Amazon Advertising Data by integrating your account with [MarketplaceAdPros](https://marketplaceadpros.com).\n\nProvides access to:\n\n- Advertising Resources in Sponsored Products, Sponsored Brands and Sponsored Display, like Campaigns, Ad Groups, Keywords, Product Ads, Targeting\n- Reports and ability to query them with plain english.\n- Marketplace Ad Pros Recommendations, Experiments and more with purchased subscription plan\n\nAlso available as a Streamable HTTP MCP Server by connecting to `https://app.marketplaceadpros.com/mcp`\n\n## Installation\n\nTo add the amazon-ads-mcp-server to your MCP client of choice, add the following to the server config:\n\nOn MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`\n\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n### Env Vars\n\n- `BEARER_TOKEN`: The Bearer token you got from MarketplaceAdPros.com\n\n\n### Configuration\n\nYou can use it via `npx` in your Claude Desktop configuration like this:\n\n```json\n{\n  \"mcpServers\": {\n    \"marketplaceadpros\": {\n      \"command\": \"npx\",\n      \"args\": [\n        \"@marketplaceadpros/amazon-ads-mcp-server\"\n      ],\n      \"env\": {\n        \"BEARER_TOKEN\": \"abcdefghijklmnop\"\n      }\n    }\n  }\n}\n```\n\n\nOr, if you clone the repo, you can build and use in your Claude Desktop configuration like this:\n\n\n```json\n\n{\n  \"mcpServers\": {\n    \"marketplaceadpros\": {\n      \"command\": \"node\",\n      \"args\": [\n        \"/path/to/amazon-ads-mcp-server/build/index.js\"\n      ],\n      \"env\": {\n        \"BEARER_TOKEN\": \"abcdefghijklmnop\"\n      }\n    }\n  }\n}\n```\n\n\nOr, if your client supports the Streamable HTTP MCP Servers, you can just point to the MCP endpoint at `https://app.marketplaceadpros.com/mcp`. \n\n\n```json\n\n{\n  \"mcpServers\": {\n    \"marketplaceadpros\": {\n      \"type\": \"streamable-http\",\n      \"url\": \"https://app.marketplaceadpros.com/mcp\"\n    }\n  }\n}\n```\n\n\nOr, configure in [LibreChat](https://www.librechat.ai/) like:\n```yaml\n  MAP:\n    type: streamable-http\n    url: https://app.marketplaceadpros.com/mcp\n    headers:\n      Authorization: \"Bearer abcdefghijklmnop\"\n````\n\n\n## Development\n\nInstall dependencies:\n```bash\nnpm install\n```\n\nBuild the server:\n```bash\nnpm run build\n```\n\nFor development with auto-rebuild:\n```bash\nnpm run watch\n```\n\n### Debugging\n\nSince MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:\n\n```bash\nnpm run inspector\n```\n\n![amazon-ads-mcp-server live in inspector](img/inspector.png)\n\nThe Inspector will provide a URL to access debugging tools in your browser.\n\n### Acknowledgements\n\n- Obviously the modelcontextprotocol and Anthropic teams for the MCP Specification. [https://modelcontextprotocol.io/introduction](https://modelcontextprotocol.io/introduction)\n- [MarketplaceAdPros](https://marketplaceadpros.com?ref=github-amazon-ads-mcp-server) for enabling and sponsoring this project.\n",
+  "category": "Marketing",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "marketplaceadpros-amazon-ads-mcp-server": {
+        "command": "npx",
+        "args": ["@marketplaceadpros/amazon-ads-mcp-server"],
+        "env": {
+          "BEARER_TOKEN": "abcdefghijklmnop"
+        }
+      },
+      "marketplaceadpros-amazon-ads-mcp-server-node-path": {
+        "command": "node",
+        "args": ["/path/to/amazon-ads-mcp-server/build/index.js"],
+        "env": {
+          "BEARER_TOKEN": "abcdefghijklmnop"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "MarketplaceAdPros",
+    "repo": "amazon-ads-mcp-server",
+    "url": "https://github.com/MarketplaceAdPros/amazon-ads-mcp-server",
+    "name": "amazon-ads-mcp-server",
+    "path": null,
+    "stars": 8,
+    "contributors": 1,
+    "issues": 0,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "87915ee9d94a2a0a0f340a3cb5a69c8880422474"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:22.920Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": true
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "dotenv",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"@marketplaceadpros/amazon-ads-mcp-server\",\n  \"version\": \"0.1.1\",\n  \"description\": \"A Model Context Protocol Server that runs as stdio, pointing to MarketplaceAdPros for Amazon Ads integration and MCP integration\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"amazon-ads-mcp-server\": \"./build/cli.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755'); require('fs').chmodSync('build/cli.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\",\n    \"clean\": \"rm -rf build\",\n    \"npm-publish\": \"npm run clean && npm run build && npm publish --access=public\",\n    \"start\": \"node build/cli.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.11.0\",\n    \"dotenv\": \"^16.4.5\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/marketplaceadpros/amazon-ads-mcp-server.git\"\n  },\n  \"keywords\": [\n    \"claude\",\n    \"openai\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"ai\",\n    \"chat\",\n    \"llm\"\n  ],\n  \"author\": \"MarketplaceAdPros\",\n  \"license\": \"MIT\",\n  \"engines\": {\n    \"node\": \">=18\"\n  }\n}\n"
+}

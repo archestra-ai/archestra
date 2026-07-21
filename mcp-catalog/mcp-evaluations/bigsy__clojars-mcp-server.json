@@ -1,0 +1,79 @@
+{
+  "name": "bigsy__clojars-mcp-server",
+  "display_name": "Clojars",
+  "description": "A Model Context Protocol (MCP) server that provides tools for fetching dependency information from Clojars, the Clojure community's artifact repository.",
+  "author": {
+    "name": "Bigsy"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "clojars-deps-server"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# Clojars MCP Server\n\n[![npm version](https://img.shields.io/npm/v/clojars-deps-server.svg)](https://www.npmjs.com/package/clojars-deps-server)\n\nA [Model Context Protocol (MCP)](https://github.com/ModelContext/protocol) server that provides tools for fetching dependency information from [Clojars](https://clojars.org/), the Clojure community's artifact repository for Cline, Roo Code, Cody, Claude Desktop etc.\n\n<a href=\"https://glama.ai/mcp/servers/i37857er6w\"><img width=\"380\" height=\"200\" src=\"https://glama.ai/mcp/servers/i37857er6w/badge\" alt=\"Clojars-MCP-Server MCP server\" /></a>\n\n## Installation\n\n### Installing via npx\n\nThe quickest way to use the Clojars MCP Server is to run it directly with npx:\n\n```bash\nnpx clojars-deps-server\n```\n\nYou can also install it globally:\n\n```bash\nnpm install -g clojars-deps-server\n```\n\n### Installing via Smithery\n\nTo install Clojars Dependency Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/clojars-deps-server):\n\n```bash\nnpx -y @smithery/cli install clojars-deps-server --client claude\n```\n\n### Manual Installation\n1. Clone this repository:\n```bash\ngit clone https://github.com/yourusername/clojars-deps-server.git\ncd clojars-deps-server\n```\n\n2. Install dependencies:\n```bash\nnpm install\n```\n\n3. Build the server:\n```bash\nnpm run build\n```\n\n4. Add the server to your Claude configuration:\n\nFor VSCode Claude extension, add to `cline_mcp_settings.json` (typically located at `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/` on macOS):\n```json\n{\n  \"mcpServers\": {\n    \"clojars-deps-server\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/clojars-deps-server/build/index.js\"]\n    }\n  }\n}\n```\n\nFor Claude desktop app, add to `claude_desktop_config.json` (typically located at `~/Library/Application Support/Claude/` on macOS):\n```json\n{\n  \"mcpServers\": {\n    \"clojars-deps-server\": {\n      \"command\": \"node\",\n      \"args\": [\"/path/to/clojars-deps-server/build/index.js\"]\n    }\n  }\n}\n```\n\nAfter adding the server configuration, Claude will automatically detect and connect to the server on startup. The server's capabilities will be listed in Claude's system prompt under \"Connected MCP Servers\", making them available for use.\n\n\n## Features\n\n- Get the latest version of any Clojars dependency\n- Check if a specific version of a dependency exists\n- Get version history of dependencies with configurable limits\n- Simple, focused responses\n- Easy integration with Claude through MCP\n\n## How It Works\n\nWhen this MCP server is configured in Claude's settings, it automatically becomes available in Claude's system prompt under the \"Connected MCP Servers\" section. This makes Claude aware of the server's capabilities and allows it to use the provided tools through the `use_mcp_tool` command.\n\nThe server exposes three tools:\n\n### get_clojars_latest_version\n```json\n{\n  \"name\": \"get_clojars_latest_version\",\n  \"description\": \"Get the latest version of a Clojars dependency (Maven artifact)\",\n  \"inputSchema\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"dependency\": {\n        \"type\": \"string\",\n        \"description\": \"Clojars dependency name in format \\\"group/artifact\\\" (e.g. \\\"metosin/reitit\\\")\"\n      }\n    },\n    \"required\": [\"dependency\"]\n  }\n}\n```\n\n### check_clojars_version_exists\n```json\n{\n  \"name\": \"check_clojars_version_exists\",\n  \"description\": \"Check if a specific version of a Clojars dependency exists\",\n  \"inputSchema\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"dependency\": {\n        \"type\": \"string\",\n        \"description\": \"Clojars dependency name in format \\\"group/artifact\\\" (e.g. \\\"metosin/reitit\\\")\"\n      },\n      \"version\": {\n        \"type\": \"string\",\n        \"description\": \"Version to check (e.g. \\\"0.7.2\\\")\"\n      }\n    },\n    \"required\": [\"dependency\", \"version\"]\n  }\n}\n```\n\n### get_clojars_history\n```json\n{\n  \"name\": \"get_clojars_history\",\n  \"description\": \"Get version history of a Clojars dependency\",\n  \"inputSchema\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"dependency\": {\n        \"type\": \"string\",\n        \"description\": \"Clojars dependency name in format \\\"group/artifact\\\" (e.g. \\\"metosin/reitit\\\")\"\n      },\n      \"limit\": {\n        \"type\": \"number\",\n        \"description\": \"Number of versions to return (default: 15, max: 100)\",\n        \"minimum\": 1,\n        \"maximum\": 100\n      }\n    },\n    \"required\": [\"dependency\"]\n  }\n}\n```\n\nThe tool names and descriptions are specifically designed to help Claude understand that these tools are for retrieving version information from Clojars. When users ask about Clojars dependencies, Claude can recognize that these tools are appropriate for the task based on:\n- The tool names explicitly indicate their purpose\n- The descriptions specify they're for \"Clojars dependency (Maven artifact)\"\n- The example formats show typical Clojars dependency patterns\n\n",
+  "category": "Development",
+  "quality_score": 42,
+  "archestra_config": {
+    "client_config_permutations": {
+      "clojars-deps-server": {
+        "command": "npx",
+        "args": ["clojars-deps-server"],
+        "env": {}
+      },
+      "clojars-deps-server-configured": {
+        "command": "node",
+        "args": ["/path/to/clojars-deps-server/build/index.js"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "Bigsy",
+    "repo": "Clojars-MCP-Server",
+    "url": "https://github.com/Bigsy/Clojars-MCP-Server",
+    "name": "Clojars-MCP-Server",
+    "path": null,
+    "stars": 5,
+    "contributors": 3,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "24c84934a96d3cb10ebc3ee6602736e46f66cc4b"
+  },
+  "programming_language": "JavaScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:26.229Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "axios",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"name\": \"clojars-deps-server\",\n  \"version\": \"0.2.0\",\n  \"description\": \"A Model Context Protocol server for fetching Clojars dependency information\",\n  \"type\": \"module\",\n  \"bin\": {\n    \"clojars-deps-server\": \"./build/index.js\"\n  },\n  \"files\": [\n    \"build\"\n  ],\n  \"scripts\": {\n    \"build\": \"tsc && node -e \\\"require('fs').chmodSync('build/index.js', '755')\\\"\",\n    \"prepare\": \"npm run build\",\n    \"watch\": \"tsc --watch\",\n    \"inspector\": \"npx @modelcontextprotocol/inspector build/index.js\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"0.6.0\",\n    \"axios\": \"^1.7.9\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.11.24\",\n    \"typescript\": \"^5.3.3\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/Bigsy/Clojars-MCP-Server\"\n  },\n  \"keywords\": [\n    \"mcp\",\n    \"modelcontextprotocol\",\n    \"clojars\",\n    \"cline\",\n    \"claude\",\n    \"dependencies\"\n  ],\n  \"author\": \"Model Context Protocol\",\n  \"license\": \"MIT\"\n}\n"
+}

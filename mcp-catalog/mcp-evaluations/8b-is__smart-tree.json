@@ -1,0 +1,214 @@
+{
+  "name": "8b-is__smart-tree",
+  "display_name": "smart-tree",
+  "description": "  A blazingly fast, context-aware directory tree tool co-created by human and AI for optimal information density across multiple output formats. Smart Tree bridges the gap between human readability and AI token   efficiency, providing fixed-width formats for parsing, ultra-compact modes for bandwidth optimization, and AI-specific formats.  HEX MODE",
+  "author": {
+    "name": "8b-is"
+  },
+  "server": {
+    "command": "/usr/local/bin/st",
+    "args": ["--mcp"],
+    "env": {
+      "AI_TOOLS": "${user_config.ai_tools}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "ai_tools": {
+      "type": "boolean",
+      "title": "Enable AI Tools",
+      "description": "Enables AI-driven optimizations and features for Smart Tree, such as auto-detection of AI callers.",
+      "default": true,
+      "required": false
+    }
+  },
+  "readme": "# 🌳 Smart Tree - Lightning Fast Directory Visualization\n\n[![Version](https://img.shields.io/badge/version-4.8.8-blue)](https://github.com/8b-is/smart-tree)\n[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)\n[![Performance](https://img.shields.io/badge/speed-10--24x%20faster-brightgreen)](TERMINAL_EXAMPLES.md)\n[![CO2 Saved](https://img.shields.io/badge/CO2-saving%20the%20planet-success)](TERMINAL_EXAMPLES.md#environment-impact)\n[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/8b-is/smart-tree)](https://archestra.ai/mcp-catalog/8b-is__smart-tree)\n\n> **Smart Tree** is a blazingly fast, AI-friendly directory visualization tool that's 10-24x faster than traditional `tree`. Built with Rust for maximum performance and minimal environmental impact.\n\n## ✨ Key Features\n\n- **⚡ Lightning Fast**: 10-24x faster than traditional tree commands\n- **🤖 AI-Optimized**: Multiple output formats designed for LLM consumption\n- **🗜️ Quantum Compression**: Up to 10x output size reduction\n- **🔍 Smart Search**: Content search with line numbers and context\n- **📡 MCP Server**: 30+ tools for AI assistants via Model Context Protocol\n- **🌍 Eco-Friendly**: Saves CO2 with every scan through efficiency\n\n## 🚀 Quick Start\n\n```bash\n# Install Smart Tree\ncurl -sSL https://raw.githubusercontent.com/8b-is/smart-tree/main/scripts/install.sh | bash\n\n# Basic usage\nst                          # Classic tree view of current directory\nst --mode ai --compress     # AI-optimized compressed output\nst --search \"TODO\"          # Search for TODOs in all files\nst --mode quantum src/      # Quantum compression for massive codebases\n```\n\n## 📦 Installation Options\n\n### Homebrew (macOS/Linux)\n```bash\nbrew install --HEAD 8b-is/smart-tree/smart-tree\n```\n\n### From Source\n```bash\ngit clone https://github.com/8b-is/smart-tree.git\ncd smart-tree\ncargo build --release\nsudo cp target/release/st /usr/local/bin/\n```\n\n### For AI Assistants (Claude Desktop)\n```bash\nst --mcp-config >> ~/Library/Application\\ Support/Claude/claude_desktop_config.json\n```\n\n## 🎯 Common Use Cases\n\n### For Developers\n```bash\nst --mode classic --depth 3     # Quick project overview\nst --search \"function\" src/     # Find all functions\nst --mode stats                 # Project statistics\nst --mode git-status            # See git changes in tree\n```\n\n### For AI/LLMs\n```bash\nst --mode ai --compress          # Optimized for token efficiency\nst --mode quantum-semantic       # Semantic code understanding\nst --mode summary-ai             # Ultra-compressed summaries\n```\n\n### For Large Codebases\n```bash\nst --stream /huge/project        # Stream output for massive directories\nst --mode quantum --compress     # Maximum compression (100x reduction)\n```\n\n## 📊 Output Formats\n\n| Format | Description | Best For |\n|--------|-------------|----------|\n| `classic` | Traditional tree with emojis | Human viewing |\n| `ai` | Hexadecimal with compression | AI assistants |\n| `quantum` | Binary wave compression | Huge directories |\n| `quantum-semantic` | Semantic grouping | Code analysis |\n| `summary-ai` | Compressed summaries | Quick overviews |\n| `json` | Standard JSON | Data processing |\n| `stats` | Directory statistics | Project metrics |\n\nSee [TERMINAL_EXAMPLES.md](TERMINAL_EXAMPLES.md) for beautiful output examples!\n\n## 🛠️ MCP Server (AI Tools)\n\nSmart Tree includes 30+ MCP tools for AI assistants:\n\n```bash\n# Start MCP server\nst --mcp\n\n# List available tools\nst --mcp-tools\n\n# Popular tools:\n- quick_tree: 3-level overview with 10x compression\n- project_overview: Comprehensive project analysis  \n- search_in_files: Content search with line numbers\n- smart_edit: AST-aware code editing (90% token reduction)\n- semantic_analysis: Wave-based code understanding\n```\n\n## 🌍 Environmental Impact\n\nEvery Smart Tree scan saves energy and reduces CO2 emissions:\n\n- **10-24x faster** = Less CPU time\n- **Less CPU time** = Less energy consumption  \n- **Less energy** = Lower carbon footprint\n- **Your impact**: ~12g CO2 saved per 1000 scans\n\n## 📚 Documentation\n\n- [TERMINAL_EXAMPLES.md](TERMINAL_EXAMPLES.md) - Beautiful terminal output examples\n- [CLAUDE.md](CLAUDE.md) - Development guide for AI assistants\n- [docs/](docs/) - Additional documentation\n- [scripts/manage.sh](scripts/manage.sh) - Colorful project management\n\n## 🤝 Contributing\n\nWe welcome contributions! Smart Tree is developed by a unique partnership:\n- **Hue** (Human) - Vision and direction\n- **Aye** (AI) - Implementation and optimization\n- **Trish** (from Accounting) - Keeping us organized with style\n\n## 📈 Version History\n\nCurrent version: **v4.8.8**\n\nRecent improvements:\n- v4.8.8: Code formatting, linting, and maintenance updates by Claude\n- v4.8.7: Moved Marqant to Crate\n- v4.8.4: Automatic version management system\n- v4.8.3: Fixed MCP schema validation\n- v4.8.2: Local feedback fallback when API is offline\n- v4.8.1: Simplified tool requests API\n\nSee [CHANGELOG.md](CHANGELOG.md) for full history.\n\n## 🎉 Fun Facts\n\n- Smart Tree processes **670,000+ files per second**\n- Written in **100% Rust** for safety and speed\n- Includes **40+ emoji mappings** for file types\n- Has saved approximately **1.2 tons of CO2** globally\n- Features comments from \"The Cheet\" (our musical code narrator)\n\n## 📄 License\n\nMIT License - See [LICENSE](LICENSE) for details.\n\n---\n\n**Smart Tree** - Making directories beautiful and saving the planet, one scan at a time! 🌳\n\n*Developed with ❤️ by the 8b.is team*\n",
+  "category": "AI Tools",
+  "quality_score": 44,
+  "archestra_config": {
+    "client_config_permutations": {
+      "smart-tree": {
+        "command": "/usr/local/bin/st",
+        "args": ["--mcp"],
+        "env": {
+          "AI_TOOLS": "1"
+        }
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "8b-is",
+    "repo": "smart-tree",
+    "url": "https://github.com/8b-is/smart-tree",
+    "name": "8b-is__smart-tree",
+    "path": null,
+    "stars": 128,
+    "contributors": 7,
+    "issues": 2,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "cc5125ca6028559391b535358f93d39a6d66ea7c"
+  },
+  "programming_language": "Rust",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:06.301Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": true,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "clap",
+      "importance": 8
+    },
+    {
+      "name": "clap_complete",
+      "importance": 7
+    },
+    {
+      "name": "clap_mangen",
+      "importance": 7
+    },
+    {
+      "name": "anyhow",
+      "importance": 5
+    },
+    {
+      "name": "walkdir",
+      "importance": 8
+    },
+    {
+      "name": "serde",
+      "importance": 8
+    },
+    {
+      "name": "serde_json",
+      "importance": 7
+    },
+    {
+      "name": "csv",
+      "importance": 6
+    },
+    {
+      "name": "chrono",
+      "importance": 5
+    },
+    {
+      "name": "flate2",
+      "importance": 7
+    },
+    {
+      "name": "colored",
+      "importance": 4
+    },
+    {
+      "name": "globset",
+      "importance": 5
+    },
+    {
+      "name": "regex",
+      "importance": 5
+    },
+    {
+      "name": "humansize",
+      "importance": 4
+    },
+    {
+      "name": "rayon",
+      "importance": 7
+    },
+    {
+      "name": "indicatif",
+      "importance": 4
+    },
+    {
+      "name": "hex",
+      "importance": 6
+    },
+    {
+      "name": "sha2",
+      "importance": 5
+    },
+    {
+      "name": "toml",
+      "importance": 5
+    },
+    {
+      "name": "dirs",
+      "importance": 4
+    },
+    {
+      "name": "libc",
+      "importance": 5
+    },
+    {
+      "name": "termimad",
+      "importance": 4
+    },
+    {
+      "name": "once_cell",
+      "importance": 3
+    },
+    {
+      "name": "base64",
+      "importance": 5
+    },
+    {
+      "name": "rand",
+      "importance": 3
+    },
+    {
+      "name": "tokio",
+      "importance": 9
+    },
+    {
+      "name": "async-trait",
+      "importance": 8
+    },
+    {
+      "name": "futures",
+      "importance": 8
+    },
+    {
+      "name": "dashmap",
+      "importance": 6
+    },
+    {
+      "name": "reqwest",
+      "importance": 9
+    },
+    {
+      "name": "serde_yaml",
+      "importance": 6
+    },
+    {
+      "name": "notify",
+      "importance": 7
+    },
+    {
+      "name": "futures-util",
+      "importance": 6
+    },
+    {
+      "name": "tokio-stream",
+      "importance": 6
+    }
+  ],
+  "raw_dependencies": "=== Cargo.toml ===\n[workspace]\nmembers = [\"expert_prompt_engineer\"]\n\n[package]\nname = \"st\"\nversion = \"4.8.8\"\nedition = \"2021\"\nauthors = [\"8bit-wraith\", \"Claude\", \"Omni\", \"8b-is Team\"]\ndescription = \"Smart Tree - An intelligent, AI-friendly directory visualization tool\"\nrepository = \"https://github.com/8b-is/smart-tree\" # Updated repository\nlicense = \"MIT\"\nreadme = \"README.md\"\nkeywords = [\"tree\", \"directory\", \"visualization\", \"ai\", \"cli\"]\ncategories = [\"command-line-utilities\", \"filesystem\"]\n\n[dependencies]\nclap = { version = \"4.5\", features = [\"derive\", \"env\"] }\nclap_complete = \"4.5\"\nclap_mangen = \"0.2\"\nanyhow = \"1.0\"\nwalkdir = \"2.5\"\nserde = { version = \"1.0\", features = [\"derive\"] }\nserde_json = \"1.0\"\ncsv = \"1.3\"\nchrono = { version = \"0.4\", features = [\"serde\"] }\nflate2 = \"1.0\"\ncolored = \"2.1\"\nglobset = \"0.4\"\nregex = \"1.10\"\nhumansize = \"2.1\"\nrayon = \"1.10\"\nindicatif = \"0.17\"\nhex = \"0.4\"\nsha2 = \"0.10.9\"\ntoml = \"0.8.23\"\ndirs = \"5.0\"\nlibc = \"0.2\"\ntermimad = \"0.26.1\"\nonce_cell = \"1.19\"\nbase64 = \"0.22\"\nrand = \"0.8\"\nuuid = { version = \"1.10\", features = [\"v4\", \"serde\"] }\nwhoami = \"1.5\"\ncrc32fast = \"1.4\"\nsimilar = \"2.4\"\n# Marqant - quantum-compressed markdown format\nmarqant = \"0.2\"\n# st-tokenizer = { path = \"../st-tokenizer\" }  # Commented out - not in repo\n\n# Terminal UI dependencies\nratatui = \"0.25\"\ncrossterm = \"0.27\"\n\n# MCP (Model Context Protocol) support\ntokio = { version = \"1.42\", features = [\"full\"] }\nasync-trait = { version = \"0.1\" }\nfutures = { version = \"0.3\" }\ndashmap = { version = \"6.1\" }\nreqwest = { version = \"0.12\", default-features = false, features = [\"json\", \"stream\", \"rustls-tls\"] }\nserde_yaml = \"0.9\"\n\n# SSE support\nnotify = { version = \"6.1\", features = [\"serde\"] }\nfutures-util = \"0.3\"\ntokio-stream = { version = \"0.1\", features = [\"sync\"] }\n\n# Tree-sitter for smart code editing\ntree-sitter = \"0.25.8\"\ntree-sitter-language = \"0.1.2\"\ntree-sitter-rust = \"0.23.2\"\ntree-sitter-python = \"0.23.6\"\ntree-sitter-javascript = \"0.23.1\"\ntree-sitter-typescript = \"0.23.2\"\ntree-sitter-go = \"0.23.4\"\ntree-sitter-java = \"0.23.5\"\ntree-sitter-c-sharp = \"0.23.1\"\ntree-sitter-cpp = \"0.23.4\"\ntree-sitter-ruby = \"0.23.1\"\n\n[[bin]]\nname = \"mq\"\npath = \"src/bin/mq.rs\"\n\n[[bin]]\nname = \"tree\"\npath = \"src/bin/tree.rs\"\n\n[[bin]]\nname = \"m8\"\npath = \"src/bin/m8.rs\"\n\n[dev-dependencies]\ntempfile = \"3.10\"\nassert_cmd = \"2.0\"\npredicates = \"3.1\"\n\n\n\n[profile.release]\nlto = true\ncodegen-units = 1\nstrip = true\nopt-level = 3\n\n\n=== package.json ===\n{\n  \"name\": \"smart-tree\",\n  \"version\": \"3.3.5\",\n  \"description\": \"A blazingly fast, AI-friendly directory tree visualization tool written in Rust. Smart Tree goes beyond traditional tree commands by providing intelligent filtering, multiple output formats, and optimization for both human and AI consumption.\",\n  \"main\": \"index.js\",\n  \"directories\": {\n    \"doc\": \"docs\",\n    \"example\": \"examples\"\n  },\n  \"scripts\": {\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"git+https://github.com/8b-is/smart-tree.git\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"type\": \"commonjs\",\n  \"bugs\": {\n    \"url\": \"https://github.com/8b-is/smart-tree/issues\"\n  },\n  \"homepage\": \"https://github.com/8b-is/smart-tree#readme\",\n  \"devDependencies\": {\n    \"@types/jest\": \"^30.0.0\",\n    \"@types/node\": \"^24.0.7\"\n  },\n  \"dependencies\": {\n    \"ansi-styles\": \"^4.3.0\",\n    \"braces\": \"^3.0.3\",\n    \"chalk\": \"^4.1.2\",\n    \"ci-info\": \"^4.2.0\",\n    \"color-convert\": \"^2.0.1\",\n    \"color-name\": \"^1.1.4\",\n    \"escape-string-regexp\": \"^2.0.0\",\n    \"expect\": \"^30.0.3\",\n    \"fill-range\": \"^7.1.1\",\n    \"graceful-fs\": \"^4.2.11\",\n    \"has-flag\": \"^4.0.0\",\n    \"is-number\": \"^7.0.0\",\n    \"jest-diff\": \"^30.0.3\",\n    \"jest-matcher-utils\": \"^30.0.3\",\n    \"jest-message-util\": \"^30.0.2\",\n    \"jest-mock\": \"^30.0.2\",\n    \"jest-regex-util\": \"^30.0.1\",\n    \"jest-util\": \"^30.0.2\",\n    \"js-tokens\": \"^4.0.0\",\n    \"micromatch\": \"^4.0.8\",\n    \"picocolors\": \"^1.1.1\",\n    \"picomatch\": \"^4.0.2\",\n    \"pretty-format\": \"^30.0.2\",\n    \"react-is\": \"^18.3.1\",\n    \"slash\": \"^3.0.0\",\n    \"stack-utils\": \"^2.0.6\",\n    \"supports-color\": \"^7.2.0\",\n    \"to-regex-range\": \"^5.0.1\",\n    \"undici-types\": \"^7.8.0\"\n  }\n}\n\n\n=== api/requirements.txt ===\nfastapi\nuvicorn[standard]\npytest\n\n=== engine/Cargo.toml ===\n[package]\nname = \"engine\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\n\n\n=== examples/requirements.txt ===\n# Smart Tree Examples Requirements\n# Install with: pip install -r requirements.txt\n\n# Core visualization libraries\nmatplotlib>=3.5.0\nnetworkx>=2.6\n\n# Scientific computing\nnumpy>=1.21.0\nscikit-learn>=1.0.0\n\n# Optional: Better graph layouts\n# Uncomment if you have graphviz installed\n# pygraphviz>=1.7\n\n# Optional: For advanced visualizations\n# seaborn>=0.11.0\n# plotly>=5.0.0\n\n=== expert_prompt_engineer/Cargo.toml ===\n[package]\nname = \"expert_prompt_engineer\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\n\n\n=== test_files/Cargo.toml ===\n\n\n=== test_files/package.json ===\n"
+}

@@ -1,0 +1,115 @@
+{
+  "name": "amidabuddha__unichat-mcp-server",
+  "display_name": "unichat-mcp-server",
+  "description": "MCP server from amidabuddha/unichat-mcp-server",
+  "author": {
+    "name": "amidabuddha"
+  },
+  "server": {
+    "command": "uvx",
+    "args": ["unichat-mcp-server"],
+    "env": {
+      "UNICHAT_MODEL": "${user_config.unichat_model}",
+      "UNICHAT_API_KEY": "${user_config.unichat_api_key}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "unichat_model": {
+      "type": "string",
+      "title": "Unichat Model",
+      "description": "The AI model to use for Unichat requests. A list of currently supported models may be found at https://github.com/amidabuddha/unichat/blob/main/unichat/models.py.",
+      "required": true,
+      "default": "gpt-4o-mini"
+    },
+    "unichat_api_key": {
+      "type": "string",
+      "title": "Unichat API Key",
+      "description": "Your API key for the selected Unichat vendor (e.g., OpenAI, MistralAI, Anthropic, xAI, Google AI, DeepSeek, Alibaba, Inception).",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "readme": "# Unichat MCP Server in Python\nAlso available in [TypeScript](https://github.com/amidabuddha/unichat-ts-mcp-server)\n--\n <h4 align=\"center\">\n  <a href=\"https://mseep.ai/app/amidabuddha-unichat-mcp-server\">\n  <img src=\"https://mseep.net/pr/amidabuddha-unichat-mcp-server-badge.png\" alt=\"MseeP.ai Security Assessment Badge\" />\n  </a>\n </h4>\n  <h4 align=\"center\">\n  <a href=\"https://github.com/amidabuddha/unichat-mcp-server/blob/main/LICENSE.md\">\n  <img src=\"https://img.shields.io/github/license/amidabuddha/unichat-mcp-server\" alt=\"Released under the MIT license.\" />\n  </a>\n  <a href=\"https://archestra.ai/mcp-catalog/amidabuddha__unichat-mcp-server\">\n    <img src=\"https://archestra.ai/mcp-catalog/api/badge/quality/amidabuddha/unichat-mcp-server\" alt=\"Trust Score\" />\n  </a>\n  <a href=\"https://smithery.ai/server/unichat-mcp-server\">\n    <img src=\"https://smithery.ai/badge/unichat-mcp-server\" alt=\"Smithery Server Installations\" />\n  </a>\n</h4>\n <h4 align=\"center\">\n  <a href=\"https://mcphub.com/mcp-servers/amidabuddha/unichat-mcp-server\">\n  <img src=\"https://img.mcphub.com/_next/image?url=%2Flogo-dark.png&w=48&q=75\" alt=\"Hosted at MCPHub\" />\n  </a>\n </h4>\n\nSend requests to OpenAI, MistralAI, Anthropic, xAI, Google AI, DeepSeek, Alibaba, Inception using MCP protocol via tool or predefined prompts.\nVendor API key required\n\n### Tools\n\nThe server implements one tool:\n- `unichat`: Send a request to unichat\n  - Takes \"messages\" as required string arguments\n  - Returns a response\n\n### Prompts\n\n- `code_review`\n  - Review code for best practices, potential issues, and improvements\n  - Arguments:\n    - `code` (string, required): The code to review\"\n- `document_code`\n  - Generate documentation for code including docstrings and comments\n  - Arguments:\n    - `code` (string, required): The code to comment\"\n- `explain_code`\n  - Explain how a piece of code works in detail\n  - Arguments:\n    - `code` (string, required): The code to explain\"\n- `code_rework`\n  - Apply requested changes to the provided code\n  - Arguments:\n    - `changes` (string, optional): The changes to apply\"\n    - `code` (string, required): The code to rework\"\n\n## Quickstart\n\n### Install\n\n#### Claude Desktop\n\nOn MacOS: `~/Library/Application\\ Support/Claude/claude_desktop_config.json`\nOn Windows: `%APPDATA%/Claude/claude_desktop_config.json`\n\n**Supported Models:**\n> A list of currently supported models to be used as `\"SELECTED_UNICHAT_MODEL\"` may be found [here](https://github.com/amidabuddha/unichat/blob/main/unichat/models.py). Please make sure to add the relevant vendor API key as `\"YOUR_UNICHAT_API_KEY\"`\n\n**Example:**\n```json\n\"env\": {\n  \"UNICHAT_MODEL\": \"gpt-4o-mini\",\n  \"UNICHAT_API_KEY\": \"YOUR_OPENAI_API_KEY\"\n}\n```\nDevelopment/Unpublished Servers Configuration\n```json\n\"mcpServers\": {\n  \"unichat-mcp-server\": {\n    \"command\": \"uv\",\n    \"args\": [\n      \"--directory\",\n      \"{{your source code local directory}}/unichat-mcp-server\",\n      \"run\",\n      \"unichat-mcp-server\"\n    ],\n    \"env\": {\n      \"UNICHAT_MODEL\": \"SELECTED_UNICHAT_MODEL\",\n      \"UNICHAT_API_KEY\": \"YOUR_UNICHAT_API_KEY\"\n    }\n  }\n}\n```\n\nPublished Servers Configuration\n```json\n\"mcpServers\": {\n  \"unichat-mcp-server\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"unichat-mcp-server\"\n    ],\n    \"env\": {\n      \"UNICHAT_MODEL\": \"SELECTED_UNICHAT_MODEL\",\n      \"UNICHAT_API_KEY\": \"YOUR_UNICHAT_API_KEY\"\n    }\n  }\n}\n```\n\n### Installing via Smithery\n\nTo install Unichat for Claude Desktop automatically via [Smithery](https://smithery.ai/server/unichat-mcp-server):\n\n```bash\nnpx -y @smithery/cli install unichat-mcp-server --client claude\n```\n\n## Development\n\n### Building and Publishing\n\nTo prepare the package for distribution:\n\n1. Remove older builds:\n```bash\nrm -rf dist\n```\n\n2. Sync dependencies and update lockfile:\n```bash\nuv sync\n```\n\n3. Build package distributions:\n```bash\nuv build\n```\n\nThis will create source and wheel distributions in the `dist/` directory.\n\n4. Publish to PyPI:\n```bash\nuv publish --token {{YOUR_PYPI_API_TOKEN}}\n```\n\n### Debugging\n\nSince MCP servers run over stdio, debugging can be challenging. For the best debugging\nexperience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).\n\n\nYou can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:\n\n```bash\nnpx @modelcontextprotocol/inspector uv --directory {{your source code local directory}}/unichat-mcp-server run unichat-mcp-server\n```\n\n\nUpon launching, the Inspector will display a URL that you can access in your browser to begin debugging.\n",
+  "category": "AI Tools",
+  "quality_score": 50,
+  "archestra_config": {
+    "client_config_permutations": {
+      "unichat-mcp-server-dev": {
+        "command": "uv",
+        "args": ["--directory", "{{your source code local directory}}/unichat-mcp-server", "run", "unichat-mcp-server"],
+        "env": {
+          "UNICHAT_MODEL": "SELECTED_UNICHAT_MODEL",
+          "UNICHAT_API_KEY": "YOUR_UNICHAT_API_KEY"
+        }
+      },
+      "unichat-mcp-server-published": {
+        "command": "uvx",
+        "args": ["unichat-mcp-server"],
+        "env": {
+          "UNICHAT_MODEL": "SELECTED_UNICHAT_MODEL",
+          "UNICHAT_API_KEY": "YOUR_UNICHAT_API_KEY"
+        }
+      },
+      "modelcontextprotocol-inspector": {
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/inspector",
+          "uv",
+          "--directory",
+          "{{your source code local directory}}/unichat-mcp-server",
+          "run",
+          "unichat-mcp-server"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "amidabuddha",
+    "repo": "unichat-mcp-server",
+    "url": "https://github.com/amidabuddha/unichat-mcp-server",
+    "name": "unichat-mcp-server",
+    "path": null,
+    "stars": 36,
+    "contributors": 0,
+    "issues": 2,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "472b16ff0c7bf8f9f1dc14a5a1f045c15367f431"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:43.741Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": true,
+    "implementing_resources": false,
+    "implementing_sampling": true,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "unichat",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"unichat-mcp-server\"\nversion = \"0.2.19\"\ndescription = \"Unichat MCP Server\"\nreadme = \"README.md\"\nrequires-python = \">=3.11\"\ndependencies = [ \"mcp>=1.0.0\",\"unichat~=3.6.0\"]\n[[project.authors]]\nname = \"Stefan\"\nemail = \"shear.0-corned@icloud.com\"\n\n[build-system]\nrequires = [ \"hatchling\",]\nbuild-backend = \"hatchling.build\"\n\n[project.scripts]\nunichat-mcp-server = \"unichat_mcp_server:main\"\n"
+}

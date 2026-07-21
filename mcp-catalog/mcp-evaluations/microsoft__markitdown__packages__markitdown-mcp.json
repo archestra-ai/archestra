@@ -1,0 +1,103 @@
+{
+  "name": "microsoft__markitdown__packages__markitdown-mcp",
+  "display_name": "markitdown-mcp",
+  "description": "Python tool for converting files and office documents to Markdown.",
+  "author": {
+    "name": "microsoft"
+  },
+  "server": {
+    "command": "python",
+    "args": ["-m", "markitdown_mcp"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MarkItDown-MCP\n\n[![PyPI](https://img.shields.io/pypi/v/markitdown-mcp.svg)](https://pypi.org/project/markitdown-mcp/)\n![PyPI - Downloads](https://img.shields.io/pypi/dd/markitdown-mcp)\n[![Built by AutoGen Team](https://img.shields.io/badge/Built%20by-AutoGen%20Team-blue)](https://github.com/microsoft/autogen)\n\nThe `markitdown-mcp` package provides a lightweight STDIO, Streamable HTTP, and SSE MCP server for calling MarkItDown.\n\nIt exposes one tool: `convert_to_markdown(uri)`, where uri can be any `http:`, `https:`, `file:`, or `data:` URI.\n\n## Installation\n\nTo install the package, use pip:\n\n```bash\npip install markitdown-mcp\n```\n\n## Usage\n\nTo run the MCP server, using STDIO (default) use the following command:\n\n\n```bash\t\nmarkitdown-mcp\n```\n\nTo run the MCP server, using Streamable HTTP and SSE use the following command:\n\n```bash\t\nmarkitdown-mcp --http --host 127.0.0.1 --port 3001\n```\n\n## Running in Docker\n\nTo run `markitdown-mcp` in Docker, build the Docker image using the provided Dockerfile:\n```bash\ndocker build -t markitdown-mcp:latest .\n```\n\nAnd run it using:\n```bash\ndocker run -it --rm markitdown-mcp:latest\n```\nThis will be sufficient for remote URIs. To access local files, you need to mount the local directory into the container. For example, if you want to access files in `/home/user/data`, you can run:\n\n```bash\ndocker run -it --rm -v /home/user/data:/workdir markitdown-mcp:latest\n```\n\nOnce mounted, all files under data will be accessible under `/workdir` in the container. For example, if you have a file `example.txt` in `/home/user/data`, it will be accessible in the container at `/workdir/example.txt`.\n\n## Accessing from Claude Desktop\n\nIt is recommended to use the Docker image when running the MCP server for Claude Desktop.\n\nFollow [these instructions](https://modelcontextprotocol.io/quickstart/user#for-claude-desktop-users) to access Claude's `claude_desktop_config.json` file.\n\nEdit it to include the following JSON entry:\n\n```json\n{\n  \"mcpServers\": {\n    \"markitdown\": {\n      \"command\": \"docker\",\n      \"args\": [\n        \"run\",\n        \"--rm\",\n        \"-i\",\n        \"markitdown-mcp:latest\"\n      ]\n    }\n  }\n}\n```\n\nIf you want to mount a directory, adjust it accordingly:\n\n```json\n{\n  \"mcpServers\": {\n    \"markitdown\": {\n      \"command\": \"docker\",\n      \"args\": [\n\t\"run\",\n\t\"--rm\",\n\t\"-i\",\n\t\"-v\",\n\t\"/home/user/data:/workdir\",\n\t\"markitdown-mcp:latest\"\n      ]\n    }\n  }\n}\n```\n\n## Debugging\n\nTo debug the MCP server you can use the `mcpinspector` tool.\n\n```bash\nnpx @modelcontextprotocol/inspector\n```\n\nYou can then connect to the inspector through the specified host and port (e.g., `http://localhost:5173/`).\n\nIf using STDIO:\n* select `STDIO` as the transport type,\n* input `markitdown-mcp` as the command, and\n* click `Connect`\n\nIf using Streamable HTTP:\n* select `Streamable HTTP` as the transport type,\n* input `http://127.0.0.1:3001/mcp` as the URL, and\n* click `Connect`\n\nIf using SSE:\n* select `SSE` as the transport type,\n* input `http://127.0.0.1:3001/sse` as the URL, and\n* click `Connect`\n\nFinally:\n* click the `Tools` tab,\n* click `List Tools`,\n* click `convert_to_markdown`, and\n* run the tool on any valid URI.\n\n## Security Considerations\n\nThe server does not support authentication, and runs with the privileges of the user running it. For this reason, when running in SSE or Streamable HTTP mode, it is recommended to run the server bound to `localhost` (default).\n\n## Trademarks\n\nThis project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft\ntrademarks or logos is subject to and must follow\n[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).\nUse of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.\nAny use of third-party trademarks or logos are subject to those third-party's policies.\n",
+  "category": "AI Tools",
+  "quality_score": 80,
+  "archestra_config": {
+    "client_config_permutations": {
+      "markitdown-mcp-stdio": {
+        "command": "markitdown-mcp",
+        "args": [],
+        "env": {}
+      },
+      "markitdown-mcp-http": {
+        "command": "markitdown-mcp",
+        "args": ["--http", "--host", "127.0.0.1", "--port", "3001"],
+        "env": {}
+      },
+      "markitdown-mcp-docker-basic": {
+        "command": "docker",
+        "args": ["run", "-it", "--rm", "markitdown-mcp:latest"],
+        "env": {},
+        "docker_image": "markitdown-mcp:latest"
+      },
+      "markitdown-mcp-docker-mounted": {
+        "command": "docker",
+        "args": ["run", "-it", "--rm", "-v", "/home/user/data:/workdir", "markitdown-mcp:latest"],
+        "env": {},
+        "docker_image": "markitdown-mcp:latest"
+      },
+      "markitdown-mcp-docker-claude-desktop": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "markitdown-mcp:latest"],
+        "env": {},
+        "docker_image": "markitdown-mcp:latest"
+      },
+      "markitdown-mcp-docker-claude-desktop-mounted": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-v", "/home/user/data:/workdir", "markitdown-mcp:latest"],
+        "env": {},
+        "docker_image": "markitdown-mcp:latest"
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "microsoft",
+    "repo": "markitdown",
+    "url": "https://github.com/microsoft/markitdown/tree/main/packages/markitdown-mcp",
+    "name": "microsoft__markitdown__packages__markitdown-mcp",
+    "path": "packages/markitdown-mcp",
+    "stars": 72966,
+    "contributors": 75,
+    "issues": 326,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "8a9d8f15936b2068bcb39ccc8d3b317f93784d86"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:06:07.880Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": true,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "markitdown",
+      "importance": 10
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"markitdown-mcp\"\ndynamic = [\"version\"]\ndescription = 'An MCP server for the \"markitdown\" library.'\nreadme = \"README.md\"\nrequires-python = \">=3.10\"\nlicense = \"MIT\"\nkeywords = []\nauthors = [\n  { name = \"Adam Fourney\", email = \"adamfo@microsoft.com\" },\n]\nclassifiers = [\n  \"Development Status :: 4 - Beta\",\n  \"Programming Language :: Python\",\n  \"Programming Language :: Python :: 3.10\",\n  \"Programming Language :: Python :: 3.11\",\n  \"Programming Language :: Python :: 3.12\",\n  \"Programming Language :: Python :: 3.13\",\n  \"Programming Language :: Python :: Implementation :: CPython\",\n  \"Programming Language :: Python :: Implementation :: PyPy\",\n]\ndependencies = [\n  \"mcp~=1.8.0\",\n  \"markitdown[all]>=0.1.1,<0.2.0\",\n]\n\n[project.urls]\nDocumentation = \"https://github.com/microsoft/markitdown#readme\"\nIssues = \"https://github.com/microsoft/markitdown/issues\"\nSource = \"https://github.com/microsoft/markitdown\"\n\n[tool.hatch.version]\npath = \"src/markitdown_mcp/__about__.py\"\n\n[project.scripts]\nmarkitdown-mcp = \"markitdown_mcp.__main__:main\"\n\n[tool.hatch.envs.types]\nextra-dependencies = [\n  \"mypy>=1.0.0\",\n]\n[tool.hatch.envs.types.scripts]\ncheck = \"mypy --install-types --non-interactive {args:src/markitdown_mcp tests}\"\n\n[tool.coverage.run]\nsource_pkgs = [\"markitdown-mcp\", \"tests\"]\nbranch = true\nparallel = true\nomit = [\n  \"src/markitdown_mcp/__about__.py\",\n]\n\n[tool.coverage.paths]\nmarkitdown-mcp = [\"src/markitdown_mcp\", \"*/markitdown-mcp/src/markitdown_mcp\"]\ntests = [\"tests\", \"*/markitdown-mcp/tests\"]\n\n[tool.coverage.report]\nexclude_lines = [\n  \"no cov\",\n  \"if __name__ == .__main__.:\",\n  \"if TYPE_CHECKING:\",\n]\n\n[tool.hatch.build.targets.sdist]\nonly-include = [\"src/markitdown_mcp\"]\n"
+}

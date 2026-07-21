@@ -1,0 +1,234 @@
+{
+  "name": "isaacwasserman__mcp-snowflake-server",
+  "display_name": "mcp-snowflake-server",
+  "description": "MCP server from isaacwasserman/mcp-snowflake-server",
+  "author": {
+    "name": "isaacwasserman"
+  },
+  "server": {
+    "command": "uvx",
+    "args": [
+      "--python=3.12",
+      "mcp_snowflake_server",
+      "{{#if user_config.allow_write}}--allow-write{{/if}}",
+      "{{#if user_config.log_directory}}--log-dir{{/if}}",
+      "{{#if user_config.log_directory}}${user_config.log_directory}{{/if}}",
+      "{{#if user_config.log_level}}--log-level{{/if}}",
+      "{{#if user_config.log_level}}${user_config.log_level}{{/if}}",
+      "{{#if user_config.exclude_tools}}--exclude-tools{{/if}}",
+      "{{#if user_config.exclude_tools}}${user_config.exclude_tools}{{/if}}"
+    ],
+    "env": {
+      "SNOWFLAKE_USER": "${user_config.snowflake_user}",
+      "SNOWFLAKE_ACCOUNT": "${user_config.snowflake_account}",
+      "SNOWFLAKE_ROLE": "${user_config.snowflake_role}",
+      "SNOWFLAKE_DATABASE": "${user_config.snowflake_database}",
+      "SNOWFLAKE_SCHEMA": "${user_config.snowflake_schema}",
+      "SNOWFLAKE_WAREHOUSE": "${user_config.snowflake_warehouse}",
+      "SNOWFLAKE_PASSWORD": "${user_config.snowflake_password}",
+      "SNOWFLAKE_AUTHENTICATOR": "${user_config.snowflake_authenticator}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "snowflake_user": {
+      "type": "string",
+      "title": "Snowflake User",
+      "description": "Your Snowflake username (e.g., email address).",
+      "required": true
+    },
+    "snowflake_account": {
+      "type": "string",
+      "title": "Snowflake Account",
+      "description": "Your Snowflake account identifier.",
+      "required": true
+    },
+    "snowflake_role": {
+      "type": "string",
+      "title": "Snowflake Role",
+      "description": "The Snowflake role to use for connections.",
+      "required": true
+    },
+    "snowflake_database": {
+      "type": "string",
+      "title": "Snowflake Database",
+      "description": "The default Snowflake database to connect to.",
+      "required": true
+    },
+    "snowflake_schema": {
+      "type": "string",
+      "title": "Snowflake Schema",
+      "description": "The default Snowflake schema within the database.",
+      "required": true
+    },
+    "snowflake_warehouse": {
+      "type": "string",
+      "title": "Snowflake Warehouse",
+      "description": "The Snowflake warehouse to use for queries.",
+      "required": true
+    },
+    "snowflake_password": {
+      "type": "string",
+      "title": "Snowflake Password",
+      "description": "Your Snowflake password. Leave blank if using external browser authentication.",
+      "sensitive": true,
+      "required": false
+    },
+    "snowflake_authenticator": {
+      "type": "string",
+      "title": "Snowflake Authenticator",
+      "description": "Authentication method (e.g., 'externalbrowser'). Use if not providing a password.",
+      "required": false,
+      "default": ""
+    },
+    "allow_write": {
+      "type": "boolean",
+      "title": "Allow Write Operations",
+      "description": "Enable INSERT, UPDATE, DELETE, and CREATE TABLE queries.",
+      "default": false,
+      "required": false
+    },
+    "log_directory": {
+      "type": "directory",
+      "title": "Log Directory",
+      "description": "Absolute path to store server logs.",
+      "required": false
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log Level",
+      "description": "Set the logging verbosity (DEBUG, INFO, WARNING, ERROR, CRITICAL).",
+      "default": "INFO",
+      "required": false
+    },
+    "exclude_tools": {
+      "type": "string",
+      "title": "Exclude Tools",
+      "description": "List of tool names to exclude (e.g., 'write_query', 'create_table').",
+      "multiple": true,
+      "required": false
+    }
+  },
+  "readme": "[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/isaacwasserman-mcp-snowflake-server-badge.png)](https://mseep.ai/app/isaacwasserman-mcp-snowflake-server)\n\n# Snowflake MCP Server\n---\n\n## Overview\n\nA Model Context Protocol (MCP) server implementation that provides database interaction with Snowflake. This server enables running SQL queries via tools and exposes data insights and schema context as resources.\n\n---\n\n## Components\n\n### Resources\n\n- **`memo://insights`**  \n  A continuously updated memo aggregating discovered data insights.  \n  Updated automatically when new insights are appended via the `append_insight` tool.\n\n- **`context://table/{table_name}`**  \n  (If prefetch enabled) Per-table schema summaries, including columns and comments, exposed as individual resources.\n\n---\n\n### Tools\n\nThe server exposes the following tools:\n\n#### Query Tools\n\n- **`read_query`**  \n  Execute `SELECT` queries to read data from the database.  \n  **Input:**\n\n  - `query` (string): The `SELECT` SQL query to execute  \n    **Returns:** Query results as array of objects\n\n- **`write_query`** (enabled only with `--allow-write`)  \n  Execute `INSERT`, `UPDATE`, or `DELETE` queries.  \n  **Input:**\n\n  - `query` (string): The SQL modification query  \n    **Returns:** Number of affected rows or confirmation\n\n- **`create_table`** (enabled only with `--allow-write`)  \n  Create new tables in the database.  \n  **Input:**\n  - `query` (string): `CREATE TABLE` SQL statement  \n    **Returns:** Confirmation of table creation\n\n#### Schema Tools\n\n- **`list_databases`**  \n  List all databases in the Snowflake instance.  \n  **Returns:** Array of database names\n\n- **`list_schemas`**  \n  List all schemas within a specific database.  \n  **Input:**\n\n  - `database` (string): Name of the database  \n    **Returns:** Array of schema names\n\n- **`list_tables`**  \n  List all tables within a specific database and schema.  \n  **Input:**\n\n  - `database` (string): Name of the database\n  - `schema` (string): Name of the schema  \n    **Returns:** Array of table metadata\n\n- **`describe_table`**  \n  View column information for a specific table.  \n  **Input:**\n  - `table_name` (string): Fully qualified table name (`database.schema.table`)  \n    **Returns:** Array of column definitions with names, types, nullability, defaults, and comments\n\n#### Analysis Tools\n\n- **`append_insight`**  \n  Add new data insights to the memo resource.  \n  **Input:**\n  - `insight` (string): Data insight discovered from analysis  \n    **Returns:** Confirmation of insight addition  \n    **Effect:** Triggers update of `memo://insights` resource\n\n---\n\n## Usage with Claude Desktop\n\n### Installing via Smithery\n\nTo install Snowflake Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/mcp_snowflake_server):\n\n```bash\nnpx -y @smithery/cli install mcp_snowflake_server --client claude\n```\n\n---\n\n### Installing via UVX\n\n#### Traditional Configuration (Individual Parameters)\n\n```json\n\"mcpServers\": {\n  \"snowflake_pip\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"--python=3.12\",  // Optional: specify Python version <=3.12\n      \"mcp_snowflake_server\",\n      \"--account\", \"your_account\",\n      \"--warehouse\", \"your_warehouse\",\n      \"--user\", \"your_user\",\n      \"--password\", \"your_password\",\n      \"--role\", \"your_role\",\n      \"--database\", \"your_database\",\n      \"--schema\", \"your_schema\"\n      // Optionally: \"--private_key_path\", \"your_private_key_absolute_path\"\n      // Optionally: \"--allow_write\"\n      // Optionally: \"--log_dir\", \"/absolute/path/to/logs\"\n      // Optionally: \"--log_level\", \"DEBUG\"/\"INFO\"/\"WARNING\"/\"ERROR\"/\"CRITICAL\"\n      // Optionally: \"--exclude_tools\", \"{tool_name}\", [\"{other_tool_name}\"]\n    ]\n  }\n}\n```\n\n#### TOML Configuration (Recommended)\n\n```json\n\"mcpServers\": {\n  \"snowflake_production\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"--python=3.12\",\n      \"mcp_snowflake_server\",\n      \"--connections-file\", \"/path/to/snowflake_connections.toml\",\n      \"--connection-name\", \"production\"\n      // Optionally: \"--allow_write\"\n      // Optionally: \"--log_dir\", \"/absolute/path/to/logs\"\n      // Optionally: \"--log_level\", \"DEBUG\"/\"INFO\"/\"WARNING\"/\"ERROR\"/\"CRITICAL\"\n      // Optionally: \"--exclude_tools\", \"{tool_name}\", [\"{other_tool_name}\"]\n    ]\n  },\n  \"snowflake_staging\": {\n    \"command\": \"uvx\",\n    \"args\": [\n      \"--python=3.12\",\n      \"mcp_snowflake_server\",\n      \"--connections-file\", \"/path/to/snowflake_connections.toml\",\n      \"--connection-name\", \"staging\"\n    ]\n  }\n}\n```\n\n---\n\n### Installing Locally\n\n1. Install [Claude AI Desktop App](https://claude.ai/download)\n\n2. Install `uv`:\n\n```bash\ncurl -LsSf https://astral.sh/uv/install.sh | sh\n```\n\n3. Create a `.env` file with your Snowflake credentials:\n\n```bash\nSNOWFLAKE_USER=\"xxx@your_email.com\"\nSNOWFLAKE_ACCOUNT=\"xxx\"\nSNOWFLAKE_ROLE=\"xxx\"\nSNOWFLAKE_DATABASE=\"xxx\"\nSNOWFLAKE_SCHEMA=\"xxx\"\nSNOWFLAKE_WAREHOUSE=\"xxx\"\nSNOWFLAKE_PASSWORD=\"xxx\"\nSNOWFLAKE_PASSWORD=\"xxx\"\nSNOWFLAKE_PRIVATE_KEY_PATH=/absolute/path/key.p8\n# Alternatively, use external browser authentication:\n# SNOWFLAKE_AUTHENTICATOR=\"externalbrowser\"\n```\n\n4. [Optional] Modify `runtime_config.json` to set exclusion patterns for databases, schemas, or tables.\n\n5. Test locally:\n\n```bash\nuv --directory /absolute/path/to/mcp_snowflake_server run mcp_snowflake_server\n```\n\n6. Add the server to your `claude_desktop_config.json`:\n\n#### Traditional Configuration (Using Environment Variables)\n\n```json\n\"mcpServers\": {\n  \"snowflake_local\": {\n    \"command\": \"/absolute/path/to/uv\",\n    \"args\": [\n      \"--python=3.12\",  // Optional\n      \"--directory\", \"/absolute/path/to/mcp_snowflake_server\",\n      \"run\", \"mcp_snowflake_server\"\n      // Optionally: \"--allow_write\"\n      // Optionally: \"--log_dir\", \"/absolute/path/to/logs\"\n      // Optionally: \"--log_level\", \"DEBUG\"/\"INFO\"/\"WARNING\"/\"ERROR\"/\"CRITICAL\"\n      // Optionally: \"--exclude_tools\", \"{tool_name}\", [\"{other_tool_name}\"]\n    ]\n  }\n}\n```\n\n#### TOML Configuration (Recommended)\n\n```json\n\"mcpServers\": {\n  \"snowflake_local\": {\n    \"command\": \"/absolute/path/to/uv\",\n    \"args\": [\n      \"--python=3.12\",\n      \"--directory\", \"/absolute/path/to/mcp_snowflake_server\",\n      \"run\", \"mcp_snowflake_server\",\n      \"--connections-file\", \"/absolute/path/to/snowflake_connections.toml\",\n      \"--connection-name\", \"development\"\n      // Optionally: \"--allow_write\"\n      // Optionally: \"--log_dir\", \"/absolute/path/to/logs\"\n      // Optionally: \"--log_level\", \"DEBUG\"/\"INFO\"/\"WARNING\"/\"ERROR\"/\"CRITICAL\"\n      // Optionally: \"--exclude_tools\", \"{tool_name}\", [\"{other_tool_name}\"]\n    ]\n  }\n}\n```\n\n---\n\n## Notes\n\n- By default, **write operations are disabled**. Enable them explicitly with `--allow-write`.\n- The server supports filtering out specific databases, schemas, or tables via exclusion patterns.\n- The server exposes additional per-table context resources if prefetching is enabled.\n- The `append_insight` tool updates the `memo://insights` resource dynamically.\n\n---\n\n## License\n\nMIT\n",
+  "category": "Data",
+  "quality_score": 67,
+  "archestra_config": {
+    "client_config_permutations": {
+      "mcp-snowflake-server-uvx": {
+        "command": "uvx",
+        "args": [
+          "--python=3.12",
+          "mcp_snowflake_server",
+          "--account",
+          "your_account",
+          "--warehouse",
+          "your_warehouse",
+          "--user",
+          "your_user",
+          "--password",
+          "your_password",
+          "--role",
+          "your_role",
+          "--database",
+          "your_database",
+          "--schema",
+          "your_schema",
+          "--allow_write",
+          "--log_dir",
+          "/absolute/path/to/logs",
+          "--log_level",
+          "INFO",
+          "--exclude_tools",
+          "{tool_name}"
+        ],
+        "env": {}
+      },
+      "mcp-snowflake-server-uv-run": {
+        "command": "uv",
+        "args": ["--directory", "/absolute/path/to/mcp_snowflake_server", "run", "mcp_snowflake_server"],
+        "env": {}
+      },
+      "mcp-snowflake-server-local-config": {
+        "command": "/absolute/path/to/uv",
+        "args": [
+          "--python=3.12",
+          "--directory",
+          "/absolute/path/to/mcp_snowflake_server",
+          "run",
+          "mcp_snowflake_server",
+          "--allow_write",
+          "--log_dir",
+          "/absolute/path/to/logs",
+          "--log_level",
+          "INFO",
+          "--exclude_tools",
+          "{tool_name}"
+        ],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "isaacwasserman",
+    "repo": "mcp-snowflake-server",
+    "url": "https://github.com/isaacwasserman/mcp-snowflake-server",
+    "name": "isaacwasserman__mcp-snowflake-server",
+    "path": null,
+    "stars": 164,
+    "contributors": 9,
+    "issues": 17,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "f5e2022abba75a49440b5c42995cbcd70517e16f"
+  },
+  "programming_language": "Python",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:28.971Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": true,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": true,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "mcp",
+      "importance": 10
+    },
+    {
+      "name": "snowflake-connector-python",
+      "importance": 9
+    },
+    {
+      "name": "pandas",
+      "importance": 7
+    },
+    {
+      "name": "python-dotenv",
+      "importance": 4
+    },
+    {
+      "name": "sqlparse",
+      "importance": 6
+    },
+    {
+      "name": "snowflake-snowpark-python",
+      "importance": 9
+    }
+  ],
+  "raw_dependencies": "=== pyproject.toml ===\n[project]\nname = \"mcp_snowflake_server\"\nversion = \"0.4.0\"\ndescription = \"A simple Snowflake MCP server\"\nreadme = \"README.md\"\nrequires-python = \">=3.10,<3.13\"\ndependencies = [\n    \"mcp>=1.0.0\",\n    \"snowflake-connector-python[pandas]>=3.12.0,<3.14.0\",\n    \"pandas>=2.2.3\",\n    \"python-dotenv>=1.0.1\",\n    \"sqlparse>=0.5.3\",\n    \"snowflake-snowpark-python>=1.26.0\",\n    \"tomli>=2.0.1\",\n]\n\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[tool.uv]\ndev-dependencies = [\"pyright>=1.1.389\"]\n\n[project.scripts]\nmcp_snowflake_server = \"mcp_snowflake_server:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"src/mcp_snowflake_server\"]\n"
+}

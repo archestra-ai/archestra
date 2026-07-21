@@ -1,0 +1,78 @@
+{
+  "name": "cqfn__aibolit-mcp-server",
+  "display_name": "aibolit-mcp-server",
+  "description": "MCP Server for Aibolit Java Static Analyzer: Helping Your AI Agent Identify Hotspots for Refactoring",
+  "author": {
+    "name": "cqfn"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "aibolit-mcp-server@0.0.6"],
+    "env": {},
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {},
+  "readme": "# MCP Server for Aibolit, Java Code Analyzer\n\n[![DevOps By Rultor.com](https://www.rultor.com/b/cqfn/aibolit-mcp-server)](https://www.rultor.com/p/cqfn/aibolit-mcp-server)\n\n[![make](https://github.com/cqfn/aibolit-mcp-server/actions/workflows/make.yml/badge.svg)](https://github.com/cqfn/aibolit-mcp-server/actions/workflows/make.yml)\n[![codecov](https://codecov.io/gh/cqfn/aibolit-mcp-server/graph/badge.svg?token=3dr2Il91wJ)](https://codecov.io/gh/cqfn/aibolit-mcp-server)\n[![Hits-of-Code](https://hitsofcode.com/github/cqfn/aibolit-mcp-server)](https://hitsofcode.com/view/github/cqfn/aibolit-mcp-server)\n[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/cqfn/aibolit-mcp-server/blob/master/LICENSE.txt)\n\nIf you use AI agents, such as [Claude Code], [Cursor], or [Windsurf],\n  for code refactoring, you may enjoy using this [MCP] server.\nYour AI agent, when you ask it to \"make code better,\"\n  may wonder what exactly needs to be improved.\nSadly, it may often overlook important problems.\nAI agents, by design, pay more attention to cosmetic issues,\n  which are \"low-hanging fruits\" for them.\nThis [MCP] server will give your agent a hint:\n  what is the **most critical design issue** in the code.\nThen, the agent will refactor it and fix the issue.\n\nFirst, install [Node], [Npm], [Python], [Pip], and [aibolit]:\n\n```bash\naibolit --version\n```\n\nThen, add this [MCP] server to [Claude Code]\n(or simply edit `~/claude.json`, but it's not recommended):\n\n```bash\nclaude mcp add aibolit npx aibolit-mcp-server@0.0.6\n```\n\nThen, restart [Claude Code] and ask it something along these lines:\n\"Find the most critical design issue in my code base and fix it.\"\n\n## How to Contribute\n\nTo test this project, simply run the following commands\n(you'll need [Node] 18+, [Npm], and [GNU make] installed):\n\n```bash\nnpm install\nmake\n```\n\nIf everything builds correctly after your changes, submit a pull request.\n\n[MCP]: https://modelcontextprotocol.io/\n[Npm]: https://www.npmjs.com/\n[Node]: https://nodejs.org/en\n[aibolit]: https://github.com/cqfn/aibolit\n[Claude Code]: https://github.com/anthropics/claude-code\n[Cursor]: https://www.cursor.com/\n[Windsurf]: https://windsurf.com/editor\n[GNU make]: https://www.gnu.org/software/make/\n[Python]: https://www.python.org/\n[Pip]: https://pypi.org/project/pip/\n",
+  "category": "AI Tools",
+  "quality_score": 54,
+  "archestra_config": {
+    "client_config_permutations": {
+      "aibolit-mcp-server": {
+        "command": "npx",
+        "args": ["-y", "aibolit-mcp-server@0.0.6"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "cqfn",
+    "repo": "aibolit-mcp-server",
+    "url": "https://github.com/cqfn/aibolit-mcp-server",
+    "name": "cqfn__aibolit-mcp-server",
+    "path": null,
+    "stars": 16,
+    "contributors": 2,
+    "issues": 0,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "d76d79c55531264322af1e0fe5b2a00697ded943"
+  },
+  "programming_language": "TypeScript",
+  "framework": null,
+  "last_scraped_at": "2025-09-09T13:05:36.422Z",
+  "evaluation_model": "gemini-2.5-flash",
+  "protocol_features": {
+    "implementing_tools": true,
+    "implementing_prompts": false,
+    "implementing_resources": false,
+    "implementing_sampling": false,
+    "implementing_roots": false,
+    "implementing_logging": false,
+    "implementing_stdio": true,
+    "implementing_streamable_http": false,
+    "implementing_oauth2": false
+  },
+  "dependencies": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "importance": 10
+    },
+    {
+      "name": "commander",
+      "importance": 8
+    },
+    {
+      "name": "semver",
+      "importance": 4
+    }
+  ],
+  "raw_dependencies": "=== package.json ===\n{\n  \"author\": \"Yegor Bugayenko <yegor256@gmail.com> (https://www.yegor256.com/)\",\n  \"bin\": {\n    \"index\": \"./index.ts\"\n  },\n  \"dependencies\": {\n    \"@modelcontextprotocol/sdk\": \"^1.10.2\",\n    \"commander\": \"^13.1.0\",\n    \"semver\": \"^7.7.2\"\n  },\n  \"description\": \"MCP Server for Aibolit\",\n  \"devDependencies\": {\n    \"@jest/globals\": \"^29.7.0\",\n    \"@types/jest\": \"^29.5.14\",\n    \"@types/semver\": \"^7.7.0\",\n    \"@typescript-eslint/eslint-plugin\": \"^8.31.1\",\n    \"@typescript-eslint/parser\": \"^8.31.1\",\n    \"eslint\": \"^9.24.0\",\n    \"jest\": \"^29.7.0\",\n    \"ts-jest\": \"^29.3.2\",\n    \"ts-node\": \"^10.9.2\",\n    \"tsx\": \"^4.19.4\",\n    \"typescript\": \"^5.8.3\",\n    \"typescript-eslint\": \"^8.31.1\"\n  },\n  \"engines\": {\n    \"node\": \">=18.0\",\n    \"npm\": \">8.0\"\n  },\n  \"homepage\": \"https://github.com/cqfn/aibolit-mcp-server\",\n  \"keywords\": [\n    \"mcp\",\n    \"aibolit\",\n    \"ai\"\n  ],\n  \"license\": \"MIT\",\n  \"main\": \"index\",\n  \"name\": \"aibolit-mcp-server\",\n  \"os\": [\n    \"darwin\",\n    \"linux\",\n    \"win32\"\n  ],\n  \"repository\": \"cqfn/aibolit-mcp-server\",\n  \"scripts\": {\n    \"lint\": \"eslint\",\n    \"test\": \"jest\"\n  },\n  \"version\": \"0.0.0\"\n}\n"
+}

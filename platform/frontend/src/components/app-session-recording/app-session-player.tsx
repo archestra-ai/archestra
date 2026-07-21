@@ -5339,7 +5339,7 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
   {
     key: "share",
     title: "Submit to Archestra for review!",
-    text: "Authorize Archestra to Create a Pull Request to Apps Hackathon repository on GitHub for you. Final cut with all your edits applied.",
+    text: "Authorize Archestra to Create a Pull Request to Apps Hackathon repository on GitHub for you.\n\nFinal cut with all your edits applied.",
     note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
   },
   {
@@ -5534,9 +5534,10 @@ function PlayerTour({
         style={{ top: bubbleTop, left: bubbleLeft }}
       >
         <div className="text-sm font-medium">{step.title}</div>
-        {/* A stop whose spotlight speaks for itself carries no body text. */}
+        {/* A stop whose spotlight speaks for itself carries no body text.
+            pre-line: a stop's text may hold blank-line paragraph breaks. */}
         {step.text && (
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
             {step.text}
           </p>
         )}

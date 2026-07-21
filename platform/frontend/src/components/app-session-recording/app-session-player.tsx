@@ -115,6 +115,15 @@ const DISPLAY_CLOCK_INTERVAL_MS = 100;
 /** Arrow-key seek step. */
 const SEEK_STEP_MS = 5_000;
 /**
+ * How often a drag-scrub may rewind. Scrubbing forward just applies the
+ * skipped events in place, so it follows every pointer move; a rewind remounts
+ * the app frame and replays its segment, which per move would be a remount
+ * storm that never gets a frame on screen. Rewinds coalesce onto this
+ * throttle — leading edge so the first backward tick is immediate, trailing
+ * edge so the scrub always settles on the latest point.
+ */
+const SCRUB_REWIND_THROTTLE_MS = 200;
+/**
  * How far ahead of an upcoming assistant message the chat shows a "thinking"
  * loader — the recording has no explicit generation-start marker, so the gap
  * before the message lands stands in for "the assistant is responding".
@@ -1078,22 +1087,63 @@ function PlayerSurface({
       ? seekIntent.baseMs
       : basePlayback.toPlaybackMs(playback.toRawMs(displayClock));
 
+  // A drag-scrub's not-yet-performed rewind (see scrubBase): the latest point
+  // the cursor asked for, waiting out the rewind throttle.
+  const scrubRewindRef = useRef<{
+    timer: ReturnType<typeof setTimeout> | null;
+    pendingClock: number | null;
+    lastAt: number;
+  }>({ timer: null, pendingClock: null, lastAt: 0 });
+  const cancelPendingScrub = useCallback(() => {
+    const scrub = scrubRewindRef.current;
+    if (scrub.timer !== null) clearTimeout(scrub.timer);
+    scrub.timer = null;
+    scrub.pendingClock = null;
+  }, []);
+  useEffect(() => cancelPendingScrub, [cancelPendingScrub]);
+
   // An edit retimes the whole playback, so the applied-event cursor and MCP log
   // are positionally invalid for the new event list: restart the run from a
   // clean, paused frame whenever the playback identity changes after mount.
+  // The author's PLACE survives the restart: raw time is stable across edits,
+  // so their point maps into the new playback exactly — through a Cut the
+  // playhead visibly stays where the selection was released (the cut's
+  // collapse instant) instead of snapping to the start, and it holds there
+  // until playback resumes or the timeline is clicked anew.
   const playbackRef = useRef(playback);
   useEffect(() => {
     if (playbackRef.current === playback) return;
+    const rawMs = playbackRef.current.toRawMs(clockRef.current);
     playbackRef.current = playback;
-    clockRef.current = 0;
-    appliedRef.current = 0;
+    cancelPendingScrub();
+    const clock = Math.max(
+      0,
+      Math.min(playback.toPlaybackMs(rawMs), playback.duration),
+    );
+    const seg = segmentIndexForClock(clock);
+    const segStart = segments[seg]?.atMs ?? 0;
+    let idx = 0;
+    while (idx < events.length && events[idx].t < segStart) idx++;
+    clockRef.current = clock;
+    appliedRef.current = idx;
     resetMcpLog();
-    setDisplayClock(0);
-    segmentIndexRef.current = 0;
-    setSegmentIndex(0);
+    // Pin the playhead to the base-time spot it occupied, not to the far side
+    // of a collapse gap the raw round-trip would pick (see seekIntentRef).
+    seekIntentRef.current = { baseMs: basePlayback.toPlaybackMs(rawMs), clock };
+    setDisplayClock(clock);
+    segmentIndexRef.current = seg;
+    setSegmentIndex(seg);
     setRunNonce((nonce) => nonce + 1);
     setPlayState("paused");
-  }, [playback, resetMcpLog]);
+  }, [
+    playback,
+    basePlayback,
+    segments,
+    events,
+    segmentIndexForClock,
+    resetMcpLog,
+    cancelPendingScrub,
+  ]);
 
   // The replay owns the app's clock. The app's timers and animation frames fire
   // against this rather than the wall, so it advances exactly as far as the
@@ -1313,6 +1363,7 @@ function PlayerSurface({
   }, [playState, frameReady, duration, applyEventsUpTo, segmentIndexForClock]);
 
   const restart = useCallback(() => {
+    cancelPendingScrub();
     clockRef.current = 0;
     appliedRef.current = 0;
     resetMcpLog();
@@ -1322,7 +1373,7 @@ function PlayerSurface({
     // remount the app frame so the demo restarts from a fresh app instance
     setRunNonce((nonce) => nonce + 1);
     setPlayState("playing");
-  }, [resetMcpLog]);
+  }, [resetMcpLog, cancelPendingScrub]);
 
   // Editing anything — the description, the chat, the one-shot prompt, or a
   // timeline selection — owns the moment: the replay pauses and the play
@@ -1492,11 +1543,54 @@ function PlayerSurface({
   // the plain round-trip is seek-complete over the whole strip.
   const seekBase = useCallback(
     (baseMs: number) => {
+      // A click-seek supersedes any scrub rewind still waiting out its
+      // throttle — the stale point must not land after this one.
+      cancelPendingScrub();
       const clock = playback.toPlaybackMs(basePlayback.toRawMs(baseMs));
       seekIntentRef.current = { baseMs, clock };
       seekTo(clock);
     },
-    [playback, basePlayback, seekTo],
+    [playback, basePlayback, seekTo, cancelPendingScrub],
+  );
+
+  // Live scrub while a selection is being drawn on the timeline: the replay —
+  // chat and app both — tracks the cursor's point. Forward motion applies the
+  // skipped events onto the running frame, cheap enough to follow every move;
+  // backward motion (or a segment change) needs the remount-and-replay rewind,
+  // so those coalesce onto SCRUB_REWIND_THROTTLE_MS, ticking backward as fast
+  // as the rebuild allows and always settling on the latest point — the
+  // release point included, which is exactly where the playhead then stays.
+  const scrubBase = useCallback(
+    (baseMs: number) => {
+      const clock = playback.toPlaybackMs(basePlayback.toRawMs(baseMs));
+      seekIntentRef.current = { baseMs, clock };
+      const scrub = scrubRewindRef.current;
+      const rewind =
+        clock < clockRef.current - 1 ||
+        segmentIndexForClock(clock) !== segmentIndexRef.current;
+      if (!rewind && scrub.timer === null) {
+        seekTo(clock);
+        return;
+      }
+      // A rewind — or one already pending, which a forward step must not
+      // overtake. The playhead and readout track the cursor immediately; the
+      // replay follows when the throttle fires.
+      scrub.pendingClock = clock;
+      setDisplayClock(clock);
+      if (scrub.timer !== null) return;
+      const wait = Math.max(
+        0,
+        SCRUB_REWIND_THROTTLE_MS - (performance.now() - scrub.lastAt),
+      );
+      scrub.timer = setTimeout(() => {
+        scrub.timer = null;
+        scrub.lastAt = performance.now();
+        const pending = scrub.pendingClock;
+        scrub.pendingClock = null;
+        if (pending !== null) seekTo(pending);
+      }, wait);
+    },
+    [playback, basePlayback, segmentIndexForClock, seekTo],
   );
 
   // ── The one-shot prompt bubble's editor. The bubble in the chat pane is the
@@ -2129,6 +2223,7 @@ function PlayerSurface({
                     : null
             }
             onSeek={seekBase}
+            onScrub={scrubBase}
             onCut={cutBaseRange}
             onResize={resizeCutBase}
             onRestore={restoreCut}
@@ -2552,6 +2647,7 @@ function ReplayTimeline({
   contentStartMs,
   saving,
   onSeek,
+  onScrub,
   demo,
   onEditingChange,
   onCut,
@@ -2574,6 +2670,8 @@ function ReplayTimeline({
   /** Editing anything pauses the replay and locks the play controls. */
   onEditingChange?: (editing: boolean) => void;
   onSeek: (ms: number) => void;
+  /** Live scrub while a selection is drawn: the replay follows the cursor. */
+  onScrub: (ms: number) => void;
   onCut: (range: { fromMs: number; toMs: number }) => void;
   onResize: (index: number, range: { fromMs: number; toMs: number }) => void;
   onRestore: (index: number) => void;
@@ -2588,6 +2686,11 @@ function ReplayTimeline({
   // Where a click would land playback: tracks the cursor over the strip and
   // the ruler band, rendered as the playhead's quiet grey twin.
   const [hoverMs, setHoverMs] = useState<number | null>(null);
+  // Whether the current select-drag has crossed the click threshold and become
+  // a scrubbing selection. Latched for the rest of the drag: a cursor that
+  // doubles back over its own anchor keeps scrubbing rather than going quiet
+  // inside the click-sized dead zone.
+  const scrubLatchedRef = useRef(false);
 
   // Committing an edit re-times the timeline; a stale selection would point at
   // the wrong stretch, so any change to the cut list clears it.
@@ -2713,6 +2816,7 @@ function ReplayTimeline({
     trackRef.current?.setPointerCapture(event.pointerId);
     const at = msAtClientX(event.clientX);
     setSelection(null);
+    scrubLatchedRef.current = false;
     setDrag({
       kind: "select",
       anchorMs: at,
@@ -2733,8 +2837,20 @@ function ReplayTimeline({
         ? at
         : drag.anchorMs + (at - msAtClientX(drag.anchorClientX));
     setDrag({ ...drag, currentMs, currentClientX: event.clientX });
+    // A selection drag scrubs as it draws: past the click threshold the
+    // replay follows the cursor point for point, forward and back.
+    if (drag.kind === "select") {
+      if (
+        scrubLatchedRef.current ||
+        Math.abs(event.clientX - drag.anchorClientX) >= CLICK_DRAG_PX
+      ) {
+        scrubLatchedRef.current = true;
+        onScrub(at);
+      }
+    }
   };
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    scrubLatchedRef.current = false;
     if (!drag) return;
     if (trackRef.current?.hasPointerCapture(event.pointerId)) {
       trackRef.current.releasePointerCapture(event.pointerId);
@@ -5385,10 +5501,10 @@ function PlayerTour({
           left: spot.left - 4,
           width: spot.width + 8,
           height: spot.height + (step.padTop ?? 4) + 4,
-          // 0.8, not the usual 0.5-ish scrim: the player is itself a dark
-          // surface over a dark app, so a lighter dim barely reads and the
+          // 0.9, not the usual 0.5-ish scrim: the player is itself a dark
+          // surface over a dark app, so anything lighter barely reads and the
           // spotlight doesn't pop.
-          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.8)",
+          boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.9)",
         }}
       />
       {/* The way out lives on the dimmed page itself, not in the bubble. */}

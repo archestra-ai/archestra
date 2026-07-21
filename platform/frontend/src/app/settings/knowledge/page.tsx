@@ -450,41 +450,16 @@ function DropEmbeddingConfigDialog({
   );
 }
 
-function ConnectionStatusPill({ status }: { status: ConnectionStatus }) {
-  const pill = {
-    untested: {
-      label: "Not tested",
-      className: "bg-muted text-muted-foreground",
-      icon: null,
-    },
-    testing: {
-      label: "Testing…",
-      className: "bg-muted text-muted-foreground",
-      icon: <Loader2 className="h-3 w-3 animate-spin" />,
-    },
-    connected: {
-      label: "Connected",
-      className: "bg-green-500/10 text-green-600 dark:text-green-400",
-      icon: <CheckCircle2 className="h-3 w-3" />,
-    },
-    failed: {
-      label: "Failed",
-      className: "bg-destructive/10 text-destructive",
-      icon: <AlertCircle className="h-3 w-3" />,
-    },
-  }[status];
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-        pill.className,
-      )}
-    >
-      {pill.icon}
-      {pill.label}
-    </span>
-  );
+function TestConnectionIcon({ status }: { status: ConnectionStatus }) {
+  if (status === "testing") {
+    return <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />;
+  }
+  if (status === "connected") {
+    return (
+      <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+    );
+  }
+  return <Zap className="mr-1 h-3.5 w-3.5" />;
 }
 
 function KnowledgeSettingsContent() {
@@ -750,12 +725,7 @@ function KnowledgeSettingsContent() {
       <SettingsSectionStack>
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle>Embedding Configuration</CardTitle>
-              {embeddingConfigured && (
-                <ConnectionStatusPill status={embeddingStatus.status} />
-              )}
-            </div>
+            <CardTitle>Embedding Configuration</CardTitle>
             <CardDescription className="leading-relaxed">
               Choose the API key and embedding model used for knowledge base
               documents. Only keys with synced models that have configured
@@ -880,11 +850,7 @@ function KnowledgeSettingsContent() {
                         }
                         onClick={handleTestEmbedding}
                       >
-                        {embeddingStatus.status === "testing" ? (
-                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Zap className="mr-1 h-3.5 w-3.5" />
-                        )}
+                        <TestConnectionIcon status={embeddingStatus.status} />
                         Test connection
                       </Button>
                     )}
@@ -909,12 +875,7 @@ function KnowledgeSettingsContent() {
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle>Reranking Configuration</CardTitle>
-              {rerankerConfigured && (
-                <ConnectionStatusPill status={rerankerStatus.status} />
-              )}
-            </div>
+            <CardTitle>Reranking Configuration</CardTitle>
             <CardDescription>
               Configure the LLM used to rerank knowledge base search results for
               improved relevance. Any LLM provider and model can be used —
@@ -973,6 +934,20 @@ function KnowledgeSettingsContent() {
               >
                 {({ hasPermission }) => (
                   <div className="flex flex-wrap justify-end gap-2">
+                    {rerankerConfigured && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          !hasPermission || rerankerStatus.status === "testing"
+                        }
+                        onClick={handleTestReranker}
+                      >
+                        <TestConnectionIcon status={rerankerStatus.status} />
+                        Test connection
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="outline"
@@ -986,24 +961,6 @@ function KnowledgeSettingsContent() {
                       <Trash2 className="mr-1 h-3.5 w-3.5" />
                       Clear reranking configuration
                     </Button>
-                    {rerankerConfigured && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={
-                          !hasPermission || rerankerStatus.status === "testing"
-                        }
-                        onClick={handleTestReranker}
-                      >
-                        {rerankerStatus.status === "testing" ? (
-                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Zap className="mr-1 h-3.5 w-3.5" />
-                        )}
-                        Test connection
-                      </Button>
-                    )}
                   </div>
                 )}
               </WithPermissions>

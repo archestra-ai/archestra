@@ -215,6 +215,35 @@
   };
 
 
+  /**
+   * The app's LIVE DOM the instant recording starts — the true seed for the
+   * replay's first frame.
+   *
+   * Replay otherwise begins from the served SOURCE html (segment 0), which is
+   * the app BEFORE its own code ran. But the app has always already run by the
+   * time a recording starts: it rendered on load, and its intro/onboarding may
+   * long since have been dismissed. None of that is a mutation the observer can
+   * see after the fact, so without this the replay opens on a screen the session
+   * never showed — an app frozen behind an intro the user had already skipped —
+   * and only catches up if the app happens to re-render that region later.
+   *
+   * Sent through the event channel as a control the host consumes to seed the
+   * segment; it is never stored as a timeline event. `outerHTML` carries the
+   * injected SDK envelope (kept alive through replay's script neutralization)
+   * and the app's live markup; canvas pixels aren't serializable this way and
+   * are seeded separately by {@link sampleCanvases}.
+   */
+  const captureInitialDom = () => {
+    try {
+      push({
+        kind: "snapshot",
+        html: "<!doctype html>\n" + document.documentElement.outerHTML,
+      });
+    } catch {
+      // A recording with no initial snapshot still replays from the source html.
+    }
+  };
+
   const startRecording = () => {
     if (recording) return;
     recording = true;
@@ -224,6 +253,9 @@
       width: window.innerWidth,
       height: window.innerHeight,
     });
+    // Seed the first replay frame from what is on screen now, before wiring up
+    // the observers that capture everything after.
+    captureInitialDom();
     flushTimer = setInterval(flush, FLUSH_INTERVAL_MS);
     // What the app becomes, alongside what is done to it.
     startDomCapture();
@@ -900,6 +932,20 @@
     } else origClearInterval(id);
   };
 
+  // Canvas frames decode asynchronously — an <img> fed a data URL, decoded on
+  // the browser's own thread pool with no ordering guarantee — so a frame drawn
+  // "when it loads" is drawn in decode-completion order, not the order the host
+  // dispatched it. A heavier frame sent earlier can finish after a lighter one
+  // sent later, land on top of it, and leave the canvas showing the OLDER frame:
+  // the replay flickers backwards and can settle on the first-generated object
+  // instead of the last. So every paint is stamped with its dispatch order (the
+  // host posts them in timeline order, and postMessage preserves that order into
+  // this frame), and a frame that finishes decoding after a later-dispatched
+  // frame has already painted its canvas is dropped. A remount hands us a new
+  // canvas element, whose absent WeakMap entry restarts the guard cleanly.
+  const canvasPaintSeq = new WeakMap();
+  let nextPaintSeq = 0;
+
   /**
    * Put a recorded piece of the app's output back on screen.
    *
@@ -913,9 +959,18 @@
       if (event.kind === "canvas") {
         const canvas = document.querySelector(event.sel);
         if (!canvas || !canvas.getContext) return;
+        // Stamp the dispatch order now, synchronously, before the async decode
+        // reorders things — this is the frame's true position in the timeline.
+        const seq = ++nextPaintSeq;
         const image = new Image();
         image.onload = () => {
           try {
+            // A later-dispatched frame already won this canvas while this one
+            // was decoding: its pixels are the more recent truth, so this stale
+            // frame is dropped rather than allowed to overwrite them.
+            const drawnSeq = canvasPaintSeq.get(canvas);
+            if (drawnSeq !== undefined && drawnSeq > seq) return;
+            canvasPaintSeq.set(canvas, seq);
             // Restore the canvas's own bitmap size before drawing. The frame
             // already carries it — toDataURL captures at canvas.width ×
             // canvas.height — and replay needs it because it serves the app's

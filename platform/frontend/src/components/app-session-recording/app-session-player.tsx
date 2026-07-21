@@ -2305,6 +2305,7 @@ type TimelineDrag =
       anchorClientX: number;
       anchorTime: number;
       currentMs: number;
+      currentClientX: number;
     }
   | {
       kind: "resize";
@@ -2313,6 +2314,7 @@ type TimelineDrag =
       anchorClientX: number;
       anchorMs: number;
       currentMs: number;
+      currentClientX: number;
     }
   | {
       kind: "trim";
@@ -2320,6 +2322,7 @@ type TimelineDrag =
       anchorClientX: number;
       anchorMs: number;
       currentMs: number;
+      currentClientX: number;
     };
 
 /**
@@ -2385,9 +2388,18 @@ function ReplayTimeline({
     setDrag(null);
   }, [cuts]);
 
+  // A press alone is not yet an edit: it may resolve to a click-seek, which
+  // must leave a running replay running (pausing it here would strand playback
+  // at the clicked point, never resuming). So a drag owns the moment only once
+  // it has travelled past the click threshold into a genuine selection, resize
+  // or trim — the same line the release handler draws between seek and select.
+  // A committed selection (its Cut/Dismiss prompt showing) always counts.
+  const dragEditing =
+    drag !== null &&
+    Math.abs(drag.currentClientX - drag.anchorClientX) >= CLICK_DRAG_PX;
   useEffect(() => {
-    onEditingChange?.(selection !== null || drag !== null);
-  }, [selection, drag, onEditingChange]);
+    onEditingChange?.(selection !== null || dragEditing);
+  }, [selection, dragEditing, onEditingChange]);
 
   const msAtClientX = (clientX: number): number => {
     const rect = trackRef.current?.getBoundingClientRect();
@@ -2466,6 +2478,7 @@ function ReplayTimeline({
         anchorClientX: event.clientX,
         anchorMs,
         currentMs: anchorMs,
+        currentClientX: event.clientX,
       });
     };
 
@@ -2482,6 +2495,7 @@ function ReplayTimeline({
         anchorClientX: event.clientX,
         anchorMs,
         currentMs: anchorMs,
+        currentClientX: event.clientX,
       });
     };
 
@@ -2496,6 +2510,7 @@ function ReplayTimeline({
       anchorClientX: event.clientX,
       anchorTime: performance.now(),
       currentMs: at,
+      currentClientX: event.clientX,
     });
   };
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -2508,7 +2523,7 @@ function ReplayTimeline({
       drag.kind === "select"
         ? at
         : drag.anchorMs + (at - msAtClientX(drag.anchorClientX));
-    setDrag({ ...drag, currentMs });
+    setDrag({ ...drag, currentMs, currentClientX: event.clientX });
   };
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!drag) return;

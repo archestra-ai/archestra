@@ -1370,7 +1370,6 @@ describe("LLM Provider API Keys Team Scope", () => {
 
     expect(response.statusCode).toBe(400);
   });
-
 });
 
 describe("LLM Provider API Keys Scope Update", () => {

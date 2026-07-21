@@ -120913,6 +120913,7 @@
                               "environmentId",
                               "sessionId",
                               "sessionSource",
+                              "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
                               "request",
@@ -121024,6 +121025,13 @@
                                   "oauth_user",
                                   "internal",
                                   "unknown"
+                                ]
+                              },
+                              "billingMode": {
+                                "type": "string",
+                                "enum": [
+                                  "metered",
+                                  "subscription"
                                 ]
                               },
                               "authenticatedAppId": {
@@ -143459,6 +143467,7 @@
                         "environmentId",
                         "sessionId",
                         "sessionSource",
+                        "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
                         "request",
@@ -143570,6 +143579,13 @@
                             "oauth_user",
                             "internal",
                             "unknown"
+                          ]
+                        },
+                        "billingMode": {
+                          "type": "string",
+                          "enum": [
+                            "metered",
+                            "subscription"
                           ]
                         },
                         "authenticatedAppId": {

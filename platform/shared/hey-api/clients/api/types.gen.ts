@@ -33927,7 +33927,7 @@ export type GetInteractionsResponses = {
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
-            billingMode?: 'metered' | 'subscription';
+            billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: {
@@ -34036,6 +34036,7 @@ export type GetInteractionsResponses = {
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
             request: GeminiGenerateContentRequest | {
@@ -38503,7 +38504,7 @@ export type GetInteractionResponses = {
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
-        billingMode?: 'metered' | 'subscription';
+        billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: {
@@ -38612,6 +38613,7 @@ export type GetInteractionResponses = {
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
         request: GeminiGenerateContentRequest | {

@@ -28205,6 +28205,7 @@ export type GetPublicConfigResponses = {
         maintenanceMode: string | null;
         siteNotificationMessage: string | null;
         enterpriseCoreActive: boolean;
+        mcpSandboxDomain: string | null;
         analytics: {
             enabled: boolean;
             instanceId: string | null;

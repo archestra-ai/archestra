@@ -77,7 +77,7 @@ import {
 } from "@/lib/app-session-recording/app-recording.query";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
+import { useMcpSandboxDomain } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { cn } from "@/lib/utils";
 
@@ -1562,11 +1562,14 @@ function PlayerSurface({
   }, []);
 
   // Resolved BEFORE the bridge below, which keys on it: the sandbox origin is
-  // not known on first paint. `mcpSandboxDomain` arrives with the public
-  // config, so on a cold load this URL changes from same-origin to the
-  // dedicated sandbox subdomain once that request lands, and the app frame is
-  // pointed somewhere new.
-  const mcpSandboxDomain = useFeature("mcpSandboxDomain");
+  // not known on first paint. `mcpSandboxDomain` arrives with the config, so on
+  // a cold load this URL changes from same-origin to the dedicated sandbox
+  // subdomain once that request lands, and the app frame is pointed somewhere
+  // new. Read via useMcpSandboxDomain so the session-less offline video
+  // renderer gets it from the public config too — without that fallback the
+  // renderer stays on the same-origin URL, which the backend refuses with a 403
+  // sandbox-host check, and the app pane films empty.
+  const mcpSandboxDomain = useMcpSandboxDomain();
   const sandboxResult = useMemo(
     () =>
       getMcpSandboxBaseUrl(

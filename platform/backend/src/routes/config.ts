@@ -194,6 +194,13 @@ const PublicConfigResponseSchema = z.strictObject({
   // Effective enterprise core flag (env var OR small-team free tier). Exposed
   // pre-auth so the login screen can decide whether to render the SSO picker.
   enterpriseCoreActive: z.boolean(),
+  // Dedicated sandbox origin (<hash>.{domain}) for MCP App iframes. Not a
+  // secret — it already appears in every app iframe URL and the sandbox CSP
+  // frame-ancestors header. Exposed pre-auth for the offline app-recording
+  // video renderer, which drives the replay page with no session and must
+  // still frame the sandbox at its real cross-origin rather than falling back
+  // to the frontend origin (which the backend refuses with a 403 host check).
+  mcpSandboxDomain: z.string().nullable(),
   analytics: z.strictObject({
     enabled: z.boolean(),
     instanceId: z.string().uuid().nullable(),
@@ -218,6 +225,7 @@ async function getPublicConfigResponse(): Promise<
     maintenanceMode: config.maintenanceMode,
     siteNotificationMessage: config.siteNotificationMessage,
     enterpriseCoreActive: enterpriseTier.isCoreActive(),
+    mcpSandboxDomain: config.mcpSandbox.domain,
     analytics: {
       enabled: config.analytics.enabled,
       instanceId: await getAnalyticsInstanceId(),

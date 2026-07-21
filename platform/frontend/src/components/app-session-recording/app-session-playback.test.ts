@@ -9,6 +9,7 @@ import {
   classifyCut,
   classifyTimelineGesture,
   consolidatedTranscript,
+  dominantViewport,
   keptTimelineRanges,
   neutralizeAppScripts,
   presentedTranscript,
@@ -830,6 +831,62 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain("scrollbar-width: none");
     expect(html).toContain("::-webkit-scrollbar");
     expect(html).toContain("<body>app</body>");
+  });
+});
+
+describe("dominantViewport", () => {
+  type Events = Parameters<typeof dominantViewport>[0];
+
+  it("uses the only recorded size when there is just one", () => {
+    const events: Events = [
+      { kind: "viewport", t: 0, width: 1024, height: 768 },
+      { kind: "pointer", t: 500, type: "click", x: 1, y: 1 },
+    ];
+    expect(dominantViewport(events)).toEqual({ width: 1024, height: 768 });
+  });
+
+  it("picks the size the app was played at, not the idle size it sat at longest", () => {
+    // The app card sits narrow and inline through two minutes of building, then
+    // opens wide in the side panel for fifteen seconds of play. Weighing by
+    // wall-clock time alone picks the narrow idle size, and the game replays on
+    // a "small screen" it was never played on — the exact bug this guards.
+    const events: Events = [
+      { kind: "viewport", t: 0, width: 448, height: 620 },
+      { kind: "viewport", t: 120_000, width: 720, height: 940 },
+    ];
+    for (let t = 120_000; t <= 135_000; t += 250) {
+      events.push({ kind: "pointer", t, type: "move", x: 10, y: 10 });
+    }
+    for (let t = 120_200; t <= 135_000; t += 500) {
+      events.push({
+        kind: "key",
+        t,
+        type: "down",
+        key: "ArrowLeft",
+        code: "ArrowLeft",
+      });
+    }
+    expect(dominantViewport(events)).toEqual({ width: 720, height: 940 });
+  });
+
+  it("ignores a transient mount size in favor of the one that was used", () => {
+    const events: Events = [
+      { kind: "viewport", t: 0, width: 300, height: 40 }, // collapsed card at mount
+      { kind: "viewport", t: 200, width: 900, height: 700 }, // settled to content
+      { kind: "pointer", t: 1_000, type: "click", x: 5, y: 5 },
+    ];
+    expect(dominantViewport(events)).toEqual({ width: 900, height: 700 });
+  });
+
+  it("falls back to longest-on-screen time when there was no user interaction", () => {
+    // A no-input recording (an app that only animates a canvas) has nothing to
+    // weigh by interaction, so the size it lived at longest still wins.
+    const events: Events = [
+      { kind: "viewport", t: 0, width: 400, height: 600 },
+      { kind: "viewport", t: 9_000, width: 800, height: 600 },
+      { kind: "canvas", t: 9_500, sel: "canvas", data: "frame" },
+    ];
+    expect(dominantViewport(events)).toEqual({ width: 400, height: 600 });
   });
 });
 

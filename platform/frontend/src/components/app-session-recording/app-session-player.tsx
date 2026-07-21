@@ -772,11 +772,12 @@ function PlayerSurface({
   const [displayClock, setDisplayClock] = useState(0);
   const [segmentIndex, setSegmentIndex] = useState(0);
   const [runNonce, setRunNonce] = useState(0);
-  // The app renders at its dominant (longest-on-screen) recorded viewport for
-  // the whole replay, uniformly scaled into the stage with its aspect ratio
-  // preserved. Identical layout to the recording means pointer coordinates map
-  // 1:1 (the visual scale doesn't touch the frame's coordinate space), so the
-  // mouse replays smoothly with no remapping error.
+  // The app renders for the whole replay at the recorded viewport it was used
+  // at — the size that carried the actual interaction, not merely the one left
+  // on screen the longest (see dominantViewport) — uniformly scaled into the
+  // stage. Laying it out at its recorded width means pointer coordinates map 1:1
+  // (the visual scale doesn't touch the frame's coordinate space), so the mouse
+  // replays smoothly with no remapping error.
   const viewport = useMemo(() => dominantViewport(events), [events]);
   // False while the (re)mounted app frame's SDK hasn't connected yet — the
   // clock and event dispatch hold until it does, so no event is lost to a
@@ -4592,13 +4593,32 @@ function takeRecordedToolResult(
 const DEFAULT_VIEWPORT = { width: 800, height: 600 };
 
 /**
- * The recording's representative viewport: the recorded size that was on screen
- * for the longest total time. An app card that mounts collapsed and then grows
- * to its content height emits a transient first viewport followed by the
- * settled one — sizing to the first would give the frame the wrong shape, so we
- * pick the size the app actually spent the demo at (ties break to larger area).
+ * The recording's representative viewport: the recorded size the app was being
+ * INTERACTED with at, not merely the size left on screen the longest.
+ *
+ * A recording routinely spans more than one size. The app card sits narrow and
+ * inline through a long build conversation, then opens wide in the side panel
+ * for the part being shown off; an app card that mounts collapsed emits a
+ * transient first size before it settles to its content height. Sizing to
+ * whichever size accrued the most wall-clock time picks the idle one — the
+ * minutes an app spends parked at a narrow width while the user types outweigh
+ * the seconds of actual use — so the replay would lay the app out narrower than
+ * it was ever really used, and any width-driven layout breaks (a game's start
+ * overlay that a small screen refuses to dismiss stays up over the whole replay,
+ * hiding the recorded session behind it). The player can't run the app to work
+ * around its own responsive quirks, so it must give the app back the viewport it
+ * was recorded at.
+ *
+ * So each distinct size is weighted by the pointer/keyboard/scroll/input events
+ * that landed while it was on screen — the moments the user was actually driving
+ * the app — and the most-used size wins. Ties, and recordings with no user
+ * interaction at all, fall back to longest-on-screen time and then to the larger
+ * area (the transient collapsed-mount size carries neither the interaction nor
+ * the dwell time, so it loses either way).
+ *
+ * @public — exported for testability
  */
-function dominantViewport(events: TimelineEvent[]) {
+export function dominantViewport(events: TimelineEvent[]) {
   const viewports = events.filter(
     (event): event is Extract<TimelineEvent, { kind: "viewport" }> =>
       event.kind === "viewport",
@@ -4606,26 +4626,60 @@ function dominantViewport(events: TimelineEvent[]) {
   if (viewports.length === 0) return DEFAULT_VIEWPORT;
   const endT = events.reduce((max, event) => Math.max(max, event.t), 0);
   const sorted = [...viewports].sort((a, b) => a.t - b.t);
+  const sizeKey = (size: { width: number; height: number }) =>
+    `${size.width}x${size.height}`;
+
+  // Per distinct size: the wall-clock time it was on screen, and how many
+  // user-driven events landed during it.
   const bySize = new Map<
     string,
-    { width: number; height: number; ms: number }
+    { width: number; height: number; ms: number; hits: number }
   >();
   for (let i = 0; i < sorted.length; i++) {
     const current = sorted[i];
     const until = i + 1 < sorted.length ? sorted[i + 1].t : endT;
-    const key = `${current.width}x${current.height}`;
+    const key = sizeKey(current);
     const entry = bySize.get(key) ?? {
       width: current.width,
       height: current.height,
       ms: 0,
+      hits: 0,
     };
     entry.ms += Math.max(0, until - current.t);
     bySize.set(key, entry);
   }
-  let best = { width: sorted[0].width, height: sorted[0].height, ms: -1 };
+
+  // Attribute each user-driven event to the size that was on screen at its time
+  // (the last viewport at or before it; the first for anything earlier).
+  for (const event of events) {
+    if (
+      event.kind !== "pointer" &&
+      event.kind !== "key" &&
+      event.kind !== "input" &&
+      event.kind !== "scroll"
+    )
+      continue;
+    let active = sorted[0];
+    for (const viewport of sorted) {
+      if (viewport.t <= event.t) active = viewport;
+      else break;
+    }
+    const entry = bySize.get(sizeKey(active));
+    if (entry) entry.hits++;
+  }
+
+  // Rank by interaction, then dwell time, then area. With no interaction
+  // anywhere every `hits` is 0, so this reduces to the longest-on-screen
+  // fallback.
+  let best = [...bySize.values()][0];
   for (const entry of bySize.values()) {
-    const larger = entry.width * entry.height > best.width * best.height;
-    if (entry.ms > best.ms || (entry.ms === best.ms && larger)) best = entry;
+    const beats =
+      entry.hits !== best.hits
+        ? entry.hits > best.hits
+        : entry.ms !== best.ms
+          ? entry.ms > best.ms
+          : entry.width * entry.height > best.width * best.height;
+    if (beats) best = entry;
   }
   return { width: best.width, height: best.height };
 }

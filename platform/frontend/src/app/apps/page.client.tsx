@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { AppWindow, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
 import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -21,6 +22,7 @@ import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
 import { AppsScopeFilter } from "./_parts/apps-scope-filter";
+import { AppsTable } from "./_parts/apps-table";
 
 const PAGE_SIZE = 100;
 
@@ -53,6 +55,7 @@ export default function AppsPage() {
     { toastOnError: false },
   );
   const [createOpen, setCreateOpen] = useState(false);
+  const [viewMode, setViewMode] = useListViewMode("archestra-apps-view");
 
   // Only the "kind" split (owned vs external) is client-side now; scope/owner
   // filtering happens on the server. Pinned-first grouping applies on top,
@@ -114,6 +117,9 @@ export default function AppsPage() {
           </SelectContent>
         </Select>
         <AppsScopeFilter />
+        <span className="ml-auto">
+          <ListViewToggle value={viewMode} onChange={setViewMode} />
+        </span>
       </div>
 
       <LoadingWrapper isPending={isPending && !data}>
@@ -134,6 +140,8 @@ export default function AppsPage() {
               Create an app to get started.
             </p>
           </div>
+        ) : viewMode === "table" ? (
+          <AppsTable apps={filtered} />
         ) : (
           <div className="space-y-6">
             <AppSection title="Pinned" apps={pinnedApps} />

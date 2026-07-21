@@ -1,4 +1,4 @@
-import { BillingModeSchema, SupportedProvidersSchema } from "@archestra/shared";
+import { SupportedProvidersSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -21,7 +21,6 @@ export const SelectLlmProviderApiKeySchema = createSelectSchema(
   baseUrl: z.string().nullable(),
   inferenceBaseUrl: z.string().nullable(),
   extraHeaders: z.record(z.string(), z.string()).nullable(),
-  billingMode: BillingModeSchema,
 });
 
 export const InsertLlmProviderApiKeySchema = createInsertSchema(
@@ -37,7 +36,6 @@ export const InsertLlmProviderApiKeySchema = createInsertSchema(
     scope: ResourceVisibilityScopeSchema,
     inferenceBaseUrl: z.string().nullable().optional(),
     extraHeaders: z.record(z.string(), z.string()).nullable().optional(),
-    billingMode: BillingModeSchema.optional(),
   });
 
 export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
@@ -55,7 +53,6 @@ export const UpdateLlmProviderApiKeySchema = createUpdateSchema(
     isPrimary: z.boolean().optional(),
     inferenceBaseUrl: z.string().nullable().optional(),
     extraHeaders: z.record(z.string(), z.string()).nullable().optional(),
-    billingMode: BillingModeSchema.optional(),
   });
 
 export type LlmProviderApiKey = z.infer<typeof SelectLlmProviderApiKeySchema>;

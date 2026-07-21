@@ -819,6 +819,45 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     expect(container?.imagePullPolicy).toBe("Always");
   });
 
+  test("generates deploymentSpec with resource governance (memory limit + ephemeral-storage request/limit)", () => {
+    const mcpServer: McpServer = {
+      id: "resources-id",
+      name: "resources-server",
+      catalogId: "catalog-resources",
+      // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+    } as any;
+
+    const k8sDeployment = createMockK8sDeployment(mcpServer);
+
+    const deploymentSpec = k8sDeployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node" },
+      false,
+      8080,
+    );
+
+    // Without ephemeral-storage requests the scheduler is blind to disk and
+    // over-packs nodes until DiskPressure eviction cascades; without limits a
+    // single runaway server can take down the whole node.
+    const resources =
+      deploymentSpec.spec?.template.spec?.containers[0]?.resources;
+    expect(resources?.requests).toEqual({
+      memory: config.orchestrator.mcpServerResources.requests.memory,
+      cpu: config.orchestrator.mcpServerResources.requests.cpu,
+      "ephemeral-storage":
+        config.orchestrator.mcpServerResources.requests.ephemeralStorage,
+    });
+    expect(resources?.limits).toEqual({
+      memory: config.orchestrator.mcpServerResources.limits.memory,
+      "ephemeral-storage":
+        config.orchestrator.mcpServerResources.limits.ephemeralStorage,
+    });
+    // Defaults are non-empty valid quantities
+    expect(resources?.requests?.["ephemeral-storage"]).toBe("256Mi");
+    expect(resources?.limits?.memory).toBe("512Mi");
+    expect(resources?.limits?.["ephemeral-storage"]).toBe("1Gi");
+  });
+
   test("generates deploymentSpec with empty arguments array when not provided", () => {
     const mcpServer: McpServer = {
       id: "no-args-id",

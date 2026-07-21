@@ -76,7 +76,6 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       scope: "personal",
       teamId: undefined,
       isPrimary: false,
-      billingMode: "metered",
       vaultSecretPath: undefined,
       vaultSecretKey: undefined,
     });

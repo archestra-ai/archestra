@@ -49873,7 +49873,6 @@ export type GetLlmProviderApiKeysResponses = {
         } | null;
         isSystem: boolean;
         isPrimary: boolean;
-        billingMode: 'metered' | 'subscription';
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -49902,7 +49901,6 @@ export type CreateLlmProviderApiKeyData = {
         scope?: 'personal' | 'team' | 'org';
         teamId?: string;
         isPrimary?: boolean;
-        billingMode?: 'metered' | 'subscription';
         vaultSecretPath?: string;
         vaultSecretKey?: string;
         awsAccessKeyId?: string;
@@ -49999,7 +49997,6 @@ export type CreateLlmProviderApiKeyResponses = {
         } | null;
         isSystem: boolean;
         isPrimary: boolean;
-        billingMode: 'metered' | 'subscription';
         createdAt: string;
         updatedAt: string;
     };
@@ -50102,7 +50099,6 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         } | null;
         isSystem: boolean;
         isPrimary: boolean;
-        billingMode: 'metered' | 'subscription';
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -50297,7 +50293,6 @@ export type GetLlmProviderApiKeyResponses = {
         } | null;
         isSystem: boolean;
         isPrimary: boolean;
-        billingMode: 'metered' | 'subscription';
         createdAt: string;
         updatedAt: string;
         teamName?: string | null;
@@ -50325,7 +50320,6 @@ export type UpdateLlmProviderApiKeyData = {
         scope?: 'personal' | 'team' | 'org';
         teamId?: string | null;
         isPrimary?: boolean;
-        billingMode?: 'metered' | 'subscription';
         vaultSecretPath?: string;
         vaultSecretKey?: string;
         awsAccessKeyId?: string;
@@ -50424,7 +50418,6 @@ export type UpdateLlmProviderApiKeyResponses = {
         } | null;
         isSystem: boolean;
         isPrimary: boolean;
-        billingMode: 'metered' | 'subscription';
         createdAt: string;
         updatedAt: string;
     };

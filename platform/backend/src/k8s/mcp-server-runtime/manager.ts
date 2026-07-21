@@ -1,4 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
+import config from "@/config";
 import { getK8sCapabilitiesFromApi } from "@/k8s/capabilities";
 import {
   checkNamespaceDeployAccess,
@@ -65,6 +66,9 @@ export class McpServerRuntimeManager {
   // concurrent deploys share one call; cleared on start() to re-assert on re-init.
   private egressBaselineByNamespace: Map<string, Promise<void>> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
+  // Periodic sweep of Failed/Evicted MCP pods (DiskPressure eviction cascades
+  // can leave hundreds of Failed pod corpses that nothing else cleans up).
+  private failedPodReapTimer?: NodeJS.Timeout;
 
   /**
    * Settles once the startup adopt pass has frozen every local install's
@@ -275,6 +279,8 @@ export class McpServerRuntimeManager {
       this.cleanupOrphanedDeployments(installedServers).catch((err) => {
         logger.warn({ err }, "Failed to cleanup orphaned MCP deployments");
       });
+
+      this.startFailedPodReaper();
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
@@ -1322,6 +1328,11 @@ export class McpServerRuntimeManager {
     logger.info("Shutting down MCP Server Runtime...");
     this.status = "stopped";
 
+    if (this.failedPodReapTimer) {
+      clearInterval(this.failedPodReapTimer);
+      this.failedPodReapTimer = undefined;
+    }
+
     // Stop all deployments
     const stopPromises = Array.from(this.mcpServerIdToDeploymentMap.keys()).map(
       async (serverId) => {
@@ -1678,6 +1689,91 @@ export class McpServerRuntimeManager {
       }
     } catch (error) {
       logger.warn({ err: error }, "Failed to sweep orphaned MCP deployments");
+    }
+  }
+
+  /**
+   * Start the periodic sweep of Failed/Evicted MCP server pods.
+   *
+   * A node under DiskPressure evicts MCP pods and then rejects their
+   * replacements, leaving a `Failed` pod corpse behind on every attempt.
+   * Nothing in Kubernetes cleans these up for Deployment-owned pods, so a
+   * single transient DiskPressure event can accumulate hundreds of dead pods.
+   * This reaper deletes Failed pods carrying the `app=mcp-server` label in
+   * every namespace the platform deploys MCP servers into.
+   */
+  private startFailedPodReaper(): void {
+    if (this.failedPodReapTimer) {
+      clearInterval(this.failedPodReapTimer);
+      this.failedPodReapTimer = undefined;
+    }
+
+    const intervalSeconds = config.orchestrator.failedPodReapIntervalSeconds;
+    if (intervalSeconds <= 0) {
+      logger.info("Failed MCP pod reaper is disabled");
+      return;
+    }
+
+    const sweep = () => {
+      this.reapFailedMcpPods().catch((err) => {
+        logger.warn({ err }, "Failed to reap Failed/Evicted MCP pods");
+      });
+    };
+
+    // Sweep once at startup to clear any backlog, then periodically.
+    sweep();
+    this.failedPodReapTimer = setInterval(sweep, intervalSeconds * 1000);
+    // Don't keep the process alive just for the reaper
+    this.failedPodReapTimer.unref?.();
+  }
+
+  private async reapFailedMcpPods(): Promise<void> {
+    if (!this.k8sApi) return;
+
+    const namespaces = uniqueStrings([
+      this.namespace,
+      ...config.orchestrator.kubernetes.environmentNamespaces,
+    ]);
+
+    for (const namespace of namespaces) {
+      try {
+        const pods = await this.k8sApi.listNamespacedPod({
+          namespace,
+          labelSelector: "app=mcp-server",
+          fieldSelector: "status.phase=Failed",
+        });
+
+        let deletedCount = 0;
+        for (const pod of pods.items) {
+          const podName = pod.metadata?.name;
+          if (!podName) continue;
+
+          try {
+            await this.k8sApi.deleteNamespacedPod({
+              name: podName,
+              namespace,
+            });
+            deletedCount++;
+          } catch (err) {
+            logger.debug(
+              { err, podName, namespace },
+              "Failed to delete Failed MCP pod (may already be gone)",
+            );
+          }
+        }
+
+        if (deletedCount > 0) {
+          logger.info(
+            { namespace, deletedCount },
+            "Reaped Failed/Evicted MCP server pods",
+          );
+        }
+      } catch (err) {
+        logger.warn(
+          { err, namespace },
+          "Failed to list Failed MCP pods for reaping",
+        );
+      }
     }
   }
 

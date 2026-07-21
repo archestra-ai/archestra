@@ -1,3 +1,7 @@
+import {
+  isValidK8sCpuQuantity,
+  isValidK8sMemoryQuantity,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import {
   afterAll,
@@ -33,6 +37,7 @@ import config, {
   parseFileStorageProvider,
   parseFileStorageS3Config,
   parseHackathonRecorderEnabled,
+  parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
   parseOptionalPort,
@@ -1791,6 +1796,64 @@ describe("parseCommaSeparatedList", () => {
 
   test("should handle single value", () => {
     expect(parseCommaSeparatedList("anthropic")).toEqual(["anthropic"]);
+  });
+});
+
+describe("parseK8sResourceQuantity", () => {
+  const memoryParams = {
+    envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT",
+    validator: isValidK8sMemoryQuantity,
+    defaultValue: "512Mi",
+  };
+
+  test("returns default when unset", () => {
+    expect(
+      parseK8sResourceQuantity({ ...memoryParams, value: undefined }),
+    ).toBe("512Mi");
+  });
+
+  test("returns default when empty or whitespace-only", () => {
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: "" })).toBe(
+      "512Mi",
+    );
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: "   " })).toBe(
+      "512Mi",
+    );
+  });
+
+  test("returns trimmed valid value", () => {
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: " 1Gi " })).toBe(
+      "1Gi",
+    );
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: "2048Mi" })).toBe(
+      "2048Mi",
+    );
+  });
+
+  test("returns default for invalid quantity", () => {
+    expect(
+      parseK8sResourceQuantity({ ...memoryParams, value: "lots-of-ram" }),
+    ).toBe("512Mi");
+    expect(parseK8sResourceQuantity({ ...memoryParams, value: "-1Gi" })).toBe(
+      "512Mi",
+    );
+  });
+
+  test("validates CPU quantities with the CPU validator", () => {
+    const cpuParams = {
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST",
+      validator: isValidK8sCpuQuantity,
+      defaultValue: "50m",
+    };
+    expect(parseK8sResourceQuantity({ ...cpuParams, value: "250m" })).toBe(
+      "250m",
+    );
+    expect(parseK8sResourceQuantity({ ...cpuParams, value: "0.5" })).toBe(
+      "0.5",
+    );
+    expect(parseK8sResourceQuantity({ ...cpuParams, value: "fast" })).toBe(
+      "50m",
+    );
   });
 });
 

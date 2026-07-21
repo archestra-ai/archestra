@@ -864,6 +864,100 @@ describe("OpenAIStreamAdapter", () => {
     });
   });
 
+  function deltaOf(
+    sseData: string | Uint8Array | null,
+  ): Record<string, unknown> {
+    if (sseData === null) throw new Error("expected sseData, got null");
+    const text =
+      typeof sseData === "string" ? sseData : new TextDecoder().decode(sseData);
+    const json = JSON.parse(text.replace(/^data: /, "").trim()) as {
+      choices: Array<{ delta: Record<string, unknown> }>;
+    };
+    return json.choices[0].delta;
+  }
+
+  test("forwards a reasoning-only chunk (reasoning_content) instead of dropping it", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-r",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "qwen3",
+      choices: [
+        {
+          index: 0,
+          delta: { reasoning_content: "Let me think..." },
+          finish_reason: null,
+        },
+      ],
+    } as unknown as Chunk);
+
+    expect(result.sseData).not.toBeNull();
+    expect(deltaOf(result.sseData)).toMatchObject({
+      reasoning_content: "Let me think...",
+    });
+  });
+
+  test("forwards a reasoning-only chunk using the `reasoning` field (OpenRouter)", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-r2",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "glm",
+      choices: [{ index: 0, delta: { reasoning: "hmm" }, finish_reason: null }],
+    } as unknown as Chunk);
+
+    expect(result.sseData).not.toBeNull();
+    expect(deltaOf(result.sseData)).toMatchObject({ reasoning: "hmm" });
+  });
+
+  test("still drops a truly empty delta chunk (no content, no reasoning)", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-e",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "qwen3",
+      choices: [{ index: 0, delta: {}, finish_reason: null }],
+    } as Chunk);
+
+    expect(result.sseData).toBeNull();
+  });
+
+  test("does not stream a chunk carrying both reasoning and a tool call", () => {
+    // A reasoning+tool_call chunk must route through the tool-call blocking-policy
+    // buffering (sseData null, isToolCallChunk true), not stream immediately — so
+    // reasoning can't carry unapproved tool-call data past the policy gate.
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    const result = adapter.processChunk({
+      id: "chatcmpl-rt",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "qwen3",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            reasoning_content: "thinking",
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "search", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    } as unknown as Chunk);
+
+    expect(result.sseData).toBeNull();
+    expect(result.isToolCallChunk).toBe(true);
+  });
+
   function finishReasonOf(endSse: string | Uint8Array): unknown {
     const text =
       typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);

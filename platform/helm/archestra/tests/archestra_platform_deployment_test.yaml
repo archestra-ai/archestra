@@ -634,6 +634,86 @@ tests:
           content:
             name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 
+  - it: should set MCP server resource env vars when mcpServerResources is configured
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpServerResources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+          ephemeralStorage: "512Mi"
+        limits:
+          memory: "1Gi"
+          ephemeralStorage: "2Gi"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST
+            value: "100m"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST
+            value: "256Mi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST
+            value: "512Mi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT
+            value: "1Gi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT
+            value: "2Gi"
+
+  - it: should not set MCP server resource env vars by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT
+
+  - it: should set ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS when configured
+    documentIndex: 1
+    set:
+      archestra.orchestrator.failedPodReapIntervalSeconds: 300
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
+            value: "300"
+
+  - it: should set ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS when set to 0 (disabled)
+    documentIndex: 1
+    set:
+      archestra.orchestrator.failedPodReapIntervalSeconds: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
+            value: "0"
+
+  - it: should not set ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
+
   # Kubeconfig volume mount tests
   - it: should not mount kubeconfig volume when kubeconfig is disabled
     documentIndex: 1

@@ -377,6 +377,7 @@ export function AppSettingsForm({
             <EnvironmentSelector
               value={environmentId}
               onChange={setEnvironmentId}
+              resource="app"
               helpText="The app can only be assigned and call MCP tools in this environment."
             />
 

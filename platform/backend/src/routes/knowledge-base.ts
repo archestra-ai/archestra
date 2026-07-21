@@ -2034,8 +2034,8 @@ async function expandContainerAcls<
  * Gate assigning a knowledge base / connector to an environment. Mirrors the
  * agent + MCP-catalog write paths: a restricted environment (or a restricted
  * org default when environmentId is null/omitted) requires
- * environment:deploy-to-restricted (environment:admin implies it). Also
- * validates the environment belongs to the org, preventing cross-tenant binding.
+ * knowledgeSource:deploy-to-restricted. Also validates the environment belongs
+ * to the org, preventing cross-tenant binding.
  */
 async function assertEnvironmentAssignable(params: {
   userId: string;
@@ -2043,19 +2043,16 @@ async function assertEnvironmentAssignable(params: {
   environmentId: string | null;
 }): Promise<void> {
   const { userId, organizationId, environmentId } = params;
-  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
-    userHasPermission(userId, organizationId, "environment", "admin"),
-    userHasPermission(
-      userId,
-      organizationId,
-      "environment",
-      "deploy-to-restricted",
-    ),
-  ]);
+  const hasKnowledgeDeploy = await userHasPermission(
+    userId,
+    organizationId,
+    "knowledgeSource",
+    "deploy-to-restricted",
+  );
   await assertCanAssignEnvironment({
     environmentId,
     organizationId,
-    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+    canDeployToRestricted: hasKnowledgeDeploy,
   });
 }
 

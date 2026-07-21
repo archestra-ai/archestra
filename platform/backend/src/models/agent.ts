@@ -1899,6 +1899,36 @@ class AgentModel {
   }
 
   /**
+   * Lean counterpart of {@link getDefaultProfile} for the LLM proxy hot path:
+   * the raw agents row plus labels, like {@link findGatewayAgentById}. The
+   * proxy resolves the default profile on every request that omits an agent id
+   * in the URL, and it only reads scalar config (org, agent type,
+   * considerContextUntrusted, identity provider) and trace/metric labels — the
+   * tools join and team/knowledge/connector hydration of the full method are
+   * unused there.
+   */
+  static async getDefaultGatewayProfile(): Promise<GatewayAgent | null> {
+    const [agent] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, "profile"),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    if (!agent) {
+      return null;
+    }
+
+    const labels = await AgentLabelModel.getLabelsForAgent(agent.id);
+    return { ...agent, labels };
+  }
+
+  /**
    * Minimal agent lookup for opening a conversation: the SAME access gate as
    * {@link findById}, but selecting only the LLM-selection fields that path uses
    * (`llmApiKeyId`, `modelId`). Skips the tool join and the

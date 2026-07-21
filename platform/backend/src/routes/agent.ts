@@ -1,6 +1,7 @@
 import {
   type AgentType,
   createPaginatedResponseSchema,
+  getResourceForAgentType,
   isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
@@ -519,6 +520,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         environmentId: body.environmentId ?? null,
+        agentType,
       });
 
       // A team-scoped agent with no teams is accessible to nobody (not even its
@@ -1273,6 +1275,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           environmentId: body.environmentId,
+          agentType: existingAgent.agentType,
         });
       }
 
@@ -1645,30 +1648,27 @@ function getPermittedAgentTypesForList(params: {
 
 /**
  * Binding an agent to a restricted environment routes its code sandbox to that
- * environment's isolated runtime, so it is gated by the same
- * environment:deploy-to-restricted permission the MCP-catalog assignment path
- * uses (environment:admin implies it). Throws 403/404 if the caller may not
- * assign the environment.
+ * environment's isolated runtime, so it is gated by the resource-specific
+ * deploy-to-restricted permission for the agent's type — agent, llmProxy, or
+ * mcpGateway. Throws 403/404 if the caller may not assign the environment.
  */
 async function assertEnvironmentAssignable(params: {
   userId: string;
   organizationId: string;
   environmentId: string | null;
+  agentType: AgentType;
 }): Promise<void> {
-  const { userId, organizationId, environmentId } = params;
-  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
-    userHasPermission(userId, organizationId, "environment", "admin"),
-    userHasPermission(
-      userId,
-      organizationId,
-      "environment",
-      "deploy-to-restricted",
-    ),
-  ]);
+  const { userId, organizationId, environmentId, agentType } = params;
+  const hasResourceDeploy = await userHasPermission(
+    userId,
+    organizationId,
+    getResourceForAgentType(agentType),
+    "deploy-to-restricted",
+  );
   await assertCanAssignEnvironment({
     environmentId,
     organizationId,
-    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+    canDeployToRestricted: hasResourceDeploy,
   });
 }
 

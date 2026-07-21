@@ -2230,6 +2230,93 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
   });
 });
 
+describe("McpServerRuntimeManager.reapFailedMcpPods", () => {
+  async function createManagerWithMockK8s(mockK8sApi: Record<string, unknown>) {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sApi: unknown }).k8sApi = mockK8sApi;
+    return manager;
+  }
+
+  function callReap(manager: unknown) {
+    return (
+      manager as { reapFailedMcpPods: () => Promise<void> }
+    ).reapFailedMcpPods();
+  }
+
+  test("deletes Failed MCP pods returned by the list call", async () => {
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        { metadata: { name: "mcp-server-a-abc123" } },
+        { metadata: { name: "mcp-server-b-def456" } },
+        // Pod without a name is skipped
+        { metadata: {} },
+      ],
+    });
+    const mockDelete = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      listNamespacedPod: mockList,
+      deleteNamespacedPod: mockDelete,
+    });
+
+    await callReap(manager);
+
+    // Sweeps only the platform namespace when no environment namespaces are
+    // configured, filtering server-side to Failed pods owned by Archestra.
+    expect(mockList).toHaveBeenCalledTimes(1);
+    expect(mockList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labelSelector: "app=mcp-server",
+        fieldSelector: "status.phase=Failed",
+      }),
+    );
+    expect(mockDelete).toHaveBeenCalledTimes(2);
+    expect(mockDelete).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-server-a-abc123" }),
+    );
+    expect(mockDelete).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-server-b-def456" }),
+    );
+  });
+
+  test("continues reaping when a single pod deletion fails", async () => {
+    const mockList = vi.fn().mockResolvedValue({
+      items: [
+        { metadata: { name: "mcp-gone-already" } },
+        { metadata: { name: "mcp-still-there" } },
+      ],
+    });
+    const mockDelete = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("404 pod not found"))
+      .mockResolvedValueOnce({});
+    const manager = await createManagerWithMockK8s({
+      listNamespacedPod: mockList,
+      deleteNamespacedPod: mockDelete,
+    });
+
+    await callReap(manager);
+
+    expect(mockDelete).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not throw when listing pods fails", async () => {
+    const manager = await createManagerWithMockK8s({
+      listNamespacedPod: vi.fn().mockRejectedValue(new Error("forbidden")),
+      deleteNamespacedPod: vi.fn(),
+    });
+
+    await expect(callReap(manager)).resolves.toBeUndefined();
+  });
+
+  test("does nothing when k8sApi is not initialized", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    (manager as unknown as { k8sApi: unknown }).k8sApi = undefined;
+    await expect(callReap(manager)).resolves.toBeUndefined();
+  });
+});
+
 describe("McpServerRuntimeManager.adoptDeploymentNames", () => {
   beforeEach(() => {
     vi.clearAllMocks();

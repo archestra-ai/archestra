@@ -2666,7 +2666,7 @@ export const updateDefaultUserLimit = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * None (no additional RBAC permission required)
+ * `environment:read`: View and list deployment environments
  */
 export const listEnvironments = <ThrowOnError extends boolean = false>(options?: Options<ListEnvironmentsData, ThrowOnError>) => (options?.client ?? client).get<ListEnvironmentsResponses, ListEnvironmentsErrors, ThrowOnError>({ url: '/api/environments', ...options });
 
@@ -2679,7 +2679,7 @@ export const listEnvironments = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
+ * `environment:create`: Create deployment environments
  */
 export const createEnvironment = <ThrowOnError extends boolean = false>(options: Options<CreateEnvironmentData, ThrowOnError>) => (options.client ?? client).post<CreateEnvironmentResponses, CreateEnvironmentErrors, ThrowOnError>({
     url: '/api/environments',
@@ -2699,7 +2699,7 @@ export const createEnvironment = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
+ * `environment:delete`: Delete deployment environments
  */
 export const deleteEnvironment = <ThrowOnError extends boolean = false>(options: Options<DeleteEnvironmentData, ThrowOnError>) => (options.client ?? client).delete<DeleteEnvironmentResponses, DeleteEnvironmentErrors, ThrowOnError>({ url: '/api/environments/{id}', ...options });
 
@@ -2712,7 +2712,7 @@ export const deleteEnvironment = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
+ * `environment:update`: Modify deployment environments, including the org default environment
  */
 export const updateEnvironment = <ThrowOnError extends boolean = false>(options: Options<UpdateEnvironmentData, ThrowOnError>) => (options.client ?? client).patch<UpdateEnvironmentResponses, UpdateEnvironmentErrors, ThrowOnError>({
     url: '/api/environments/{id}',
@@ -3570,7 +3570,7 @@ export const checkInvitation = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
+ * `environment:update`: Modify deployment environments, including the org default environment
  */
 export const getK8sCapabilities = <ThrowOnError extends boolean = false>(options?: Options<GetK8sCapabilitiesData, ThrowOnError>) => (options?.client ?? client).get<GetK8sCapabilitiesResponses, GetK8sCapabilitiesErrors, ThrowOnError>({ url: '/api/k8s/capabilities', ...options });
 
@@ -5754,7 +5754,7 @@ export const updateConnectionSettings = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
+ * `environment:update`: Modify deployment environments, including the org default environment
  */
 export const updateDefaultEnvironment = <ThrowOnError extends boolean = false>(options: Options<UpdateDefaultEnvironmentData, ThrowOnError>) => (options.client ?? client).patch<UpdateDefaultEnvironmentResponses, UpdateDefaultEnvironmentErrors, ThrowOnError>({
     url: '/api/organization/default-environment',

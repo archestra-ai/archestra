@@ -666,6 +666,7 @@ export function SkillEditorDialog({
               <EnvironmentSelector
                 value={environmentId}
                 onChange={setEnvironmentId}
+                resource="skill"
                 hideWhenOnlyDefault
                 helpText="Agents only see skills in their own environment."
               />

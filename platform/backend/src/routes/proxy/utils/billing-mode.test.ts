@@ -1,87 +1,63 @@
 import { describe, expect, test } from "vitest";
+import { anthropicAdapterFactory } from "../adapters/anthropic";
 import { resolveInteractionBillingMode } from "./billing-mode";
 
 describe("resolveInteractionBillingMode", () => {
-  const passthrough = {
-    providerApiKeyRow: null,
-    isForwardedSubscriptionCredential: true,
-    isClaudeClientRequest: true,
-    autodetectEnabled: true,
-  };
-
-  test("a DB-managed key's configured mode wins (subscription)", () => {
+  test("subscription credential => subscription", () => {
     expect(
       resolveInteractionBillingMode({
-        ...passthrough,
-        providerApiKeyRow: { billingMode: "subscription" },
-        // Even with no passthrough signals, the key's mode is authoritative.
-        isForwardedSubscriptionCredential: false,
-        isClaudeClientRequest: false,
+        isSubscriptionCredential: true,
+        autodetectEnabled: true,
       }),
     ).toBe("subscription");
   });
 
-  test("a DB-managed key's configured mode wins (metered) over passthrough signals", () => {
+  test("non-subscription credential stays metered", () => {
     expect(
       resolveInteractionBillingMode({
-        ...passthrough,
-        providerApiKeyRow: { billingMode: "metered" },
-      }),
-    ).toBe("metered");
-  });
-
-  test("Claude client + forwarded OAuth Bearer passthrough => subscription", () => {
-    expect(resolveInteractionBillingMode(passthrough)).toBe("subscription");
-  });
-
-  test("forwarded Bearer WITHOUT a Claude-client signal stays metered", () => {
-    // Guards the BLOCKING case: a client forwarding a metered Bearer (e.g.
-    // Workload Identity) carries no Claude body signal and must not be zeroed.
-    expect(
-      resolveInteractionBillingMode({
-        ...passthrough,
-        isClaudeClientRequest: false,
-      }),
-    ).toBe("metered");
-  });
-
-  test("Claude client WITHOUT a forwarded Bearer (x-api-key) stays metered", () => {
-    // Claude Code on an API key uses x-api-key, not Bearer.
-    expect(
-      resolveInteractionBillingMode({
-        ...passthrough,
-        isForwardedSubscriptionCredential: false,
-      }),
-    ).toBe("metered");
-  });
-
-  test("autodetect disabled forces metered for passthrough", () => {
-    expect(
-      resolveInteractionBillingMode({
-        ...passthrough,
-        autodetectEnabled: false,
-      }),
-    ).toBe("metered");
-  });
-
-  test("autodetect disabled still honors an explicit key subscription mode", () => {
-    expect(
-      resolveInteractionBillingMode({
-        ...passthrough,
-        providerApiKeyRow: { billingMode: "subscription" },
-        autodetectEnabled: false,
-      }),
-    ).toBe("subscription");
-  });
-
-  test("no key and no signals defaults to metered", () => {
-    expect(
-      resolveInteractionBillingMode({
-        providerApiKeyRow: null,
-        isForwardedSubscriptionCredential: false,
-        isClaudeClientRequest: false,
+        isSubscriptionCredential: false,
         autodetectEnabled: true,
       }),
     ).toBe("metered");
+  });
+
+  test("autodetect disabled forces metered", () => {
+    expect(
+      resolveInteractionBillingMode({
+        isSubscriptionCredential: true,
+        autodetectEnabled: false,
+      }),
+    ).toBe("metered");
+  });
+});
+
+describe("anthropic isSubscriptionCredential (credential format)", () => {
+  const isSubscription = (credential: string | undefined) =>
+    anthropicAdapterFactory.isSubscriptionCredential?.(credential) ?? false;
+
+  test("forwarded OAuth access token (Claude Code passthrough) => subscription", () => {
+    expect(isSubscription("Bearer:sk-ant-oat01-abc123")).toBe(true);
+  });
+
+  test("stored OAuth access token (no Bearer sentinel) => subscription", () => {
+    expect(isSubscription("sk-ant-oat01-abc123")).toBe(true);
+  });
+
+  test("metered API key via x-api-key stays metered", () => {
+    expect(isSubscription("sk-ant-api03-abc123")).toBe(false);
+  });
+
+  test("forwarded non-OAuth Bearer (e.g. Workload Identity) stays metered", () => {
+    // A Bearer transport alone is not a subscription signal — only the
+    // sk-ant-oat… token format is.
+    expect(isSubscription("Bearer:ya29.some-wif-access-token")).toBe(false);
+  });
+
+  test("forwarded metered API key over Bearer stays metered", () => {
+    expect(isSubscription("Bearer:sk-ant-api03-abc123")).toBe(false);
+  });
+
+  test("undefined credential stays metered", () => {
+    expect(isSubscription(undefined)).toBe(false);
   });
 });

@@ -54,6 +54,7 @@ overrides:
   express: 5.2.0
   express-rate-limit: 8.3.1
   jws: 4.0.1
+  js-yaml: '>=4.3.0 <5'
   qs: 6.15.2
   d3-path: 3.1.0
   hono: 4.12.25
@@ -64,7 +65,7 @@ overrides:
   samlify: '>=2.13.0'
   fast-uri: '>=3.1.2'
   ajv: 8.18.0
-  axios: '>=1.15.2'
+  axios: '>=1.18.0'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
   undici: 7.28.0
@@ -78,7 +79,7 @@ overrides:
   postcss: '>=8.5.10'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.1.1'
-  brace-expansion: '>=5.0.6'
+  brace-expansion: '>=5.0.7'
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
@@ -431,8 +432,8 @@ importers:
         specifier: ^6.2.0
         version: 6.2.1
       js-yaml:
-        specifier: ^4.1.1
-        version: 4.1.1
+        specifier: '>=4.3.0 <5'
+        version: 4.3.0
       jsdom:
         specifier: ^29.0.0
         version: 29.0.0(@noble/hashes@2.0.1)
@@ -6552,8 +6553,8 @@ packages:
   aws4fetch@1.0.20:
     resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
 
-  axios@1.16.0:
-    resolution: {integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==}
+  axios@1.18.1:
+    resolution: {integrity: sha512-3nTvFlvpn9Zu/RkHUqtc7/+al4UpRW5az71ap5zccp6e8RAYEzhMTecX8Dz1wWDYrPpUoB1HAQEGEAEvUr7S9g==}
 
   b4a@1.7.3:
     resolution: {integrity: sha512-5Q2mfq2WfGuFp3uS//0s6baOJLMoVduPYVeNmDYxu5OUA1/cBfvr2RIS7vi62LdNj/urk1hfmj867I3qt6uZ7Q==}
@@ -6746,8 +6747,8 @@ packages:
   bowser@2.14.1:
     resolution: {integrity: sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg==}
 
-  brace-expansion@5.0.6:
-    resolution: {integrity: sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g==}
+  brace-expansion@5.0.7:
+    resolution: {integrity: sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA==}
     engines: {node: 18 || 20 || >=22}
 
   braces@3.0.3:
@@ -8372,8 +8373,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@4.1.1:
-    resolution: {integrity: sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==}
+  js-yaml@4.3.0:
+    resolution: {integrity: sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==}
     hasBin: true
 
   jsdom@29.0.0:
@@ -12554,7 +12555,7 @@ snapshots:
     dependencies:
       '@jsdevtools/ono': 7.1.3
       '@types/json-schema': 7.0.15
-      js-yaml: 4.1.1
+      js-yaml: 4.3.0
 
   '@hey-api/openapi-ts@0.97.3(@typescript/typescript6@6.0.1)':
     dependencies:
@@ -12918,7 +12919,7 @@ snapshots:
       form-data: 4.0.6
       hpagent: 1.2.0
       isomorphic-ws: 5.0.0(ws@8.21.0)
-      js-yaml: 4.1.1
+      js-yaml: 4.3.0
       jsonpath-plus: 10.3.0
       node-fetch: 2.7.0
       openid-client: 6.8.1
@@ -13110,7 +13111,7 @@ snapshots:
       colorette: 2.0.20
       emnapi: 1.10.0
       es-toolkit: 1.45.1
-      js-yaml: 4.1.1
+      js-yaml: 4.3.0
       obug: 2.1.1
       semver: 7.7.4
       typanion: 3.14.0
@@ -15925,6 +15926,7 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - debug
+      - supports-color
       - utf-8-validate
 
   '@slack/types@2.20.0': {}
@@ -15935,7 +15937,7 @@ snapshots:
       '@slack/types': 2.20.0
       '@types/node': 25.5.0
       '@types/retry': 0.12.0
-      axios: 1.16.0(debug@4.4.3)
+      axios: 1.18.1(debug@4.4.3)
       eventemitter3: 5.0.4
       form-data: 4.0.6
       is-electron: 2.2.2
@@ -15945,6 +15947,7 @@ snapshots:
       retry: 0.13.1
     transitivePeerDependencies:
       - debug
+      - supports-color
 
   '@smithy/abort-controller@4.2.12':
     dependencies:
@@ -17167,13 +17170,15 @@ snapshots:
 
   aws4fetch@1.0.20: {}
 
-  axios@1.16.0(debug@4.4.3):
+  axios@1.18.1(debug@4.4.3):
     dependencies:
       follow-redirects: 1.16.0(debug@4.4.3)
       form-data: 4.0.6
+      https-proxy-agent: 5.0.1
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
       - debug
+      - supports-color
 
   b4a@1.7.3: {}
 
@@ -17397,7 +17402,7 @@ snapshots:
     dependencies:
       '@azure/core-rest-pipeline': 1.22.2
       '@azure/msal-node': 2.16.3
-      axios: 1.16.0(debug@4.4.3)
+      axios: 1.18.1(debug@4.4.3)
       botbuilder-core: 4.23.3
       botbuilder-stdlib: 4.23.3-internal
       botframework-connector: 4.23.3
@@ -17422,7 +17427,7 @@ snapshots:
       '@azure/identity': 4.13.0
       '@azure/msal-node': 2.16.3
       '@types/jsonwebtoken': 9.0.6
-      axios: 1.16.0(debug@4.4.3)
+      axios: 1.18.1(debug@4.4.3)
       base64url: 3.0.1
       botbuilder-stdlib: 4.23.3-internal
       botframework-schema: 4.23.3
@@ -17456,7 +17461,7 @@ snapshots:
 
   bowser@2.14.1: {}
 
-  brace-expansion@5.0.6:
+  brace-expansion@5.0.7:
     dependencies:
       balanced-match: 4.0.3
 
@@ -17704,7 +17709,7 @@ snapshots:
   confluence.js@2.1.0:
     dependencies:
       '@atlassian/atlassian-jwt': 2.2.0
-      axios: 1.16.0(debug@4.4.3)
+      axios: 1.18.1(debug@4.4.3)
       form-data: 4.0.6
       oauth: 0.10.2
       zod: 3.25.76
@@ -19120,11 +19125,12 @@ snapshots:
 
   jira.js@5.3.1:
     dependencies:
-      axios: 1.16.0(debug@4.4.3)
+      axios: 1.18.1(debug@4.4.3)
       mime-types: 2.1.35
       zod: 4.3.6
     transitivePeerDependencies:
       - debug
+      - supports-color
 
   jiti@2.6.1: {}
 
@@ -19141,7 +19147,7 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@4.1.1:
+  js-yaml@4.3.0:
     dependencies:
       argparse: 2.0.1
 
@@ -19900,7 +19906,7 @@ snapshots:
 
   minimatch@10.2.4:
     dependencies:
-      brace-expansion: 5.0.6
+      brace-expansion: 5.0.7
 
   minimist@1.2.8: {}
 
@@ -20091,7 +20097,7 @@ snapshots:
 
   node-vault@0.11.0:
     dependencies:
-      axios: 1.16.0(debug@4.4.3)
+      axios: 1.18.1(debug@4.4.3)
       debug: 4.4.3
       mustache: 4.2.0
       tv4: 1.3.0

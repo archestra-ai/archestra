@@ -4,6 +4,7 @@ import {
   APP_RECORDING_DESCRIPTION_MAX_CHARS,
   APP_RECORDING_MAX_EXPORT_MS,
   APP_RECORDING_RENDER_REGION_ATTR,
+  APP_RECORDING_VIEWPORT_ASPECT,
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolShortName,
   normalizeCuts,
@@ -225,12 +226,28 @@ export function revealSchedule(
   return { schedule: build(low).slots, revealScale: low };
 }
 
-// ── Dialog sizing: fixed by the SCREEN alone — never by the recorded app's
-// dimensions, and never by the user's side-panel width. The app renders at its
-// recorded viewport inside the stage and is scaled to fit the app column, so
-// pointer coordinates still map 1:1 and the mouse replays smoothly.
-const MAX_DIALOG_WIDTH = 1400;
-const MAX_DIALOG_HEIGHT = 1220;
+// ── Player geometry: the render region (chat card + app card) is the sizing
+// anchor — its height comes from the screen, each card's width from its
+// aspect, and the dialog shell shrink-wraps the result (see
+// replayRegionLayout). The user's side-panel width never enters.
+/**
+ * Vertical chrome around the render region — the dialog header above it plus
+ * the transport strip below. An estimate, not a measurement: it only tunes
+ * how close the dialog's total height lands to the screen fraction, and the
+ * dialog's max-height class still bounds the total.
+ */
+const REGION_CHROME_PX = 160;
+/** Tallest the render region grows on large screens. */
+const REGION_MAX_HEIGHT = 1060;
+/** Shortest the render region shrinks to before the player stops scaling. */
+const REGION_MIN_HEIGHT = 320;
+/**
+ * Bounds on the app card's width:height in the layout. A recording at a
+ * pathological shape (an extremely tall sliver, an ultrawide inline capture)
+ * gets a sane card and the stage contain-fits the recorded shape inside it.
+ */
+const STAGE_ASPECT_MIN = 1 / 3;
+const STAGE_ASPECT_MAX = 2;
 
 /**
  * The square "click to edit" chip that fades in over an editable surface — the
@@ -366,7 +383,6 @@ export function AppSessionPlayer({
   const renderVideo = useRenderAppRecordingVideo();
   // Survives closing and reopening the player mid-render.
   const rendering = useIsRenderingAppRecordingVideo();
-  const dialogSize = usePlayerDialogSize();
   // Generation results land async; the description row's handlers must apply
   // them against the LATEST enhancement, not the snapshot captured when the
   // request went out (a prompt edited mid-flight would be clobbered).
@@ -460,8 +476,12 @@ export function AppSessionPlayer({
         // lands directly against the app and reads as a stray light border
         // around it rather than as the dialog's own edge. The overlay and
         // shadow already separate the player from the page behind it.
-        className="flex max-h-[94vh] max-w-[96vw] flex-col gap-0 overflow-hidden border-0 p-0"
-        style={dialogSize ?? undefined}
+        // `w-fit`: the dialog shrink-wraps the render region — the chat and
+        // app cards' explicit widths are the only intrinsic contribution (the
+        // header and transport are `w-0 min-w-full`, so a long title can't
+        // drive the shell wide) — which keeps the player's shape a property
+        // of the recording, not of the viewer's screen width.
+        className="flex max-h-[94vh] w-fit max-w-[96vw] flex-col gap-0 overflow-hidden border-0 p-0"
         // The close control lives in the header's own button cluster so every
         // header action shares one size, style, and baseline — the floating
         // default X can't align with an in-flow row.
@@ -496,7 +516,9 @@ export function AppSessionPlayer({
         <DialogDescription className="sr-only">
           Read-only replay of a recorded app session.
         </DialogDescription>
-        <DialogHeader className="flex-row items-start gap-3 space-y-0 border-b px-4 py-4">
+        {/* `w-0 min-w-full`: span the shrink-wrapped dialog without
+            contributing intrinsic width — the render region alone sets it. */}
+        <DialogHeader className="w-0 min-w-full flex-row items-start gap-3 space-y-0 border-b px-4 py-4">
           <AppWindow className="mt-px size-4 shrink-0 text-muted-foreground" />
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <DialogTitle className="truncate">{title}</DialogTitle>
@@ -692,11 +714,13 @@ export function AppSessionPlayer({
             onEditingChange={setSurfaceEditing}
           />
         ) : validation && !validation.ok ? (
-          <div className="flex flex-1 items-center justify-center px-8 text-center text-sm text-muted-foreground">
+          // The shrink-wrapped dialog has no size of its own, so the
+          // placeholder states bring their own.
+          <div className="flex min-h-[40vh] min-w-[560px] flex-1 items-center justify-center px-8 text-center text-sm text-muted-foreground">
             This recording can't be replayed. {validation.reason}
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex min-h-[40vh] min-w-[560px] flex-1 items-center justify-center text-sm text-muted-foreground">
             Loading recording…
           </div>
         )}
@@ -780,6 +804,9 @@ function PlayerSurface({
   // space) and a viewport-sized surface (a game, a WebGL canvas) keeps its
   // recorded shape instead of reflowing to the stage's.
   const viewport = useMemo(() => dominantViewport(events), [events]);
+  // The region's two format cards — chat at the canonical recording aspect,
+  // app at the recorded one — sized from the screen height alone.
+  const layout = useReplayRegionLayout(viewport);
   // False while the (re)mounted app frame's SDK hasn't connected yet — the
   // clock and event dispatch hold until it does, so no event is lost to a
   // frame whose replay listener isn't attached (fresh play, restart, seek, or
@@ -1735,7 +1762,7 @@ function PlayerSurface({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-col">
       {/* Paused means fully frozen: halt every CSS animation/transition in the
           chat pane and app stage (the app's own frame is frozen via the SDK).
           Lifted while the prompt editor or a generation is live — their
@@ -1743,81 +1770,91 @@ function PlayerSurface({
       <div
         // The rendered region: the two viewports and nothing else — the
         // toolbar, description and timeline stay out of the exported video.
+        // Its explicit card widths are what the shrink-wrapped dialog sizes
+        // itself around.
         {...{ [APP_RECORDING_RENDER_REGION_ATTR]: "" }}
         className={cn(
-          "flex min-h-0 flex-1",
+          "flex min-h-0 shrink-0",
           playState !== "playing" &&
             promptDraft === null &&
             !chatEditing &&
             !generateEnhancement.isPending &&
             "[&_*]:![animation-play-state:paused] [&_*]:!transition-none",
         )}
+        style={layout ? { height: layout.regionHeight } : undefined}
       >
-        {chatEditing ||
-        tourStepKey === "chat-toggle" ||
-        tourStepKey === "chat-message" ? (
-          <ReplayChatEditPane
-            transcript={recording.originalTranscript}
-            enhancement={recording.enhancement ?? null}
-            chat={chatEdits}
-            saving={editor.isSaving}
-            promptEditor={promptEditor}
-            responseEditor={responseEditor}
-            // The tour's message stop demonstrates the original-chat view;
-            // display-only, the stored toggle state is untouched.
-            forceEnhancementOff={tourStepKey === "chat-message"}
-            highlightFirstMessage={tourStepKey === "chat-message"}
-            onToggleEnhancement={toggleEnhancementDisabled}
-            onRemove={removeChatMessage}
-            onRestore={restoreChatMessage}
-            onDone={() => setChatEditing(false)}
-          />
-        ) : (
-          <ReplayChatPane
-            transcript={transcript}
-            clockMs={displayClock}
-            durationMs={duration}
-            paused={playState !== "playing"}
-            filming={filming}
-            pending={pending}
-            promptEditor={promptEditor}
-            showEditHint={tourStepKey === "chat"}
-            // Idle at the very start, or spotlighted by the tour: show the
-            // finished conversation rather than an empty pane that says
-            // nothing about the recording. Never while filming — that is
-            // paused at every frame, so the first frame would open on the
-            // whole finished chat before the second one snapped back to the
-            // timed reveal and began building it up again.
-            preview={
-              !filming &&
-              ((playState !== "playing" && displayClock <= 0) ||
-                tourStepKey === "chat")
-            }
-            onEnterEdit={() => {
-              setChatEditing(true);
-              setPlayState((state) => (state === "playing" ? "paused" : state));
-            }}
-          />
-        )}
+        {/* The chat replays as a format card of its own — the canonical
+            recording aspect, the same shape the app card takes for a
+            locked-aspect session — so the player reads as two matched cards
+            whatever screen it opens on. */}
+        <div
+          className={cn("flex min-h-0", layout ? "shrink-0" : "min-w-0 flex-1")}
+          style={layout ? { width: layout.chatWidth } : undefined}
+        >
+          {chatEditing ||
+          tourStepKey === "chat-toggle" ||
+          tourStepKey === "chat-message" ? (
+            <ReplayChatEditPane
+              transcript={recording.originalTranscript}
+              enhancement={recording.enhancement ?? null}
+              chat={chatEdits}
+              saving={editor.isSaving}
+              promptEditor={promptEditor}
+              responseEditor={responseEditor}
+              // The tour's message stop demonstrates the original-chat view;
+              // display-only, the stored toggle state is untouched.
+              forceEnhancementOff={tourStepKey === "chat-message"}
+              highlightFirstMessage={tourStepKey === "chat-message"}
+              onToggleEnhancement={toggleEnhancementDisabled}
+              onRemove={removeChatMessage}
+              onRestore={restoreChatMessage}
+              onDone={() => setChatEditing(false)}
+            />
+          ) : (
+            <ReplayChatPane
+              transcript={transcript}
+              clockMs={displayClock}
+              durationMs={duration}
+              paused={playState !== "playing"}
+              filming={filming}
+              pending={pending}
+              promptEditor={promptEditor}
+              showEditHint={tourStepKey === "chat"}
+              // Idle at the very start, or spotlighted by the tour: show the
+              // finished conversation rather than an empty pane that says
+              // nothing about the recording. Never while filming — that is
+              // paused at every frame, so the first frame would open on the
+              // whole finished chat before the second one snapped back to the
+              // timed reveal and began building it up again.
+              preview={
+                !filming &&
+                ((playState !== "playing" && displayClock <= 0) ||
+                  tourStepKey === "chat")
+              }
+              onEnterEdit={() => {
+                setChatEditing(true);
+                setPlayState((state) =>
+                  state === "playing" ? "paused" : state,
+                );
+              }}
+            />
+          )}
+        </div>
         {/* The app view shares the dialog's single top bar (app icon + name);
             the only per-app chrome is the running-tool chip, floated over the
             stage so it doesn't reintroduce a second header. */}
-        {/* The column takes the RECORDED shape: its width follows from its
-            height and the recording's aspect (clamped so neither pane ever
-            vanishes), and the chat pane flexes into the rest. A recording made
-            at the canonical locked aspect (the side panel's shape while
-            recording) therefore fills its stage exactly — one uniform scale,
-            no margins; the clamps only engage for off-shape recordings, whose
-            stage then contain-fits with neutral margins. */}
+        {/* The app card takes the RECORDED shape (clamped to sane bounds —
+            see replayRegionLayout): a session recorded at the canonical
+            locked aspect fills its stage exactly, one uniform scale, no
+            margins, and sits as the chat card's twin; an off-shape recording
+            gets a sane card whose stage contain-fits it with neutral
+            margins. */}
         <div
-          // h-full makes the height the aspect-ratio transfers from
-          // explicitly definite rather than leaning on flex-stretch
-          // definiteness. The max-width both keeps a wide (landscape,
-          // legacy) recording from crowding the chat and reserves the chat
-          // pane a readable floor; when a narrow window forces the min-width
-          // to win over it, the chat compresses rather than the row clipping.
-          className="relative flex h-full min-w-[280px] max-w-[min(62%,calc(100%_-_240px))] flex-none select-none flex-col bg-muted/20"
-          style={{ aspectRatio: `${viewport.width} / ${viewport.height}` }}
+          className={cn(
+            "relative flex select-none flex-col bg-muted/20",
+            layout ? "shrink-0" : "min-w-0 flex-1",
+          )}
+          style={layout ? { width: layout.appWidth } : undefined}
           data-tour="stage"
         >
           {activity && (
@@ -1894,7 +1931,9 @@ function PlayerSurface({
             standard border token draws a light hairline straight across the
             replayed app and reads as a stray white line around it. The strip's
             own filled bar already separates the transport from the stage. */}
-        <div className="flex shrink-0 items-end gap-3 px-4 py-2.5">
+        {/* `w-0 min-w-full`: span the shrink-wrapped dialog without
+            contributing intrinsic width — the render region alone sets it. */}
+        <div className="flex w-0 min-w-full shrink-0 items-end gap-3 px-4 py-2.5">
           {(() => {
             const playButton = (
               <Button
@@ -4522,37 +4561,84 @@ export function partEditId(messageId: string, partIndex: number): string {
 }
 
 /**
- * Size the dialog's shell from the screen alone, so the player always opens
- * at the same, predictable size. Within that shell the app column takes the
- * recorded aspect and the chat pane the rest — the recording decides the
- * split, never the shell. Recomputed on window resize; returns null only
- * during SSR (the dialog opens client-side).
+ * The render region's geometry: two FORMAT CARDS cut from one cloth — the
+ * chat card at the canonical recording aspect, the app card at the
+ * recording's own (clamped) aspect — with the region height anchored to the
+ * screen. The dialog shell shrink-wraps this region plus its chrome, so the
+ * player's shape follows the recording, never the viewer's screen width or
+ * the width the user happens to have dragged their side panel to: a session
+ * recorded at the locked aspect opens as two matching cards on any machine,
+ * and the exported video keeps that shape too. When the natural width would
+ * overflow a narrow screen, the whole region scales down uniformly, so the
+ * cards keep their aspects.
+ *
+ * @public — exported for testability
  */
-function usePlayerDialogSize() {
-  const [size, setSize] = useState(() => measureDialog());
+export function replayRegionLayout({
+  screenWidth,
+  screenHeight,
+  viewport,
+}: {
+  screenWidth: number;
+  screenHeight: number;
+  viewport: { width: number; height: number };
+}): { regionHeight: number; chatWidth: number; appWidth: number } {
+  const naturalHeight = Math.max(
+    REGION_MIN_HEIGHT,
+    Math.min(
+      Math.round(screenHeight * 0.82) - REGION_CHROME_PX,
+      REGION_MAX_HEIGHT,
+    ),
+  );
+  const recordedAspect =
+    viewport.width > 0 && viewport.height > 0
+      ? viewport.width / viewport.height
+      : APP_RECORDING_VIEWPORT_ASPECT;
+  const appAspect = Math.min(
+    STAGE_ASPECT_MAX,
+    Math.max(STAGE_ASPECT_MIN, recordedAspect),
+  );
+  const naturalWidth =
+    naturalHeight * (APP_RECORDING_VIEWPORT_ASPECT + appAspect);
+  const scale = Math.min(1, (screenWidth * 0.94) / naturalWidth);
+  const regionHeight = Math.round(naturalHeight * scale);
+  return {
+    regionHeight,
+    chatWidth: Math.round(regionHeight * APP_RECORDING_VIEWPORT_ASPECT),
+    appWidth: Math.round(regionHeight * appAspect),
+  };
+}
+
+/**
+ * {@link replayRegionLayout} against the live window, recomputed on resize.
+ * Null only during SSR — the dialog opens client-side, so every real render
+ * has a layout from the first frame.
+ */
+function useReplayRegionLayout(viewport: { width: number; height: number }) {
+  const [screen, setScreen] = useState(() =>
+    typeof window === "undefined"
+      ? null
+      : { width: window.innerWidth, height: window.innerHeight },
+  );
   useEffect(() => {
-    const onResize = () => setSize(measureDialog());
+    const onResize = () =>
+      setScreen({ width: window.innerWidth, height: window.innerHeight });
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  return size;
-}
-
-/**
- * The dialog shell's size is a property of the SCREEN — not the width the
- * user happens to have dragged their side panel to, which would make the same
- * app replay in a different-sized player depending on the recording machine.
- * The recording's shape enters one level down: the app column inside the
- * shell takes the recorded aspect, and its stage scales the recorded viewport
- * uniformly into whatever box that yields.
- */
-function measureDialog() {
-  if (typeof window === "undefined") return null;
-  return {
-    width: Math.round(Math.min(window.innerWidth * 0.66, MAX_DIALOG_WIDTH)),
-    height: Math.round(Math.min(window.innerHeight * 0.82, MAX_DIALOG_HEIGHT)),
-  };
+  const { width: recordedWidth, height: recordedHeight } = viewport;
+  return useMemo(
+    () =>
+      screen
+        ? replayRegionLayout({
+            screenWidth: screen.width,
+            screenHeight: screen.height,
+            viewport: { width: recordedWidth, height: recordedHeight },
+          })
+        : null,
+    [screen, recordedWidth, recordedHeight],
+  );
 }
 
 /**

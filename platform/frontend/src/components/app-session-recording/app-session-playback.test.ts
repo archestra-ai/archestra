@@ -13,6 +13,7 @@ import {
   keptTimelineRanges,
   neutralizeAppScripts,
   presentedTranscript,
+  replayRegionLayout,
   replayStageFit,
   revealSchedule,
   uncutRecording,
@@ -972,6 +973,49 @@ describe("replayStageFit", () => {
         viewport: { width: 0, height: 0 },
       }),
     ).toBeNull();
+  });
+});
+
+describe("replayRegionLayout", () => {
+  it("lays the chat and app out as matching cards for a locked-aspect recording", () => {
+    const layout = replayRegionLayout({
+      screenWidth: 1920,
+      screenHeight: 1080,
+      viewport: { width: 400, height: 500 }, // the canonical 4:5
+    });
+    expect(layout.chatWidth).toBe(layout.appWidth);
+    // Both cards carry the canonical aspect against the region height.
+    expect(layout.chatWidth).toBe(Math.round(layout.regionHeight * (4 / 5)));
+  });
+
+  it("scales the whole region down uniformly when the screen is too narrow", () => {
+    const viewport = { width: 400, height: 500 };
+    const wide = replayRegionLayout({
+      screenWidth: 1920,
+      screenHeight: 1080,
+      viewport,
+    });
+    const narrow = replayRegionLayout({
+      screenWidth: 900,
+      screenHeight: 1080,
+      viewport,
+    });
+    // Fits the narrow screen…
+    expect(narrow.chatWidth + narrow.appWidth).toBeLessThanOrEqual(
+      Math.ceil(900 * 0.94) + 2,
+    );
+    // …by shrinking, not reshaping: the cards stay twins.
+    expect(narrow.regionHeight).toBeLessThan(wide.regionHeight);
+    expect(narrow.chatWidth).toBe(narrow.appWidth);
+  });
+
+  it("clamps a pathological recorded shape to a sane card", () => {
+    const layout = replayRegionLayout({
+      screenWidth: 1920,
+      screenHeight: 1080,
+      viewport: { width: 4000, height: 500 }, // an 8:1 ultrawide capture
+    });
+    expect(layout.appWidth).toBe(Math.round(layout.regionHeight * 2));
   });
 });
 

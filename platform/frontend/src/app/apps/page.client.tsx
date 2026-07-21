@@ -4,7 +4,11 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { AppWindow, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
+import {
+  type ListViewMode,
+  ListViewToggle,
+  useListViewMode,
+} from "@/components/list-view-toggle";
 import { LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -140,15 +144,14 @@ export default function AppsPage() {
               Create an app to get started.
             </p>
           </div>
-        ) : viewMode === "table" ? (
-          <AppsTable apps={filtered} />
         ) : (
           <div className="space-y-6">
-            <AppSection title="Pinned" apps={pinnedApps} />
-            <AppSection title="Apps" apps={ownedApps} />
+            <AppSection title="Pinned" apps={pinnedApps} viewMode={viewMode} />
+            <AppSection title="Apps" apps={ownedApps} viewMode={viewMode} />
             <AppSection
               title="Apps from installed MCP servers"
               apps={externalApps}
+              viewMode={viewMode}
             />
           </div>
         )}
@@ -160,9 +163,17 @@ export default function AppsPage() {
 }
 
 // Mirrors the Projects page's ProjectSection: an uppercase header over the
-// card grid. Renders nothing when the group is empty, so only sections with
-// cards appear.
-function AppSection({ title, apps }: { title: string; apps: AppListItem[] }) {
+// card grid (or table, in table view). Renders nothing when the group is
+// empty, so only sections with entries appear.
+function AppSection({
+  title,
+  apps,
+  viewMode,
+}: {
+  title: string;
+  apps: AppListItem[];
+  viewMode: ListViewMode;
+}) {
   if (apps.length === 0) return null;
 
   return (
@@ -170,22 +181,26 @@ function AppSection({ title, apps }: { title: string; apps: AppListItem[] }) {
       <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {apps.map((app) => (
-          <AppCard
-            // Several tools of one server can share a widget resource, so
-            // (mcpServerId, resourceUri) alone collides; duplicate keys make
-            // React duplicate/omit cards on search re-renders, breaking the
-            // grid. The tool-scoped name disambiguates.
-            key={
-              app.source === "owned"
-                ? app.id
-                : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
-            }
-            app={app}
-          />
-        ))}
-      </div>
+      {viewMode === "table" ? (
+        <AppsTable apps={apps} />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {apps.map((app) => (
+            <AppCard
+              // Several tools of one server can share a widget resource, so
+              // (mcpServerId, resourceUri) alone collides; duplicate keys make
+              // React duplicate/omit cards on search re-renders, breaking the
+              // grid. The tool-scoped name disambiguates.
+              key={
+                app.source === "owned"
+                  ? app.id
+                  : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
+              }
+              app={app}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

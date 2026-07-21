@@ -91,8 +91,8 @@ function CardOverflowMenu({
 }
 
 // Pin/Unpin menu item (mirrors the project card's): pins are per-user and
-// toggle from the same overflow menu on both card kinds and table rows.
-export function PinMenuItem({
+// toggle from the same overflow menu on both card kinds.
+function PinMenuItem({
   pinned,
   target,
 }: {

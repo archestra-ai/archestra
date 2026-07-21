@@ -383,9 +383,11 @@ describe("ProjectsPageClient", () => {
 
     fireEvent.click(screen.getByLabelText("View as table"));
 
-    // One flat table replaces the card sections; both projects stay visible.
-    expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
+    // The Pinned / All projects sections survive the switch, each rendering
+    // its own table; both projects stay visible.
+    expect(screen.getAllByRole("table")).toHaveLength(2);
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    expect(screen.getByText("All projects")).toBeInTheDocument();
     expect(screen.getByText("Pinned project")).toBeInTheDocument();
     expect(screen.getByText("Plain project")).toBeInTheDocument();
     expect(window.localStorage.getItem("archestra-projects-view")).toBe(

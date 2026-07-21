@@ -14,7 +14,11 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
-import { ListViewToggle, useListViewMode } from "@/components/list-view-toggle";
+import {
+  type ListViewMode,
+  ListViewToggle,
+  useListViewMode,
+} from "@/components/list-view-toggle";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
@@ -206,19 +210,13 @@ function ProjectsList() {
                   : "No projects yet"}
             </p>
           </div>
-        ) : viewMode === "table" ? (
-          <ProjectsTable
-            projects={projects}
-            onTogglePin={togglePin}
-            onEdit={setEditingProject}
-            onDelete={setDeletingProject}
-          />
         ) : (
           <>
             {pinnedProjects.length > 0 && (
               <ProjectSection
                 title="Pinned"
                 projects={pinnedProjects}
+                viewMode={viewMode}
                 onTogglePin={togglePin}
                 onEdit={setEditingProject}
                 onDelete={setDeletingProject}
@@ -227,6 +225,7 @@ function ProjectsList() {
             <ProjectSection
               title={pinnedProjects.length > 0 ? "All projects" : undefined}
               projects={unpinnedProjects}
+              viewMode={viewMode}
               onTogglePin={togglePin}
               onEdit={setEditingProject}
               onDelete={setDeletingProject}
@@ -245,12 +244,14 @@ type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
 function ProjectSection({
   title,
   projects,
+  viewMode,
   onTogglePin,
   onEdit,
   onDelete,
 }: {
   title?: string;
   projects: ProjectListItem[];
+  viewMode: ListViewMode;
   onTogglePin: (project: ProjectListItem) => void;
   onEdit: (project: ProjectListItem) => void;
   onDelete: (project: ProjectListItem) => void;
@@ -264,17 +265,26 @@ function ProjectSection({
           {title}
         </h2>
       ) : null}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {projects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            project={project}
-            onTogglePin={onTogglePin}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        ))}
-      </div>
+      {viewMode === "table" ? (
+        <ProjectsTable
+          projects={projects}
+          onTogglePin={onTogglePin}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onTogglePin={onTogglePin}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

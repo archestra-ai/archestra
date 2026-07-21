@@ -55237,9 +55237,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
         }
       }
     },
@@ -55560,9 +55561,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "chat:update"
+          ]
         }
       }
     },
@@ -100739,6 +100741,10 @@
                     "enterpriseCoreActive": {
                       "type": "boolean"
                     },
+                    "mcpSandboxDomain": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "analytics": {
                       "type": "object",
                       "properties": {
@@ -100783,6 +100789,7 @@
                     "maintenanceMode",
                     "siteNotificationMessage",
                     "enterpriseCoreActive",
+                    "mcpSandboxDomain",
                     "analytics"
                   ],
                   "additionalProperties": false

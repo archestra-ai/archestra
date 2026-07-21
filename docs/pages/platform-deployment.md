@@ -210,6 +210,12 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 **Orchestrator Settings**:
 
 - `archestra.orchestrator.baseImage` - Base Docker image for MCP server containers (defaults to official Archestra MCP server base image)
+- `archestra.orchestrator.mcpServerResources.requests.cpu` - CPU request for generated MCP server containers (default: `50m`)
+- `archestra.orchestrator.mcpServerResources.requests.memory` - Memory request for generated MCP server containers (default: `128Mi`)
+- `archestra.orchestrator.mcpServerResources.requests.ephemeralStorage` - Ephemeral-storage request for generated MCP server containers (default: `256Mi`)
+- `archestra.orchestrator.mcpServerResources.limits.memory` - Memory limit for generated MCP server containers (default: `512Mi`)
+- `archestra.orchestrator.mcpServerResources.limits.ephemeralStorage` - Ephemeral-storage limit for generated MCP server containers (default: `1Gi`)
+- `archestra.orchestrator.failedPodReapIntervalSeconds` - How often Failed or Evicted MCP server pods are garbage-collected (default: `600`, `0` disables)
 
 **Kubernetes Settings**:
 
@@ -1230,8 +1236,6 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS`** - How often the platform deletes Failed or Evicted MCP server pods left behind by node-pressure evictions.
   - Default: `600`
   - Set to `0` to disable.
-
-The Helm chart exposes the resource settings as `archestra.orchestrator.mcpServerResources` and the reap interval as `archestra.orchestrator.failedPodReapIntervalSeconds`. Per-server overrides are possible by editing the server's deployment YAML in the MCP Registry.
 
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
   - Default: `true`

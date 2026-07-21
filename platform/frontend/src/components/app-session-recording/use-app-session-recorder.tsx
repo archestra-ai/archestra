@@ -23,6 +23,7 @@ import {
   fallbackRecordingDescription,
   useInvalidateAppRecording,
 } from "@/lib/app-session-recording/app-recording.query";
+import { serializeRecordingEvents } from "@/lib/app-session-recording/app-recording-binary";
 import {
   type AppRecordingBundle,
   recordingStore,
@@ -90,8 +91,12 @@ export interface AppSessionRecorder {
 const MAX_EVENTS = APP_RECORDING_LIMITS.maxEvents - 5_000;
 const MAX_SEGMENTS = APP_RECORDING_LIMITS.maxSegments - 5;
 const MAX_DURATION_MS = 10 * 60_000;
-/** The SDK flushes its buffer on stop; give that final batch time to arrive. */
-const STOP_FLUSH_GRACE_MS = 400;
+/**
+ * The SDK flushes its buffer on stop; give that final batch time to arrive —
+ * including the video-encoder drain, which flushes each canvas's encoder and
+ * posts the chunks it still owned.
+ */
+const STOP_FLUSH_GRACE_MS = 700;
 /**
  * The injected recorder starts idempotently, so while recording we re-send
  * "start" on an interval — this also captures a mid-recording iframe swap (an
@@ -517,11 +522,18 @@ export function useOwnAppSessionRecorder(params: {
             appName: ctx.appName,
           })
         : undefined;
+      // The captured events hold their frame payloads as Blobs/bytes; the
+      // bundle at rest is JSON, so this is the one place they become base64.
       const bundle = buildBundle({
         appId: ctx.appId,
         appName: ctx.appName,
         authorName: ctx.authorName,
-        raw,
+        raw: {
+          ...raw,
+          events: (await serializeRecordingEvents(
+            raw.events,
+          )) as RawRecording["events"],
+        },
         transcript,
         enhancement,
       });

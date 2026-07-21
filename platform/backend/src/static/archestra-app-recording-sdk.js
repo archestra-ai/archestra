@@ -49,12 +49,24 @@
   // Events carry an absolute epoch `ts`; the host rebases them onto the
   // recording clock (same machine, same clock).
   const push = (event) => {
-    if (!recording) return;
+    // The recording gate — with one seam: encoded video chunks may land during
+    // the post-stop drain, while the encoder flushes what it already owns.
+    if (
+      !recording &&
+      !(videoDraining && event.kind === "video-chunk")
+    ) {
+      return;
+    }
     event.ts = Date.now();
     // Recorded input doubles as an activity signal for the canvas sampler: an
     // event-driven draw (a click repainting a chart) follows input, not rAF.
-    // Canvas frames themselves must not count, or capture would self-sustain.
-    if (event.kind !== "canvas") {
+    // Captured output (stills, video chunks/configs) must not count, or
+    // capture would self-sustain.
+    if (
+      event.kind !== "canvas" &&
+      event.kind !== "video-chunk" &&
+      event.kind !== "video-config"
+    ) {
       inputActivityUntil = event.ts + INPUT_ACTIVITY_MS;
     }
     buffer.push(event);
@@ -196,16 +208,267 @@
   let inputActivityUntil = 0;
   let scratchCanvas = null;
 
+  // ── Encoded video capture (WebCodecs) ──
+  // A canvas filmed as stills re-encodes the whole screen every frame; a video
+  // codec spends those bytes once per keyframe and encodes motion deltas in
+  // between — the difference between megabytes-per-second of WebPs and a few
+  // hundred kilobytes of VP9 at the same fidelity. Where VideoEncoder exists,
+  // each canvas gets one encoder stream: a config event opens it, keyframes
+  // land on a fixed cadence so a seek never re-decodes more than a cadence's
+  // worth of deltas, and chunks flow through the same event pipeline as
+  // everything else — as raw bytes; base64 exists only in the stored bundle.
+  //
+  // VP9/VP8 only, deliberately: every Chromium build decodes them (the offline
+  // renderer may run a codecs-free Chromium where H.264 decode is absent), and
+  // VP9 hardware encode is common on the machines that record. A browser that
+  // can encode neither (or has no WebCodecs) records WebP stills instead.
+  const VIDEO_CODEC_CANDIDATES = ["vp09.00.10.08", "vp8"];
+  const VIDEO_BITRATE = 2_500_000;
+  const VIDEO_KEYFRAME_MS = 1_000;
+  /** How deep the encoder's input queue may grow before frames are skipped. */
+  const VIDEO_MAX_QUEUE = 2;
+  /** canvas → { encoder, sel, width, height, lastKeyMs, errored } */
+  const videoStreams = new WeakMap();
+  /** undefined = not probed yet; null = unsupported; string = chosen codec. */
+  let videoCodec;
+  let videoCodecProbe = null;
+  let videoDraining = false;
+
+  const probeVideoCodec = () => {
+    if (videoCodecProbe) return videoCodecProbe;
+    videoCodecProbe = (async () => {
+      if (typeof VideoEncoder !== "function") return null;
+      for (const codec of VIDEO_CODEC_CANDIDATES) {
+        try {
+          const support = await VideoEncoder.isConfigSupported({
+            codec,
+            width: 1280,
+            height: 720,
+            bitrate: VIDEO_BITRATE,
+          });
+          if (support && support.supported) return codec;
+        } catch {
+          // an unparseable candidate just means "not this one"
+        }
+      }
+      return null;
+    })().then((codec) => {
+      videoCodec = codec;
+      return codec;
+    });
+    return videoCodecProbe;
+  };
+
+  const pushVideoConfig = (sel, width, height, description) => {
+    const event = {
+      kind: "video-config",
+      sel,
+      codec: videoCodec,
+      codedWidth: width,
+      codedHeight: height,
+    };
+    if (description) {
+      // Copy out of the encoder-owned buffer; the event outlives the callback.
+      event.description = new Uint8Array(
+        description instanceof ArrayBuffer
+          ? description.slice(0)
+          : description.buffer.slice(
+              description.byteOffset,
+              description.byteOffset + description.byteLength,
+            ),
+      );
+    }
+    push(event);
+  };
+
+  const createVideoStream = (sel, width, height) => {
+    const stream = {
+      sel,
+      width,
+      height,
+      lastKeyMs: Number.NEGATIVE_INFINITY,
+      errored: false,
+      encoder: null,
+      descriptionSent: false,
+    };
+    try {
+      stream.encoder = new VideoEncoder({
+        output: (chunk, metadata) => {
+          try {
+            // Codec extradata, when a codec carries any, arrives with the
+            // first chunk — reopen the stream with it so the decoder gets it.
+            const description =
+              metadata &&
+              metadata.decoderConfig &&
+              metadata.decoderConfig.description;
+            if (description && !stream.descriptionSent) {
+              stream.descriptionSent = true;
+              pushVideoConfig(sel, width, height, description);
+            }
+            const bytes = new Uint8Array(chunk.byteLength);
+            chunk.copyTo(bytes);
+            push({
+              kind: "video-chunk",
+              sel,
+              type: chunk.type === "key" ? "key" : "delta",
+              tsUs: Math.max(0, Math.round(chunk.timestamp || 0)),
+              bytes,
+            });
+          } catch {
+            // a dropped chunk must never break the app
+          }
+        },
+        error: () => {
+          stream.errored = true;
+        },
+      });
+      stream.encoder.configure({
+        codec: videoCodec,
+        width,
+        height,
+        bitrate: VIDEO_BITRATE,
+        latencyMode: "realtime",
+      });
+    } catch {
+      return null;
+    }
+    pushVideoConfig(sel, width, height, null);
+    return stream;
+  };
+
   /**
-   * Read one canvas's current pixels into a WebP data URL, off the app's
-   * critical path: an oversized bitmap is first downscaled into a reused
-   * scratch canvas, and the encode goes through toBlob — which snapshots the
-   * bitmap at call time and encodes off the main thread — rather than
-   * toDataURL, whose whole encode runs synchronously on it. `sync` forces the
-   * synchronous path for the one capture that cannot wait (the final frame at
-   * stop, taken just before the recording gate closes). Calls `done` with
-   * null when the canvas can't be captured (tainted, zero-sized, encoder
-   * failure) — a skipped frame must never break the app.
+   * Feed one canvas frame into its encoder stream, creating or reopening the
+   * stream as needed (first frame, canvas resize, encoder closed by a prior
+   * stop). VideoFrame reads the canvas GPU-side — no toDataURL readback, no
+   * main-thread image encode — and the encoder's own queue is the throttle:
+   * when it falls behind, frames are skipped, never queued up.
+   */
+  const feedVideoFrame = (canvas) => {
+    const pixels = canvas.width * canvas.height;
+    if (!pixels) return;
+    // Codecs subsample chroma in 2x2 blocks, so coded dimensions stay even.
+    let width = canvas.width;
+    let height = canvas.height;
+    if (pixels > CANVAS_CAPTURE_MAX_PIXELS) {
+      const scale = Math.sqrt(CANVAS_CAPTURE_MAX_PIXELS / pixels);
+      width = Math.round(canvas.width * scale);
+      height = Math.round(canvas.height * scale);
+    }
+    width = Math.max(2, width - (width % 2));
+    height = Math.max(2, height - (height % 2));
+
+    let stream = videoStreams.get(canvas);
+    if (
+      stream &&
+      (stream.errored ||
+        !stream.encoder ||
+        stream.encoder.state === "closed" ||
+        stream.width !== width ||
+        stream.height !== height)
+    ) {
+      if (stream.errored) return; // this canvas falls back to stills
+      try {
+        if (stream.encoder && stream.encoder.state !== "closed") {
+          stream.encoder.close();
+        }
+      } catch {}
+      stream = null;
+    }
+    if (!stream) {
+      stream = createVideoStream(
+        selectorFor(canvas).slice(0, 1000),
+        width,
+        height,
+      );
+      if (!stream) return;
+      videoStreams.set(canvas, stream);
+    }
+    if (stream.encoder.encodeQueueSize > VIDEO_MAX_QUEUE) return;
+
+    let source = canvas;
+    if (width !== canvas.width || height !== canvas.height) {
+      if (!scratchCanvas) scratchCanvas = document.createElement("canvas");
+      if (scratchCanvas.width !== width) scratchCanvas.width = width;
+      if (scratchCanvas.height !== height) scratchCanvas.height = height;
+      const ctx = scratchCanvas.getContext("2d");
+      if (!ctx) return;
+      try {
+        ctx.drawImage(canvas, 0, 0, width, height);
+      } catch {
+        return; // tainted canvas — nothing to record
+      }
+      source = scratchCanvas;
+    }
+    const atMs = nowMs();
+    const keyFrame = atMs - stream.lastKeyMs >= VIDEO_KEYFRAME_MS;
+    let frame;
+    try {
+      frame = new VideoFrame(source, { timestamp: Math.round(atMs * 1000) });
+    } catch {
+      return;
+    }
+    try {
+      stream.encoder.encode(frame, { keyFrame });
+      if (keyFrame) stream.lastKeyMs = atMs;
+    } catch {
+      stream.errored = true;
+    } finally {
+      frame.close();
+    }
+  };
+
+  /**
+   * Flush every live encoder after the recording gate closes, so the chunks
+   * the encoders still own make it into the capture: `videoDraining` holds the
+   * push gate open for exactly those chunks, and the buffer is flushed again
+   * when the last encoder settles — inside the host's post-stop grace window.
+   */
+  const drainVideoStreams = () => {
+    let canvases;
+    try {
+      canvases = Array.from(document.querySelectorAll("canvas"));
+    } catch {
+      return;
+    }
+    const streams = [];
+    const flushes = [];
+    for (const canvas of canvases) {
+      const stream = videoStreams.get(canvas);
+      if (!stream || !stream.encoder || stream.encoder.state === "closed") {
+        continue;
+      }
+      streams.push(stream);
+      if (!stream.errored) {
+        try {
+          flushes.push(stream.encoder.flush());
+        } catch {}
+      }
+    }
+    if (streams.length === 0) return;
+    videoDraining = true;
+    Promise.allSettled(flushes).then(() => {
+      videoDraining = false;
+      flush();
+      for (const stream of streams) {
+        try {
+          stream.encoder.close();
+        } catch {}
+      }
+    });
+  };
+
+  /**
+   * Read one canvas's current pixels into an encoded-image Blob (the stills
+   * fallback for browsers without WebCodecs), off the app's critical path: an
+   * oversized bitmap is first downscaled into a reused scratch canvas, and
+   * the encode goes through toBlob — which snapshots the bitmap at call time
+   * and encodes off the main thread — rather than toDataURL, whose whole
+   * encode runs synchronously on it. The bytes stay a Blob end to end;
+   * nothing here (or anywhere on the live path) renders base64. `sync`
+   * forces the synchronous path for the one capture that cannot wait (the
+   * final frame at stop, taken just before the recording gate closes). Calls
+   * `done` with null when the canvas can't be captured (tainted, zero-sized,
+   * encoder failure) — a skipped frame must never break the app.
    */
   const captureCanvas = (canvas, sync, done) => {
     try {
@@ -224,24 +487,56 @@
         source = scratchCanvas;
       }
       if (!sync && typeof source.toBlob === "function") {
-        source.toBlob(
-          (blob) => {
-            if (!blob) return done(null);
-            const reader = new FileReader();
-            reader.onload = () => done(String(reader.result || "") || null);
-            reader.onerror = () => done(null);
-            reader.readAsDataURL(blob);
-          },
-          "image/webp",
-          0.85,
-        );
+        // WebP keeps a flat-colour game screen to a couple of kilobytes.
+        source.toBlob((blob) => done(blob || null), "image/webp", 0.85);
         return;
       }
-      // WebP keeps a flat-colour game screen to a couple of kilobytes.
-      done(source.toDataURL("image/webp", 0.85));
+      done(dataUrlToBlob(source.toDataURL("image/webp", 0.85)));
     } catch {
       // A canvas holding cross-origin pixels is tainted and throws — skip it.
       done(null);
+    }
+  };
+
+  /** data URL → Blob, in memory — the sync capture path and legacy replay. */
+  const dataUrlToBlob = (dataUrl) => {
+    try {
+      const comma = dataUrl.indexOf(",");
+      if (comma < 0) return null;
+      const header = dataUrl.slice(0, comma);
+      const payload = dataUrl.slice(comma + 1);
+      const mime = (/^data:([^;,]+)/.exec(header) || [])[1] || "image/webp";
+      if (header.indexOf(";base64") >= 0) {
+        const binary = atob(payload);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return new Blob([bytes], { type: mime });
+      }
+      return new Blob([decodeURIComponent(payload)], { type: mime });
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * A frame's identity for change detection: size plus FNV-1a over the encoded
+   * bytes. Encoded image data is high-entropy, so byte-identical digests mean
+   * byte-identical frames for any practical purpose — and it needs no
+   * SubtleCrypto, which an opaque-origin frame doesn't have.
+   */
+  const blobDigest = async (blob) => {
+    try {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let hash = 0x811c9dc5;
+      for (let i = 0; i < bytes.length; i++) {
+        hash ^= bytes[i];
+        hash = Math.imul(hash, 0x01000193);
+      }
+      return blob.size + ":" + (hash >>> 0).toString(16);
+    } catch {
+      return null;
     }
   };
 
@@ -264,6 +559,19 @@
       ) {
         continue;
       }
+      // The video path, wherever the codec probe granted one. Still resolving
+      // (a few frames at most) skips rather than committing this canvas to
+      // stills for the whole recording. A canvas whose encoder errored falls
+      // through to stills for good. The stop-time sync capture is stills-only:
+      // video canvases are closed out by the encoder drain instead.
+      if (videoCodec === undefined && videoCodecProbe) continue;
+      const stream = videoStreams.get(canvas);
+      if (videoCodec && !(stream && stream.errored)) {
+        if (sync) continue;
+        canvasLastAttemptAt.set(canvas, now);
+        feedVideoFrame(canvas);
+        continue;
+      }
       // One capture in flight per canvas: a frame that lands while the
       // previous one is still encoding is skipped, not queued, so on a machine
       // where encoding is slower than the display rate the capture rate backs
@@ -273,12 +581,21 @@
       if (!sync && canvasCaptureBusy.has(canvas)) continue;
       canvasLastAttemptAt.set(canvas, now);
       if (!sync) canvasCaptureBusy.add(canvas);
-      captureCanvas(canvas, sync, (data) => {
+      captureCanvas(canvas, sync, (blob) => {
         canvasCaptureBusy.delete(canvas);
-        if (!data) return;
-        if (canvasLastFrame.get(canvas) === data) return;
-        canvasLastFrame.set(canvas, data);
-        push({ kind: "canvas", sel: selectorFor(canvas).slice(0, 1000), data });
+        if (!blob) return;
+        const sel = selectorFor(canvas).slice(0, 1000);
+        if (sync) {
+          // The final frame cannot wait for an async digest; a possible
+          // duplicate of the last pushed frame is harmless.
+          push({ kind: "canvas", sel, blob });
+          return;
+        }
+        blobDigest(blob).then((digest) => {
+          if (digest && canvasLastFrame.get(canvas) === digest) return;
+          if (digest) canvasLastFrame.set(canvas, digest);
+          push({ kind: "canvas", sel, blob });
+        });
       });
     }
   };
@@ -401,9 +718,12 @@
     // the observers that capture everything after.
     captureInitialDom();
     flushTimer = setInterval(flush, FLUSH_INTERVAL_MS);
-    // What the app becomes, alongside what is done to it. The seed sample is
-    // unconditional (idle apps still show their first frame); the loop then
-    // captures at presented-frame rate while the app is active.
+    // What the app becomes, alongside what is done to it. The codec probe
+    // resolves the capture mode (encoded video vs WebP stills) within a few
+    // frames; the seed sample is unconditional (idle apps still show their
+    // first frame); the loop then captures at presented-frame rate while the
+    // app is active.
+    probeVideoCodec();
     startDomCapture();
     sampleCanvases();
     canvasRafId = origRaf(canvasCaptureLoop);
@@ -556,9 +876,11 @@
     // One last look before the gate closes, so the recording ends on the frame
     // the app actually finished on rather than a sample interval short of it.
     // Synchronous: an async capture would land after the gate closed and be
-    // discarded.
+    // discarded. Video canvases are handled by the encoder drain below — their
+    // last sampled frame is already in the encoder.
     sampleCanvases(true);
     recording = false;
+    drainVideoStreams();
     for (const fn of teardownFns) {
       try {
         fn();
@@ -1106,44 +1428,145 @@
    * cannot be applied is skipped rather than allowed to stop the replay — one
    * missing element must not cost every frame after it.
    */
+  /**
+   * Size the canvas's bitmap to the recorded frame and paint it. Sizing
+   * matters because replay serves the app's SOURCE html and never runs its
+   * code: a canvas the app sized in its own JS is still at the HTML default
+   * 300x150 here, so drawing a full frame into it would squeeze the whole app
+   * down to a thumbnail while the markup around it stayed full size.
+   * Assigning width resets the bitmap, so only on an actual change.
+   */
+  const drawFrameToCanvas = (canvas, frame, width, height) => {
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+  };
+
+  // ── Encoded video playback: one VideoDecoder per recorded stream, keyed by
+  // the stream's canvas selector. A config event (re)opens the stream — the
+  // host re-sends it on every seek, making it the decoder-reset point — and
+  // chunks decode in the order the host posts them. Decoded frames share the
+  // stills' paint-order guard, so a stale still can never overwrite a newer
+  // video frame or vice versa.
+  const videoPlayback = new Map();
+  const openVideoPlaybackStream = (event) => {
+    try {
+      if (typeof VideoDecoder !== "function") return;
+      const existing = videoPlayback.get(event.sel);
+      if (existing) {
+        try {
+          existing.decoder.close();
+        } catch {}
+      }
+      const sel = event.sel;
+      const state = { decoder: null, sawKey: false };
+      state.decoder = new VideoDecoder({
+        output: (frame) => {
+          try {
+            const canvas = document.querySelector(sel);
+            if (canvas && canvas.getContext) {
+              const seq = ++nextPaintSeq;
+              const drawnSeq = canvasPaintSeq.get(canvas);
+              if (drawnSeq === undefined || seq > drawnSeq) {
+                canvasPaintSeq.set(canvas, seq);
+                drawFrameToCanvas(
+                  canvas,
+                  frame,
+                  frame.displayWidth || frame.codedWidth,
+                  frame.displayHeight || frame.codedHeight,
+                );
+              }
+            }
+          } catch {}
+          frame.close();
+        },
+        error: () => {
+          // a broken stream shows its last good frame; never break the replay
+        },
+      });
+      const config = {
+        codec: event.codec,
+        codedWidth: event.codedWidth,
+        codedHeight: event.codedHeight,
+        optimizeForLatency: true,
+      };
+      if (event.description) {
+        config.description =
+          event.description instanceof Uint8Array
+            ? event.description
+            : new Uint8Array(event.description);
+      }
+      state.decoder.configure(config);
+      videoPlayback.set(sel, state);
+    } catch {}
+  };
+  const feedVideoPlaybackChunk = (event) => {
+    try {
+      const state = videoPlayback.get(event.sel);
+      if (!state || state.decoder.state !== "configured") return;
+      // Deltas before the stream's first keyframe are undecodable — a decoder
+      // fed one errors out and takes the rest of the stream with it.
+      if (!state.sawKey) {
+        if (event.type !== "key") return;
+        state.sawKey = true;
+      }
+      if (!(event.bytes instanceof Uint8Array)) return;
+      state.decoder.decode(
+        new EncodedVideoChunk({
+          type: event.type === "key" ? "key" : "delta",
+          timestamp: event.tsUs || 0,
+          data: event.bytes,
+        }),
+      );
+    } catch {}
+  };
+
   const paintRecordedOutput = (event) => {
     try {
+      if (event.kind === "video-config") {
+        openVideoPlaybackStream(event);
+        return;
+      }
+      if (event.kind === "video-chunk") {
+        feedVideoPlaybackChunk(event);
+        return;
+      }
       if (event.kind === "canvas") {
         const canvas = document.querySelector(event.sel);
         if (!canvas || !canvas.getContext) return;
         // Stamp the dispatch order now, synchronously, before the async decode
         // reorders things — this is the frame's true position in the timeline.
         const seq = ++nextPaintSeq;
-        const image = new Image();
-        image.onload = () => {
-          try {
-            // A later-dispatched frame already won this canvas while this one
-            // was decoding: its pixels are the more recent truth, so this stale
-            // frame is dropped rather than allowed to overwrite them.
-            const drawnSeq = canvasPaintSeq.get(canvas);
-            if (drawnSeq !== undefined && drawnSeq > seq) return;
-            canvasPaintSeq.set(canvas, seq);
-            // Restore the canvas's own bitmap size before drawing. The frame
-            // already carries it — toDataURL captures at canvas.width ×
-            // canvas.height — and replay needs it because it serves the app's
-            // SOURCE html and never runs the app's code: a canvas the app
-            // sized in its own JS is still at the HTML default 300x150 here,
-            // so drawing a full frame into it squeezed the whole app down to a
-            // thumbnail while the markup around it stayed full size. Assigning
-            // width resets the bitmap, so only on an actual change.
-            if (canvas.width !== image.naturalWidth) {
-              canvas.width = image.naturalWidth;
-            }
-            if (canvas.height !== image.naturalHeight) {
-              canvas.height = image.naturalHeight;
-            }
-            const ctx = canvas.getContext("2d");
-            if (!ctx) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-          } catch {}
-        };
-        image.src = event.data;
+        // Frames arrive as Blobs; `data` strings only from a bundle written by
+        // an older recorder.
+        const blob =
+          event.blob instanceof Blob
+            ? event.blob
+            : typeof event.data === "string"
+              ? dataUrlToBlob(event.data)
+              : null;
+        if (!blob) return;
+        createImageBitmap(blob)
+          .then((bitmap) => {
+            try {
+              // A later-dispatched frame already won this canvas while this
+              // one was decoding: its pixels are the more recent truth, so
+              // this stale frame is dropped rather than allowed to overwrite
+              // them.
+              const drawnSeq = canvasPaintSeq.get(canvas);
+              if (drawnSeq !== undefined && drawnSeq > seq) {
+                bitmap.close();
+                return;
+              }
+              canvasPaintSeq.set(canvas, seq);
+              drawFrameToCanvas(canvas, bitmap, bitmap.width, bitmap.height);
+              bitmap.close();
+            } catch {}
+          })
+          .catch(() => {});
         return;
       }
       if (event.kind === "dom") {
@@ -1272,6 +1695,12 @@
         }
         hoverTarget = null;
         closeSelectMenu();
+        for (const state of videoPlayback.values()) {
+          try {
+            state.decoder.close();
+          } catch {}
+        }
+        videoPlayback.clear();
       } else if (data.action === "paint" && data.event) {
         paintRecordedOutput(data.event);
       } else if (data.action === "pause") {

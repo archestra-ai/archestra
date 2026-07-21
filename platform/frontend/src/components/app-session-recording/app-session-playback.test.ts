@@ -12,6 +12,7 @@ import {
   dominantViewport,
   keptTimelineRanges,
   neutralizeAppScripts,
+  planPaintFlush,
   presentedTranscript,
   replayRegionLayout,
   replayStageFit,
@@ -918,7 +919,7 @@ describe("dominantViewport", () => {
     const events: Events = [
       { kind: "viewport", t: 0, width: 400, height: 600 },
       { kind: "viewport", t: 9_000, width: 800, height: 600 },
-      { kind: "canvas", t: 9_500, sel: "canvas", data: "frame" },
+      { kind: "canvas", t: 9_500, sel: "canvas", blob: new Blob(["frame"]) },
     ];
     expect(dominantViewport(events)).toEqual({ width: 400, height: 600 });
   });
@@ -1019,6 +1020,89 @@ describe("replayRegionLayout", () => {
   });
 });
 
+describe("planPaintFlush", () => {
+  type Paints = Parameters<typeof planPaintFlush>[0];
+  const still = (sel: string, t: number, tag: string) => ({
+    kind: "canvas" as const,
+    t,
+    sel,
+    blob: new Blob([tag]),
+  });
+  const config = (sel: string, t: number) => ({
+    kind: "video-config" as const,
+    t,
+    sel,
+    codec: "vp8",
+    codedWidth: 2,
+    codedHeight: 2,
+  });
+  const chunk = (sel: string, t: number, type: "key" | "delta") => ({
+    kind: "video-chunk" as const,
+    t,
+    sel,
+    type,
+    tsUs: t * 1_000,
+    bytes: new Uint8Array([t]),
+  });
+
+  it("coalesces stills to the newest per canvas", () => {
+    const a1 = still("#a", 1, "a1");
+    const a2 = still("#a", 2, "a2");
+    const b1 = still("#b", 1, "b1");
+    expect(planPaintFlush([a1, a2, b1] as Paints)).toEqual([a2, b1]);
+  });
+
+  it("passes a mid-stream continuation through in order", () => {
+    // No config crossed: the decoder holds state from earlier chunks, so every
+    // chunk — deltas before this range's key included — must reach it.
+    const events = [
+      chunk("#v", 1, "delta"),
+      chunk("#v", 2, "key"),
+      chunk("#v", 3, "delta"),
+    ];
+    expect(planPaintFlush(events as Paints)).toEqual(events);
+  });
+
+  it("rebuilds a config-crossing range from the last keyframe", () => {
+    const cfg = config("#v", 0);
+    const k1 = chunk("#v", 1, "key");
+    const d1 = chunk("#v", 2, "delta");
+    const k2 = chunk("#v", 3, "key");
+    const d2 = chunk("#v", 4, "delta");
+    expect(planPaintFlush([cfg, k1, d1, k2, d2] as Paints)).toEqual([
+      cfg,
+      k2,
+      d2,
+    ]);
+  });
+
+  it("keeps a re-opened stream's newest config and its span", () => {
+    // A resize mid-range re-configures the stream: only the last config and
+    // the chunks after its last keyframe matter.
+    const cfg1 = config("#v", 0);
+    const k1 = chunk("#v", 1, "key");
+    const cfg2 = config("#v", 2);
+    const k2 = chunk("#v", 3, "key");
+    const d2 = chunk("#v", 4, "delta");
+    expect(planPaintFlush([cfg1, k1, cfg2, k2, d2] as Paints)).toEqual([
+      cfg2,
+      k2,
+      d2,
+    ]);
+  });
+
+  it("keeps independent canvases and streams apart", () => {
+    const frame = still("#c", 2, "x");
+    const cfg = config("#v", 0);
+    const key = chunk("#v", 1, "key");
+    expect(planPaintFlush([frame, cfg, key] as Paints)).toEqual([
+      frame,
+      cfg,
+      key,
+    ]);
+  });
+});
+
 describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
   // The offline renderer drives buildPlayback frame by frame, so the prune is
   // lossless iff buildPlayback's output — events, segments, transcript, duration
@@ -1031,7 +1115,11 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
         title: rec.title,
         startedAt: rec.startedAt,
         durationMs: rec.durationMs,
-        events: rec.events,
+        // The prune reads only kind/t/durationMs; the frame payload field
+        // (runtime blob vs stored base64) is opaque to it, so runtime-form
+        // fixtures stand in for the stored form here.
+        events:
+          rec.events as unknown as AppRecordingBundle["recording"]["events"],
         segments: rec.segments,
         transcript: rec.transcript,
       },
@@ -1047,7 +1135,10 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
 
   function pruned(rec: Recording): Recording {
     const out = pruneTrailingTrimEvents(recToBundle(rec));
-    return { ...rec, events: out.recording.events };
+    return {
+      ...rec,
+      events: out.recording.events as unknown as Recording["events"],
+    };
   }
 
   function expectSamePlayback(rec: Recording) {
@@ -1068,8 +1159,8 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       durationMs: 5_000,
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 1_000, sel: "#c", data: "keep" },
-        { kind: "canvas", t: 3_500, sel: "#c", data: "cut" },
+        { kind: "canvas", t: 1_000, sel: "#c", blob: new Blob(["keep"]) },
+        { kind: "canvas", t: 3_500, sel: "#c", blob: new Blob(["cut"]) },
         { kind: "dom", t: 4_200, op: "html", sel: "#a", html: "cut2" },
       ],
       edits: { cuts: [{ fromMs: 2_000, toMs: 5_000 }] },
@@ -1087,8 +1178,8 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       ],
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 2_500, sel: "#c", data: "shown" },
-        { kind: "canvas", t: 4_500, sel: "#c", data: "cut" },
+        { kind: "canvas", t: 2_500, sel: "#c", blob: new Blob(["shown"]) },
+        { kind: "canvas", t: 4_500, sel: "#c", blob: new Blob(["cut"]) },
       ],
       edits: { cuts: [{ fromMs: 4_000, toMs: 6_000 }] },
       enhancement: { description: "d", prompt: "build it" },
@@ -1102,8 +1193,13 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       durationMs: 5_000,
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 3_000, sel: "#c", data: "cut" },
-        { kind: "canvas", t: 4_990, sel: "#c", data: "tail-anchor" },
+        { kind: "canvas", t: 3_000, sel: "#c", blob: new Blob(["cut"]) },
+        {
+          kind: "canvas",
+          t: 4_990,
+          sel: "#c",
+          blob: new Blob(["tail-anchor"]),
+        },
       ],
       edits: { cuts: [{ fromMs: 2_000, toMs: 4_980 }] },
     });
@@ -1116,8 +1212,8 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       durationMs: 5_000,
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 1_500, sel: "#c", data: "a" },
-        { kind: "canvas", t: 4_000, sel: "#c", data: "b" },
+        { kind: "canvas", t: 1_500, sel: "#c", blob: new Blob(["a"]) },
+        { kind: "canvas", t: 4_000, sel: "#c", blob: new Blob(["b"]) },
       ],
       edits: { cuts: [{ fromMs: 1_000, toMs: 2_000 }] },
     });
@@ -1130,9 +1226,9 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       durationMs: 5_000,
       events: [
         { kind: "segment", t: 0, version: 1 },
-        { kind: "canvas", t: 1_000, sel: "#c", data: "keep" },
-        { kind: "canvas", t: 3_500, sel: "#c", data: "cut" },
-        { kind: "canvas", t: 4_500, sel: "#c", data: "cut2" },
+        { kind: "canvas", t: 1_000, sel: "#c", blob: new Blob(["keep"]) },
+        { kind: "canvas", t: 3_500, sel: "#c", blob: new Blob(["cut"]) },
+        { kind: "canvas", t: 4_500, sel: "#c", blob: new Blob(["cut2"]) },
       ],
       edits: {
         cuts: [
@@ -1155,8 +1251,8 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
       events: [
         { kind: "segment", t: 0, version: 1 },
         { kind: "mcp", t: 5_000, method: "tools/call", durationMs: 4_000 },
-        { kind: "canvas", t: 3_000, sel: "#c", data: "kept" },
-        { kind: "canvas", t: 9_000, sel: "#c", data: "cut" },
+        { kind: "canvas", t: 3_000, sel: "#c", blob: new Blob(["kept"]) },
+        { kind: "canvas", t: 9_000, sel: "#c", blob: new Blob(["cut"]) },
       ],
       edits: { cuts: [{ fromMs: 4_000, toMs: 10_000 }] },
     });

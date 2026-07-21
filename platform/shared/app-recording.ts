@@ -175,6 +175,47 @@ const CanvasFrameEventSchema = z
   .strict();
 
 /**
+ * Opens (or reopens) one canvas's encoded video stream: the codec and coded
+ * size a decoder needs before it can take chunks. Emitted when the recorder
+ * (re)configures the encoder — at stream start and on a canvas resize — and
+ * replayed as the decoder-reset point: every seek re-feeds from the config,
+ * then the nearest keyframe.
+ *
+ * This is the stored (JSON) form of the stream; `description` is base64 codec
+ * extradata for codecs that carry any. In memory the frame data flows as raw
+ * bytes — base64 exists only in the bundle at rest.
+ */
+const VideoConfigEventSchema = z
+  .object({
+    kind: z.literal("video-config"),
+    t: EventTimeSchema,
+    sel: z.string().max(1_000),
+    codec: z.string().max(64),
+    codedWidth: z.number().int().positive(),
+    codedHeight: z.number().int().positive(),
+    description: z.string().max(65_536).optional(),
+  })
+  .strict();
+
+/**
+ * One encoded video chunk of a canvas's stream — what a real video file is
+ * made of: rare standalone keyframes and cheap motion-compensated deltas, an
+ * order of magnitude smaller than per-frame stills. `tsUs` is the encoder's
+ * microsecond timestamp (monotonic within the stream); `data` is the chunk's
+ * bytes, base64 in this stored form only.
+ */
+const VideoChunkEventSchema = z
+  .object({
+    kind: z.literal("video-chunk"),
+    t: EventTimeSchema,
+    sel: z.string().max(1_000),
+    type: z.enum(["key", "delta"]),
+    tsUs: z.number().int().min(0),
+    data: z.string().max(2_000_000),
+  })
+  .strict();
+
+/**
  * One DOM change: an element's markup after it changed, or one attribute.
  *
  * Replay applies these rather than re-running the app, so what the viewer sees
@@ -201,6 +242,8 @@ export const AppRecordingEventSchema = z.discriminatedUnion("kind", [
   McpEventSchema,
   SegmentMarkerEventSchema,
   CanvasFrameEventSchema,
+  VideoConfigEventSchema,
+  VideoChunkEventSchema,
   DomMutationEventSchema,
 ]);
 export type AppRecordingEvent = z.infer<typeof AppRecordingEventSchema>;

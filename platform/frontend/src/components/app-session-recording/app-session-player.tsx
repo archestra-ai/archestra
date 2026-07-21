@@ -76,6 +76,10 @@ import {
   useIsRenderingAppRecordingVideo,
   useRenderAppRecordingVideo,
 } from "@/lib/app-session-recording/app-recording.query";
+import {
+  type RuntimeRecordingEvent,
+  reviveRecordingEvents,
+} from "@/lib/app-session-recording/app-recording-binary";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useMcpSandboxDomain } from "@/lib/config/config.query";
@@ -85,9 +89,11 @@ import { cn } from "@/lib/utils";
 /**
  * The stored recording flattened for playback: the immutable capture plus the
  * app name and the viewer's edits (cuts), which layer over the capture without
- * ever modifying it.
+ * ever modifying it. Events are the REVIVED runtime form — frame payloads as
+ * Blobs/bytes; their base64 was decoded once when the bundle was opened.
  */
-type PlaybackRecording = AppRecordingBundle["recording"] & {
+type PlaybackRecording = Omit<AppRecordingBundle["recording"], "events"> & {
+  events: RuntimeRecordingEvent[];
   appName: string;
   /** The capture's own transcript, untouched — the chat editor's source. */
   originalTranscript: AppRecordingBundle["recording"]["transcript"];
@@ -360,6 +366,9 @@ export function AppSessionPlayer({
       validBundle
         ? {
             ...validBundle.recording,
+            // Frame payloads leave base64 exactly once, here at bundle-open;
+            // every path after this handles Blobs/bytes only.
+            events: reviveRecordingEvents(validBundle.recording.events),
             // The replayed chat is the capture seen through the viewer's
             // presentation edits: the AI consolidation (unless disabled),
             // minus removed messages, with manual user-text overrides.
@@ -1087,20 +1096,48 @@ function PlayerSurface({
    */
   const primeCanvases = useCallback(
     (clock: number) => {
-      const latest = new Map<string, TimelineEvent>();
-      for (const event of events) {
-        if (event.kind !== "canvas") continue;
-        // The newest frame this clock has reached, or failing that the oldest
-        // there is: before the first frame the app looked like its first frame,
-        // never like an empty canvas.
-        if (event.t <= clock || !latest.has(event.sel))
-          latest.set(event.sel, event);
-      }
-      for (const event of latest.values()) {
+      const paint = (event: TimelineEvent) => {
         iframeElRef.current?.contentWindow?.postMessage(
           { type: REPLAY_CONTROL_TYPE, action: "paint", event },
           "*",
         );
+      };
+      const latest = new Map<string, TimelineEvent>();
+      // Encoded streams whose first keyframe the clock hasn't reached yet:
+      // their poster is the stream's opening config + first keyframe — before
+      // the first frame the app looked like its first frame, never like an
+      // empty canvas. Streams the clock is inside were already fed by the
+      // catch-up walk (which re-sends the config and decodes from the last
+      // keyframe), so re-posting them here would only decode the span twice.
+      const posters = new Map<
+        string,
+        { config: TimelineEvent; key: TimelineEvent | null; reached: boolean }
+      >();
+      for (const event of events) {
+        if (event.kind === "canvas") {
+          // The newest frame this clock has reached, or failing that the
+          // oldest there is.
+          if (event.t <= clock || !latest.has(event.sel))
+            latest.set(event.sel, event);
+        } else if (event.kind === "video-config") {
+          if (!posters.has(event.sel))
+            posters.set(event.sel, {
+              config: event,
+              key: null,
+              reached: false,
+            });
+        } else if (event.kind === "video-chunk" && event.type === "key") {
+          const poster = posters.get(event.sel);
+          if (!poster) continue;
+          if (event.t <= clock) poster.reached = true;
+          else if (!poster.key) poster.key = event;
+        }
+      }
+      for (const event of latest.values()) paint(event);
+      for (const poster of posters.values()) {
+        if (poster.reached || !poster.key) continue;
+        paint(poster.config);
+        paint(poster.key);
       }
     },
     [events],
@@ -1109,22 +1146,26 @@ function PlayerSurface({
   const applyEventsUpTo = useCallback(
     (clock: number) => {
       sendAppClock(clock);
-      // Canvas frames in the advanced range are coalesced to the newest per
-      // canvas. Frames are captured at presented-frame rate, so a deep
-      // catch-up (a seek, a remount) spans hundreds of them — and decoding
-      // every superseded frame only for the replay's paint-order guard to
-      // throw it away is pure waste. During normal playback the range is a
-      // frame or two wide and the coalescing is a no-op. The survivor posts
-      // after the loop: recorded later than everything else in the range, so
-      // painting it last also lands it on the range's final DOM.
-      const latestCanvas = new Map<string, TimelineEvent>();
+      // Frame paints (stills and encoded-video events) are collected over the
+      // advanced range and flushed through `planPaintFlush` after the walk: a
+      // deep catch-up (a seek, a remount) spans hundreds of frames, and the
+      // plan reduces them to what actually needs decoding — the newest still
+      // per canvas, and for a video stream its config plus the span from the
+      // last keyframe. During normal playback the range is a frame or two
+      // wide and the plan passes it through. Flushing after the loop also
+      // lands the survivors on the range's final DOM.
+      const paints: TimelineEvent[] = [];
       while (
         appliedRef.current < events.length &&
         events[appliedRef.current].t <= clock
       ) {
         const event = events[appliedRef.current++];
-        if (event.kind === "canvas") {
-          latestCanvas.set(event.sel, event);
+        if (
+          event.kind === "canvas" ||
+          event.kind === "video-config" ||
+          event.kind === "video-chunk"
+        ) {
+          paints.push(event);
         } else if (event.kind === "dom") {
           // What the app produced, put back exactly. The replayed document runs
           // none of the app's own code, so these are not corrections applied
@@ -1153,7 +1194,7 @@ function PlayerSurface({
           );
         }
       }
-      for (const event of latestCanvas.values()) {
+      for (const event of planPaintFlush(paints)) {
         iframeElRef.current?.contentWindow?.postMessage(
           { type: REPLAY_CONTROL_TYPE, action: "paint", event },
           "*",
@@ -1347,6 +1388,30 @@ function PlayerSurface({
       // usual cause is an origin the sandbox refuses to be framed by, so say
       // so rather than reporting a generic stall much later.
       ready: async () => {
+        // Renderer check: every codec this recording's video streams use must
+        // be decodable in THIS browser, or each affected canvas silently films
+        // as an empty rectangle. Recording sticks to VP9/VP8 exactly so any
+        // Chromium can decode it; this guards the contract (and any bundle
+        // recorded by a future codec) with a loud, immediate failure.
+        const codecs = new Set<string>();
+        for (const event of events) {
+          if (event.kind === "video-config") codecs.add(event.codec);
+        }
+        if (codecs.size > 0 && typeof VideoDecoder === "undefined") {
+          throw new Error(
+            "This recording carries encoded video, but the render browser has no WebCodecs decoder.",
+          );
+        }
+        for (const codec of codecs) {
+          const support = await VideoDecoder.isConfigSupported({
+            codec,
+          }).catch(() => null);
+          if (!support?.supported) {
+            throw new Error(
+              `This recording's video codec (${codec}) is not decodable in the render browser.`,
+            );
+          }
+        }
         for (
           let i = 0;
           i < APP_FRAME_READY_TRIES && !frameReadyRef.current;
@@ -1372,7 +1437,7 @@ function PlayerSurface({
     return () => {
       window.__archestraReplay = undefined;
     };
-  }, [filming, duration, seekTo]);
+  }, [filming, duration, seekTo, events]);
 
   // The single timeline runs on the FULL (uncut) session; a click there seeks
   // the cut playback to the same moment (a click inside a removed stretch
@@ -4409,6 +4474,56 @@ export function buildPlayback(recording: PlaybackRecording): {
     toRawMs,
     toPlaybackMs,
   };
+}
+
+/**
+ * Reduce one applied range's frame paints to what actually needs decoding.
+ *
+ * Stills coalesce to the newest per canvas — every earlier frame would be
+ * decoded only for the replay's paint-order guard to discard it. An encoded
+ * video stream can't coalesce that way (a delta chunk is meaningless without
+ * its predecessors), so it follows decoder semantics instead: a range that
+ * crossed the stream's config event is a stream (re)build — post the config,
+ * then only from the last keyframe in the range, since everything before it
+ * decodes to pixels a later frame fully replaces. A range with no config is a
+ * mid-stream continuation whose decoder holds state — every chunk passes
+ * through in order.
+ *
+ * @public — exported for testability
+ */
+export function planPaintFlush(paints: TimelineEvent[]): TimelineEvent[] {
+  const stills = new Map<string, TimelineEvent>();
+  const streams = new Map<
+    string,
+    { config: TimelineEvent | null; chunks: TimelineEvent[]; rebuilt: boolean }
+  >();
+  for (const event of paints) {
+    if (event.kind === "canvas") {
+      stills.set(event.sel, event);
+      continue;
+    }
+    if (event.kind !== "video-config" && event.kind !== "video-chunk") continue;
+    let stream = streams.get(event.sel);
+    if (!stream) {
+      stream = { config: null, chunks: [], rebuilt: false };
+      streams.set(event.sel, stream);
+    }
+    if (event.kind === "video-config") {
+      stream.config = event;
+      stream.chunks = [];
+      stream.rebuilt = true;
+    } else if (stream.rebuilt && event.type === "key") {
+      stream.chunks = [event];
+    } else {
+      stream.chunks.push(event);
+    }
+  }
+  const flush: TimelineEvent[] = [...stills.values()];
+  for (const stream of streams.values()) {
+    if (stream.config) flush.push(stream.config);
+    flush.push(...stream.chunks);
+  }
+  return flush;
 }
 
 /**

@@ -123,6 +123,33 @@
   // visible result is recorded directly and replayed as itself.
 
   /**
+   * WebGL capture prerequisite, installed at SDK load — the SDK is injected at
+   * the head of the document as a classic script, so this wrap is in place
+   * before any app code (module scripts run only after parse) can create a
+   * context.
+   *
+   * toDataURL reads a WebGL canvas's drawing buffer, and by default that
+   * buffer is cleared the moment each frame reaches the screen — sampled from
+   * a timer, every read comes back blank, so a WebGL app would record nothing
+   * but empty frames. preserveDrawingBuffer can only be chosen at context
+   * creation, and a recording can start at any moment in the app's life, so
+   * while the recording SDK is present every WebGL context is created
+   * preservable. The cost is one extra buffer copy per composited frame —
+   * paid only on deployments that enabled recording, which is what gates
+   * serving this file at all.
+   */
+  const origGetContext = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (kind, attrs) {
+    if (/^(webgl2?|experimental-webgl)$/.test(String(kind))) {
+      return origGetContext.call(this, kind, {
+        ...(attrs && typeof attrs === "object" ? attrs : {}),
+        preserveDrawingBuffer: true,
+      });
+    }
+    return origGetContext.apply(this, arguments);
+  };
+
+  /**
    * Canvas pixels.
    *
    * A canvas is invisible to a MutationObserver — an app can repaint its entire

@@ -22,12 +22,6 @@ interface AppGalleryRepo {
   name: string;
 }
 
-export type ShareProgressStage =
-  | "forking"
-  | "branching"
-  | "uploading"
-  | "opening-pr";
-
 /** GitHub said the token no longer works — the caller should sign in again. */
 export class GithubAuthError extends Error {}
 
@@ -64,14 +58,35 @@ export async function acquireGithubToken(params: {
 
   const deadline = Date.now() + data.expiresIn * 1000;
   let waitSeconds = data.interval;
+  // A poll that fails for reasons other than GitHub's verdict — a network
+  // blip, a relay hiccup — must not kill a sign-in the participant is halfway
+  // through on github.com. Ride out a short streak; only a deliberate refusal
+  // (the backend's 400s: expired, declined) ends the flow early.
+  let failureStreak = 0;
   while (Date.now() < deadline) {
     await sleep(waitSeconds * 1000, params.signal);
-    const poll = await archestraApiSdk.appGalleryDeviceAuthPoll({
-      body: { deviceCode: data.deviceCode },
-    });
-    if (poll.error || !poll.data) {
-      throw new Error(apiErrorMessage(poll.error) ?? "GitHub sign-in failed.");
+    let poll: Awaited<
+      ReturnType<typeof archestraApiSdk.appGalleryDeviceAuthPoll>
+    > | null = null;
+    try {
+      poll = await archestraApiSdk.appGalleryDeviceAuthPoll({
+        body: { deviceCode: data.deviceCode },
+      });
+    } catch {
+      // network-level failure — transient; handled below
     }
+    if (!poll || poll.error || !poll.data) {
+      if (apiErrorType(poll?.error) === "api_validation_error") {
+        throw new Error(
+          apiErrorMessage(poll?.error) ?? "GitHub sign-in failed.",
+        );
+      }
+      if (++failureStreak >= 5) {
+        throw new Error("GitHub sign-in keeps failing — try again.");
+      }
+      continue;
+    }
+    failureStreak = 0;
     if (poll.data.status === "complete") {
       cachedToken = poll.data.accessToken;
       return poll.data.accessToken;
@@ -80,7 +95,9 @@ export async function acquireGithubToken(params: {
       waitSeconds += 5;
     }
   }
-  throw new Error("The GitHub sign-in expired before it was authorized.");
+  throw new Error(
+    "The GitHub sign-in expired before it was authorized — start again.",
+  );
 }
 
 /**
@@ -93,12 +110,18 @@ export async function submitRecordingToAppGallery(params: {
   repo: AppGalleryRepo;
   bundle: AppRecordingBundle;
   signal: AbortSignal;
-  onProgress: (stage: ShareProgressStage) => void;
+  /**
+   * Called with a short human sentence as each wire step starts — naming the
+   * actual repository, branch, or file it touches, so the dialog narrates
+   * what is really happening rather than a generic stage word.
+   */
+  onProgress: (label: string) => void;
 }): Promise<{ prUrl: string }> {
   const { token, repo, bundle, signal, onProgress } = params;
   const gh = makeGithubClient(token, signal);
+  const galleryName = `github.com/${repo.owner}/${repo.name}`;
 
-  onProgress("forking");
+  onProgress(`Forking ${galleryName} to your GitHub account…`);
   const viewer = await gh<{ login: string }>("GET", "/user");
   // 202: fork creation is asynchronous. The response still carries the fork's
   // name (GitHub renames on collision with an unrelated same-named repo) and
@@ -110,7 +133,9 @@ export async function submitRecordingToAppGallery(params: {
   }>("POST", `/repos/${repo.owner}/${repo.name}/forks`, {
     default_branch_only: true,
   });
+  const forkName = `github.com/${fork.owner.login}/${fork.name}`;
   const forkPath = `/repos/${fork.owner.login}/${fork.name}`;
+  onProgress(`Waiting for your fork ${forkName} to be ready…`);
   const baseRef = await waitForForkRef({
     gh,
     forkPath,
@@ -118,21 +143,21 @@ export async function submitRecordingToAppGallery(params: {
     signal,
   });
 
-  onProgress("branching");
   // One branch per share, so resubmissions of the same app become their own
   // pull requests instead of piling commits onto an open one.
   const appSlug = gallerySubmissionSlug(bundle);
   const branch = `submission/${appSlug}-${Date.now().toString(36)}`;
+  onProgress(`Creating branch ${branch} in ${forkName}…`);
   await gh("POST", `${forkPath}/git/refs`, {
     ref: `refs/heads/${branch}`,
     sha: baseRef,
   });
 
-  onProgress("uploading");
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
   const dir = `submissions/${viewer.login}/${appSlug}`;
   for (const file of buildGallerySubmissionFiles(bundle)) {
+    onProgress(`Uploading ${file.name} to ${forkName}…`);
     await gh("PUT", `${forkPath}/contents/${dir}/${file.name}`, {
       message: `Add ${file.name} for: ${bundle.recording.title}`,
       content: toBase64(file.bytes),
@@ -140,7 +165,7 @@ export async function submitRecordingToAppGallery(params: {
     });
   }
 
-  onProgress("opening-pr");
+  onProgress(`Opening the pull request on ${galleryName}…`);
   const pr = await gh<{ html_url: string }>(
     "POST",
     `/repos/${repo.owner}/${repo.name}/pulls`,
@@ -226,33 +251,90 @@ type GithubCall = <T = unknown>(
 
 function makeGithubClient(token: string, signal: AbortSignal): GithubCall {
   return async <T>(method: string, path: string, body?: unknown) => {
-    const response = await fetch(`https://api.github.com${path}`, {
-      method,
-      signal,
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${token}`,
-        "x-github-api-version": "2022-11-28",
-        ...(body !== undefined ? { "content-type": "application/json" } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`https://api.github.com${path}`, {
+        method,
+        signal,
+        headers: {
+          accept: "application/vnd.github+json",
+          authorization: `Bearer ${token}`,
+          "x-github-api-version": "2022-11-28",
+          ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (error) {
+      // Cancellation must stay a cancellation, not become an error card.
+      if (signal.aborted) throw error;
+      throw new Error(
+        "Couldn't reach GitHub — check your connection and retry.",
+      );
+    }
     if (response.status === 401) {
       dropCachedGithubToken();
-      throw new GithubAuthError("GitHub no longer accepts the sign-in.");
+      throw new GithubAuthError(
+        "GitHub no longer accepts the sign-in — sign in again.",
+      );
     }
     if (!response.ok) {
-      const message = await githubErrorMessage(response);
-      throw new Error(message);
+      throw await toGithubRequestError(response);
     }
     return (await response.json()) as T;
   };
 }
 
 /**
+ * One HTTP refusal, phrased for the error card: retriable conditions (rate
+ * limits, GitHub 5xx weather) get a short plain-language line, and only a
+ * genuine verdict (403/404/422 …) quotes GitHub's own message — that one is
+ * the useful, specific explanation.
+ */
+async function toGithubRequestError(
+  response: Response,
+): Promise<GithubRequestError> {
+  let detail = "";
+  try {
+    const payload = (await response.json()) as { message?: string };
+    if (payload.message) detail = payload.message;
+  } catch {
+    // Non-JSON error body — the status alone will have to explain it.
+  }
+  const { status } = response;
+  if (status === 429 || (status === 403 && /rate limit/i.test(detail))) {
+    return new GithubRequestError(
+      "GitHub is rate-limiting requests — wait a moment and retry.",
+      status,
+    );
+  }
+  if (status >= 500) {
+    return new GithubRequestError(
+      `GitHub had a hiccup (${status}) — retry in a moment.`,
+      status,
+    );
+  }
+  return new GithubRequestError(
+    `GitHub refused the request (${status}).${detail ? ` ${detail}` : ""}`,
+    status,
+  );
+}
+
+/** An api.github.com refusal, keeping the status for retry decisions. */
+class GithubRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
  * A fresh fork answers 404/409 on its git refs for a few seconds while GitHub
  * copies the repository; the ref appearing is what "fork is ready" means.
- * Resolves with the branch head's sha.
+ * ONLY those two statuses are worth waiting on — any other refusal (empty
+ * upstream, revoked token…) is a verdict, and retrying it for forty seconds
+ * would just delay the message. Resolves with the branch head's sha.
  */
 async function waitForForkRef(params: {
   gh: GithubCall;
@@ -269,21 +351,18 @@ async function waitForForkRef(params: {
       );
       return ref.object.sha;
     } catch (error) {
-      if (error instanceof GithubAuthError || attempt >= attempts) throw error;
+      const stillMaterializing =
+        error instanceof GithubRequestError &&
+        (error.status === 404 || error.status === 409);
+      if (!stillMaterializing) throw error;
+      if (attempt >= attempts) {
+        throw new Error(
+          "GitHub is taking too long to prepare your fork — retry in a moment.",
+        );
+      }
       await sleep(2000, params.signal);
     }
   }
-}
-
-async function githubErrorMessage(response: Response): Promise<string> {
-  let detail = "";
-  try {
-    const payload = (await response.json()) as { message?: string };
-    if (payload.message) detail = ` ${payload.message}`;
-  } catch {
-    // Non-JSON error body — the status alone will have to explain it.
-  }
-  return `GitHub refused the request (${response.status}).${detail}`;
 }
 
 /**
@@ -327,6 +406,19 @@ function prBody(bundle: AppRecordingBundle): string {
 }
 
 /** The `{ error: { message } }` envelope every backend error carries. */
+/**
+ * The error `type` from the backend envelope — how the poll loop tells a
+ * deliberate 400 verdict (expired, declined) from relay weather worth
+ * riding out.
+ */
+function apiErrorType(error: unknown): string | null {
+  if (error && typeof error === "object" && "error" in error) {
+    const inner = (error as { error?: { type?: string } }).error;
+    if (inner?.type) return inner.type;
+  }
+  return null;
+}
+
 function apiErrorMessage(error: unknown): string | null {
   if (error && typeof error === "object" && "error" in error) {
     const inner = (error as { error?: { message?: string } }).error;

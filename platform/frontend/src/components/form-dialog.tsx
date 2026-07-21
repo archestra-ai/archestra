@@ -34,6 +34,8 @@ export type FormDialogProps = {
    */
   isDirty?: boolean;
   className?: string;
+  /** Extra classes for the header block, e.g. `border-b-0` to drop its rule. */
+  headerClassName?: string;
 };
 
 // Flex column + overflow-hidden come from the base DialogContent.
@@ -53,6 +55,7 @@ export function FormDialog({
   preventCloseOnInteractOutside,
   isDirty = false,
   className,
+  headerClassName,
 }: FormDialogProps) {
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
 
@@ -68,7 +71,7 @@ export function FormDialog({
           }
         >
           <DialogDismissProvider requestClose={guard.requestClose}>
-            <DialogHeader>
+            <DialogHeader className={headerClassName}>
               <DialogTitle>{title}</DialogTitle>
               {description && (
                 <DialogDescription>{description}</DialogDescription>

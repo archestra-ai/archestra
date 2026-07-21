@@ -100,19 +100,28 @@ describe("submitRecordingToAppGallery", () => {
   });
 
   test("runs the fork workflow in order and returns the PR url", async () => {
-    const stages: string[] = [];
+    const labels: string[] = [];
     const result = await submitRecordingToAppGallery({
       token: "gho_token",
       repo: { owner: "archestra-ai", name: "app-gallery" },
       bundle: makeBundle(),
       signal: new AbortController().signal,
-      onProgress: (stage) => stages.push(stage),
+      onProgress: (label) => labels.push(label),
     });
 
     expect(result.prUrl).toBe(
       "https://github.com/archestra-ai/app-gallery/pull/7",
     );
-    expect(stages).toEqual(["forking", "branching", "uploading", "opening-pr"]);
+    // Progress narrates the real repositories, branch, and files by name.
+    expect(labels).toEqual([
+      "Forking github.com/archestra-ai/app-gallery to your GitHub account…",
+      "Waiting for your fork github.com/sam/app-gallery to be ready…",
+      expect.stringMatching(
+        /^Creating branch submission\/pr_review_queue-[a-z0-9]+ in github\.com\/sam\/app-gallery…$/,
+      ),
+      "Uploading recording.json to github.com/sam/app-gallery…",
+      "Opening the pull request on github.com/archestra-ai/app-gallery…",
+    ]);
     expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
       "GET /user",
       "POST /repos/archestra-ai/app-gallery/forks",
@@ -230,6 +239,56 @@ describe("submitRecordingToAppGallery", () => {
         onProgress: () => {},
       }),
     ).rejects.toBeInstanceOf(GithubAuthError);
+  });
+
+  test("phrases rate limiting as a short retriable message", async () => {
+    stubGithub({
+      respond: (method, url) =>
+        method === "GET" && url.endsWith("/user")
+          ? Response.json(
+              { message: "API rate limit exceeded" },
+              { status: 429 },
+            )
+          : null,
+    });
+
+    await expect(
+      submitRecordingToAppGallery({
+        token: "gho_token",
+        repo: { owner: "archestra-ai", name: "app-gallery" },
+        bundle: makeBundle(),
+        signal: new AbortController().signal,
+        onProgress: () => {},
+      }),
+    ).rejects.toThrow(
+      "GitHub is rate-limiting requests — wait a moment and retry.",
+    );
+  });
+
+  test("a hard refusal during the fork wait surfaces immediately, not after the retry window", async () => {
+    stubGithub({
+      respond: (method, url) =>
+        method === "GET" && url.includes("/git/ref/heads/main")
+          ? Response.json(
+              { message: "Repository access blocked" },
+              { status: 403 },
+            )
+          : null,
+    });
+
+    const started = Date.now();
+    await expect(
+      submitRecordingToAppGallery({
+        token: "gho_token",
+        repo: { owner: "archestra-ai", name: "app-gallery" },
+        bundle: makeBundle(),
+        signal: new AbortController().signal,
+        onProgress: () => {},
+      }),
+    ).rejects.toThrow(/403.*Repository access blocked/);
+    // Only 404/409 mean "fork still materializing" — a verdict must not sit
+    // through the 40-second readiness loop before reaching the participant.
+    expect(Date.now() - started).toBeLessThan(1500);
   });
 
   test("surfaces GitHub's own error message on failure", async () => {

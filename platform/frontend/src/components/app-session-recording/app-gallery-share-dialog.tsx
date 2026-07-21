@@ -28,7 +28,6 @@ import {
   type GallerySubmissionFile,
   GithubAuthError,
   gallerySubmissionSlug,
-  type ShareProgressStage,
   submitRecordingToAppGallery,
   takeCachedGithubToken,
 } from "@/lib/app-session-recording/app-gallery-share";
@@ -79,7 +78,7 @@ export function AppGalleryShareButton(props: {
 
       let token = takeCachedGithubToken();
       if (!token) {
-        setState({ step: "working", stage: "signing-in" });
+        setState({ step: "working", label: "Connecting to GitHub…" });
         token = await acquireGithubToken({
           signal: cancellation.signal,
           onUserCode: (info) =>
@@ -91,14 +90,15 @@ export function AppGalleryShareButton(props: {
         });
       }
 
-      setState({ step: "working", stage: "forking" });
       const { prUrl } = await submitRecordingToAppGallery({
         token,
         repo: galleryRepo,
         // Same size trim the video export ships (renders identically).
         bundle: pruneTrailingTrimEvents(validation.bundle),
         signal: cancellation.signal,
-        onProgress: (stage) => setState({ step: "working", stage }),
+        // The engine narrates each wire step with the repository, branch, or
+        // file it is touching.
+        onProgress: (label) => setState({ step: "working", label }),
       });
       setState({ step: "done", prUrl });
       // Best effort — this open comes long after the click, so a popup
@@ -211,10 +211,26 @@ export function AppGalleryShareButton(props: {
             ? "Authorize Archestra to GitHub"
             : "Submit to Archestra for review!"
         }
+        // No rule under the header — these are short single-purpose screens,
+        // and the line just chops them in half.
+        headerClassName="border-b-0"
         description={
-          authPhase(state)
-            ? "Once authorized, Archestra will create a pull request to the Apps Hackathon repository on GitHub for you."
-            : "Archestra creates a pull request to the Apps Hackathon repository on GitHub for you — your final cut with all your edits applied. Nothing is published before it is reviewed."
+          authPhase(state) ? (
+            "Once authorized, Archestra will create a pull request to the Apps Hackathon repository on GitHub for you."
+          ) : (
+            <>
+              Your App demo will be showcased in the{" "}
+              <a
+                className="text-foreground underline underline-offset-2"
+                href={`https://github.com/${galleryRepo.owner}/${galleryRepo.name}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Apps Gallery
+              </a>{" "}
+              once Archestra team approves the Pull Request.
+            </>
+          )
         }
       >
         <ShareDialogBody
@@ -222,6 +238,20 @@ export function AppGalleryShareButton(props: {
           repo={galleryRepo}
           onRetry={run}
           onManual={openManual}
+          // Backing out of a slow sign-in returns to the inert gate; stopping
+          // a slow submission lands on the error card (Retry starts a fresh
+          // branch, so a half-made submission is never resumed).
+          onCancelAuth={() => {
+            abortRef.current?.abort();
+            setState({ step: "signin" });
+          }}
+          onCancelWork={() => {
+            abortRef.current?.abort();
+            setState({
+              step: "error",
+              message: "Stopped — no pull request was opened.",
+            });
+          }}
         />
       </StandardDialog>
     </>
@@ -236,7 +266,7 @@ type ShareState =
   | { step: "idle" }
   | { step: "signin" }
   | { step: "connect"; userCode: string; verificationUri: string }
-  | { step: "working"; stage: ShareProgressStage | "signing-in" }
+  | { step: "working"; label: string }
   | { step: "done"; prUrl: string }
   | { step: "error"; message: string }
   | {
@@ -246,28 +276,25 @@ type ShareState =
       login: string | null;
     };
 
+/** The one working label of the auth stretch (before the engine narrates). */
+const CONNECTING_LABEL = "Connecting to GitHub…";
+
 /** Sign-in gate through GitHub authorization — the "connect your account" stretch. */
 function authPhase(state: ShareState): boolean {
   return (
     state.step === "signin" ||
     state.step === "connect" ||
-    (state.step === "working" && state.stage === "signing-in")
+    (state.step === "working" && state.label === CONNECTING_LABEL)
   );
 }
-
-const STAGE_LABELS: Record<ShareProgressStage | "signing-in", string> = {
-  "signing-in": "Connecting to GitHub…",
-  forking: "Forking the Apps Hackathon repository…",
-  branching: "Creating the submission branch…",
-  uploading: "Uploading your final cut…",
-  "opening-pr": "Opening the pull request…",
-};
 
 function ShareDialogBody(props: {
   state: ShareState;
   repo: { owner: string; name: string };
   onRetry: () => void;
   onManual: () => void;
+  onCancelAuth: () => void;
+  onCancelWork: () => void;
 }) {
   const { state } = props;
 
@@ -288,30 +315,33 @@ function ShareDialogBody(props: {
     );
   }
   if (state.step === "connect") {
-    return <ConnectStep {...state} />;
+    return <ConnectStep {...state} onCancel={props.onCancelAuth} />;
   }
   if (state.step === "working") {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        {STAGE_LABELS[state.stage]}
-      </div>
-    );
+    return <WorkingStep label={state.label} onCancel={props.onCancelWork} />;
   }
   if (state.step === "done") {
     return (
-      <div className="flex flex-col gap-2">
-        <p className="flex items-center gap-2 text-sm">
-          <Check className="h-4 w-4 text-green-500" aria-hidden="true" />
-          Your pull request is open — it opened in a new tab.
-        </p>
-        <Button asChild variant="outline" size="sm" className="w-fit">
-          <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
-            Open the pull request
-            <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+      <p className="flex items-start gap-2 text-sm">
+        <Check
+          className="mt-0.5 h-4 w-4 shrink-0 text-green-500"
+          aria-hidden="true"
+        />
+        <span>
+          If your pull request didn&apos;t open in a new tab automatically, go
+          to{" "}
+          <a
+            className="text-foreground underline underline-offset-2"
+            href={state.prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            your pull request
+            <ExternalLink className="ml-1 inline h-3 w-3" aria-hidden="true" />
           </a>
-        </Button>
-      </div>
+          .
+        </span>
+      </p>
     );
   }
   if (state.step === "error") {
@@ -349,9 +379,16 @@ function ShareDialogBody(props: {
  * click-to-copy fallback. The flow continues on its own the moment GitHub
  * reports the authorization.
  */
-function ConnectStep(props: { userCode: string; verificationUri: string }) {
+function ConnectStep(props: {
+  userCode: string;
+  verificationUri: string;
+  onCancel: () => void;
+}) {
   const [codeCopied, setCodeCopied] = useState(false);
   const copyResetTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // The device code lives ~15 minutes, so the flow itself is patient; this
+  // only surfaces the way back out once the wait stops feeling deliberate.
+  const slow = useSlowHint(60_000);
 
   useEffect(() => () => clearTimeout(copyResetTimeout.current), []);
 
@@ -411,8 +448,65 @@ function ConnectStep(props: { userCode: string; verificationUri: string }) {
           Waiting for authorization…
         </span>
       </div>
+      {slow && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs text-muted-foreground">
+            Taking longer than expected — approve on GitHub, or cancel.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={props.onCancel}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
     </div>
   );
+}
+
+/**
+ * One submission wire step, named in full — plus, once the wait stops
+ * feeling instant, the way out. Forty seconds of fork preparation is normal
+ * GitHub weather; the hint keeps that from reading as a hang.
+ */
+function WorkingStep(props: { label: string; onCancel: () => void }) {
+  const slow = useSlowHint(20_000);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+        <span className="break-all">{props.label}</span>
+      </div>
+      {slow && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs text-muted-foreground">
+            Still working — GitHub can be slow to prepare a fork.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={props.onCancel}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** True once the current step has been on screen for `ms`. */
+function useSlowHint(ms: number): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), ms);
+    return () => clearTimeout(timer);
+  }, [ms]);
+  return slow;
 }
 
 /**

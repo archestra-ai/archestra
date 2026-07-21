@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -1385,14 +1386,13 @@ describe("LLM Provider API Keys Team Scope", () => {
     expect(createResponse.statusCode).toBe(200);
     const createdKey = createResponse.json();
 
-    const knowledgeResponse = await app.inject({
-      method: "PATCH",
-      url: "/api/organization/knowledge-settings",
-      payload: {
-        embeddingChatApiKeyId: createdKey.id,
-      },
+    // Seed the org's embedding config directly: the knowledge-settings route
+    // now validates the key+model pair with a live embedding probe, which is
+    // out of scope here — this test pins the delete guard only.
+    await OrganizationModel.patch(organizationId, {
+      embeddingChatApiKeyId: createdKey.id,
+      embeddingModel: "text-embedding-3-small",
     });
-    expect(knowledgeResponse.statusCode).toBe(200);
 
     const deleteResponse = await app.inject({
       method: "DELETE",
@@ -1420,14 +1420,11 @@ describe("LLM Provider API Keys Team Scope", () => {
     expect(createResponse.statusCode).toBe(200);
     const createdKey = createResponse.json();
 
-    const knowledgeResponse = await app.inject({
-      method: "PATCH",
-      url: "/api/organization/knowledge-settings",
-      payload: {
-        rerankerChatApiKeyId: createdKey.id,
-      },
+    // Seed the reranker config directly (see the embedding test above).
+    await OrganizationModel.patch(organizationId, {
+      rerankerChatApiKeyId: createdKey.id,
+      rerankerModel: "gpt-4o-mini",
     });
-    expect(knowledgeResponse.statusCode).toBe(200);
 
     const deleteResponse = await app.inject({
       method: "DELETE",

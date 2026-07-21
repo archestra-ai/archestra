@@ -47,7 +47,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/lib/config/config", () => ({
+vi.mock("@/lib/config/config", async (importOriginal) => ({
+  // Partial: the auth client reads this module's default export at import
+  // time, and it is reachable from here through the recorder's organization
+  // query — a factory without it takes the whole suite down on load.
+  ...(await importOriginal<typeof import("@/lib/config/config")>()),
   getMcpSandboxBaseUrl: () => ({
     baseUrl: "http://127.0.0.1:9000",
     hasCrossOrigin: true,
@@ -60,11 +64,24 @@ vi.mock("@/lib/config/config.query");
 // the test; the edit pencil is covered by app-frame.test.tsx.
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
+  useSession: () => ({ data: undefined }),
 }));
 
 vi.mock("@/lib/app.query", () => ({
   useApp: vi.fn(() => ({ data: undefined })),
   useDeleteApp: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+}));
+
+// Session-recording hooks pull TanStack Query mutations; this suite renders
+// without a QueryClient, so stub the module (recording flows have their own
+// coverage).
+vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
+  useAppRecording: vi.fn(() => ({ data: null })),
+  useInvalidateAppRecording: vi.fn(() => vi.fn()),
+  useDownloadAppRecordingBundle: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
 }));
 
 // Stub the inline settings form: it pulls the environment/teams/auth query
@@ -372,6 +389,78 @@ describe("McpAppContainer (via McpAppSection)", () => {
     });
     await act(async () => {
       await user.click(closeButton);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /exit fullscreen/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows an exit-fullscreen button in the panel top bar when the app goes fullscreen", async () => {
+    // Regression: the panel surface renders no hover overlay, so when a
+    // panel-hosted app requested fullscreen via the SDK there was no way back
+    // out (Escape is swallowed by iframe focus) short of reloading the page.
+    const user = userEvent.setup();
+
+    const { AppBridge } = await import(
+      "@modelcontextprotocol/ext-apps/app-bridge"
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    (AppBridge as ReturnType<typeof vi.fn>).mockImplementation(function (
+      this: Record<string, unknown>,
+    ) {
+      this.onrequestdisplaymode = null as
+        | null
+        | ((args: { mode: string }) => Promise<{ mode: string }>);
+      this.onopenlink = null;
+      this.oncalltool = null;
+      this.onreadresource = null;
+      this.onlistresources = null;
+      this.onlistresourcetemplates = null;
+      this.onlistprompts = null;
+      this.onloggingmessage = null;
+      this.onmessage = null;
+      this.onsizechange = null;
+      this.oninitialized = null;
+      this.onsandboxready = null;
+      this.connect = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendSandboxResourceReady = vi
+        .fn()
+        .mockReturnValue(Promise.resolve());
+      this.sendToolInput = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolInputPartial = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolResult = vi.fn().mockReturnValue(Promise.resolve());
+      this.setHostContext = vi.fn();
+      this.teardownResource = vi.fn().mockReturnValue(Promise.resolve());
+      bridgeInstances.push(this);
+    });
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /exit fullscreen/i }),
+    ).not.toBeInTheDocument();
+
+    const bridge = bridgeInstances[0];
+    await act(async () => {
+      await bridge.onrequestdisplaymode({ mode: "fullscreen" });
+    });
+
+    const exitButton = screen.getByRole("button", {
+      name: /exit fullscreen/i,
+    });
+
+    await act(async () => {
+      await user.click(exitButton);
     });
 
     expect(

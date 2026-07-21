@@ -22,6 +22,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
+  openaiAuthMethod: "api-key",
 };
 
 export function LlmKeySetupStep() {

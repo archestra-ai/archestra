@@ -2,8 +2,9 @@
 
 DB-backed, Dagger-materialized execution sandbox for Agent Skills.
 
-> Gated behind the sandbox feature flag (`config.skillsSandbox`, derived from
-> `ARCHESTRA_CODE_RUNTIME_ENABLED` + a Dagger runner host).
+> Gated behind the sandbox feature flag (`config.skillsSandbox`, enabled when a
+> Dagger runner host (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`) is
+> configured, off otherwise).
 
 ## What this directory contains
 
@@ -134,15 +135,16 @@ sandbox — rather than the opaque mount failure it would otherwise surface.
 
 The sandbox always runs as the non-root user from `runtime-image.ts`, with no
 host mounts and no backend env exposed inside the container. Network access is
-enabled because npm/uv/npx require it; this is documented in the activation
-prompt.
+enabled because npm/uv/npx require it.
 
 ## RBAC
 
-The sandbox MCP tools (`run_command`, `upload_file`, `download_file`,
-`search_files`, `save_file`) are gated by `sandbox:execute` (`backend/src/archestra-mcp-server/rbac.ts`). Sandboxes are
-scoped to the caller's organization + user + **conversation**: a `target: { id }`
-referencing a sandbox outside that scope is rejected.
+The execution MCP tools (`run_command`, `upload_file`, `download_file`) are
+gated by `sandbox:execute`; the file tools (`search_files`, `read_file`,
+`save_file`, `edit_file`, `delete_file`) by `file:manage`
+(`backend/src/archestra-mcp-server/rbac.ts`). Sandboxes are scoped to the
+caller's organization + user + **conversation**: a `target: { id }` referencing
+a sandbox outside that scope is rejected.
 
 Skills are mounted into the default sandbox by `load_skill` (and
 slash-command activation), which enforces `skill:read` + per-skill team scope

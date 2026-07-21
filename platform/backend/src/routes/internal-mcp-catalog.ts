@@ -3,6 +3,7 @@ import {
   isMetadataOnlyEdit,
   isPlaywrightCatalogItem,
   RouteId,
+  SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -140,8 +141,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const appCatalogIds = items
         .filter((item) => item.serverType === "app")
         .map((item) => item.id);
-      const appIdByCatalog =
-        await AppModel.getAppIdsByCatalogIds(appCatalogIds);
+      const [appIdByCatalog, appEnabledByCatalog] = await Promise.all([
+        AppModel.getAppIdsByCatalogIds(appCatalogIds),
+        AppModel.getAppEnabledByCatalogIds(appCatalogIds),
+      ]);
       const approvalRequired = await flagImageApprovalRequired(
         items,
         request.organizationId,
@@ -151,7 +154,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...item,
           imageApprovalRequired: approvalRequired.has(item.id),
           ...(item.serverType === "app"
-            ? { appId: appIdByCatalog.get(item.id) ?? null }
+            ? {
+                appId: appIdByCatalog.get(item.id) ?? null,
+                appEnabled: appEnabledByCatalog.get(item.id) ?? null,
+              }
             : {}),
         })),
       );
@@ -249,8 +255,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // Gate assigning a restricted environment. Requires
-      // environment:deploy-to-restricted (environment:admin implies it).
-      // Unrestricted and default (null) environments are open.
+      // mcpRegistry:deploy-to-restricted. Unrestricted and default (null)
+      // environments are open.
       await assertCanAssignEnvironment({
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
@@ -726,6 +732,71 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // undefined leaves the existing rows untouched.
       restBody.teams = scopeChanged || teamsChanged ? newTeams : undefined;
 
+      // ── Rename ─────────────────────────────────────────────────────────
+      // A name change never flows into the generic update below: it is
+      // gated (409) and applied atomically by renameCascade — a pure DB
+      // cascade (catalog → install names → tool slugs → limits) with zero
+      // K8s interaction, since deployment identity is frozen. App catalogs
+      // never get here (name is app-owned and stripped above).
+      const newCatalogName = restBody.name;
+      if (
+        newCatalogName !== undefined &&
+        newCatalogName !== originalCatalogItemForGate.name
+      ) {
+        // Tool names embed the catalog name and are unique only per catalog;
+        // tool-call routing resolves the raw name string, so a same-name (or
+        // same-lowercased-slug) sibling would silently receive this server's
+        // calls. App-level check only (no DB constraint — legacy duplicates
+        // must keep working); the check-then-write race is accepted.
+        const conflict = await InternalMcpCatalogModel.findRootByNameInOrg({
+          name: newCatalogName,
+          organizationId: request.organizationId,
+        });
+        if (conflict && conflict.id !== id) {
+          throw new ApiError(
+            409,
+            `An MCP server named "${newCatalogName}" already exists in this organization. Tool names embed the server name, so duplicates would route tool calls to the wrong server.`,
+            "catalog_name_conflict",
+          );
+        }
+
+        // The cascade's freeze-fallback is only safe once the startup adopt
+        // pass has frozen every row that HAS a live deployment. Block a
+        // rename issued during the startup window until the pass completes;
+        // fail it if the pass failed (churn-prevention outranks
+        // availability).
+        const k8sRuntimeConfigured =
+          Boolean(config.orchestrator.kubernetes.kubeconfig) ||
+          config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster;
+        if (k8sRuntimeConfigured) {
+          await mcpServerRuntimeManager.deploymentNamesAdopted;
+        }
+
+        // The serverName placeholder is the one way the display name can
+        // reach a pod spec — those installs genuinely need a reinstall.
+        const effectiveDeploymentSpecYaml =
+          restBody.deploymentSpecYaml !== undefined
+            ? restBody.deploymentSpecYaml
+            : originalCatalogItemForGate.deploymentSpecYaml;
+        await InternalMcpCatalogModel.renameCascade({
+          id,
+          newName: newCatalogName,
+          flagReinstallRequired:
+            originalCatalogItemForGate.serverType === "local" &&
+            Boolean(
+              effectiveDeploymentSpecYaml?.includes(SERVER_NAME_PLACEHOLDER),
+            ),
+          freezeDeploymentNames: k8sRuntimeConfigured,
+        });
+
+        // Downstream must see NO name diff: the row is already renamed, and
+        // the reinstall gates below would otherwise misread the rename as a
+        // breaking change. A rename combined with a real breaking change
+        // still composes — the remaining diff drives the gates as usual.
+        restBody.name = undefined;
+        originalCatalogItemForGate.name = newCatalogName;
+      }
+
       let clientSecretId = originalCatalogItem.clientSecretId;
       let localConfigSecretId = originalCatalogItem.localConfigSecretId;
 
@@ -986,8 +1057,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // When the environment assignment changes, gate it the same way create
       // does — the target must belong to this org, and a restricted environment
-      // (or restricted default) requires environment:deploy-to-restricted
-      // (environment:admin implies it).
+      // (or restricted default) requires mcpRegistry:deploy-to-restricted.
       const environmentChanged =
         "environmentId" in restBody &&
         restBody.environmentId !== originalCatalogItem.environmentId;
@@ -1733,17 +1803,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 /**
  * Whether the caller may deploy catalog items to restricted environments.
- * Holding `environment:admin` (full environment management) implies the
- * `environment:deploy-to-restricted` capability.
+ * Gated by `mcpRegistry:deploy-to-restricted`.
  */
 async function callerCanDeployToRestricted(
   headers: FastifyRequest["headers"],
 ): Promise<boolean> {
-  const [{ success: hasAdmin }, { success: hasDeploy }] = await Promise.all([
-    hasPermission({ environment: ["admin"] }, headers),
-    hasPermission({ environment: ["deploy-to-restricted"] }, headers),
-  ]);
-  return hasAdmin || hasDeploy;
+  const { success: hasDeploy } = await hasPermission(
+    { mcpRegistry: ["deploy-to-restricted"] },
+    headers,
+  );
+  return hasDeploy;
 }
 
 async function upsertCatalogClientSecretValue(params: {

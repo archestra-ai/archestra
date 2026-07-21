@@ -73,6 +73,8 @@ pub fn load_task(task_dir: &Path) -> Result<Task, TaskConfigError> {
     let state_table = toml_util::table_with_default(&data, "state", &ctx)?;
     let state_rest = load_state_rest(&state_table, &format!("{ctx} [state]"))?;
 
+    let agent_system_prompt = load_agent_override(&data, &ctx)?;
+
     Ok(Task {
         id: task_id,
         dir: task_dir.to_path_buf(),
@@ -82,7 +84,26 @@ pub fn load_task(task_dir: &Path) -> Result<Task, TaskConfigError> {
         artifact_key: toml_util::opt_str(&data, "artifact_key", &ctx)?,
         max_format_attempts: max_attempts,
         state_rest,
+        agent_system_prompt,
     })
+}
+
+/// Parse the optional `[agent]` override. Absent means the task runs on the env's shared lane
+/// agent; present requires a non-empty `system_prompt` (an empty override would silently mean
+/// "stock prompt", which is what omitting the table already says).
+fn load_agent_override(data: &TomlTable, ctx: &str) -> Result<Option<String>, TaskConfigError> {
+    if !data.contains_key("agent") {
+        return Ok(None);
+    }
+    let agent = toml_util::table(data, "agent", ctx)?;
+    let agent_ctx = format!("{ctx} [agent]");
+    let prompt = toml_util::req_str(&agent, "system_prompt", &agent_ctx)?;
+    if prompt.trim().is_empty() {
+        return Err(TaskConfigError(format!(
+            "{agent_ctx}: system_prompt must be non-empty (omit [agent] to use the env's agent)"
+        )));
+    }
+    Ok(Some(prompt))
 }
 
 fn load_stage(row: &TomlTable, ctx: &str, task_dir: &Path) -> Result<Stage, TaskConfigError> {
@@ -282,6 +303,37 @@ mod tests {
         )
         .unwrap();
         tmp
+    }
+
+    #[test]
+    fn agent_override_absent_is_none() {
+        let tmp = write_task("[[stages]]\ntext = \"go\"\n");
+        let task = load_task(&tmp.path().join("sample-task")).unwrap();
+        assert_eq!(task.agent_system_prompt, None);
+    }
+
+    #[test]
+    fn agent_override_parsed() {
+        let tmp = write_task("[agent]\nsystem_prompt = \"stale prompt\"\n\n[[stages]]\ntext = \"go\"\n");
+        let task = load_task(&tmp.path().join("sample-task")).unwrap();
+        assert_eq!(task.agent_system_prompt.as_deref(), Some("stale prompt"));
+    }
+
+    #[test]
+    fn agent_override_rejects_empty_prompt() {
+        let tmp = write_task("[agent]\nsystem_prompt = \"  \"\n\n[[stages]]\ntext = \"go\"\n");
+        let err = load_task(&tmp.path().join("sample-task")).unwrap_err();
+        assert!(
+            err.to_string().contains("system_prompt must be non-empty"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn agent_override_requires_system_prompt_key() {
+        let tmp = write_task("[agent]\nname = \"x\"\n\n[[stages]]\ntext = \"go\"\n");
+        let err = load_task(&tmp.path().join("sample-task")).unwrap_err();
+        assert!(err.to_string().contains("system_prompt"), "unexpected error: {err}");
     }
 
     #[test]

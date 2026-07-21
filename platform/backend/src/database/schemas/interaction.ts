@@ -1,4 +1,5 @@
 import type {
+  BillingMode,
   InteractionSource,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
@@ -89,6 +90,8 @@ const interactionsTable = pgTable(
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)
+     * - Codex `client_metadata.session_id` body field / `session-id` request
+     *   header (only on requests identified as Codex)
      * - Claude/Anthropic metadata.user_id field
      * - OpenAI's user field
      */
@@ -96,8 +99,8 @@ const interactionsTable = pgTable(
     /**
      * Provenance of the session ID (NOT the client app — that is
      * external_agent_id). Values: 'claude_metadata', 'header', 'meta_header',
-     * 'openwebui_chat', 'openai_user', null. Legacy rows may carry 'claude_code'
-     * / 'claude_desktop'.
+     * 'openwebui_chat', 'codex_session', 'openai_user', null. Legacy rows may
+     * carry 'claude_code' / 'claude_desktop'.
      */
     sessionSource: varchar("session_source"),
     /**
@@ -111,6 +114,18 @@ const interactionsTable = pgTable(
      * Authentication method used for the request.
      */
     authMethod: varchar("auth_method").$type<InteractionAuthMethod>(),
+    /**
+     * Whether this interaction's upstream fulfillment actually incurs a
+     * per-token charge. `metered` (default) = real per-token cost; `subscription`
+     * = flat-rate coverage (e.g. Claude Code on a Max/Pro plan) that incurs no
+     * per-token charge. `cost` is always kept as the list-price estimate; billed
+     * spend is `cost` for metered rows and 0 for subscription rows. Resolved at
+     * request time from the fulfilling credential (see resolveInteractionBillingMode).
+     */
+    billingMode: varchar("billing_mode")
+      .$type<BillingMode>()
+      .notNull()
+      .default("metered"),
     /**
      * Authenticated application identity resolved from an OAuth client
      * credentials token. This is distinct from externalAgentId, which is a
@@ -203,6 +218,16 @@ const interactionsTable = pgTable(
     // they filter on created_at and only read these numeric/model columns, so
     // an index-only scan avoids fetching scattered heap pages of a table whose
     // rows are dominated by large TOASTed JSONB payloads.
+    //
+    // NOTE: `billingMode` is intentionally NOT in this index. The aggregations
+    // split billed vs subscription cost with a conditional (FILTER) SUM on it,
+    // so including it would make the split index-only — but adding a column to
+    // this index means a non-concurrent DROP/CREATE rebuild, which takes a
+    // write-blocking lock on a very large `interactions` table. The rebuild risk
+    // outweighs the index-only win for an analytics query, so the FILTER reads
+    // billing_mode from the heap instead. If that ever becomes a bottleneck, add
+    // the column with a separate `CREATE INDEX CONCURRENTLY` ops step (see the
+    // interactions-table migration skill), never a transactional migration.
     statisticsCoveringIdx: index("interactions_statistics_covering_idx").on(
       table.createdAt,
       table.profileId,

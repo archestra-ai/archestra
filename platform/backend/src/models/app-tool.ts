@@ -20,30 +20,6 @@ class AppToolModel {
     return results.map((r) => r.tool);
   }
 
-  /** Full assignments (tool + resolution config) — what the app server needs to execute. */
-  static async getAssignmentsForApp(appId: string) {
-    return await db
-      .select({
-        tool: schema.toolsTable,
-        mcpServerId: schema.appToolsTable.mcpServerId,
-        credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
-      })
-      .from(schema.appToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(eq(schema.appToolsTable.appId, appId));
-  }
-
-  static async findToolIdsByApp(appId: string): Promise<string[]> {
-    const results = await db
-      .select({ toolId: schema.appToolsTable.toolId })
-      .from(schema.appToolsTable)
-      .where(eq(schema.appToolsTable.appId, appId));
-    return results.map((r) => r.toolId);
-  }
-
   /** Attach a tool to an app. */
   static async create(
     appId: string,

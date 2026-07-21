@@ -3,6 +3,7 @@ import {
   getResourceForAgentType,
   type Resource,
 } from "@archestra/shared";
+import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import {
   type AgentScope,
   type AgentType,
@@ -32,7 +33,12 @@ export async function requireAgentTypePermission(params: {
     params.action,
   );
   if (!allowed) {
-    throw new ApiError(403, "Forbidden");
+    throw new ApiError(
+      403,
+      buildForbiddenErrorMessage({
+        missingPermissions: { [resource]: [params.action] },
+      }),
+    );
   }
 }
 
@@ -90,7 +96,12 @@ export async function getAgentTypePermissionChecker(params: {
     require(agentType: AgentType, action: Action): void {
       const resource = getResourceForAgentType(agentType);
       if (!(permissions[resource]?.includes(action) ?? false)) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(
+          403,
+          buildForbiddenErrorMessage({
+            missingPermissions: { [resource]: [action] },
+          }),
+        );
       }
     },
     isAdmin(agentType: AgentType): boolean {

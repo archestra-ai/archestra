@@ -14,6 +14,8 @@ export const RouteId = {
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",
   UpdateAgentToolExclusions: "updateAgentToolExclusions",
+  GetAgentSubagentExclusions: "getAgentSubagentExclusions",
+  UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -315,6 +317,11 @@ export const RouteId = {
   Microsoft365CopilotDeviceAuthStart: "microsoft365CopilotDeviceAuthStart",
   Microsoft365CopilotDeviceAuthPoll: "microsoft365CopilotDeviceAuthPoll",
 
+  // OpenAI "ChatGPT subscription" (Codex) device-flow sign-in — connects a
+  // ChatGPT/Codex subscription as an OpenAI provider credential
+  OpenaiCodexDeviceAuthStart: "openaiCodexDeviceAuthStart",
+  OpenaiCodexDeviceAuthPoll: "openaiCodexDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
@@ -383,6 +390,7 @@ export const RouteId = {
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
+  GetVirtualApiKey: "getVirtualApiKey",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
@@ -444,6 +452,12 @@ export const RouteId = {
   // LLM Settings Routes (organization-level)
   UpdateLlmSettings: "updateLlmSettings",
 
+  // MCP Settings Routes (organization-level)
+  UpdateMcpSettings: "updateMcpSettings",
+
+  // Skills Settings Routes (organization-level)
+  UpdateSkillsSettings: "updateSkillsSettings",
+
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
 
@@ -467,6 +481,12 @@ export const RouteId = {
   GetGithubAppConfig: "getGithubAppConfig",
   UpdateGithubAppConfig: "updateGithubAppConfig",
   DeleteGithubAppConfig: "deleteGithubAppConfig",
+
+  // Stored GitHub personal access tokens
+  ListGithubPats: "listGithubPats",
+  CreateGithubPat: "createGithubPat",
+  UpdateGithubPat: "updateGithubPat",
+  DeleteGithubPat: "deleteGithubPat",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
@@ -565,6 +585,11 @@ export const RouteId = {
   DeleteConnector: "deleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
+  TriggerPermissionSync: "triggerPermissionSync",
+  GetPermissionSyncCoverage: "getPermissionSyncCoverage",
+  GetConnectorUserGroups: "getConnectorUserGroups",
+  UpsertConnectorMemberOverride: "upsertConnectorMemberOverride",
+  DeleteConnectorMemberOverride: "deleteConnectorMemberOverride",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
 
@@ -598,6 +623,7 @@ export const RouteId = {
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
   ResetSkill: "resetSkill",
+  UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",
   PreviewGithubSkill: "previewGithubSkill",
@@ -625,6 +651,7 @@ export const RouteId = {
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
+  GetAuditLog: "getAuditLog",
 
   // Hook File Routes
   GetHooks: "getHooks",
@@ -650,6 +677,8 @@ export const RouteId = {
   CreateApp: "createApp",
   GetApp: "getApp",
   UpdateApp: "updateApp",
+  EnableApp: "enableApp",
+  DisableApp: "disableApp",
   DeleteApp: "deleteApp",
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",
@@ -665,6 +694,13 @@ export const RouteId = {
   UnpinExternalApp: "unpinExternalApp",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
+  // App session recordings live client-side (IndexedDB); the only server
+  // endpoint forwards a shared recording bundle to the public demo catalog.
+  EnhanceAppRecording: "enhanceAppRecording",
+  RenderAppRecordingVideo: "renderAppRecordingVideo",
+  GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
+  DownloadAppRecordingVideo: "downloadAppRecordingVideo",
+  CancelAppRecordingRender: "cancelAppRecordingRender",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
 } as const;

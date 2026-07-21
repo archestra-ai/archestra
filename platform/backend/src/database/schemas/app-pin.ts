@@ -20,8 +20,11 @@ import usersTable from "./user";
  * The Apps surface lists two kinds of items (types/app.ts AppListItemSchema),
  * so a pin row carries exactly one of two references:
  * - owned app  → `app_id`
- * - external app → `(mcp_server_id, resource_uri)` — one UI resource of one
- *   installed MCP server, the same identity the listing uses.
+ * - external app → `(mcp_server_id, resource_uri, tool_name)` — one tool tile
+ *   of one installed MCP server, the same identity the listing uses. The tool
+ *   name is part of the identity because several tools of one server commonly
+ *   share a single ui:// resource (e.g. a server-wide widget template) yet
+ *   list as separate tiles — a pin must land on one tile, not the group.
  * The shape (exactly one reference set) is enforced by AppPinModel, the single
  * writer, rather than a CHECK — matching how app_data enforces its caps.
  */
@@ -38,20 +41,21 @@ const appPinsTable = pgTable(
     appId: uuid("app_id").references(() => appsTable.id, {
       onDelete: "cascade",
     }),
-    /** External-app pin target (with `resourceUri`); null for owned pins. */
+    /** External-app pin target (with `resourceUri` + `toolName`); null for owned pins. */
     mcpServerId: uuid("mcp_server_id").references(() => mcpServerTable.id, {
       onDelete: "cascade",
     }),
     resourceUri: text("resource_uri"),
+    toolName: text("tool_name"),
     pinnedAt: timestamp("pinned_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
-    // One pin per (user, owned app) / per (user, install, resource).
+    // One pin per (user, owned app) / per (user, install, resource, tool).
     uniqueIndex("app_pins_user_app_uidx")
       .on(table.userId, table.appId)
       .where(sql`${table.appId} IS NOT NULL`),
     uniqueIndex("app_pins_user_external_uidx")
-      .on(table.userId, table.mcpServerId, table.resourceUri)
+      .on(table.userId, table.mcpServerId, table.resourceUri, table.toolName)
       .where(sql`${table.mcpServerId} IS NOT NULL`),
     // back the FK cascade deletes from `apps` / `mcp_server`
     index("app_pins_app_id_idx").on(table.appId),

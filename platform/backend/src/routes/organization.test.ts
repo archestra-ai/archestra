@@ -1,9 +1,11 @@
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import ToolModel from "@/models/tool";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -119,6 +121,126 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe("PATCH /api/organization/mcp-settings - online catalog", () => {
+    test("defaults onlineMcpCatalogEnabled to true for a new organization", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().onlineMcpCatalogEnabled).toBe(true);
+    });
+
+    test("disables the online catalog and persists it", async () => {
+      const disable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      expect(disable.statusCode).toBe(200);
+      expect(disable.json().onlineMcpCatalogEnabled).toBe(false);
+
+      const afterDisable = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+      expect(afterDisable.json().onlineMcpCatalogEnabled).toBe(false);
+    });
+
+    test("re-enables the online catalog", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: true },
+      });
+
+      expect(enable.statusCode).toBe(200);
+      expect(enable.json().onlineMcpCatalogEnabled).toBe(true);
+    });
+
+    test("captures the catalog toggle in the audit snapshot", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: { onlineMcpCatalogEnabled: false },
+      });
+
+      const snapshot = await OrganizationModel.findByIdForAudit(
+        organizationId,
+        organizationId,
+      );
+      expect(snapshot?.onlineMcpCatalogEnabled).toBe(false);
+    });
+  });
+
+  describe("PATCH /api/organization/skills-settings - online catalog", () => {
+    test("defaults onlineSkillCatalogEnabled to true for a new organization", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().onlineSkillCatalogEnabled).toBe(true);
+    });
+
+    test("disables the online catalog and persists it", async () => {
+      const disable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      expect(disable.statusCode).toBe(200);
+      expect(disable.json().onlineSkillCatalogEnabled).toBe(false);
+
+      const afterDisable = await app.inject({
+        method: "GET",
+        url: "/api/organization",
+      });
+      expect(afterDisable.json().onlineSkillCatalogEnabled).toBe(false);
+    });
+
+    test("re-enables the online catalog", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      const enable = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: true },
+      });
+
+      expect(enable.statusCode).toBe(200);
+      expect(enable.json().onlineSkillCatalogEnabled).toBe(true);
+    });
+
+    test("captures the catalog toggle in the audit snapshot", async () => {
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/skills-settings",
+        payload: { onlineSkillCatalogEnabled: false },
+      });
+
+      const snapshot = await OrganizationModel.findByIdForAudit(
+        organizationId,
+        organizationId,
+      );
+      expect(snapshot?.onlineSkillCatalogEnabled).toBe(false);
     });
   });
 
@@ -463,6 +585,52 @@ describe("organization routes", () => {
       expect(response.json()).toMatchObject({
         allowChatFileUploads: false,
         allowToolAutoAssignment: false,
+      });
+    });
+
+    test("stores the Apps Hackathon toggle when the deployment carries it", async () => {
+      config.hackathonRecorder.enabled = true;
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: { appsHackathonRecorderEnabled: false },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        appsHackathonRecorderEnabled: false,
+      });
+    });
+
+    test("refuses to store the Apps Hackathon toggle where the feature does not exist", async () => {
+      // An enterprise deployment never carries the hackathon, so it must never
+      // end up recorded as having switched it on — otherwise "never for
+      // enterprise" would hold only for as long as the settings page keeps the
+      // section hidden.
+      config.hackathonRecorder.enabled = true;
+      await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: { appsHackathonRecorderEnabled: false },
+      });
+
+      config.hackathonRecorder.enabled = false;
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: {
+          appsHackathonRecorderEnabled: true,
+          allowChatFileUploads: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        // Left where it was, not raised to the value the request asked for...
+        appsHackathonRecorderEnabled: false,
+        // ...while everything else in the same request still applied.
+        allowChatFileUploads: false,
       });
     });
 

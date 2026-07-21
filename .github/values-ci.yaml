@@ -100,6 +100,9 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    # BETA: auto-sync-permissions connectors — required by the
+    # knowledge-permission-sync e2e spec (off by default).
+    ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests

@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-07-14
+lastUpdated: 2026-07-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -104,7 +104,7 @@ To restrict OAuth flows to pre-registered clients only, set `ARCHESTRA_AUTH_DCR_
 
 ### Bearer Token
 
-For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Tokens can be scoped to a specific user, team, or organization. You can create and manage tokens in **Settings > Tokens**.
+For direct API integrations, clients can authenticate using a static Bearer token with the header `Authorization: Bearer arch_<token>`. Tokens can be scoped to a specific user, team, or organization. Your personal token is on **Your Account** — click your name in the sidebar. Team tokens are on each team in **Settings > Teams**. The organization token is in **Settings > Organization**.
 
 Bearer tokens authenticate the client to Archestra. They are not enterprise assertions by themselves. If Archestra also needs to exchange the matched user's IdP token and use the result on the downstream MCP request, it must still have a usable IdP token for that user.
 

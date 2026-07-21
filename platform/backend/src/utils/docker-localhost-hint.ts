@@ -1,19 +1,14 @@
 import { isLoopbackRedirectUri } from "@/utils/network";
 
 /**
- * Substrings that appear in Node's `fetch` errors when a TCP connection cannot
- * be established (as opposed to an HTTP error response). `fetch failed` is the
- * generic wrapper message; the others are the underlying libuv codes that may
- * surface depending on the platform and Node version.
+ * True when an error message indicates a TCP-level connection failure (as
+ * opposed to an HTTP error response the provider actually sent back).
  */
-const CONNECTION_ERROR_MARKERS = [
-  "fetch failed",
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "ETIMEDOUT",
-  "ENOTFOUND",
-  "EHOSTUNREACH",
-];
+export function isConnectionFailureMessage(errorMessage: string): boolean {
+  return CONNECTION_ERROR_MARKERS.some((marker) =>
+    errorMessage.includes(marker),
+  );
+}
 
 /**
  * When connecting to a self-hosted provider (e.g. Ollama) fails and the base
@@ -30,10 +25,7 @@ export function dockerLocalhostConnectionHint(params: {
   const { baseUrl, errorMessage } = params;
   if (!baseUrl) return null;
 
-  const looksLikeConnectionFailure = CONNECTION_ERROR_MARKERS.some((marker) =>
-    errorMessage.includes(marker),
-  );
-  if (!looksLikeConnectionFailure) return null;
+  if (!isConnectionFailureMessage(errorMessage)) return null;
 
   if (!isLoopbackRedirectUri(baseUrl)) return null;
 
@@ -48,3 +40,18 @@ export function dockerLocalhostConnectionHint(params: {
 
   return `If this server is running in Docker, "localhost" points at the container itself, not your host machine — try using ${suggestedUrl} instead.`;
 }
+
+/**
+ * Substrings that appear in Node's `fetch` errors when a TCP connection cannot
+ * be established (as opposed to an HTTP error response). `fetch failed` is the
+ * generic wrapper message; the others are the underlying libuv codes that may
+ * surface depending on the platform and Node version.
+ */
+const CONNECTION_ERROR_MARKERS = [
+  "fetch failed",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "EHOSTUNREACH",
+];

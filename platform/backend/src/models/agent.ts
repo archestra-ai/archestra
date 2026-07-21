@@ -23,6 +23,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  max,
   min,
   ne,
   notInArray,
@@ -56,12 +57,14 @@ import type {
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
@@ -116,6 +119,48 @@ class AgentModel {
         ),
       )
       .orderBy(desc(schema.agentsTable.createdAt), desc(schema.agentsTable.id));
+  }
+
+  /**
+   * Auto-mode agents (accessAllTools = true) grouped by organization. These
+   * agents have implicit access to every tool, so they can reach every MCP
+   * server without an explicit tool assignment. They are therefore surfaced
+   * separately from `assignedAgents` (e.g. below a divider in the server card
+   * "Used by N agents" tooltip). Batched by organization to avoid an N+1 when
+   * decorating a list of servers.
+   */
+  static async getAutoModeAgentDetailsByOrganizations(
+    organizationIds: string[],
+  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
+    const agentsByOrg = new Map<string, Array<{ id: string; name: string }>>();
+    for (const organizationId of organizationIds) {
+      agentsByOrg.set(organizationId, []);
+    }
+    if (organizationIds.length === 0) {
+      return agentsByOrg;
+    }
+
+    const rows = await db
+      .select({
+        organizationId: schema.agentsTable.organizationId,
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          inArray(schema.agentsTable.organizationId, organizationIds),
+          eq(schema.agentsTable.accessAllTools, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name), asc(schema.agentsTable.id));
+
+    for (const { organizationId, id, name } of rows) {
+      agentsByOrg.get(organizationId)?.push({ id, name });
+    }
+
+    return agentsByOrg;
   }
 
   static async activeNameExistsInOrganization(params: {
@@ -217,6 +262,21 @@ class AgentModel {
     const promptsMap = await AgentSuggestedPromptModel.getForAgents(agentIds);
     for (const agent of agents) {
       agent.suggestedPrompts = promptsMap.get(agent.id) ?? [];
+    }
+  }
+
+  /**
+   * Populate lastUsedAt on agents from the MCP tool-call log: the most recent
+   * request (any JSON-RPC method) routed through each agent's MCP gateway
+   * endpoint. Null when nothing was ever routed through the agent.
+   */
+  private static async populateLastUsedAt(agents: Agent[]): Promise<void> {
+    const agentIds = agents.map((a) => a.id);
+    if (agentIds.length === 0) return;
+
+    const lastCallMap = await McpToolCallModel.getLastCallAtForAgents(agentIds);
+    for (const agent of agents) {
+      agent.lastUsedAt = lastCallMap.get(agent.id) ?? null;
     }
   }
 
@@ -1147,6 +1207,28 @@ class AgentModel {
             sql`COALESCE(${knowledgeSourcesCountSubquery.knowledgeSourcesCount}, 0)`,
           ),
         );
+    } else if (sorting?.sortBy === "lastUsedAt") {
+      const lastUsedAtSubquery = db
+        .select({
+          agentId: schema.mcpToolCallsTable.agentId,
+          lastUsedAt: max(schema.mcpToolCallsTable.createdAt).as("lastUsedAt"),
+        })
+        .from(schema.mcpToolCallsTable)
+        .groupBy(schema.mcpToolCallsTable.agentId)
+        .as("lastUsedAts");
+
+      query = query
+        .leftJoin(
+          lastUsedAtSubquery,
+          eq(schema.agentsTable.id, lastUsedAtSubquery.agentId),
+        )
+        .orderBy(
+          ...personalAgentPriorityOrderClauses,
+          // Never-used agents sort as oldest (asc first / desc last).
+          direction(
+            sql`COALESCE(${lastUsedAtSubquery.lastUsedAt}, '-infinity'::timestamp)`,
+          ),
+        );
     } else if (sorting?.sortBy === "team") {
       const teamNameSubquery = db
         .select({
@@ -1262,6 +1344,7 @@ class AgentModel {
       AgentModel.populateConnectorIds(agents),
       AgentModel.populateSuggestedPrompts(agents),
       AgentModel.populateResolvedLlm(agents),
+      AgentModel.populateLastUsedAt(agents),
     ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
@@ -1283,8 +1366,9 @@ class AgentModel {
       case "subagentsCount":
       case "knowledgeSourcesCount":
       case "team":
-        // toolsCount, subagentsCount, knowledgeSourcesCount, and team sorting use a separate query path.
-        // This fallback should never be reached for these sort types.
+      case "lastUsedAt":
+        // These sort keys use a separate query path with a dedicated subquery join.
+        // This fallback should never be reached for them.
         return direction(schema.agentsTable.createdAt); // Fallback
       default:
         // Default: newest first
@@ -1405,6 +1489,21 @@ class AgentModel {
   }
 
   /**
+   * Single-column lookup for the Auto-subagent-mode gate on the delegation
+   * dispatch path; intentionally not cached so toggling the setting affects the
+   * next delegation call. Defaults to false when the agent is missing/deleted.
+   */
+  static async getAccessAllSubagents(id: string): Promise<boolean> {
+    const [result] = await db
+      .select({ accessAllSubagents: schema.agentsTable.accessAllSubagents })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.accessAllSubagents ?? false;
+  }
+
+  /**
    * Single-column agentType lookup for per-call dispatch gates, avoiding
    * findById's multi-table join. Null when the agent is missing or deleted.
    */
@@ -1512,6 +1611,85 @@ class AgentModel {
       );
 
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * Internal agents eligible as Auto-mode delegation targets for a caller:
+   * agentType "agent", not built-in, not soft-deleted, that the caller user can
+   * access (org, own personal, or a team the user belongs to), minus the caller
+   * agent itself. This is the delegation analog of
+   * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
+   * `agents.access_all_subagents`. Admins see every internal agent.
+   */
+  static async findAccessibleDelegationTargets(params: {
+    userId: string;
+    isAdmin: boolean;
+    excludeAgentId: string;
+    /**
+     * The calling agent's environment: delegation never crosses environment
+     * boundaries (null is the Default environment), mirroring tool isolation.
+     */
+    environmentId: string | null;
+  }): Promise<Pick<Agent, "id" | "name" | "description">[]> {
+    const { userId, isAdmin, excludeAgentId, environmentId } = params;
+
+    const baseConditions = [
+      eq(schema.agentsTable.agentType, "agent"),
+      eq(schema.agentsTable.builtIn, false),
+      ne(schema.agentsTable.id, excludeAgentId),
+      environmentId === null
+        ? isNull(schema.agentsTable.environmentId)
+        : eq(schema.agentsTable.environmentId, environmentId),
+      notDeleted(schema.agentsTable),
+    ];
+
+    if (isAdmin) {
+      return db
+        .selectDistinct({
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+          description: schema.agentsTable.description,
+        })
+        .from(schema.agentsTable)
+        .where(and(...baseConditions))
+        .orderBy(asc(schema.agentsTable.name));
+    }
+
+    return db
+      .selectDistinct({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
+      })
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
+      )
+      .leftJoin(
+        schema.teamMembersTable,
+        and(
+          eq(schema.agentTeamsTable.teamId, schema.teamMembersTable.teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .where(
+        and(
+          ...baseConditions,
+          or(
+            eq(schema.agentsTable.scope, "org"),
+            and(
+              eq(schema.agentsTable.scope, "personal"),
+              eq(schema.agentsTable.authorId, userId),
+            ),
+            and(
+              eq(schema.agentsTable.scope, "team"),
+              eq(schema.teamMembersTable.userId, userId),
+            ),
+          ),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name));
   }
 
   static async findDelegationTarget(
@@ -1717,6 +1895,36 @@ class AgentModel {
     }
 
     const labels = await AgentLabelModel.getLabelsForAgent(id);
+    return { ...agent, labels };
+  }
+
+  /**
+   * Lean counterpart of {@link getDefaultProfile} for the LLM proxy hot path:
+   * the raw agents row plus labels, like {@link findGatewayAgentById}. The
+   * proxy resolves the default profile on every request that omits an agent id
+   * in the URL, and it only reads scalar config (org, agent type,
+   * considerContextUntrusted, identity provider) and trace/metric labels — the
+   * tools join and team/knowledge/connector hydration of the full method are
+   * unused there.
+   */
+  static async getDefaultGatewayProfile(): Promise<GatewayAgent | null> {
+    const [agent] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.isDefault, true),
+          eq(schema.agentsTable.agentType, "profile"),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    if (!agent) {
+      return null;
+    }
+
+    const labels = await AgentLabelModel.getLabelsForAgent(agent.id);
     return { ...agent, labels };
   }
 
@@ -2790,6 +2998,10 @@ class AgentModel {
   static async cloneAgent(params: {
     sourceId: string;
     userId: string;
+    /** Visibility for the clone; defaults to copying the source's scope. */
+    scope?: AgentScope;
+    /** Teams for a team-scoped clone; defaults to the source's teams. */
+    teams?: string[];
   }): Promise<Agent> {
     const { sourceId, userId } = params;
 
@@ -2798,9 +3010,12 @@ class AgentModel {
       throw new Error("Source agent not found");
     }
 
+    const cloneScope = params.scope ?? sourceAgent.scope;
     // Omit teams if scope is not 'team' — scope takes precedence
     const cloneTeams =
-      sourceAgent.scope === "team" ? sourceAgent.teams.map((t) => t.id) : [];
+      cloneScope === "team"
+        ? (params.teams ?? sourceAgent.teams.map((t) => t.id))
+        : [];
 
     let created: Agent | null = null;
     try {
@@ -2808,7 +3023,7 @@ class AgentModel {
         {
           organizationId: sourceAgent.organizationId,
           agentType: sourceAgent.agentType,
-          scope: sourceAgent.scope,
+          scope: cloneScope,
           teams: cloneTeams,
           labels: sourceAgent.labels,
           knowledgeBaseIds: sourceAgent.knowledgeBaseIds ?? [],
@@ -2832,7 +3047,7 @@ class AgentModel {
           identityProviderId: null,
           passthroughHeaders: null,
         },
-        sourceAgent.scope === "personal" ? userId : undefined,
+        cloneScope === "personal" ? userId : undefined,
         // Copy the source's assignments verbatim below; don't let create's
         // default assignment force built-ins the source lacked onto the clone.
         { skipCreationDefaultTools: true },
@@ -2943,15 +3158,53 @@ class AgentModel {
     // Fetch relational data so audit diffs capture tool/KB/team changes —
     // not just main-table columns.  Each sub-query is lightweight (index
     // lookup by agent_id) and the parallel fetch keeps latency low.
-    const [tools, teams, labels, knowledgeBaseIds, connectorIds, delegations] =
-      await Promise.all([
-        AgentToolModel.getToolsForAgent(id),
-        AgentTeamModel.getTeamDetailsForAgent(id),
-        AgentLabelModel.getLabelsForAgent(id),
-        AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
-        AgentConnectorAssignmentModel.getConnectorIds(id),
-        AgentToolModel.getDelegationTargets(id),
-      ]);
+    const [
+      tools,
+      teams,
+      labels,
+      knowledgeBaseIds,
+      connectorIds,
+      delegations,
+      excludedSubagentIds,
+      suggestedPrompts,
+      modelRows,
+      keyRows,
+    ] = await Promise.all([
+      AgentToolModel.getToolsForAgent(id),
+      AgentTeamModel.getTeamDetailsForAgent(id),
+      AgentLabelModel.getLabelsForAgent(id),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
+      AgentConnectorAssignmentModel.getConnectorIds(id),
+      AgentToolModel.getDelegationTargets(id),
+      AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      AgentSuggestedPromptModel.getForAgent(id),
+      // Resolve the live modelId FK to its human-readable identity so a model
+      // change surfaces as a real diff — the legacy llmModel text column is
+      // deprecated (never written) and would always read null.
+      row.modelId
+        ? db
+            .select({ externalId: schema.modelsTable.externalId })
+            .from(schema.modelsTable)
+            .where(eq(schema.modelsTable.id, row.modelId))
+            .limit(1)
+        : Promise.resolve([]),
+      // The model and its API key are set as a pair; capture a redacted key
+      // identity (id/name/scope + provider) so an LLM-config change is legible
+      // and a swap between two same-provider keys still diffs — without ever
+      // touching key material (secretId is excluded).
+      row.llmApiKeyId
+        ? db
+            .select({
+              id: schema.llmProviderApiKeysTable.id,
+              name: schema.llmProviderApiKeysTable.name,
+              scope: schema.llmProviderApiKeysTable.scope,
+              provider: schema.llmProviderApiKeysTable.provider,
+            })
+            .from(schema.llmProviderApiKeysTable)
+            .where(eq(schema.llmProviderApiKeysTable.id, row.llmApiKeyId))
+            .limit(1)
+        : Promise.resolve([]),
+    ]);
 
     const delegationTargets = [...delegations]
       .sort((a, b) => a.id.localeCompare(b.id))
@@ -2967,15 +3220,37 @@ class AgentModel {
       systemPrompt: row.systemPrompt ?? null,
       slug: row.slug ?? null,
       isDefault: row.isDefault,
-      llmModel: row.llmModel ?? null,
+      model: modelRows[0]?.externalId ?? null,
+      llmProvider: keyRows[0]?.provider ?? null,
+      llmApiKey: keyRows[0]
+        ? {
+            id: keyRows[0].id,
+            name: keyRows[0].name,
+            scope: keyRows[0].scope,
+          }
+        : null,
+      icon: row.icon ?? null,
+      considerContextUntrusted: row.considerContextUntrusted,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
+      accessAllSubagents: row.accessAllSubagents,
+      // passthrough_headers is a text[] of header NAMES (no values), so it is
+      // safe to capture verbatim.
+      passthroughHeaders: [...(row.passthroughHeaders ?? [])].sort(),
+      identityProviderId: row.identityProviderId ?? null,
+      environmentId: row.environmentId ?? null,
+      incomingEmailEnabled: row.incomingEmailEnabled,
+      incomingEmailSecurityMode: row.incomingEmailSecurityMode,
+      incomingEmailAllowedDomain: row.incomingEmailAllowedDomain ?? null,
+      builtInAgentConfig: row.builtInAgentConfig ?? null,
       tools: tools.map((t) => t.name).sort(),
       knowledgeBaseIds: [...knowledgeBaseIds].sort(),
       connectorIds: [...connectorIds].sort(),
       teams: teams.map((t) => t.name).sort(),
       labels: labels.sort(),
       delegationTargets,
+      excludedSubagentIds: [...excludedSubagentIds].sort(),
+      suggestedPrompts,
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };

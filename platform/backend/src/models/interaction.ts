@@ -4,8 +4,7 @@ import type {
   PaginationQuery,
 } from "@archestra/shared";
 import {
-  CLAUDE_CLIENT_AGENT_IDS,
-  CLAUDE_CLIENT_FILTER,
+  clientFilterToAgentIds,
   isClaudeSessionSource,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
 } from "@archestra/shared";
@@ -1015,15 +1014,15 @@ class InteractionModel {
     }
 
     // Client-app filter — queries external_agent_id (the client-attribution
-    // column). CLAUDE_CLIENT_FILTER expands to every Claude client id, matched
+    // column). Each filter value expands to its client's agent ids, matched
     // case-insensitively (header values, auto-discovered, and backfilled).
-    if (filters?.client === CLAUDE_CLIENT_FILTER) {
+    if (filters?.client) {
       // Lower both sides so the match stays case-insensitive even if a
-      // mixed-case id is ever added to CLAUDE_CLIENT_AGENT_IDS.
+      // mixed-case id is ever added to a client's agent-id set.
       conditions.push(
         inArray(
           sql`lower(${schema.interactionsTable.externalAgentId})`,
-          CLAUDE_CLIENT_AGENT_IDS.map((id) => id.toLowerCase()),
+          clientFilterToAgentIds(filters.client).map((id) => id.toLowerCase()),
         ),
       );
     }
@@ -1077,7 +1076,19 @@ class InteractionModel {
           totalOutputTokens: sum(schema.interactionsTable.outputTokens),
           totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
           totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
+          // `totalCost` is the full list-price estimate across the session.
+          // `totalBilledCost` / `totalSubscriptionCost` split it by billing mode
+          // (metered = billed spend; subscription = flat-rate, not billed), so a
+          // session's Cost cell can show what was actually charged plus what the
+          // subscription-covered portion would have cost. A session may mix modes
+          // (e.g. a mid-session switch), so both filtered sums are needed.
           totalCost: sum(schema.interactionsTable.cost),
+          totalBilledCost: sql<
+            string | null
+          >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'metered')`,
+          totalSubscriptionCost: sql<
+            string | null
+          >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription')`,
           totalBaselineCost: sum(schema.interactionsTable.baselineCost),
           totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
           totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
@@ -1097,7 +1108,12 @@ class InteractionModel {
           authenticatedAppNames: sql<
             string[]
           >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.interactionsTable.authenticatedAppName}), NULL)`,
-          userNames: sql<string>`STRING_AGG(DISTINCT ${schema.usersTable.name}, ',')`,
+          // ARRAY_AGG (not STRING_AGG) — user names can contain commas
+          // (e.g. "Last, First" display names), so a delimited string can't
+          // be split back apart reliably
+          userNames: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.name} ORDER BY ${schema.usersTable.name}), NULL)`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
         })
@@ -1180,6 +1196,8 @@ class InteractionModel {
         totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,
         totalCacheWriteTokens: Number(s.totalCacheWriteTokens) || 0,
         totalCost: s.totalCost,
+        totalBilledCost: s.totalBilledCost,
+        totalSubscriptionCost: s.totalSubscriptionCost,
         totalBaselineCost: s.totalBaselineCost,
         totalToonCostSavings: s.totalToonCostSavings,
         totalCacheSavings: s.totalCacheSavings,
@@ -1200,7 +1218,7 @@ class InteractionModel {
         ),
         authMethods: parseInteractionAuthMethods(s.authMethods),
         authenticatedAppNames: s.authenticatedAppNames ?? [],
-        userNames: s.userNames ? s.userNames.split(",").filter(Boolean) : [],
+        userNames: s.userNames ?? [],
         lastInteractionRequest: lastInteraction?.request ?? null,
         lastInteractionType: lastInteraction?.type ?? null,
         conversationTitle: s.conversationTitle,
@@ -1352,8 +1370,10 @@ class InteractionModel {
           // We accept any interaction that has a valid request structure, not just text content.
           // This ensures we don't skip requests with images, files, or function calls.
           const request = interaction.request as {
-            // OpenAI/Anthropic format
+            // OpenAI/Anthropic chat-completions format
             messages?: Array<{ content?: string | Array<unknown> }>;
+            // OpenAI Responses format (e.g. Codex) carries turns in `input`
+            input?: Array<unknown>;
             // Gemini format
             contents?: Array<{
               role?: string;
@@ -1361,13 +1381,16 @@ class InteractionModel {
             }>;
           };
 
-          // Check if request has valid content (messages or contents array with items)
+          // Check if request has valid content (a messages / input / contents
+          // array with items) across all supported provider request shapes.
           const hasOpenAiContent =
             Array.isArray(request?.messages) && request.messages.length > 0;
+          const hasResponsesContent =
+            Array.isArray(request?.input) && request.input.length > 0;
           const hasGeminiContent =
             Array.isArray(request?.contents) && request.contents.length > 0;
 
-          if (hasOpenAiContent || hasGeminiContent) {
+          if (hasOpenAiContent || hasResponsesContent || hasGeminiContent) {
             lastMainInteraction = interaction;
           }
         }

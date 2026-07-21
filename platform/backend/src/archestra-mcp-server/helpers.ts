@@ -15,6 +15,7 @@ import {
   ToolModel,
 } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
+import { isUniqueConstraintError } from "@/utils/db";
 import type { ArchestraContext } from "./types";
 
 export function isAbortLikeError(error: unknown): boolean {
@@ -195,6 +196,22 @@ export function deduplicateLabels(
   rawLabels: Array<{ key: string; value: string }>,
 ): Array<{ key: string; value: string }> {
   return Array.from(new Map(rawLabels.map((l) => [l.key, l])).values());
+}
+
+/**
+ * Decode bytes as text, or null when they are not safe to treat as text. The
+ * mime label is never trusted (a binary payload can be saved as e.g.
+ * text/plain), so readability is decided by the bytes: a NUL byte or any
+ * invalid UTF-8 sequence means "binary". NUL is rejected even though it is
+ * valid UTF-8 — Postgres cannot store it in a text column.
+ */
+export function decodeUtf8Text(data: Buffer): string | null {
+  if (data.includes(0)) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    return null;
+  }
 }
 
 export function successResult(text: string): CallToolResult {
@@ -488,12 +505,6 @@ export function formatZodErrorWithSchema(
       return path ? `${path}: ${enriched}` : enriched;
     })
     .join("; ");
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  // PostgreSQL unique_violation code
-  return "code" in error && (error as { code: string }).code === "23505";
 }
 
 function formatZodIssue(issue: z.core.$ZodIssue): string {

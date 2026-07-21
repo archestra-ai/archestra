@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "apps_hackathon_recorder_enabled" boolean DEFAULT true NOT NULL;

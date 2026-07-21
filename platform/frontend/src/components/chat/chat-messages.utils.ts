@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  type ChatOpenedAppMetadata,
   getArchestraAppResourceUri,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
@@ -326,6 +327,24 @@ export function deriveAppsFromMessages(
   }
 
   return apps;
+}
+
+/**
+ * The app to report to the backend as open in this chat, so it can restate the
+ * app's context in the turn's system prompt. The most recent render wins — the
+ * app the panel shows by default (see `apps-context`'s `panelToolCallId`). Only
+ * owned apps (always identifiable by `appId`) and external apps opened via an
+ * apps-page deep link (which carry an `mcpServerId`) can be named; an external
+ * app rendered organically has neither and reports nothing, so the backend
+ * simply injects no context for it.
+ */
+export function openedAppMetadataFromApps(
+  apps: PanelApp[],
+): ChatOpenedAppMetadata | undefined {
+  const openApp = apps.findLast((entry) => entry.appId || entry.mcpServerId);
+  if (openApp?.appId) return { appId: openApp.appId };
+  if (openApp?.mcpServerId) return { appMcpServerId: openApp.mcpServerId };
+  return undefined;
 }
 
 /**

@@ -103,7 +103,9 @@ describe("LlmProviderApiKeyDropdown", () => {
       showChatTestIds: true,
     });
 
-    await user.click(screen.getByRole("button", { name: /select api key/i }));
+    await user.click(
+      screen.getByRole("button", { name: /select provider key/i }),
+    );
     await user.type(
       screen.getByTestId(E2eTestId.ChatApiKeySelectorSearchInput),
       "Staging",

@@ -9,6 +9,7 @@ import {
 } from "@archestra/shared";
 import {
   AlertTriangle,
+  Bot,
   Copy,
   FileSearch,
   Globe,
@@ -23,7 +24,6 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Avatar,
@@ -31,7 +31,6 @@ import {
   AvatarGroup,
   AvatarGroupCount,
 } from "@/components/ui/avatar";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -52,6 +51,7 @@ import {
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -271,6 +271,42 @@ export function McpServerCard({
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
 
+  // Distinct agents with tools explicitly assigned from any install of this
+  // catalog item — the audience affected if those installs go away.
+  const assignedAgents = (() => {
+    const byId = new Map<string, { id: string; name: string }>();
+    for (const server of allServersForCatalog) {
+      for (const agent of server.assignedAgents ?? []) {
+        byId.set(agent.id, agent);
+      }
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  // Auto-mode agents (implicit access to all tools) can reach this server
+  // without an explicit assignment. The set is org-wide, so the same list rides
+  // on every install of this catalog item — dedupe across them.
+  const autoModeAgents = (() => {
+    const byId = new Map<string, { id: string; name: string }>();
+    for (const server of allServersForCatalog) {
+      for (const agent of server.autoModeAgents ?? []) {
+        byId.set(agent.id, agent);
+      }
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  // An auto-mode agent may also carry an explicit assignment to this server
+  // (a legacy pin, or "Auto except some"), which would otherwise list it in
+  // both sections. An explicit assignment is the more specific fact, so show it
+  // once — under assigned tools — and drop it from the auto-mode list. The
+  // badge counts the distinct agents across both sections.
+  const assignedAgentIds = new Set(assignedAgents.map((agent) => agent.id));
+  const autoModeOnlyAgents = autoModeAgents.filter(
+    (agent) => !assignedAgentIds.has(agent.id),
+  );
+  const totalAgentCount = assignedAgents.length + autoModeOnlyAgents.length;
+
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
     const install = personalServersForCatalog
@@ -279,7 +315,14 @@ export function McpServerCard({
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       )[0];
-    return install ? [{ server: { id: install.id, name: install.name } }] : [];
+    return install
+      ? [
+          {
+            server: { id: install.id, name: install.name },
+            assignedAgents: install.assignedAgents ?? [],
+          },
+        ]
+      : [];
   })();
 
   const handleUninstallClick = () => {
@@ -539,6 +582,7 @@ export function McpServerCard({
   const hasCompactInfoContent =
     showAuthorAvatar ||
     toolsCount > 0 ||
+    totalAgentCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
     (!isBuiltinVariant &&
       (connectionAvatars.length > 0 ||
@@ -577,6 +621,62 @@ export function McpServerCard({
               {toolsCount}
             </span>
           </div>
+          <div className="h-4 w-px bg-border" />
+        </>
+      )}
+      {totalAgentCount > 0 && (
+        <>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 cursor-help">
+                  <Bot className="h-3.5 w-3.5" />
+                  <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
+                    {totalAgentCount}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {assignedAgents.length > 0 && (
+                  <>
+                    <p className="font-medium">
+                      Used by {assignedAgents.length}{" "}
+                      {assignedAgents.length === 1 ? "agent" : "agents"}{" "}
+                      (assigned tools)
+                    </p>
+                    <div className="mt-1 space-y-0.5">
+                      {assignedAgents.slice(0, 8).map((agent) => (
+                        <div key={agent.id}>{agent.name}</div>
+                      ))}
+                      {assignedAgents.length > 8 && (
+                        <div>+{assignedAgents.length - 8} more</div>
+                      )}
+                    </div>
+                  </>
+                )}
+                {assignedAgents.length > 0 && autoModeOnlyAgents.length > 0 && (
+                  <div className="my-1.5 h-px bg-border" />
+                )}
+                {autoModeOnlyAgents.length > 0 && (
+                  <>
+                    <p className="font-medium">
+                      {autoModeOnlyAgents.length} auto-mode{" "}
+                      {autoModeOnlyAgents.length === 1 ? "agent" : "agents"}{" "}
+                      (access all tools)
+                    </p>
+                    <div className="mt-1 space-y-0.5">
+                      {autoModeOnlyAgents.slice(0, 8).map((agent) => (
+                        <div key={agent.id}>{agent.name}</div>
+                      ))}
+                      {autoModeOnlyAgents.length > 8 && (
+                        <div>+{autoModeOnlyAgents.length - 8} more</div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="h-4 w-px bg-border" />
         </>
       )}
@@ -738,7 +838,7 @@ export function McpServerCard({
   const isInstallAdmin = !!isMcpServerInstallAdmin;
 
   const copyApprovalLink = () => {
-    void navigator.clipboard.writeText(
+    void copyToClipboard(
       `${window.location.origin}/mcp/registry/${item.id}/edit`,
     );
     toast.success("Link copied — share it with an admin to approve this image");

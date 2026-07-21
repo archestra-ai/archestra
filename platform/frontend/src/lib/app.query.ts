@@ -11,6 +11,8 @@ const {
   getAppTools,
   createApp,
   updateApp,
+  enableApp,
+  disableApp,
   deleteApp,
   assignToolToApp,
   unassignToolFromApp,
@@ -23,7 +25,10 @@ const {
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
-type AppsParams = Pick<AppsQuery, "limit" | "offset" | "search">;
+type AppsParams = Pick<
+  AppsQuery,
+  "limit" | "offset" | "search" | "scope" | "authorIds" | "excludeAuthorIds"
+>;
 type AppDetailQueryOptions = { toastOnError?: boolean };
 
 // ===== Query hooks =====
@@ -172,11 +177,54 @@ export function useOpenExternalAppInChat() {
 
 /**
  * The identity of a pinnable Apps-surface item, matching the list's
- * discriminated union: owned apps by id, external apps by (install, resource).
+ * discriminated union: owned apps by id, external apps by (install, resource,
+ * tool). The tool name is part of the identity because several tools of one
+ * server can share a ui:// resource yet list as separate tiles — a pin must
+ * land on one tile, not the group.
  */
 export type PinAppTarget =
   | { source: "owned"; appId: string }
-  | { source: "external"; mcpServerId: string; resourceUri: string };
+  | {
+      source: "external";
+      mcpServerId: string;
+      resourceUri: string;
+      toolName: string;
+    };
+
+type AppsListResponse = archestraApiTypes.GetAppsResponses["200"];
+type AppListItem = AppsListResponse["data"][number];
+
+function matchesPinTarget(app: AppListItem, target: PinAppTarget): boolean {
+  return target.source === "owned"
+    ? app.source === "owned" && app.id === target.appId
+    : app.source === "external" &&
+        app.mcpServerId === target.mcpServerId &&
+        app.resourceUri === target.resourceUri &&
+        app.toolName === target.toolName;
+}
+
+/**
+ * Flip `pinnedAt` for the target across every cached apps list (the Apps page
+ * and the sidebar Pinned section may hold separate entries, e.g. with a search
+ * active), so all surfaces reflect a pin/unpin together and immediately.
+ */
+function writePinToAppsLists(params: {
+  queryClient: ReturnType<typeof useQueryClient>;
+  target: PinAppTarget;
+  pinnedAt: string | null;
+}): void {
+  const { queryClient, target, pinnedAt } = params;
+  queryClient.setQueriesData<AppsListResponse>(
+    { queryKey: ["apps", "paginated"] },
+    (old) =>
+      old && {
+        ...old,
+        data: old.data.map((app) =>
+          matchesPinTarget(app, target) ? { ...app, pinnedAt } : app,
+        ),
+      },
+  );
+}
 
 /** Pin/unpin an app for the current user (personal — toggle by `pinned`). */
 export function usePinApp() {
@@ -197,11 +245,17 @@ export function usePinApp() {
           : pinned
             ? await pinExternalApp({
                 path: { mcpServerId: target.mcpServerId },
-                body: { resourceUri: target.resourceUri },
+                body: {
+                  resourceUri: target.resourceUri,
+                  toolName: target.toolName,
+                },
               })
             : await unpinExternalApp({
                 path: { mcpServerId: target.mcpServerId },
-                query: { resourceUri: target.resourceUri },
+                query: {
+                  resourceUri: target.resourceUri,
+                  toolName: target.toolName,
+                },
               });
       if (error) {
         handleApiError(error);
@@ -209,8 +263,29 @@ export function usePinApp() {
       }
       return true;
     },
-    onSuccess: (ok) => {
-      if (!ok) return;
+    // Optimistically flip the pin in every cached list so the card grid and
+    // the sidebar move together without waiting a full list round-trip.
+    onMutate: async ({ pinned, target }) => {
+      await queryClient.cancelQueries({ queryKey: ["apps", "paginated"] });
+      const previousLists = queryClient.getQueriesData<AppsListResponse>({
+        queryKey: ["apps", "paginated"],
+      });
+      writePinToAppsLists({
+        queryClient,
+        target,
+        pinnedAt: pinned ? new Date().toISOString() : null,
+      });
+      return { previousLists };
+    },
+    // mutationFn reports failures by resolving `null` (the error was already
+    // toasted), so the rollback lives here rather than in onError.
+    onSuccess: (ok, _variables, context) => {
+      if (!ok) {
+        for (const [queryKey, data] of context.previousLists) {
+          queryClient.setQueryData(queryKey, data);
+        }
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["apps"] });
     },
   });
@@ -241,6 +316,39 @@ export function useUpdateApp() {
       // which drives the MCP registry card — refresh it too.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success("App updated");
+    },
+  });
+}
+
+// Enable/disable an app. Separate from useUpdateApp so the transition has its
+// own toast and its own cache invalidation — an enabled app newly exposes its
+// launch tool to gateways/agents (and vice versa), so the MCP catalog must
+// refresh alongside the apps list.
+export function useSetAppEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      appId,
+      enabled,
+    }: {
+      appId: string;
+      enabled: boolean;
+    }) => {
+      const { data, error } = await (enabled
+        ? enableApp({ path: { appId } })
+        : disableApp({ path: { appId } }));
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
+      queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      toast.success(variables.enabled ? "App enabled" : "App disabled");
     },
   });
 }

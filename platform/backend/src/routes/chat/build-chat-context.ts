@@ -9,6 +9,7 @@ import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import { ConversationEnabledToolModel } from "@/models";
+import type { OpenedApp } from "@/services/apps/opened-app-context";
 import type { ToolExposureMode } from "@/types";
 
 /**
@@ -30,6 +31,10 @@ export async function buildChatContext(params: {
   hookSessionContext: string | undefined;
   /** The project's instructions, when this chat belongs to a project. */
   projectInstructions: string | undefined;
+  /** The app this chat was opened with, when it was opened from one. */
+  openedApp: OpenedApp | undefined;
+  /** Filenames of the project's shared files, when this chat belongs to a project. */
+  projectFileNames: string[] | undefined;
   hookRunCollector: CollectedHookRun[];
   elicitation: ChatMcpElicitationBridge;
   subagentToolStream: SubagentToolStreamBridge;
@@ -51,6 +56,8 @@ export async function buildChatContext(params: {
     organizationId,
     hookSessionContext,
     projectInstructions,
+    openedApp,
+    projectFileNames,
     hookRunCollector,
     elicitation,
     subagentToolStream,
@@ -99,6 +106,8 @@ export async function buildChatContext(params: {
     user: { name: user.name, email: user.email },
     hookSessionContext,
     projectInstructions,
+    openedApp,
+    projectFileNames,
   });
 
   return {

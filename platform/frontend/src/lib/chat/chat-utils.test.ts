@@ -2,7 +2,6 @@ import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
   applyFeedbackToMessages,
-  applyTextEditToMessages,
   chatDraftStorageKey,
   conversationStorageKeys,
   getChatExternalAgentId,
@@ -644,59 +643,6 @@ describe("resolveCanonicalMessageId", () => {
         canonicalMessages: undefined,
       }),
     ).toBeNull();
-  });
-});
-
-describe("applyTextEditToMessages", () => {
-  it("replaces only the targeted text part and keeps other messages untouched", () => {
-    const messages = [
-      {
-        id: "user-1",
-        role: "user",
-        parts: [
-          { type: "file", url: "blob:a", mediaType: "image/png" },
-          { type: "text", text: "old text" },
-        ],
-      },
-      {
-        id: "assistant-1",
-        role: "assistant",
-        parts: [{ type: "text", text: "answer" }],
-      },
-    ] as UIMessage[];
-
-    const updated = applyTextEditToMessages({
-      messages,
-      messageId: "user-1",
-      partIndex: 1,
-      text: "new text",
-    });
-
-    expect(updated[0]?.parts[1]).toMatchObject({
-      type: "text",
-      text: "new text",
-    });
-    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
-    expect(updated[1]).toBe(messages[1]);
-  });
-
-  it("does not touch a part whose index matches but is not text", () => {
-    const messages = [
-      {
-        id: "user-1",
-        role: "user",
-        parts: [{ type: "file", url: "blob:a", mediaType: "image/png" }],
-      },
-    ] as UIMessage[];
-
-    const updated = applyTextEditToMessages({
-      messages,
-      messageId: "user-1",
-      partIndex: 0,
-      text: "new text",
-    });
-
-    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
   });
 });
 

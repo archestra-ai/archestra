@@ -150,10 +150,10 @@ test.describe("Skills import", () => {
     await expect(selectDialog).toBeVisible();
     await expect(selectDialog).toContainText("2 of 2 selected");
     await expect(
-      selectDialog.getByRole("button", { name: "Deselect Alpha skill" }),
+      selectDialog.getByRole("checkbox", { name: "Deselect Alpha skill" }),
     ).toBeVisible();
     await expect(
-      selectDialog.getByRole("button", { name: "Deselect Beta skill" }),
+      selectDialog.getByRole("checkbox", { name: "Deselect Beta skill" }),
     ).toBeVisible();
   });
 

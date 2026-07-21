@@ -142,6 +142,19 @@ const agentsTable = softDeletablePgTable(
      */
     accessAllTools: boolean("access_all_tools").notNull().default(false),
 
+    /**
+     * "Auto" subagent mode (vs "Custom"): whether this agent may delegate to
+     * any internal agent the *calling user* can access (team/scope visibility),
+     * beyond the explicitly-configured delegation targets. Mirrors
+     * `accessAllTools` for agent-to-agent delegation. When on, delegation
+     * targets are resolved dynamically per caller (minus `agent_excluded_subagents`);
+     * when off, only explicitly-assigned delegation tools are exposed. This
+     * per-agent flag is the sole gate for dynamic subagent access.
+     */
+    accessAllSubagents: boolean("access_all_subagents")
+      .notNull()
+      .default(false),
+
     /** JSONB config for built-in agents (null for user-created agents) */
     builtInAgentConfig: jsonb(
       "built_in_agent_config",

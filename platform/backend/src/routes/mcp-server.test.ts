@@ -8,7 +8,14 @@ import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mustExist,
+  test,
+} from "@/test";
 import type { User } from "@/types";
 
 const {
@@ -1249,7 +1256,7 @@ describe("mcp server inspect route", () => {
     expect(updatedServer?.secretId).toBeTruthy();
 
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).toMatchObject({
       header_existing: "on-the-bag",
@@ -1313,7 +1320,7 @@ describe("mcp server inspect route", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).not.toHaveProperty("header_optional");
     // Unrelated bag entries (OAuth tokens, etc.) must stay put.
@@ -1377,7 +1384,7 @@ describe("mcp server inspect route", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).toMatchObject({
       header_required: "valid-value",
@@ -1692,7 +1699,7 @@ describe("mcp server inspect route", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).toMatchObject({
       EXISTING_SECRET: "in-the-bag",
@@ -1811,7 +1818,7 @@ describe("mcp server inspect route", () => {
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, mcpServer.id));
     const storedSecret = await secretManager().getSecret(
-      updatedServer.secretId!,
+      mustExist(updatedServer.secretId),
     );
     expect(storedSecret?.secret).toMatchObject({
       API_SECRET: "valid-credential",
@@ -3875,6 +3882,40 @@ describe("mcp server core route coverage", () => {
     await app.close();
   });
 
+  describe("GET /api/mcp_server", () => {
+    test("lists the agents using each server via explicit tool assignments", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+      });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+      const tool = await makeTool({ catalogId: catalog.id });
+      const agent = await makeAgent({ name: "Server Consumer" });
+      await makeAgentTool(agent.id, tool.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const servers = response.json();
+      const returned = servers.find((s: { id: string }) => s.id === server.id);
+      expect(returned.assignedAgents).toEqual([
+        { id: agent.id, name: "Server Consumer" },
+      ]);
+    });
+  });
+
   describe("GET /api/mcp_server/:id", () => {
     test("returns an MCP server the caller can access", async ({
       makeInternalMcpCatalog,
@@ -3896,6 +3937,7 @@ describe("mcp server core route coverage", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().id).toBe(server.id);
+      expect(response.json().assignedAgents).toEqual([]);
     });
 
     test("returns 404 for an unknown id", async () => {

@@ -28,7 +28,7 @@ const archestraApiConfig = await defineConfig({
   plugins: [
     {
       name: "@hey-api/client-fetch",
-      runtimeConfigPath: "./custom-client",
+      runtimeConfigPath: "./hey-api/clients/api/custom-client",
     },
   ],
 });
@@ -45,7 +45,7 @@ const archestraCatalogConfig = await defineConfig({
   plugins: [
     {
       name: "@hey-api/client-fetch",
-      runtimeConfigPath: "./custom-client",
+      runtimeConfigPath: "./hey-api/clients/archestra-catalog/custom-client",
     },
   ],
 });

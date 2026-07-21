@@ -8,7 +8,7 @@
 
 import client from "prom-client";
 import logger from "@/logging";
-import type { Agent } from "@/types";
+import type { GatewayAgent } from "@/types";
 import { sanitizeLabelKey } from "./utils";
 
 let agentExecutionsTotal: client.Counter<string>;
@@ -61,7 +61,7 @@ export function initializeAgentExecutionMetrics(labelKeys: string[]): void {
  */
 export function reportAgentExecution(params: {
   executionId: string;
-  profile: Agent;
+  profile: GatewayAgent;
   externalAgentId?: string;
 }): void {
   if (!agentExecutionsTotal) {

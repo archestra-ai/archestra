@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, type Resource } from "@archestra/shared";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Label } from "@/components/ui/label";
@@ -25,6 +25,12 @@ interface EnvironmentSelectorProps {
   value: string | null;
   onChange: (environmentId: string | null) => void;
   /**
+   * The RBAC resource being assigned to the environment (e.g. "agent",
+   * "llmProxy", "mcpRegistry"). Restricted environments require the
+   * resource-specific `deploy-to-restricted` permission.
+   */
+  resource: Resource;
+  /**
    * When set and no custom environments are accessible, render nothing instead
    * of a disabled default-only select (the agent dialog hides the field in that
    * case; the MCP form shows the disabled state).
@@ -43,6 +49,7 @@ interface EnvironmentSelectorProps {
 export function EnvironmentSelector({
   value,
   onChange,
+  resource,
   hideWhenOnlyDefault,
   className,
   helpText,
@@ -50,14 +57,16 @@ export function EnvironmentSelector({
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments ?? [];
   const defaultEnvironment = useDefaultEnvironment();
-  // Deploying to a restricted environment needs environment:deploy-to-restricted;
-  // environment:admin (full environment management) implies it.
-  const { data: hasEnvAdmin } = useHasPermissions({ environment: ["admin"] });
+  // Deploying to a restricted environment needs the resource-specific
+  // deploy-to-restricted permission.
   const { data: hasDeployToRestricted } = useHasPermissions({
-    environment: ["deploy-to-restricted"],
+    [resource]: ["deploy-to-restricted"],
   });
-  const canDeployRestricted =
-    (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
+  // Gates the "Manage environments" link, mirroring the settings page.
+  const { data: canManageEnvironments } = useHasPermissions({
+    environment: ["update"],
+  });
+  const canDeployRestricted = hasDeployToRestricted ?? false;
   // Restricted environments the user can't deploy to are hidden entirely; the
   // default is always available.
   const accessibleEnvironments = environments.filter(
@@ -121,7 +130,7 @@ export function EnvironmentSelector({
       {!hasCustomEnvironmentOptions ? (
         <p className="text-xs text-muted-foreground">
           Only the default environment is available.
-          {hasEnvAdmin ? (
+          {canManageEnvironments ? (
             <>
               {" "}
               <Link

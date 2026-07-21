@@ -57,6 +57,7 @@ import { useCreateConversation } from "@/lib/chat/chat.query";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
+import { useDialogFlagUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { canManageProject } from "@/lib/projects/project-permissions";
 import {
   useDeleteProject,
@@ -92,7 +93,8 @@ function ProjectDetail() {
   const deleteProject = useDeleteProject();
   const pinProjectMutation = usePinProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
+  const { open: editOpen, setOpen: setEditOpen } =
+    useDialogFlagUrlParam("edit");
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
@@ -395,7 +397,8 @@ function ChatsList({
     id: string;
     title: string | null;
     authorName: string | null;
-    origin: "user" | "schedule_trigger";
+    /** Conversation origin; only `schedule_trigger` is special here. */
+    origin: string;
     lastMessageAt: string;
     readOnly: boolean;
     scheduleTriggerId: string | null;

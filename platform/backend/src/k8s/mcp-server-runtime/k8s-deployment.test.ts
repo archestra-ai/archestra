@@ -455,6 +455,74 @@ describe("K8sDeployment.constructDeploymentName", () => {
     expect(result1).toBe(result2);
     expect(result1).toBe("mcp-firecrawl-joey");
   });
+
+  // Frozen deployment identity: the stored name always wins over the
+  // name-derived recompute, so renames never re-derive the deployment.
+  test("returns the stored frozen deploymentName over the name recompute", () => {
+    const mockServer = {
+      name: "renamed display name",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      deploymentName: "mcp-original-1a2b3c4d",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    expect(K8sDeployment.constructDeploymentName(mockServer)).toBe(
+      "mcp-original-1a2b3c4d",
+    );
+  });
+
+  test("falls back to the legacy recompute when deploymentName is NULL", () => {
+    const mockServer = {
+      name: "Not Yet Frozen",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      deploymentName: null,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    expect(K8sDeployment.constructDeploymentName(mockServer)).toBe(
+      "mcp-not-yet-frozen",
+    );
+  });
+
+  test("multitenant reads the frozen name from the CATALOG row, ignoring the install's", () => {
+    const mockServer = {
+      name: "install name",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      catalogId: "aaaabbbb-e89b-12d3-a456-426614174000",
+      deploymentName: "mcp-install-frozen",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const mockCatalog = {
+      multitenant: true,
+      name: "renamed catalog",
+      deploymentName: "mcp-mt-aaaabbbb-original",
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    expect(K8sDeployment.constructDeploymentName(mockServer, mockCatalog)).toBe(
+      "mcp-mt-aaaabbbb-original",
+    );
+  });
+
+  test("multitenant falls back to the legacy mt recompute when the catalog is not frozen", () => {
+    const mockServer = {
+      name: "install name",
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      catalogId: "aaaabbbb-e89b-12d3-a456-426614174000",
+      deploymentName: null,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+    const mockCatalog = {
+      multitenant: true,
+      name: "Shared Catalog",
+      deploymentName: null,
+      // biome-ignore lint/suspicious/noExplicitAny: Minimal mock for testing
+    } as any;
+
+    expect(K8sDeployment.constructDeploymentName(mockServer, mockCatalog)).toBe(
+      "mcp-mt-aaaabbbb-shared-catalog",
+    );
+  });
 });
 
 describe("K8sDeployment.generateDeploymentSpec", () => {
@@ -517,12 +585,13 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
       "mcp-server-name": "test-server",
     });
 
-    // Verify deployment spec
+    // Verify deployment spec. The selector must NOT carry the mutable
+    // mcp-server-name label: selectors are immutable, so pod identity keys
+    // on `app` + the stable id only (renames stay pure DB operations).
     expect(deploymentSpec.spec?.replicas).toBe(1);
     expect(deploymentSpec.spec?.selector.matchLabels).toEqual({
       app: "mcp-server",
       "mcp-server-id": "test-server-id",
-      "mcp-server-name": "test-server",
     });
 
     // Verify pod template spec

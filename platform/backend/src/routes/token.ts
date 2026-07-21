@@ -3,11 +3,17 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  TeamModel,
+  TeamTokenModel,
+} from "@/models";
 import {
   ApiError,
   constructResponseSchema,
   type SelectTeamToken,
+  type TeamTokenWithTeam,
   TeamTokenWithValueResponseSchema,
   TokensListResponseSchema,
 } from "@/types";
@@ -51,10 +57,13 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Get tokens visible to the user based on their permissions:
    * - ac:update: can see org-wide token
    * - team:create: can see all team tokens
-   * - team admin role: can see tokens for teams they administer
+   * - team membership (any role): can see their teams' tokens — listing
+   *   only exposes metadata (name, tokenStart); the value endpoint below
+   *   stays gated behind team admin / org-level team management
    *
-   * When profileId is provided, team tokens are further filtered to only
-   * include tokens for teams that the profile is also assigned to.
+   * When profileId is provided, tokens are annotated with worksWithProfile
+   * (org-scoped agents accept any team token; team-scoped agents only their
+   * teams'; personal agents none) so the UI can grey out the rest.
    *
    * Also returns permission flags so the UI can show disabled options
    * for tokens the user doesn't have access to.
@@ -73,7 +82,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .uuid()
             .optional()
             .describe(
-              "Filter team tokens to only show tokens for teams the profile is assigned to",
+              "Annotate each token with worksWithProfile: whether it can authenticate against this profile",
             ),
         }),
         response: constructResponseSchema(TokensListResponseSchema),
@@ -119,33 +128,39 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Filter team tokens based on user permissions
+      // Filter team tokens: users see tokens for teams they belong to (any
+      // role). Listing only exposes metadata — the token value itself stays
+      // gated behind team admin / org-level team management, so members see
+      // that a token exists and can ask an admin for it.
       if (!canManageAllTeams) {
-        if (!hasMcpGatewayTeamAdmin && adminTeamIds.length === 0) {
-          visibleTokens = visibleTokens.filter(
-            (token) => token.isOrganizationToken,
-          );
-        } else {
-          const userTeamIds = hasMcpGatewayTeamAdmin
-            ? await TeamModel.getUserTeamIds(user.id)
-            : adminTeamIds;
-          visibleTokens = visibleTokens.filter(
-            (token) =>
-              token.isOrganizationToken ||
-              (token.teamId && userTeamIds.includes(token.teamId)),
-          );
-        }
-      }
-
-      // If profileId is provided, further filter team tokens to only show
-      // tokens for teams that the profile is also assigned to
-      if (profileId) {
-        const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
+        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
         visibleTokens = visibleTokens.filter(
           (token) =>
             token.isOrganizationToken ||
-            (token.teamId && profileTeamIds.includes(token.teamId)),
+            (token.teamId && userTeamIds.includes(token.teamId)),
         );
+      }
+
+      // If profileId is provided, annotate each token with whether it can
+      // actually authenticate against that agent — mirroring
+      // AgentTeamModel.teamHasAgentAccess: org-scoped agents accept any
+      // team token, team-scoped agents only their assigned teams' tokens,
+      // personal agents none. Org tokens always pass. Tokens stay listed
+      // either way so the UI can show them greyed out with the reason.
+      let worksWithProfile: ((token: TeamTokenWithTeam) => boolean) | null =
+        null;
+      if (profileId) {
+        const agent = await AgentModel.findAccessContextById(profileId);
+        const profileTeamIds =
+          agent?.scope === "team"
+            ? await AgentTeamModel.getTeamsForAgent(profileId)
+            : [];
+        worksWithProfile = (token) =>
+          token.isOrganizationToken ||
+          agent?.scope === "org" ||
+          (agent?.scope === "team" &&
+            !!token.teamId &&
+            profileTeamIds.includes(token.teamId));
       }
 
       return reply.send({
@@ -157,6 +172,9 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
           team: token.team,
           createdAt: token.createdAt,
           lastUsedAt: token.lastUsedAt,
+          worksWithProfile: worksWithProfile
+            ? worksWithProfile(token)
+            : undefined,
         })),
         permissions: {
           canAccessOrgToken,

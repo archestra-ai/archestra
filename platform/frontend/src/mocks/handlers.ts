@@ -3,8 +3,9 @@
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
 import {
-  CLAUDE_CLIENT_FILTER,
-  isClaudeClientAgentId,
+  type ClientFilter,
+  ClientFilterSchema,
+  clientFilterToAgentIds,
 } from "@archestra/shared/interactions/client";
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
 import { agentsSeed, makeAgent } from "./data/agents";
@@ -211,6 +212,9 @@ export const handlers: HttpHandler[] = [
   // LLM provider API keys (plain array — not paginated)
   ...getJson("/api/llm-provider-api-keys", llmProviderApiKeysSeed),
   ...getJson("/api/llm-provider-api-keys/available", []),
+  // Deep-linkable detail dialogs refetch the opened key by id; keep this after
+  // "/available" so that route isn't swallowed by ":id".
+  ...getJson("/api/llm-provider-api-keys/:id", makeLlmProviderApiKey()),
   ...postJson("/api/llm-provider-api-keys", makeLlmProviderApiKey()),
   ...patchJson("/api/llm-provider-api-keys/:id", makeLlmProviderApiKey()),
   ...deleteJson("/api/llm-provider-api-keys/:id"),
@@ -267,9 +271,14 @@ export const handlers: HttpHandler[] = [
       const source = params.get("source");
       let data = llmLogsSessionsSeed;
       if (sessionId) data = data.filter((s) => s.sessionId === sessionId);
-      if (client === CLAUDE_CLIENT_FILTER) {
+      if (client && ClientFilterSchema.safeParse(client).success) {
+        const ids = new Set(
+          clientFilterToAgentIds(client as ClientFilter).map((id) =>
+            id.toLowerCase(),
+          ),
+        );
         data = data.filter((s) =>
-          s.externalAgentIds.some(isClaudeClientAgentId),
+          s.externalAgentIds.some((a) => ids.has(a.toLowerCase())),
         );
       }
       if (source) data = data.filter((s) => s.source === source);

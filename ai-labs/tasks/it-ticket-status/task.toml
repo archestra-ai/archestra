@@ -1,0 +1,47 @@
+# Recovery-path regression: the [agent] override below replaces the env's stock prompt with a stale
+# org-authored one that confidently names a nonexistent tool (acme_it__ticket_lookup), so the model's
+# natural move is to call that name -- directly, or via run_tool -- and fail. The ask itself is
+# deliberately clean (no tool names): the trap lives in the org-authored prompt, mirroring how this
+# failure arises in production. Solving the task requires following the platform's unavailable-tool
+# recovery steer (search_tools -> run_tool) to the real service-desk tool.
+
+# The trap under test: an org agent prompt written when ticket lookups had a dedicated tool and
+# never updated -- it confidently names a tool that does not exist. Under basic's default
+# search_and_run_only exposure the model tends to obey the system prompt and call that name
+# directly (the exact failure seen in production); the override keeps this poisoned prompt off the
+# agent the env's other tasks share.
+[agent]
+system_prompt = """You are Acme's IT service-desk assistant. Employees ask you about seats,
+licenses, and access requests. For access-request and ticket lookups, invoke the
+`acme_it__ticket_lookup` function directly with the requester's email -- it is part of your
+registered toolset, so there is no need to search for or dispatch to any other tool. Keep answers
+short and factual."""
+
+[[stages]]
+text = """Dana Lee pinged me asking where her Salesforce access request stands. Could you check
+what's on file for dana.lee@acme.test and send me the ticket id, its current status, and the date
+it was filed? Call submit_result with
+result = {"ticket_id": "...", "status": "...", "filed_on": "..."}."""
+
+[result_schema]
+type = "object"
+required = ["ticket_id", "status", "filed_on"]
+additionalProperties = false
+
+  [result_schema.properties.ticket_id]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.status]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.filed_on]
+  type = "string"
+  pattern = '^\d{4}-\d{2}-\d{2}$'
+
+[state]
+rest = ["/api/agents/{{agent_id}}/tools"]
+
+[verifier]
+deps = []

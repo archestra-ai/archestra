@@ -24,6 +24,7 @@ import {
   openGatewayCatalogToolAssignment,
   openManageCredentialsDialog,
   saveOpenProfileDialog,
+  selectCredentialOption,
   settleRegistryAfterInstall,
   verifyToolCallResultViaApi,
   waitForMcpServerAbsent,
@@ -192,16 +193,12 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
         await expect(visibleStaticCredentials).toHaveLength(
           expectedAssignableCredentials.length,
         );
-        // Force the click: the credential option list re-renders when the
-        // dropdown opens, detaching the node mid-click. Same DOM-detach race
-        // assignCatalogCredentialToGateway already handles this way.
-        await page
-          .getByRole("option", {
+        await selectCredentialOption(
+          page,
+          page.getByRole("option", {
             name: expectedAssignableCredentials[0] ?? "",
-          })
-          .click({ force: true });
-        await page.keyboard.press("Escape");
-        await page.waitForTimeout(200);
+          }),
+        );
         await saveOpenProfileDialog(page);
 
         // Revoke the admin's own (personal) credential, then close dialog.

@@ -15,12 +15,12 @@ import {
   type Tokenizer,
 } from "@/tokenizers";
 import type {
-  Agent,
   Anthropic,
   Cerebras,
   Cohere,
   CommonMcpToolDefinition,
   DeepSeek,
+  GatewayAgent,
   Gemini,
   GithubCopilot,
   Groq,
@@ -85,7 +85,7 @@ export function estimateToolTokens(
 export async function getOptimizedModel<
   Provider extends keyof ProviderMessages,
 >(
-  agent: Agent,
+  agent: GatewayAgent,
   messages: ProviderMessages[Provider],
   provider: Provider,
   hasTools: boolean,

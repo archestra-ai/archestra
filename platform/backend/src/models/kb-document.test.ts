@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import db from "@/database";
 import { describe, expect, test } from "@/test";
 import type { InsertKbDocument } from "@/types";
+import KbChunkModel from "./kb-chunk";
 import KbDocumentModel from "./kb-document";
 
 function createDocumentData(
@@ -494,10 +495,11 @@ describe("KbDocumentModel", () => {
         }),
       );
 
-      const updatedCount = await KbDocumentModel.updateAclByConnector(
-        targetConnector.id,
-        ["team:alpha"],
-      );
+      const updatedCount = await KbDocumentModel.updateAclByConnector({
+        connectorId: targetConnector.id,
+        acl: ["team:alpha"],
+        aclConfigEpoch: targetConnector.aclConfigEpoch,
+      });
 
       expect(updatedCount).toBe(1);
       expect((await KbDocumentModel.findById(unchangedDoc.id))?.acl).toEqual([
@@ -625,6 +627,92 @@ describe("KbDocumentModel", () => {
       });
 
       expect(ids).toHaveLength(2);
+    });
+  });
+
+  describe("applyContainerAssignment", () => {
+    /** Seed a document with one chunk, both fail-closed. */
+    async function seedDocWithChunk(params: {
+      connectorId: string;
+      organizationId: string;
+    }) {
+      const doc = await KbDocumentModel.create(
+        createDocumentData(params.connectorId, params.organizationId, {
+          acl: [],
+        }),
+      );
+      await KbChunkModel.insertMany([
+        { documentId: doc.id, content: "chunk", chunkIndex: 0, acl: [] },
+      ]);
+      return doc;
+    }
+
+    const chunkAcls = async (documentId: string) =>
+      (
+        await db.execute<{ acl: string[] }>(
+          sql`SELECT acl FROM kb_chunks WHERE document_id = ${documentId}`,
+        )
+      ).rows.map((row) => row.acl);
+
+    test("moves the document row and its chunks together, reporting both", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await seedDocWithChunk({
+        connectorId: connector.id,
+        organizationId: org.id,
+      });
+
+      const result = await KbDocumentModel.applyContainerAssignment({
+        documentId: doc.id,
+        connectorId: connector.id,
+        acl: ["container:x"],
+        containerKey: "repo:o/r",
+        aclConfigEpoch: connector.aclConfigEpoch,
+      });
+
+      expect(result).toEqual({ documentUpdated: true, chunksRewritten: 1 });
+      const stored = await KbDocumentModel.findById(doc.id);
+      expect(stored?.acl).toEqual(["container:x"]);
+      expect(stored?.containerKey).toBe("repo:o/r");
+      expect(await chunkAcls(doc.id)).toEqual([["container:x"]]);
+    });
+
+    test("a stale epoch fences out the document AND its chunks — never one without the other", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      // The invariant this method exists for. As two separately-fenced
+      // statements, a visibility switch landing between them fenced out only the
+      // second: the chunks (which the search filter actually reads) kept a
+      // container token the document row never got. One statement, one fence
+      // evaluation, so the pair cannot come apart.
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await seedDocWithChunk({
+        connectorId: connector.id,
+        organizationId: org.id,
+      });
+
+      const result = await KbDocumentModel.applyContainerAssignment({
+        documentId: doc.id,
+        connectorId: connector.id,
+        acl: ["container:x"],
+        containerKey: "repo:o/r",
+        aclConfigEpoch: connector.aclConfigEpoch + 1,
+      });
+
+      expect(result).toEqual({ documentUpdated: false, chunksRewritten: 0 });
+      const stored = await KbDocumentModel.findById(doc.id);
+      expect(stored?.acl).toEqual([]);
+      expect(stored?.containerKey).toBeNull();
+      expect(await chunkAcls(doc.id)).toEqual([[]]);
     });
   });
 });

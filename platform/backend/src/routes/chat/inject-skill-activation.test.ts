@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@archestra/shared";
-import { SkillModel } from "@/models";
+import { EnvironmentModel, SkillModel } from "@/models";
 import { expect, test } from "@/test";
+import { drainBackgroundWork } from "@/utils/background-work";
 import { injectSkillActivation } from "./inject-skill-activation";
 
 async function seedSkill(
@@ -62,6 +63,10 @@ test("prepends the skill activation block to the last user message", async ({
   expect(text).toContain("summarize this paper");
   // the original message is left untouched for persistence / display
   expect(messages[0].parts?.[0]?.text).toBe("summarize this paper");
+
+  // the activation counts one use
+  await drainBackgroundWork();
+  expect((await SkillModel.findById(skill.id))?.usageCount).toBe(1);
 });
 
 test("ignores a skill that belongs to another organization", async ({
@@ -178,4 +183,88 @@ test("returns the messages unchanged when no skill metadata is present", async (
   });
 
   expect(result).toBe(messages);
+});
+
+test("leaves the message unchanged when the skill is outside the agent's environment", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id);
+  const agent = await makeAgent({
+    name: "Default Env Agent",
+    organizationId: org.id,
+  });
+
+  const otherEnv = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "Other Environment",
+  });
+  const skill = await seedSkill(org.id, "Research");
+  await SkillModel.updateWithFiles({
+    id: skill.id,
+    skill: { environmentId: otherEnv.id },
+  });
+
+  const messages: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [{ type: "text", text: "summarize this paper" }],
+      metadata: { skill: { id: skill.id, name: skill.name } },
+    },
+  ];
+
+  const result = await injectSkillActivation({
+    messages,
+    organizationId: org.id,
+    userId: user.id,
+    agentId: agent.id,
+    conversationId: undefined,
+  });
+
+  expect(result).toBe(messages);
+});
+
+test("injects a delegation directive instead of the body for an agent-designated skill", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id);
+  const skill = await seedSkill(org.id, "Deep Research");
+  await SkillModel.updateWithFiles({
+    id: skill.id,
+    skill: { agentName: "Research Bot" },
+  });
+
+  const messages: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [{ type: "text", text: "find prior art" }],
+      metadata: { skill: { id: skill.id, name: skill.name } },
+    },
+  ];
+
+  const result = await injectSkillActivation({
+    messages,
+    organizationId: org.id,
+    userId: user.id,
+    agentId: undefined,
+    conversationId: undefined,
+  });
+
+  const text = result[0].parts?.[0]?.text ?? "";
+  expect(text).toContain(
+    '<skill_delegation skill="Deep Research" agent="Research Bot">',
+  );
+  expect(text).toContain("skill__deep_research");
+  expect(text).toContain("find prior art");
+  // the skill's instructions never reach the parent context
+  expect(text).not.toContain("Follow the Deep Research steps.");
+  expect(text).not.toContain("<skill_content");
 });

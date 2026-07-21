@@ -332,7 +332,10 @@ describe("mcp-reinstall", () => {
         expect(result).toBe(true);
       });
 
-      test("returns true when server NAME changes (even with no prompted env vars)", () => {
+      // Renames are a pure DB cascade (deployment identity is frozen,
+      // secret names are id-keyed) and never reach this gate through the
+      // PUT route — a bare name diff must not demand new user input.
+      test("returns false when only the server NAME changes (no prompted env vars)", () => {
         const oldConfig = {
           ...createLocalCatalog([]),
           name: "Old Server Name",
@@ -344,10 +347,10 @@ describe("mcp-reinstall", () => {
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
-        expect(result).toBe(true);
+        expect(result).toBe(false);
       });
 
-      test("returns true when server NAME changes (with existing prompted env vars)", () => {
+      test("returns false when only the server NAME changes (with existing prompted env vars)", () => {
         const envVars = [
           {
             key: "API_KEY",
@@ -366,7 +369,7 @@ describe("mcp-reinstall", () => {
 
         const result = requiresNewUserInputForReinstall(oldConfig, newConfig);
 
-        expect(result).toBe(true);
+        expect(result).toBe(false);
       });
 
       test("returns true when command or args change", () => {

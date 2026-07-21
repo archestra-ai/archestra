@@ -1,11 +1,11 @@
 import {
   ARCHESTRA_TOOL_PREFIX,
-  buildFullToolName,
   TOOL_RENDER_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { generateId, type UIMessage } from "ai";
 import {
   AgentModel,
+  AppAccessModel,
   AppModel,
   ConversationModel,
   McpServerModel,
@@ -19,6 +19,7 @@ import {
 } from "@/services/apps/app-render-result";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
 import { ApiError } from "@/types";
+import { externalAppLabel } from "@/utils/external-app-label";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
 
@@ -40,8 +41,6 @@ export async function createSeededAppConversation(params: {
   appId: string;
   userId: string;
   organizationId: string;
-  /** Agent to bind the chat to; defaults to the caller's default chat agent. */
-  agentId?: string;
 }): Promise<{ conversationId: string }> {
   const { appId, userId, organizationId } = params;
 
@@ -55,10 +54,20 @@ export async function createSeededAppConversation(params: {
     throw new ApiError(404, `No app found with id ${appId}.`);
   }
 
+  // An app-admin can open an app they only see through oversight (someone
+  // else's personal app). They may use it and change its settings, but not edit
+  // it via chat — so the greeting must not invite edits the authoring tools
+  // will refuse. "Reachable without the admin bypass" is exactly "not oversight".
+  const isOversight = !(await AppAccessModel.userHasAppAccess({
+    organizationId,
+    userId,
+    app,
+    isAppAdmin: false,
+  }));
+
   return seedConversationWithRender({
     userId,
     organizationId,
-    agentId: params.agentId,
     title: app.name,
     part: {
       type: "dynamic-tool",
@@ -68,7 +77,7 @@ export async function createSeededAppConversation(params: {
       input: { appId: app.id },
       output: buildAppRenderResult(app),
     },
-    greeting: buildAppOpenedGreeting(app.name),
+    greeting: buildAppOpenedGreeting(app.name, isOversight),
   });
 }
 
@@ -106,8 +115,6 @@ export async function createSeededExternalAppConversation(params: {
   resourceUri: string;
   userId: string;
   organizationId: string;
-  /** Agent to bind the chat to; defaults to the caller's default chat agent. */
-  agentId?: string;
 }): Promise<ExternalAppOpenResult> {
   const { mcpServerId, resourceUri, userId, organizationId } = params;
 
@@ -120,15 +127,15 @@ export async function createSeededExternalAppConversation(params: {
     throw new ApiError(404, "No runnable app found for this install.");
   }
 
-  // The card title: "<server> / <tool>" — also the seeded part's tool name, so
-  // the chat's `mcpToolLabel` derives the same label.
-  const label = `${uiResource.serverName} / ${uiResource.toolName}`;
+  // The apps-page card title: the server name, "/ <tool>"-suffixed only when
+  // the server exposes several UI tools. Reused as the conversation title and
+  // the rendered app's display label so all three surfaces agree.
+  const label = externalAppLabel(uiResource);
 
   if (toolRequiresInputs(uiResource.toolParameters)) {
     const { conversationId } = await createAppChatConversation({
       userId,
       organizationId,
-      agentId: params.agentId,
       title: label,
     });
     return {
@@ -144,11 +151,14 @@ export async function createSeededExternalAppConversation(params: {
   const { conversationId } = await seedConversationWithRender({
     userId,
     organizationId,
-    agentId: params.agentId,
     title: label,
     part: {
       type: "dynamic-tool",
-      toolName: buildFullToolName(uiResource.serverName, uiResource.toolName),
+      // The tool's stored name, verbatim. `serverName`/`toolName` are a display
+      // pair — the stored prefix is a slug of the catalog's human name (and may
+      // be truncated), so recombining them names a tool that dispatches nowhere
+      // and puts a fake name in front of the model.
+      toolName: uiResource.fullToolName,
       toolCallId: generateId(),
       state: "output-available",
       input: {},
@@ -172,14 +182,11 @@ export async function createSeededExternalAppConversation(params: {
 async function createAppChatConversation(params: {
   userId: string;
   organizationId: string;
-  agentId?: string;
   title: string;
 }): Promise<{ conversationId: string }> {
   const { userId, organizationId, title } = params;
 
-  const agentId =
-    params.agentId ??
-    (await resolveDefaultChatAgentId({ userId, organizationId }));
+  const agentId = await resolveDefaultChatAgentId({ userId, organizationId });
   const agent = await AgentModel.findById(agentId);
   if (!agent || agent.organizationId !== organizationId) {
     throw new ApiError(404, "Agent not found");
@@ -201,6 +208,10 @@ async function createAppChatConversation(params: {
     title,
     modelId: llmSelection.modelId,
     chatApiKeyId: llmSelection.chatApiKeyId,
+    // App-opened chats are drafts: the conversations list hides them until the
+    // user writes a message (see ConversationModel.findAll), so clicking
+    // through apps doesn't pile unused chats into the sidebar.
+    origin: "app_open",
   });
 
   return { conversationId: conversation.id };
@@ -216,17 +227,15 @@ async function createAppChatConversation(params: {
 async function seedConversationWithRender(params: {
   userId: string;
   organizationId: string;
-  agentId?: string;
   title: string;
   part: UIMessage["parts"][number];
   greeting?: string;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, agentId, title, part, greeting } = params;
+  const { userId, organizationId, title, part, greeting } = params;
 
   const { conversationId } = await createAppChatConversation({
     userId,
     organizationId,
-    agentId,
     title,
   });
 
@@ -276,10 +285,24 @@ async function resolveDefaultChatAgentId(params: {
   return created;
 }
 
-/** Markdown greeting seeded when an owned app is opened in chat. */
-function buildAppOpenedGreeting(name: string): string {
+/**
+ * Markdown greeting seeded when an owned app is opened in chat. For an admin
+ * viewing an app they only see through oversight, it invites use — not edits —
+ * since the authoring tools refuse to modify someone else's app.
+ */
+function buildAppOpenedGreeting(name: string, isOversight: boolean): string {
+  const heading = `Here's **${escapeAppNameForModelText(name)}**.`;
+  if (isOversight) {
+    return (
+      `${heading}\n\n` +
+      `You're viewing this app as an administrator — it belongs to another ` +
+      `user. You can use it and change its settings, but not modify the app ` +
+      `itself here.\n\n` +
+      `Want to use the app? Use the UI 👉, or ask me to!`
+    );
+  }
   return (
-    `Here's **${escapeAppNameForModelText(name)}**.\n\n` +
+    `${heading}\n\n` +
     `Want to change the app? Tell me how!\n\n` +
     `Want to use the app? Use the UI 👉, or ask me to!`
   );

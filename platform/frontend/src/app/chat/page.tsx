@@ -26,18 +26,24 @@ import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
-import { getScheduledRunChatState } from "@/app/scheduled-tasks/schedule-trigger.utils";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
+import {
+  AppSessionRecorderProvider,
+  useOwnAppSessionRecorder,
+} from "@/components/app-session-recording/use-app-session-recorder";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils";
+import {
+  collectBrowserToolCallIds,
+  openedAppMetadataFromApps,
+} from "@/components/chat/chat-messages.utils";
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
@@ -48,6 +54,7 @@ import {
   usePlaywrightSetupRequired,
 } from "@/components/chat/playwright-install-dialog";
 import {
+  AppsPanelContent,
   type RightPanelTab,
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
@@ -60,6 +67,7 @@ import MessageThread, {
   type PartialUIMessage,
 } from "@/components/message-thread";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
+import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -81,6 +89,7 @@ import {
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { trackEvent } from "@/lib/analytics";
+import { useApp } from "@/lib/app.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   clearOAuthPendingChatResume,
@@ -110,7 +119,6 @@ import {
   useUpdateConversationEnabledTools,
   useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
-import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
 import { useSetChatMessageFeedback } from "@/lib/chat/chat-message.query";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import {
@@ -145,7 +153,7 @@ import {
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig, useFeature } from "@/lib/config/config.query";
+import { useConfig } from "@/lib/config/config.query";
 import {
   type ConnectivityState,
   useConnectivity,
@@ -321,7 +329,7 @@ export function ChatPageContent({
   const cannotCreateDueToNoTeams =
     !isAgentAdmin && (!teams || teams.length === 0);
 
-  const _isMobile = useIsMobile();
+  const isMobile = useIsMobile();
 
   // State for browser panel. Restored per-conversation by the conversation-load
   // effect below (a fresh /chat with no conversation has no saved state).
@@ -497,10 +505,13 @@ export function ChatPageContent({
   // Same query the composer's slash-command table is built from (identical
   // input → shared TanStack cache entry). The prefill token must come from
   // that table, not be re-derived from the skill name, so slug collisions
-  // resolve to the right skill.
+  // resolve to the right skill. Deep links land on a new chat, where the
+  // composer's agent is the initial agent — so the same environment filter
+  // (forAgentId) applies here; a cross-environment skill resolves
+  // "unavailable" rather than prefilling a token the composer can't parse.
   const urlSkillCommandsQuery = useSkillsPaginated(
-    { limit: 100 },
-    { enabled: urlSkillWanted && skillToolsEnabled },
+    { limit: 100, forAgentId: initialAgentId ?? undefined },
+    { enabled: urlSkillWanted && skillToolsEnabled && !!initialAgentId },
   );
   useEffect(() => {
     if (urlSkillProcessedRef.current || !urlSkillId) return;
@@ -1034,6 +1045,45 @@ export function ChatPageContent({
     earlyToolUiStarts: chatSession?.earlyToolUiStarts ?? {},
     filterDeleted: true,
   });
+  // The app currently open in the chat, reported to the backend on each user
+  // message so it can restate that app's context in the turn's system prompt.
+  // The backend re-resolves the id under the caller's own access, so this is a
+  // hint, never an authorization.
+  const openedAppMetadata = useMemo(
+    () => openedAppMetadataFromApps(mcpApps),
+    [mcpApps],
+  );
+
+  // This chat's Apps Hackathon session recorder, owned here as part of the
+  // chat session and provided to the tree below: the composer's control drives
+  // Start/Stop and each app frame feeds capture. Ownership scopes the
+  // recording's lifetime — leaving this conversation (or this page) stops and
+  // saves it. A recording started from scratch (before this chat had an id) is
+  // adopted under the new id in createInitialConversation's onSuccess.
+  const recordedAppId = useMemo(
+    () => mcpApps.find((entry) => entry.appId)?.appId ?? null,
+    [mcpApps],
+  );
+  const appSessionRecorder = useOwnAppSessionRecorder({
+    conversationId: conversationId ?? null,
+    appId: recordedAppId,
+  });
+  // When an admin opens another user's app, the seeded conversation (origin
+  // "app_open") renders that app, but its server-computed viewerRole is "admin":
+  // they may use it and change its settings, not modify it via chat. Mirror the
+  // Projects admin view by replacing the composer with a "Viewing as
+  // administrator" banner. Gate on origin so useApp never fires for ordinary
+  // chats, and read the same authoritative viewerRole the card/settings use.
+  const oversightAppId =
+    conversation?.origin === "app_open"
+      ? (mcpApps.find((entry) => entry.appId)?.appId ?? null)
+      : null;
+  const oversightApp = useApp(oversightAppId);
+  const isAppOversight = oversightApp.data?.viewerRole === "admin";
+  // Hold the composer while an app-open conversation's app is still resolving so
+  // an oversight view never briefly flashes an editable composer before we know.
+  const isResolvingOversightApp =
+    oversightAppId !== null && oversightApp.isPending;
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const status = chatSession?.status ?? "ready";
@@ -1107,9 +1157,6 @@ export function ChatPageContent({
     },
     [setMessages, conversationId, messages, setChatMessageFeedback],
   );
-  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
-  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
-
   // A scheduled run's transcript is persisted only when it completes, so a run
   // opened while still running seeds the live chat session empty. When the run
   // finishes, the completion effect refetches the conversation; hydrate the
@@ -1245,20 +1292,10 @@ export function ChatPageContent({
     syncPersistedMessageMetadata(persistedConversationMessages);
   }, [persistedConversationMessages, status, syncPersistedMessageMetadata]);
 
-  const {
-    conversationAgentId,
-    activeAgentId,
-    promptAgentId,
-    swappedAgentName,
-  } = useChatAgentState({
-    conversation,
-    initialAgentId,
-    messages,
-    agents: internalAgents.map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-    })),
-  });
+  const conversationAgentId =
+    conversation?.agentId ?? conversation?.agent?.id ?? null;
+  const activeAgentId = conversationAgentId ?? initialAgentId;
+  const promptAgentId = conversation?.agent?.id ?? activeAgentId;
   const newChatAgentId =
     activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
 
@@ -1317,7 +1354,9 @@ export function ChatPageContent({
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
   const handleCompactConversation = useCallback(async () => {
-    if (!conversationId || isReadOnlyConversation) {
+    // The compaction guard matters now that the composer stays usable during
+    // compaction when queueing is on — a second /compact must not re-enter.
+    if (!conversationId || isReadOnlyConversation || isContextCompacting) {
       return;
     }
 
@@ -1404,6 +1443,7 @@ export function ChatPageContent({
   }, [
     compactConversationMutation,
     conversationId,
+    isContextCompacting,
     isReadOnlyConversation,
     recordContextCompaction,
     syncPersistedMessageMetadata,
@@ -1673,7 +1713,7 @@ export function ChatPageContent({
       });
     };
 
-    const queueEnabled = isMessageQueueEnabled && !!conversationId;
+    const queueEnabled = !!conversationId;
     const submitAction = classifyChatSubmitAction({
       status,
       queueEnabled,
@@ -1681,10 +1721,10 @@ export function ChatPageContent({
     });
 
     if (submitAction === "stop") {
-      // Queueing off: the submit button doubles as Stop while a turn streams.
-      // (Stopping is the submit button's onClick, not a form submit.) Throw to
-      // keep the textarea and draft intact — see onSubmit contract in
-      // ArchestraPromptInputProps.
+      // No conversation to queue into (new-chat composer): the submit button
+      // doubles as Stop while a turn streams. (Stopping is the submit button's
+      // onClick, not a form submit.) Throw to keep the textarea and draft
+      // intact — see onSubmit contract in ArchestraPromptInputProps.
       handleStopStreaming();
       throw new Error("stop-not-submit");
     }
@@ -1774,6 +1814,7 @@ export function ChatPageContent({
         ...(skillToAttach ? { skill: skillToAttach } : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
+        ...(openedAppMetadata ? { openedApp: openedAppMetadata } : {}),
       },
     });
     // Mark the turn as in flight synchronously so follow-up submits queue
@@ -1949,6 +1990,10 @@ export function ChatPageContent({
       createConversationMutation.mutate(input, {
         onSuccess: (newConversation) => {
           if (newConversation) {
+            // A recording started from scratch (before this chat had an id)
+            // becomes this conversation's recording now that its id exists, so
+            // the timer and buffered capture carry across the transition.
+            appSessionRecorder.adoptConversation(newConversation.id);
             void onSuccess?.(newConversation);
           }
         },
@@ -1961,6 +2006,7 @@ export function ChatPageContent({
       initialApiKeyId,
       createConversationMutation,
       searchParams,
+      appSessionRecorder.adoptConversation,
     ],
   );
 
@@ -2305,7 +2351,7 @@ export function ChatPageContent({
   // in the same session, right after the first key is added (`firstKeyAdded`).
   // If the admin skips it or navigates away mid-onboarding, they are not
   // re-prompted on later visits — they set the default anytime in Settings →
-  // Agents (which links here from its "Default Model" copy). Deriving it purely
+  // Chat (which links here from its "Default Model" copy). Deriving it purely
   // from server state (keys exist && no org default) would re-show it on every
   // /chat visit until a default is set, which nags.
   //
@@ -2466,7 +2512,7 @@ export function ChatPageContent({
     autoSendTriggered: autoSendTriggeredRef.current,
   });
 
-  return (
+  const page = (
     <AppsProvider
       key={conversationId ?? "new"}
       apps={mcpApps}
@@ -2485,6 +2531,8 @@ export function ChatPageContent({
           isTitleAnimating={
             !!conversation && headerAnimatingTitles.has(conversation.id)
           }
+          isAppOversight={isAppOversight}
+          oversightOwnerName={oversightApp.data?.authorName ?? null}
           canManageShare={canManageShare}
           isShared={isShared}
           canCreateProject={canCreateProjectFromThisChat}
@@ -2498,6 +2546,7 @@ export function ChatPageContent({
             scheduledRun,
             isArtifactOpen,
             isBrowserVisible: isBrowserPanelVisible,
+            isAppsVisible: isAppsTabOpen,
             showBrowserButton,
             isPlaywrightSetupVisible,
             onClose: closeRightPanel,
@@ -2549,6 +2598,14 @@ export function ChatPageContent({
                           handleInitialNavigateComplete
                         }
                       />
+                    </div>
+                  )}
+                  {/* Gated on isMobile (not just CSS) so the app iframe only
+                      ever mounts once — the desktop panel below unmounts on
+                      mobile the same way. */}
+                  {activeRightTab === "apps" && isMobile && (
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      <AppsPanelContent agentId={browserToolsAgentId} />
                     </div>
                   )}
                 </div>
@@ -2699,7 +2756,7 @@ export function ChatPageContent({
                         </div>
                       </div>
                     </div>
-                  ) : (
+                  ) : isAppOversight || isResolvingOversightApp ? null : (
                     activeAgentId && (
                       <div className="sticky bottom-0 bg-background border-t p-4">
                         {/* Shared-element pair with the centered New Chat
@@ -2747,7 +2804,6 @@ export function ChatPageContent({
                                 isPlaywrightSetupVisible
                               }
                               selectorAgentId={activeAgentId}
-                              selectorAgentName={swappedAgentName ?? undefined}
                               onAgentChange={handleConversationAgentChange}
                               modelSource={conversationModelSource}
                               onResetModelOverride={
@@ -2924,24 +2980,28 @@ export function ChatPageContent({
             </div>
           </div>
 
-          {/* Right-side panel - desktop only */}
-          <div className="hidden md:flex h-full min-h-0">
-            <RightSidePanel
-              isOpen={isRightPanelOpen}
-              activeTab={activeRightTab}
-              onClose={closeRightPanel}
-              canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
-              scheduledRun={scheduledRun}
-              artifact={conversation?.artifact}
-              projectId={conversation?.projectId}
-              conversationId={conversationId}
-              agentId={browserToolsAgentId}
-              onCreateConversationWithUrl={handleCreateConversationWithUrl}
-              isCreatingConversation={createConversationMutation.isPending}
-              initialNavigateUrl={pendingBrowserUrl}
-              onInitialNavigateComplete={handleInitialNavigateComplete}
-            />
-          </div>
+          {/* Right-side panel - desktop only. Unmounted (not just CSS-hidden)
+              on mobile so its Apps tab never hosts a second, invisible copy of
+              the app iframe alongside the inline mobile panel above. */}
+          {!isMobile && (
+            <div className="hidden md:flex h-full min-h-0">
+              <RightSidePanel
+                isOpen={isRightPanelOpen}
+                activeTab={activeRightTab}
+                onClose={closeRightPanel}
+                canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
+                scheduledRun={scheduledRun}
+                artifact={conversation?.artifact}
+                projectId={conversation?.projectId}
+                conversationId={conversationId}
+                agentId={browserToolsAgentId}
+                onCreateConversationWithUrl={handleCreateConversationWithUrl}
+                isCreatingConversation={createConversationMutation.isPending}
+                initialNavigateUrl={pendingBrowserUrl}
+                onInitialNavigateComplete={handleInitialNavigateComplete}
+              />
+            </div>
+          )}
         </div>
 
         <CustomServerRequestDialog
@@ -3027,6 +3087,11 @@ export function ChatPageContent({
         </StandardDialog>
       </div>
     </AppsProvider>
+  );
+  return (
+    <AppSessionRecorderProvider recorder={appSessionRecorder}>
+      {page}
+    </AppSessionRecorderProvider>
   );
 }
 

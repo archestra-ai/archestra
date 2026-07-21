@@ -1,7 +1,10 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { SkillModel, SkillVersionModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import type { InsertSkill } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import { drainBackgroundWork } from "@/utils/background-work";
 
 function skillInput(overrides: Partial<InsertSkill>): InsertSkill {
   return {
@@ -326,5 +329,124 @@ describe("SkillModel immutable versioning", () => {
     const v2 = await SkillVersionModel.findBySkillAndVersion(skill.id, 2);
     const files = await SkillVersionModel.findFiles(v2?.id ?? "");
     expect(files.map((f) => f.content)).toEqual(["# A v2"]);
+  });
+});
+
+describe("SkillModel.recordUsage", () => {
+  test("increments usageCount and stamps lastUsedAt without touching updatedAt", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "counted" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+    expect(skill.usageCount).toBe(0);
+    expect(skill.lastUsedAt).toBeNull();
+
+    SkillModel.recordUsage(skill.id);
+    SkillModel.recordUsage(skill.id);
+    await drainBackgroundWork();
+
+    const used = await SkillModel.findById(skill.id);
+    expect(used?.usageCount).toBe(2);
+    expect(used?.lastUsedAt).not.toBeNull();
+    // a usage tick is not an edit
+    expect(used?.updatedAt).toEqual(skill.updatedAt);
+  });
+
+  test("default list order is most-used first", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const names = ["alpha", "beta", "gamma"];
+    const skills = [];
+    for (const name of names) {
+      const skill = await SkillModel.createWithFiles({
+        skill: skillInput({ organizationId: org.id, name }),
+        files: [],
+      });
+      if (!skill) throw new Error("seed failed");
+      skills.push(skill);
+    }
+
+    SkillModel.recordUsage(skills[1].id);
+    SkillModel.recordUsage(skills[1].id);
+    SkillModel.recordUsage(skills[2].id);
+    await drainBackgroundWork();
+
+    const byUsage = await SkillModel.findByOrganization({
+      organizationId: org.id,
+    });
+    // never-used skills tie on 0 and fall back to newest-first
+    expect(byUsage.map((s) => s.name)).toEqual(["beta", "gamma", "alpha"]);
+
+    const byName = await SkillModel.findByOrganization({
+      organizationId: org.id,
+      sorting: { sortBy: "name", sortDirection: "asc" },
+    });
+    expect(byName.map((s) => s.name)).toEqual(["alpha", "beta", "gamma"]);
+  });
+});
+
+describe("SkillModel.findDueGithubSyncs", () => {
+  test("returns synced skills past their interval; never-synced are always due", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const seed = (name: string, overrides: Partial<InsertSkill>) =>
+      SkillModel.createWithFiles({
+        skill: skillInput({ organizationId: org.id, name, ...overrides }),
+        files: [],
+      });
+
+    const neverSynced = await seed("never-synced", {
+      githubSyncInterval: "15m",
+    });
+    const overdue = await seed("overdue", { githubSyncInterval: "15m" });
+    const fresh = await seed("fresh", { githubSyncInterval: "1d" });
+    await seed("disconnected", {});
+    if (!neverSynced || !overdue || !fresh) throw new Error("seed failed");
+
+    // overdue: last synced an hour ago with a 15m interval; fresh: just now.
+    await SkillModel.markGithubSyncResult(overdue.id, null);
+    await db
+      .update(schema.skillsTable)
+      .set({ lastSyncedAt: new Date(Date.now() - 60 * 60 * 1000) })
+      .where(eq(schema.skillsTable.id, overdue.id));
+    await SkillModel.markGithubSyncResult(fresh.id, null);
+
+    const due = await SkillModel.findDueGithubSyncs();
+    expect(due.map((s) => s.name).sort()).toEqual(["never-synced", "overdue"]);
+  });
+
+  test("setGithubSync(null) disconnects and clears sync fields", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "to-disconnect",
+        githubSyncInterval: "1h",
+        githubSyncRef: "main",
+      }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+    await SkillModel.markGithubSyncResult(skill.id, "boom");
+
+    const changed = await SkillModel.setGithubSync(skill.id, {
+      interval: "15m",
+    });
+    expect(changed?.githubSyncInterval).toBe("15m");
+
+    const disconnected = await SkillModel.setGithubSync(skill.id, null);
+    expect(disconnected?.githubSyncInterval).toBeNull();
+    expect(disconnected?.githubSyncRef).toBeNull();
+    expect(disconnected?.githubAppConfigId).toBeNull();
+    expect(disconnected?.githubPatId).toBeNull();
+    expect(disconnected?.lastSyncError).toBeNull();
   });
 });

@@ -3,7 +3,6 @@ import {
   and,
   asc,
   eq,
-  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -15,6 +14,7 @@ import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema, type Transaction } from "@/database";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
@@ -25,8 +25,10 @@ import type {
   ToolParametersContent,
   UpdateMcpServer,
 } from "@/types";
-import { escapeLikePattern } from "@/utils/sql-search";
+import { externalAppLabel } from "@/utils/external-app-label";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
+import AgentModel from "./agent";
+import AgentToolModel from "./agent-tool";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
@@ -101,10 +103,22 @@ class McpServerModel {
       teamId: serverData.teamId ?? null,
     });
 
+    // Freeze K8s deployment identity at creation (needs the id up front —
+    // supplying one is equivalent to the column's defaultRandom()). Renames
+    // update `name` but must never re-derive the deployment name; that would
+    // orphan the running deployment. Remote installs have no deployment.
+    // Multitenant installs share the catalog-level deployment, so this
+    // per-install name is simply never read for them.
+    const id = crypto.randomUUID();
+    const deploymentName =
+      serverData.serverType === "local"
+        ? constructFrozenMcpDeploymentName(mcpServerName, id)
+        : null;
+
     // ownerId is part of serverData and will be inserted
     const [createdServer] = await (tx ?? db)
       .insert(schema.mcpServersTable)
-      .values({ ...serverData, name: mcpServerName })
+      .values({ ...serverData, id, name: mcpServerName, deploymentName })
       .returning();
 
     // Assign user to the MCP server if provided (personal auth)
@@ -120,6 +134,22 @@ class McpServerModel {
       ...createdServer,
       users: userId ? [userId] : [],
     };
+  }
+
+  /**
+   * Writes the frozen `deployment_name`. Deliberately bypasses the
+   * UpdateMcpServer type-omit: deployment identity is written exactly once —
+   * by `create`, the startup adopt pass, or the rename cascade's
+   * freeze-fallback — and never follows the mutable display name.
+   */
+  static async setDeploymentName(
+    params: { id: string; deploymentName: string },
+    tx?: Transaction,
+  ): Promise<void> {
+    await (tx ?? db)
+      .update(schema.mcpServersTable)
+      .set({ deploymentName: params.deploymentName })
+      .where(eq(schema.mcpServersTable.id, params.id));
   }
 
   /**
@@ -245,6 +275,7 @@ class McpServerModel {
   static async findAll(
     userId?: string,
     isMcpServerAdmin?: boolean,
+    organizationId?: string,
   ): Promise<McpServer[]> {
     // Single query with LEFT JOINs for all related data including assigned users,
     // eliminating the consecutive DB query for user details.
@@ -366,7 +397,28 @@ class McpServerModel {
       }
     }
 
-    return Array.from(serversMap.values());
+    const servers = Array.from(serversMap.values());
+    const assignedAgentsByServer =
+      await AgentToolModel.getAssignedAgentDetailsForMcpServers([
+        ...serversMap.keys(),
+      ]);
+    // Auto-mode agents belong to the viewing org and can reach every server, so
+    // the same set decorates each one. Skipped when the caller omits an org
+    // (e.g. background/admin sweeps that do not render the registry card).
+    let autoModeAgents: Array<{ id: string; name: string }> = [];
+    if (organizationId) {
+      const autoModeAgentsByOrg =
+        await AgentModel.getAutoModeAgentDetailsByOrganizations([
+          organizationId,
+        ]);
+      autoModeAgents = autoModeAgentsByOrg.get(organizationId) ?? [];
+    }
+
+    return servers.map((server) => ({
+      ...server,
+      assignedAgents: assignedAgentsByServer.get(server.id) ?? [],
+      autoModeAgents,
+    }));
   }
 
   /**
@@ -398,6 +450,8 @@ class McpServerModel {
       resourceUri: string;
       /** The tool declares required inputs, so a bare render can't succeed. */
       requiresInput: boolean;
+      /** How many UI tools the whole catalog exposes (search-independent). */
+      uiToolCount: number;
     }>
   > {
     const { userId, organizationId, search } = params;
@@ -412,19 +466,43 @@ class McpServerModel {
 
     const uiApps = await McpServerModel.getUiApps({
       catalogIds: accessibleCatalogIds,
-      search,
     });
-    if (uiApps.length === 0) return [];
+
+    // A card's title depends on whether its server exposes one UI tool or
+    // several, so count per catalog BEFORE the search filter — a search that
+    // matches one of a server's tools must not retitle the surviving card.
+    const uiToolCountByCatalog = new Map<string, number>();
+    for (const app of uiApps) {
+      uiToolCountByCatalog.set(
+        app.catalogId,
+        (uiToolCountByCatalog.get(app.catalogId) ?? 0) + 1,
+      );
+    }
+
+    // Case-insensitive substring over the displayed fields (the tool name is
+    // matched in its stripped, card-visible form).
+    const searchTerm = search?.trim().toLowerCase();
+    const matched = searchTerm
+      ? uiApps.filter((app) =>
+          [
+            app.serverName,
+            app.serverDescription,
+            app.toolName,
+            app.toolDescription,
+          ].some((field) => field?.toLowerCase().includes(searchTerm)),
+        )
+      : uiApps;
+    if (matched.length === 0) return [];
 
     // Every UI tool of a catalog shares its installs, so resolve installs once
     // per distinct catalog, then expand each UI resource across them.
     const installsByCatalog =
       await McpServerModel.getAccessibleInstallsByCatalog({
         userId,
-        catalogIds: Array.from(new Set(uiApps.map((a) => a.catalogId))),
+        catalogIds: Array.from(new Set(matched.map((a) => a.catalogId))),
       });
 
-    return uiApps.flatMap((app) =>
+    return matched.flatMap((app) =>
       (installsByCatalog.get(app.catalogId) ?? []).map((install) => ({
         catalogId: app.catalogId,
         mcpServerId: install.mcpServerId,
@@ -435,6 +513,7 @@ class McpServerModel {
         toolDescription: app.toolDescription,
         resourceUri: app.resourceUri,
         requiresInput: toolRequiresInputs(app.toolParameters),
+        uiToolCount: uiToolCountByCatalog.get(app.catalogId) ?? 1,
       })),
     );
   }
@@ -446,19 +525,27 @@ class McpServerModel {
    * resource. Backs external open-in-chat (a card's `(mcpServerId,
    * resourceUri)` must resolve to a real, accessible UI resource before a
    * conversation is seeded; the input schema decides render-vs-prompt mode).
-   * Returns null when the install is not accessible or exposes no such
-   * resource.
+   * Several tools of one server can share a resource; pass `toolName` to
+   * resolve one specific tool's entry (pinning), omit it to accept any
+   * (open-in-chat). Returns null when the install is not accessible or
+   * exposes no such resource.
    */
   static async findInstalledUiResourceForCaller(params: {
     userId: string;
     mcpServerId: string;
     resourceUri: string;
+    toolName?: string;
   }): Promise<{
     catalogId: string;
     serverName: string;
+    serverDescription: string | null;
     toolName: string;
+    /** The tool's stored, dispatchable name — never recombine the display pair. */
+    fullToolName: string;
     resourceUri: string;
     toolParameters: ToolParametersContent;
+    /** How many UI tools the whole catalog exposes — decides the app label. */
+    uiToolCount: number;
   } | null> {
     const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
       params.userId,
@@ -471,15 +558,59 @@ class McpServerModel {
     const uiApps = await McpServerModel.getUiApps({
       catalogIds: [server.catalogId],
     });
-    const match = uiApps.find((a) => a.resourceUri === params.resourceUri);
+    const match = uiApps.find(
+      (a) =>
+        a.resourceUri === params.resourceUri &&
+        (params.toolName === undefined || a.toolName === params.toolName),
+    );
     if (!match) return null;
 
     return {
       catalogId: server.catalogId,
       serverName: match.serverName,
+      serverDescription: match.serverDescription,
       toolName: match.toolName,
+      fullToolName: match.fullToolName,
       resourceUri: match.resourceUri,
       toolParameters: match.toolParameters,
+      uiToolCount: uiApps.length,
+    };
+  }
+
+  /**
+   * The caller-visible identity of an external (MCP-server) app install: its
+   * display name and description, plus the `<slug>__` prefix its tools are
+   * really stored under (read off a stored name, since the prefix is a slug of
+   * the display name and cannot be derived back from it). Backs the opened-app
+   * system-prompt injection, which needs a namespace the model can actually
+   * search and call. Returns null when the install is gone, no longer
+   * accessible, or exposes no UI resource.
+   */
+  static async findUiAppIdentityForCaller(params: {
+    userId: string;
+    mcpServerId: string;
+  }): Promise<{
+    serverName: string;
+    serverDescription: string | null;
+    toolNamespace: string | null;
+  } | null> {
+    const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
+      params.userId,
+    );
+    if (!accessibleServerIds.includes(params.mcpServerId)) return null;
+
+    const server = await McpServerModel.findById(params.mcpServerId);
+    if (!server?.catalogId) return null;
+
+    const [uiApp] = await McpServerModel.getUiApps({
+      catalogIds: [server.catalogId],
+    });
+    if (!uiApp) return null;
+
+    return {
+      serverName: uiApp.serverName,
+      serverDescription: uiApp.serverDescription,
+      toolNamespace: parseFullToolName(uiApp.fullToolName).serverName,
     };
   }
 
@@ -543,7 +674,11 @@ class McpServerModel {
       resources: uiApps.map((app) => ({
         resourceUri: app.resourceUri,
         toolName: app.toolName,
-        name: `${app.serverName} / ${app.toolName}`,
+        name: externalAppLabel({
+          serverName: app.serverName,
+          toolName: app.toolName,
+          uiToolCount: uiApps.length,
+        }),
         requiresInput: toolRequiresInputs(app.toolParameters),
       })),
       defaultMcpServerId: McpServerModel.pickDefaultInstall(installs),
@@ -602,32 +737,35 @@ class McpServerModel {
    * is the tool's short name (the server prefix is stripped, so a stored
    * `excalidraw__create_view` surfaces as `create_view`); `toolDescription` is
    * the tool's own description. Sorted by server then tool for a stable listing.
+   * Always unfiltered — callers that search do so over the returned rows, so a
+   * catalog's full UI-tool count stays observable (it decides card titles).
    */
-  private static async getUiApps(params: {
-    catalogIds: string[];
-    search?: string;
-  }): Promise<
+  private static async getUiApps(params: { catalogIds: string[] }): Promise<
     Array<{
       catalogId: string;
       serverName: string;
+      serverDescription: string | null;
       serverIcon: string | null;
       toolName: string;
+      /**
+       * The tool's stored, dispatchable name (`<server-slug>__<tool>`). Unlike
+       * `serverName`/`toolName` — a display pair that cannot be recombined into
+       * it — this is the only form a tool call may use.
+       */
+      fullToolName: string;
       toolDescription: string | null;
       resourceUri: string;
       toolParameters: ToolParametersContent;
     }>
   > {
-    const { catalogIds, search } = params;
+    const { catalogIds } = params;
     if (catalogIds.length === 0) return [];
-    const searchTerm = search?.trim();
-    const searchPattern = searchTerm
-      ? `%${escapeLikePattern(searchTerm)}%`
-      : undefined;
     const uiResourceUri = toolUiResourceUriSql();
     const rows = await db
       .select({
         catalogId: schema.internalMcpCatalogTable.id,
         serverName: schema.internalMcpCatalogTable.name,
+        serverDescription: schema.internalMcpCatalogTable.description,
         serverIcon: schema.internalMcpCatalogTable.icon,
         toolName: schema.toolsTable.name,
         toolDescription: schema.toolsTable.description,
@@ -647,17 +785,6 @@ class McpServerModel {
           // the platform CSP — never surfaced as external apps.
           ne(schema.internalMcpCatalogTable.serverType, "app"),
           sql`${uiResourceUri} IS NOT NULL`,
-          searchPattern
-            ? or(
-                ilike(schema.internalMcpCatalogTable.name, searchPattern),
-                ilike(
-                  schema.internalMcpCatalogTable.description,
-                  searchPattern,
-                ),
-                ilike(schema.toolsTable.name, searchPattern),
-                ilike(schema.toolsTable.description, searchPattern),
-              )
-            : undefined,
         ),
       );
 
@@ -668,10 +795,16 @@ class McpServerModel {
               {
                 catalogId: row.catalogId,
                 serverName: row.serverName,
+                serverDescription: row.serverDescription,
                 serverIcon: row.serverIcon,
                 // Strip the server prefix: catalog tools are stored as
-                // `<server>__<tool>`, but the card shows just the tool.
+                // `<server>__<tool>`, but the card shows just the tool. The
+                // stripped pair is for display only — `serverName` is the
+                // catalog's human name while the stored prefix is a slug of it,
+                // so recombining the two fabricates a name that dispatches
+                // nowhere. Carry the stored name for anything that must call it.
                 toolName: parseFullToolName(row.toolName).toolName,
+                fullToolName: row.toolName,
                 toolDescription: row.toolDescription,
                 resourceUri: row.resourceUri,
                 toolParameters: row.toolParameters,
@@ -759,6 +892,7 @@ class McpServerModel {
     id: string,
     userId?: string,
     isMcpServerAdmin?: boolean,
+    organizationId?: string,
   ): Promise<McpServer | null> {
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
@@ -801,7 +935,18 @@ class McpServerModel {
       return null;
     }
 
-    const userDetails = await McpServerUserModel.getUserDetailsForMcpServer(id);
+    const [userDetails, assignedAgentsByServer] = await Promise.all([
+      McpServerUserModel.getUserDetailsForMcpServer(id),
+      AgentToolModel.getAssignedAgentDetailsForMcpServers([id]),
+    ]);
+    let autoModeAgents: Array<{ id: string; name: string }> = [];
+    if (organizationId) {
+      const autoModeAgentsByOrg =
+        await AgentModel.getAutoModeAgentDetailsByOrganizations([
+          organizationId,
+        ]);
+      autoModeAgents = autoModeAgentsByOrg.get(organizationId) ?? [];
+    }
 
     // Build teamDetails from the joined team data
     const teamDetails = result.server.teamId
@@ -826,6 +971,8 @@ class McpServerModel {
       userDetails,
       teamDetails,
       secretStorageType,
+      assignedAgents: assignedAgentsByServer.get(id) ?? [],
+      autoModeAgents,
     };
   }
 
@@ -885,8 +1032,11 @@ class McpServerModel {
     return row?.server ?? null;
   }
 
-  static async findByCatalogId(catalogId: string): Promise<McpServer[]> {
-    return await db
+  static async findByCatalogId(
+    catalogId: string,
+    tx?: Transaction,
+  ): Promise<McpServer[]> {
+    return await (tx ?? db)
       .select()
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.catalogId, catalogId));
@@ -911,6 +1061,7 @@ class McpServerModel {
   static async update(
     id: string,
     server: Partial<UpdateMcpServer>,
+    tx?: Transaction,
   ): Promise<McpServer | null> {
     const serverData = server;
 
@@ -918,7 +1069,7 @@ class McpServerModel {
 
     // Only update server table if there are fields to update
     if (Object.keys(serverData).length > 0) {
-      [updatedServer] = await db
+      [updatedServer] = await (tx ?? db)
         .update(schema.mcpServersTable)
         .set(serverData)
         .where(eq(schema.mcpServersTable.id, id))
@@ -929,7 +1080,7 @@ class McpServerModel {
       }
     } else {
       // No fields to update, fetch the existing server
-      const [existingServer] = await db
+      const [existingServer] = await (tx ?? db)
         .select()
         .from(schema.mcpServersTable)
         .where(eq(schema.mcpServersTable.id, id));

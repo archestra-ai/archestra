@@ -100,6 +100,7 @@ describe("config routes", () => {
       ngrokDomain: expect.any(String),
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
       chatSecretScanEnabled: true,
+      kbAutoSyncPermissionsEnabled: expect.any(Boolean),
     });
     expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");

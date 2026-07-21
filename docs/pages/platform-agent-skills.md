@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-06
+lastUpdated: 2026-07-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,9 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-![The Skills page listing the organization's skills, each with its name, description, source repository, and file count](/docs/automated_screenshots/platform-agent-skills_catalog.webp)
+Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
+
+![The Skills page open under the Studio tab of the sidebar, listing the organization's skills](/docs/automated_screenshots/platform-agent-skills_skills-in-studio.webp)
 
 ## Progressive disclosure via two tools
 
@@ -74,7 +76,7 @@ A skill created from chat is **personal** to its author — sharing it with a te
 
 ![The Add a new skill screen, importing from a GitHub repo, with the skill index searched for ML skills](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 
-Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, paste a token — it is used for the request and never stored.
+Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, use a saved token or GitHub App from **Settings → GitHub**, or paste a token — it is saved there on import.
 
 For anything bigger than a small repo, narrow the scan with the `path` field and supply a GitHub token. Archestra walks the whole tree by default, and anonymous GitHub calls share a 60-requests/hour limit — discovery on a large monorepo is slow without a path and will rate-limit without a token.
 
@@ -84,12 +86,18 @@ The visibility **scope** chosen in the dialog applies to every skill in the batc
 
 Each import records the source (`owner/repo@ref:path`) and the resolved commit SHA, so you can later filter the catalog by repo and see exactly which revision landed.
 
+### Sync
+
+Every import stays synced with the repository. **Keep in sync** in the dialog picks the schedule for the batch — every 15 minutes, every hour, or once a day (the default). Synced skills carry a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Visibility scope, teams, and environment stay editable. A failed pull keeps the last good content and shows the error in the editor.
+
+**Stop syncing** in the skill editor breaks the link: the skill keeps its current content, becomes editable, and stops updating. **Sync now** pulls immediately instead of waiting for the schedule.
+
+Sync authenticates with a saved personal access token or a GitHub App configuration — both managed under **Settings → GitHub** — or not at all (public repos). A token pasted in the import dialog is saved there on import, so scheduled pulls stay authenticated.
+
 A few behaviors worth knowing:
 
-- **Duplicates are skipped.** Importing a skill whose name already exists leaves the local copy alone — no silent overwrite.
 - **One snapshot per session.** The repo tree is cached for five minutes, so what you previewed is what you import even if upstream moves in between.
 - **Per-file 10 MB cap, 500 files per skill.** Binary assets are preserved (base64-encoded), so images and fonts round-trip.
-- **No background sync.** Re-import to pull in upstream changes; your edits are never overwritten.
 
 ## Permissions and scope
 
@@ -104,6 +112,28 @@ Every skill carries a visibility **scope**, set in the skill editor or the GitHu
 `skill:read` governs *using* a skill — listing it, loading it, or invoking its slash command in chat. A user only ever sees skills inside their scope (org-wide skills, their own personal skills, and skills in their teams); `list_skills`, `load_skill`, and the `/skill-name` slash commands are all filtered the same way. `skill:admin` bypasses scope and sees every skill.
 
 Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skill requires `skill:team-admin` and membership in the teams it is assigned to. By default the predefined roles grant: **admin** — full control; **editor** — create/update/delete plus team sharing; **member** — create and manage their own personal skills, and read everything in scope.
+
+## Environments
+
+A skill belongs to an [environment](./platform-environments). Unassigned skills use the Default environment. An agent only sees skills in its own environment — `list_skills`, `load_skill`, and slash commands are all filtered the same way. Built-in skills are the exception: they are visible in every environment, like built-in tools.
+
+Set the environment in the skill editor. A skill authored from chat inherits the authoring agent's environment. Converting an agent to a skill carries the agent's environment over.
+
+## Running a Skill in a Subagent
+
+A skill can name an agent in its frontmatter:
+
+```markdown
+---
+name: deep-research
+description: Multi-step research with citations.
+agent: Research Bot
+---
+```
+
+Such a skill runs *in that agent* instead of loading its instructions into the calling agent's context. The skill surfaces as a `skill__deep_research` tool; calling it sends the skill's instructions plus the task to Research Bot, which executes with its own tools and returns the result. A slash command on the skill does the same — the model is told to call the tool rather than receiving the instructions.
+
+This keeps the parent conversation's context clean and pairs a skill with the agent whose tools it needs. The designated agent must be in the same environment as the calling agent, and the calling user must have access to it — the same rules as [delegation](./platform-agents#delegation). Skill delegation needs a signed-in user; automated runs (a scheduled trigger, for example) cannot use it.
 
 ## Compatibility
 

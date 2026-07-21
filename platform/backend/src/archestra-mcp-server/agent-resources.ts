@@ -108,6 +108,12 @@ export const CreateBaseToolArgsSchema = z
       .describe(
         "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings.",
       ),
+    accessAllSubagents: z
+      .boolean()
+      .optional()
+      .describe(
+        "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false.",
+      ),
   })
   .strict();
 
@@ -160,6 +166,11 @@ export const AgentDetailOutputSchema = z.object({
     .describe(
       "Whether search_tools/run_tool may dynamically access every tool the calling user can access.",
     ),
+  accessAllSubagents: z
+    .boolean()
+    .describe(
+      "Whether the agent may delegate to every internal agent the calling user can access.",
+    ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
     .describe("The resource type."),
@@ -207,6 +218,7 @@ export async function handleCreateResource<
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
+    accessAllSubagents?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -286,6 +298,9 @@ export async function handleCreateResource<
     if (args.accessAllTools !== undefined) {
       createParams.accessAllTools = args.accessAllTools;
     }
+    if (args.accessAllSubagents !== undefined) {
+      createParams.accessAllSubagents = args.accessAllSubagents;
+    }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
       if (targetAgentType === "agent" && args.systemPrompt) {
@@ -318,10 +333,7 @@ export async function handleCreateResource<
       if (args.icon) createParams.icon = args.icon;
     }
 
-    const created = await AgentModel.create(
-      createParams,
-      scope === "personal" ? context.userId : undefined,
-    );
+    const created = await AgentModel.create(createParams, context.userId);
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
@@ -390,9 +402,8 @@ export async function handleGetResource<
     if (args.id) {
       record = await AgentModel.findById(args.id, context.userId, isAdmin);
       // findById doesn't support excludeOtherPersonalAgents, so we guard here.
-      // swap_agent is the primary Archestra MCP use-case and requires only the
-      // caller's own personal agents to be visible, even though admins can see
-      // all personal agents in the UI.
+      // MCP tools only need the caller's own personal agents to be visible,
+      // even though admins can see all personal agents in the UI.
       if (
         record &&
         record.scope === "personal" &&
@@ -408,10 +419,9 @@ export async function handleGetResource<
         {
           name: args.name,
           agentType: expectedType,
-          // Hide other users' personal agents from MCP tools. swap_agent is
-          // the primary Archestra MCP use-case and requires only the caller's
-          // own personal agents to be visible, even though admins can see all
-          // personal agents in the UI.
+          // Hide other users' personal agents from MCP tools. Only the
+          // caller's own personal agents need to be visible, even though
+          // admins can see all personal agents in the UI.
           excludeOtherPersonalAgents: true,
         },
         context.userId,
@@ -461,6 +471,7 @@ export async function handleEditResource<
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
+    accessAllSubagents?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -520,6 +531,9 @@ export async function handleEditResource<
     }
     if (args.accessAllTools !== undefined) {
       updateData.accessAllTools = args.accessAllTools;
+    }
+    if (args.accessAllSubagents !== undefined) {
+      updateData.accessAllSubagents = args.accessAllSubagents;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

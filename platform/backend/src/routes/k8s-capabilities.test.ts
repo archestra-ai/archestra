@@ -114,7 +114,7 @@ describe("k8s capabilities routes", () => {
 
     expect(response.statusCode).toBe(403);
     expect(mockHasPermission).toHaveBeenCalledWith(
-      { environment: ["admin"] },
+      { environment: ["update"] },
       expect.any(Object),
     );
   });

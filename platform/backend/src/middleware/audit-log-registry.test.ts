@@ -46,6 +46,46 @@ describe("resolveAuditableRouteConfig", () => {
     expect(typeof resolved?.cfg.fetchById).toBe("function");
   });
 
+  test("connector permission-sync route is registered so its POST is not dropped as a walk-up", () => {
+    const resolved = resolveAuditableRouteConfig(
+      "/api/connectors/:id/permission-sync",
+    );
+    // viaWalkUp would make the hook discard the POST entirely (no audit row),
+    // and the inherited config would call it a connector creation.
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("connector");
+    expect(resolved?.cfg.action).toBe("connector.permission_sync_triggered");
+    expect(typeof resolved?.cfg.fetchById).toBe("function");
+  });
+
+  test("delegations sync route is registered so its POST is not dropped as a walk-up", () => {
+    // POST /api/agents/:agentId/delegations is unregistered → walks up to
+    // /api/agents/:agentId → the hook discards POST walk-ups → the record falls
+    // to the unknown.created fallback with a null resourceType. Registering it
+    // directly pins the correct agent.updated semantics.
+    const resolved = resolveAuditableRouteConfig(
+      "/api/agents/:agentId/delegations",
+    );
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("agent");
+    expect(resolved?.cfg.action).toBe("agent.updated");
+    expect(resolved?.cfg.resourceIdParam).toBe("agentId");
+    expect(typeof resolved?.cfg.fetchById).toBe("function");
+  });
+
+  test("single-delegation DELETE inherits agent.updated, not agent.deleted", () => {
+    // DELETE /api/agents/:agentId/delegations/:targetAgentId walks up. A DELETE
+    // walk-up is NOT suppressed, so without the explicit /delegations entry it
+    // would inherit /api/agents/:agentId and derive agent.deleted — mislabeling
+    // the removal of one delegation as deleting the whole agent.
+    const resolved = resolveAuditableRouteConfig(
+      "/api/agents/:agentId/delegations/:targetAgentId",
+    );
+    expect(resolved?.viaWalkUp).toBe(true);
+    expect(resolved?.cfg.action).toBe("agent.updated");
+    expect(resolved?.cfg.resourceType).toBe("agent");
+  });
+
   test("walk-up match returns viaWalkUp=true with the parent config", () => {
     // /api/mcp_server/:id/some-subroute is not registered; walks up to /api/mcp_server/:id
     const resolved = resolveAuditableRouteConfig(
@@ -57,13 +97,56 @@ describe("resolveAuditableRouteConfig", () => {
     expect(resolved?.cfg.resourceType).toBe("mcpServer");
   });
 
+  test("swept child routes resolve directly with an explicit non-.deleted action", () => {
+    // POST children (would otherwise be dropped as walk-up → unknown.created)
+    // and DELETE children (would otherwise derive parent.deleted).
+    const cases: Array<[string, string, string]> = [
+      ["/api/teams/:id/members", "team", "team.updated"],
+      ["/api/teams/:id/members/:userId", "team", "team.updated"],
+      ["/api/connectors/:id/sync", "connector", "connector.synced"],
+      [
+        "/api/connectors/:id/documents/:docId",
+        "connector",
+        "connector.updated",
+      ],
+      [
+        "/api/internal_mcp_catalog/:id/reinstall",
+        "internalMcpCatalog",
+        "internalMcpCatalog.reinstalled",
+      ],
+      [
+        "/api/schedule-triggers/:id/run-now",
+        "scheduleTrigger",
+        "scheduleTrigger.triggered",
+      ],
+      [
+        "/api/mcp-oauth-clients/:id/rotate-secret",
+        "mcpOauthClient",
+        "mcpOauthClient.rotated",
+      ],
+      [
+        "/api/service-accounts/:id/tokens/:tokenId",
+        "serviceAccount",
+        "serviceAccount.updated",
+      ],
+      ["/api/teams/:teamId/vault-folder", "team", "team.updated"],
+    ];
+    for (const [route, resourceType, action] of cases) {
+      const resolved = resolveAuditableRouteConfig(route);
+      expect(resolved?.viaWalkUp).toBe(false);
+      expect(resolved?.cfg.resourceType).toBe(resourceType);
+      expect(resolved?.cfg.action).toBe(action);
+      expect(typeof resolved?.cfg.fetchById).toBe("function");
+    }
+  });
+
   test("walk-up match two levels deep returns viaWalkUp=true", () => {
-    // /api/connectors/:id/knowledge-bases has no direct entry; inherits connector
+    // No direct entry two levels down; inherits the knowledgeBase parent.
     const resolved = resolveAuditableRouteConfig(
-      "/api/connectors/:id/knowledge-bases",
+      "/api/knowledge-bases/:id/documents/:docId",
     );
     expect(resolved?.viaWalkUp).toBe(true);
-    expect(resolved?.cfg.resourceType).toBe("connector");
+    expect(resolved?.cfg.resourceType).toBe("knowledgeBase");
   });
 
   test("no match returns undefined", () => {

@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   CLAUDE_CODE_CLIENT_ID,
+  CODEX_CLIENT_ID,
   EXTERNAL_AGENT_ID_HEADER,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -19,6 +20,9 @@ const execFileAsync = promisify(execFile);
 
 /** The client-attribution header line the Claude Code setup script emits. */
 const AGENT_ID_HEADER_LINE = `${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`;
+
+/** The client-attribution header line the Codex setup script writes to config.toml. */
+const CODEX_AGENT_ID_TOML_LINE = `"${EXTERNAL_AGENT_ID_HEADER}" = "${CODEX_CLIENT_ID}"`;
 
 const MCP = {
   serverName: "prod_gateway",
@@ -45,6 +49,22 @@ const ANTHROPIC_PASSTHROUGH_PROXY = {
   provider: "anthropic" as const,
   providerLabel: "Anthropic",
   url: "https://archestra.example.com/v1/anthropic/profile-123",
+  proxyName: "default_proxy",
+  virtualKey: null,
+  virtualKeyName: null,
+  passthroughVirtualKey: "arch_passthroughcafe",
+};
+
+/**
+ * Codex ChatGPT-subscription passthrough: no virtual key credential is injected
+ * (Codex keeps its own login), so only the attribution headers are emitted —
+ * including the passthrough key that attributes the request to the user.
+ */
+const OPENAI_PASSTHROUGH_PROXY = {
+  authMode: "provider-key" as const,
+  provider: "openai" as const,
+  providerLabel: "OpenAI",
+  url: "https://archestra.example.com/v1/openai/profile-123",
   proxyName: "default_proxy",
   virtualKey: null,
   virtualKeyName: null,
@@ -145,6 +165,77 @@ async function runClaudeSettingsMerge(params: {
   }
 }
 
+/**
+ * A python pty driver that reproduces the exact `curl | bash` shape inside a
+ * terminal: bash reads the script from a pipe (so its stdin is NOT a tty, and
+ * every command inherits that pipe), while its stdout IS a real tty. The driver
+ * also answers terminal probes the way an emulator would, so any probe reply
+ * that leaks would show up in the captured output.
+ */
+const PTY_DRIVER = `import os, pty, select, sys, time, re
+script_path = sys.argv[1]
+r, w = os.pipe()
+os.write(w, b"FROM-THE-CURL-PIPE\\n" * 20); os.close(w)
+pid, master = os.forkpty()
+if pid == 0:
+    os.dup2(r, 0)                      # stdin = the download pipe (curl | bash)
+    os.execvp("bash", ["bash", script_path])
+    os._exit(1)
+out = b""; end = time.time() + 20
+while time.time() < end:
+    rr, _, _ = select.select([master], [], [], 0.3)
+    if rr:
+        try: d = os.read(master, 65536)
+        except OSError: break
+        if not d: break
+        out += d
+        reply = b""
+        if b"\\x1b]11;?" in d: reply += b"\\x1b]11;rgb:1e1e/1e1e/1e1e\\x1b\\\\"
+        if re.search(rb"\\x1b\\[c", d): reply += b"\\x1b[?1;2c"
+        if reply: os.write(master, reply)
+    if os.waitpid(pid, os.WNOHANG)[0] != 0:
+        time.sleep(0.3)
+        rr, _, _ = select.select([master], [], [], 0.3)
+        if rr:
+            try: out += os.read(master, 65536)
+            except OSError: pass
+        break
+try: os.kill(pid, 9)
+except Exception: pass
+sys.stdout.write(out.decode("latin1"))`;
+
+/** The rendered helper block (color + terminal guard + `say`/`cli`/… helpers). */
+function helperBlock(): string {
+  return renderSetupScript(fullContext("claude-code"))
+    .split("set -euo pipefail\n\n")[1]
+    .split("\n\ncat <<'ARCHESTRA_BANNER'")[0];
+}
+
+/**
+ * Runs arbitrary bash under {@link PTY_DRIVER} — i.e. as `curl | bash` would,
+ * with the download pipe on stdin and a live tty on stdout, and an emulator that
+ * answers terminal probes. Returns everything the terminal saw (escape bytes
+ * shown as `^[`).
+ */
+async function runBashInTerminal(script: string): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-cli-"));
+  try {
+    const scriptFile = path.join(dir, "run.sh");
+    const driver = path.join(dir, "pty.py");
+    await writeFile(scriptFile, script, "utf8");
+    await writeFile(driver, PTY_DRIVER, "utf8");
+    const { stdout } = await execFileAsync("python3", [driver, scriptFile]);
+    return stdout.replaceAll("\x1b", "^[");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** Runs `body` after the real rendered helper block. */
+function runInTerminal(body: string): Promise<string> {
+  return runBashInTerminal(`set -euo pipefail\n${helperBlock()}\n${body}\n`);
+}
+
 const ALL_CLIENTS = ["claude-code", "codex", "copilot-cli", "cursor"] as const;
 
 describe("renderSetupScript", () => {
@@ -168,6 +259,22 @@ describe("renderSetupScript", () => {
       expect(script).toContain(SKILLS.marketplaceName);
     });
 
+    test(`${clientId}: client CLIs never drive the terminal directly`, () => {
+      const script = renderSetupScript(fullContext(clientId));
+      // A client CLI renders a full-screen TUI when its stdout is a tty: it
+      // probes the terminal (replies echo in as "rgb:1e1e/1e1e/1e1e" / "^[[?1;2c")
+      // and positions text with absolute cursor moves that assume it owns the
+      // screen, cascading every line to the right under `curl | bash`. Every
+      // invocation must go through `cli`, which detaches stdout from the tty.
+      const bareInvocations = script
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) =>
+          /^(?:if\s+!\s+|!\s+)?(?:claude|codex|copilot)\s/.test(line),
+        );
+      expect(bareInvocations).toEqual([]);
+    });
+
     test(`${clientId}: sections are omitted when not selected`, async () => {
       const script = renderSetupScript({
         clientId,
@@ -185,22 +292,107 @@ describe("renderSetupScript", () => {
     });
   }
 
+  test("bash: `cli` detaches a command's stdout from the terminal", async () => {
+    // Control + subject in one run. At script level stdout is a real tty (the
+    // pty harness is faithful), so the control prints TTY-AT-SCRIPT. Through
+    // `cli` the same probe sees a pipe, so it prints PIPE-VIA-CLI — that non-tty
+    // stdout is what stops a client CLI probing the terminal or positioning text
+    // with absolute cursor moves. `cat` reads stdin and gets EOF from /dev/null,
+    // so the download pipe ("FROM-THE-CURL-PIPE") is never read as input.
+    const probe = `[ -t 1 ] && echo TTY-AT-SCRIPT
+cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
+    const out = await runInTerminal(probe);
+    expect(out).toContain("TTY-AT-SCRIPT");
+    expect(out).toContain("PIPE-VIA-CLI");
+    expect(out).not.toContain("TTY-VIA-CLI");
+    expect(out).not.toContain("FROM-THE-CURL-PIPE");
+  });
+
+  test("bash: `cli` leaks no terminal probe replies into the output", async () => {
+    // Model a client CLI faithfully: it probes the terminal only when stdout is
+    // a tty. Run bare (stdout = tty) it fires the probe and the harness's reply
+    // echoes in as stray "rgb:1e1e/1e1e/1e1e" / "^[[?1;2c" text — the reported
+    // bug. Through `cli` (stdout = pipe) the tty check fails, so nothing probes
+    // and nothing leaks.
+    const probe = `if [ -t 1 ]; then printf '\\033]11;?\\033[c'; fi; sleep 0.5`;
+
+    const bare = await runInTerminal(`sh -c ${JSON.stringify(probe)}`);
+    expect(bare).toContain("1e1e/1e1e/1e1e"); // harness answers, bare leaks
+
+    const wrapped = await runInTerminal(`cli sh -c ${JSON.stringify(probe)}`);
+    expect(wrapped).not.toContain("1e1e/1e1e/1e1e");
+    expect(wrapped).not.toContain("^[[?1;2c");
+  });
+
+  test("bash: `cli` surfaces the command's failure through pipefail", async () => {
+    // `cli` pipes stdout through cat; without `set -o pipefail` the pipeline
+    // would mask a CLI failure behind cat's success, so `if ! cli ...` guards
+    // (e.g. the skills-install fallback) would never fire.
+    const out = await runInTerminal(
+      `if ! cli sh -c 'exit 7'; then echo FAILURE-SEEN; fi`,
+    );
+    expect(out).toContain("FAILURE-SEEN");
+  });
+
+  test("bash: the script leaves the terminal's line discipline sane", async () => {
+    // Regression: a CLI that grabbed the terminal (raw mode) leaves newline
+    // translation (onlcr) off, so every line staircases to the right — including
+    // a plain banner printed before any CLI runs. The helper block guards both
+    // ends: it resets the terminal on entry (healing a terminal a *previous* run
+    // wedged) and, via an EXIT trap, restores it on exit (so a CLI that wedges it
+    // *mid-run* never leaves it broken for the next command).
+    const state = (label: string) =>
+      `printf '${label}:'; stty -a </dev/tty | grep -o -- '-\\?onlcr' | head -1`;
+
+    // Sanity: the harness really can wedge the terminal (nothing heals it here).
+    const wedged = await runBashInTerminal(
+      `stty -onlcr </dev/tty\n${state("BARE")}\n`,
+    );
+    expect(wedged).toContain("BARE:-onlcr");
+
+    // Start wedged (inherited). Inside a subshell running the helper block, entry
+    // reset should have healed it (ENTRY); then re-wedge to mimic a CLI grabbing
+    // the terminal mid-run; after the subshell exits its trap should heal it
+    // again (AFTER). Both points must read `onlcr`, isolating the two guards.
+    const helpers = helperBlock();
+    const out = await runBashInTerminal(
+      `stty -onlcr </dev/tty\n(\nset -euo pipefail\n${helpers}\n${state("ENTRY")}\nstty -onlcr </dev/tty\n)\n${state("AFTER")}\n`,
+    );
+    expect(out).toContain("ENTRY:onlcr"); // entry reset healed the inherited wedge
+    expect(out).toContain("AFTER:onlcr"); // exit trap healed the mid-run wedge
+  });
+
   test("claude-code: registers gateway idempotently and merges settings.json", () => {
     const script = renderSetupScript(fullContext("claude-code"));
+    // The terminal is reset on entry and on exit so a raw-mode-wedged terminal
+    // is healed and never handed back broken.
+    expect(script).toContain("stty sane </dev/tty");
     expect(script).toContain(
-      "claude mcp remove 'prod_gateway' >/dev/null 2>&1 || true",
+      "trap 'stty sane </dev/tty 2>/dev/null || true' EXIT",
+    );
+    // Client CLIs run detached from the tty so they print plain linear text.
+    expect(script).toContain('cli() { "$@" </dev/null 2>&1 | cat; }');
+    // Remove per-scope: a scopeless `claude mcp remove` errors ("exists in
+    // multiple scopes") when both a local and user entry exist, which would
+    // abort the script under `set -euo pipefail`. Add at user scope so the
+    // gateway is visible from every directory, not just where connect ran.
+    expect(script).toContain(
+      "cli claude mcp remove --scope local 'prod_gateway' >/dev/null 2>&1 || true",
     );
     expect(script).toContain(
-      `claude mcp add --transport http 'prod_gateway' '${MCP.url}'`,
+      "cli claude mcp remove --scope user 'prod_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      `cli claude mcp add --scope user --transport http 'prod_gateway' '${MCP.url}'`,
     );
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(script).toContain(
-      `claude plugin marketplace add '${SKILLS.cloneUrl}'`,
+      `cli claude plugin marketplace add '${SKILLS.cloneUrl}'`,
     );
     // The skill bundle is installed by the script, not via a manual browse step.
     expect(script).toContain(
-      `claude plugin install '${SKILLS.marketplaceName}@${SKILLS.marketplaceName}'`,
+      `cli claude plugin install '${SKILLS.marketplaceName}@${SKILLS.marketplaceName}'`,
     );
     expect(script).not.toContain("marketplace browse");
     // python3 fallback prints a manual snippet rather than failing.
@@ -334,12 +526,40 @@ describe("renderSetupScript", () => {
     expect(script).toContain("[model_providers.default_proxy]");
     expect(script).toContain('wire_api = "responses"');
     expect(script).toContain("requires_openai_auth = true");
+    // Attribution parity with Claude Code: every proxied Codex request carries
+    // the client-id header via config.toml's http_headers table.
+    expect(script).toContain("[model_providers.default_proxy.http_headers]");
+    expect(script).toContain(CODEX_AGENT_ID_TOML_LINE);
+    // Virtual-key mode: the injected key carries user attribution, so no
+    // separate passthrough-key header is written.
+    expect(script).not.toContain('"X-Archestra-Virtual-Key"');
     expect(script).toContain(
       `printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`,
     );
     // The virtual key is assigned to a variable, never an argv of codex.
     expect(script).not.toContain(
       `codex login --with-api-key ${PROXY.virtualKey}`,
+    );
+  });
+
+  test("codex passthrough: attributes user + client via config.toml http_headers", () => {
+    const script = renderSetupScript({
+      ...fullContext("codex"),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    expect(script).toContain("[model_providers.default_proxy.http_headers]");
+    expect(script).toContain(CODEX_AGENT_ID_TOML_LINE);
+    // Passthrough mode: the user is attributed via the passthrough virtual key,
+    // exactly like the Claude Code Anthropic-subscription passthrough.
+    expect(script).toContain(
+      '"X-Archestra-Virtual-Key" = "arch_passthroughcafe"',
+    );
+    // No credential is injected into config.toml — Codex keeps its own login.
+    expect(script).toContain(
+      "Codex keeps using your own OpenAI API key login.",
+    );
+    expect(script).not.toContain(
+      `printf '%s' "$ARCHESTRA_VIRTUAL_KEY" | codex login --with-api-key`,
     );
   });
 
@@ -471,9 +691,21 @@ describe("renderSetupScript (windows)", () => {
         // (emitted when the server is not yet registered — e.g. a first run or a
         // renamed gateway) to a terminating error that 2>$null does not suppress,
         // which would abort the script before the add ever runs.
-        expect(script).toContain(
-          `try { ${binary} mcp remove 'prod_gateway' 2>$null | Out-Null } catch { }`,
-        );
+        if (clientId === "claude-code") {
+          // Claude Code registers at user scope, so it removes per-scope: a
+          // scopeless remove errors ("exists in multiple scopes") once both a
+          // local and user entry exist, which would abort the script.
+          expect(script).toContain(
+            `try { ${binary} mcp remove --scope local 'prod_gateway' 2>$null | Out-Null } catch { }`,
+          );
+          expect(script).toContain(
+            `try { ${binary} mcp remove --scope user 'prod_gateway' 2>$null | Out-Null } catch { }`,
+          );
+        } else {
+          expect(script).toContain(
+            `try { ${binary} mcp remove 'prod_gateway' 2>$null | Out-Null } catch { }`,
+          );
+        }
       }
     });
   }
@@ -500,10 +732,13 @@ describe("renderSetupScript (windows)", () => {
   test("claude-code: remove-then-add MCP and merge settings.json env", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
     expect(script).toContain(
-      "try { claude mcp remove 'prod_gateway' 2>$null | Out-Null } catch { }",
+      "try { claude mcp remove --scope local 'prod_gateway' 2>$null | Out-Null } catch { }",
     );
     expect(script).toContain(
-      `claude mcp add --transport http 'prod_gateway' '${MCP.url}'`,
+      "try { claude mcp remove --scope user 'prod_gateway' 2>$null | Out-Null } catch { }",
+    );
+    expect(script).toContain(
+      `claude mcp add --scope user --transport http 'prod_gateway' '${MCP.url}'`,
     );
     expect(script).toContain("ANTHROPIC_BASE_URL");
     expect(script).toContain("ANTHROPIC_AUTH_TOKEN");
@@ -552,6 +787,9 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("# >>> archestra:default_proxy >>>");
     expect(script).toContain("[model_providers.default_proxy]");
     expect(script).toContain('wire_api = "responses"');
+    // Attribution parity: the client-id header is written to config.toml.
+    expect(script).toContain("[model_providers.default_proxy.http_headers]");
+    expect(script).toContain(CODEX_AGENT_ID_TOML_LINE);
     // virtual key passed via variable + stdin, never argv.
     expect(script).toContain("$ArchVirtualKey | codex login --with-api-key");
     expect(script).not.toContain(

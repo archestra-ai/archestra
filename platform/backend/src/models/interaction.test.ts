@@ -3,6 +3,8 @@ import {
   CLAUDE_CLIENT_FILTER,
   CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
+  CODEX_CLIENT_FILTER,
+  CODEX_CLIENT_ID,
 } from "@archestra/shared";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction } from "@/types";
@@ -1283,6 +1285,63 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions billing-mode split", () => {
+    test("splits session cost into billed and subscription", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const base = {
+        profileId: agent.id,
+        sessionId: "billing-split-session",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+      // Same session, mixed billing modes: $1 + $1 metered, $5 subscription.
+      await InteractionModel.create({
+        ...base,
+        cost: "1.0000000000",
+        billingMode: "metered",
+      });
+      await InteractionModel.create({
+        ...base,
+        cost: "1.0000000000",
+        billingMode: "metered",
+      });
+      await InteractionModel.create({
+        ...base,
+        cost: "5.0000000000",
+        billingMode: "subscription",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+      const session = sessions.data.find(
+        (s) => s.sessionId === "billing-split-session",
+      );
+      expect(session).toBeDefined();
+      // Full list price is unchanged; billed spend is metered-only; the
+      // subscription portion is tracked separately.
+      expect(Number(session?.totalCost)).toBeCloseTo(7, 5);
+      expect(Number(session?.totalBilledCost)).toBeCloseTo(2, 5);
+      expect(Number(session?.totalSubscriptionCost)).toBeCloseTo(5, 5);
+    });
+  });
+
   describe("getSessions auth attribution", () => {
     test("aggregates auth methods and authenticated app names", async ({
       makeAdmin,
@@ -1347,6 +1406,57 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].authenticatedAppNames).toEqual(
         expect.arrayContaining(["Backend Service", "User OAuth App, Inc."]),
       );
+    });
+  });
+
+  describe("getSessions user attribution", () => {
+    test("keeps a user name containing a comma as a single entry", async ({
+      makeAdmin,
+      makeUser,
+    }) => {
+      const admin = await makeAdmin();
+      // "Last, First" display names (common for enterprise IdP / MS Teams
+      // accounts) must not be split into multiple names by the aggregation
+      const commaNameUser = await makeUser({ name: "Doe, Jane Q." });
+      const plainNameUser = await makeUser({ name: "John Smith" });
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      for (const [index, user] of [commaNameUser, plainNameUser].entries()) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: "comma-user-name-session",
+          userId: user.id,
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: `Request ${index}` }],
+          },
+          response: {
+            id: `r${index}`,
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
+      }
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "comma-user-name-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].userNames).toEqual([
+        "Doe, Jane Q.",
+        "John Smith",
+      ]);
     });
   });
 
@@ -1497,9 +1607,10 @@ describe("InteractionModel", () => {
         });
 
       // Two Claude clients (auto-discovered generic id and header-set Code id),
-      // a customer agent, and a plain session with no client.
+      // a Codex client, a customer agent, and a plain session with no client.
       await make("auto-claude-session", CLAUDE_CLIENT_ID);
       await make("claude-code-session", CLAUDE_CODE_CLIENT_ID);
+      await make("codex-session", CODEX_CLIENT_ID);
       await make("customer-session", "my-custom-agent");
       await make("plain-session", null);
 
@@ -1515,13 +1626,25 @@ describe("InteractionModel", () => {
         [CLAUDE_CLIENT_ID, CLAUDE_CODE_CLIENT_ID].sort(),
       );
 
-      // No filter returns all four
+      // Filter to Codex — only the Codex client id.
+      const codex = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { client: CODEX_CLIENT_FILTER },
+      );
+      expect(codex.data).toHaveLength(1);
+      expect(codex.data.flatMap((s) => s.externalAgentIds)).toEqual([
+        CODEX_CLIENT_ID,
+      ]);
+
+      // No filter returns all five
       const all = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
         true,
       );
-      expect(all.data).toHaveLength(4);
+      expect(all.data).toHaveLength(5);
     });
 
     test("marks mixed-source chat sessions without promoting compaction to the session source", async ({
@@ -1697,6 +1820,54 @@ describe("InteractionModel", () => {
       expect(sessions.data[0].lastInteractionType).toBe(
         "openai:chatCompletions",
       );
+    });
+
+    test("recognizes a Responses-format request (Codex `input`) as the last interaction", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      // Codex sends the OpenAI Responses shape: turns live in `input`, not
+      // `messages`. The session summary must still surface it so the logs UI can
+      // render the real last user message instead of an empty title.
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "codex-responses-session",
+        externalAgentId: CODEX_CLIENT_ID,
+        request: {
+          model: "gpt-5.6-sol",
+          input: [
+            {
+              type: "message",
+              role: "user",
+              content: [{ type: "input_text", text: "Hi from codex cli" }],
+            },
+          ],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r1",
+          object: "response",
+          created: Date.now(),
+          model: "gpt-5.6-sol",
+        } as unknown as InsertInteraction["response"],
+        type: "openai:responses",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "codex-responses-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastInteractionType).toBe("openai:responses");
     });
 
     test("skips prompt suggestion generator requests when finding lastInteractionRequest", async ({

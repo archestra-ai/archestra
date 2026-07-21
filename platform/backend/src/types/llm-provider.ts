@@ -35,7 +35,7 @@ import type {
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
 
-import type { Agent } from "./agent";
+import type { GatewayAgent } from "./agent";
 
 /**
  * GenAI operation names for tracing span names.
@@ -59,7 +59,7 @@ export interface CreateClientOptions {
   /** Base URL override for the provider API */
   baseUrl?: string;
   /** Agent for observability metrics (request duration, tokens) */
-  agent?: Agent;
+  agent?: GatewayAgent;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
   /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */
@@ -398,6 +398,18 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
 
   /** Extract API key from headers */
   extractApiKey(headers: THeaders): string | undefined;
+
+  /**
+   * Whether the resolved upstream credential is a flat-rate subscription token
+   * rather than a metered API key, judged purely by the credential's format.
+   * Used for billing-mode classification (see resolveInteractionBillingMode).
+   * Implement ONLY for providers whose subscription tokens are format-
+   * distinguishable from metered keys: Anthropic OAuth access tokens (Claude
+   * Pro/Max, what Claude Code forwards) are `sk-ant-oat…` while metered API
+   * keys are `sk-ant-api…`. Providers without such a marker must leave this
+   * unset so their traffic stays metered.
+   */
+  isSubscriptionCredential?(apiKey: string | undefined): boolean;
 
   /** Get base URL for the provider (from config), undefined means use SDK default */
   getBaseUrl(): string | undefined;

@@ -1,4 +1,5 @@
 import {
+  BillingModeSchema,
   InteractionSourceSchema,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
@@ -126,7 +127,12 @@ const extendedFields = {
  */
 const BaseSelectInteractionSchema = createSelectSchema(
   schema.interactionsTable,
-  extendedFields,
+  {
+    ...extendedFields,
+    // Required on read: the column is NOT NULL, so every row carries a concrete
+    // BillingMode. (The default override belongs on the insert schema only.)
+    billingMode: BillingModeSchema,
+  },
 );
 
 /**
@@ -477,6 +483,9 @@ export const InsertInteractionSchema = createInsertSchema(
   schema.interactionsTable,
   {
     ...extendedFields,
+    // Optional on write: the column has a DB default ("metered"), so callers may
+    // omit it. The proxy write path sets it explicitly (buildInteractionRecord).
+    billingMode: BillingModeSchema.optional(),
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),
@@ -521,7 +530,12 @@ export const SessionSummarySchema = z.object({
   totalOutputTokens: z.number(),
   totalCacheReadTokens: z.number(),
   totalCacheWriteTokens: z.number(),
+  /** Full list-price estimate for the session (all rows, regardless of billing mode). */
   totalCost: z.string().nullable(),
+  /** Billed spend: list-price `cost` of metered rows only (null when none). */
+  totalBilledCost: z.string().nullable(),
+  /** Would-be list-price cost of subscription-covered rows (null when none). */
+  totalSubscriptionCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
   totalToonCostSavings: z.string().nullable(),
   totalCacheSavings: z.string().nullable(),

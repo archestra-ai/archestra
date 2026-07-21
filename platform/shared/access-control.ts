@@ -25,15 +25,47 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   ...(defaultStatements as unknown as Record<string, Action[]>),
 
   // Agents
-  agent: ["read", "create", "update", "delete", "team-admin", "admin"],
-  skill: ["read", "create", "update", "delete", "team-admin", "admin"],
-  app: ["read", "create", "update", "delete", "team-admin", "admin"],
+  agent: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
+  skill: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
+  app: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
 
   // LLM
-  llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
+  llmProxy: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
   llmOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
@@ -43,17 +75,41 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
+  mcpGateway: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "deploy-to-restricted",
+  ],
   mcpOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
+  mcpRegistry: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
-  environment: ["admin", "deploy-to-restricted"],
+  environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
+  knowledgeSource: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "query",
+    "admin",
+    "deploy-to-restricted",
+  ],
+  knowledgeSourceAutoSync: ["read", "create", "update", "delete"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -67,6 +123,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   auditLog: ["read"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
+  mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
@@ -91,15 +149,43 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
-  agent: ["read", "create", "update", "delete", "team-admin"],
-  skill: ["read", "create", "update", "delete", "team-admin"],
-  app: ["read", "create", "update", "delete", "team-admin"],
+  agent: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
+  skill: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
+  app: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
-  llmProxy: ["read", "create", "update", "delete", "team-admin"],
+  llmProxy: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   llmProviderApiKey: ["read", "create", "update", "delete"],
   llmVirtualKey: ["read", "create", "update", "delete"],
   llmOauthClient: ["read", "create", "update", "delete", "team-admin"],
@@ -109,17 +195,39 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmCost: ["read"],
 
   // MCP
-  mcpGateway: ["read", "create", "update", "delete", "team-admin"],
+  mcpGateway: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   mcpOauthClient: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
+  mcpRegistry: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "deploy-to-restricted",
+  ],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
-  environment: ["admin"],
+  environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
-  knowledgeSource: ["read", "create", "update", "delete", "query"],
+  knowledgeSource: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "query",
+    "deploy-to-restricted",
+  ],
+  knowledgeSourceAutoSync: [],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -133,6 +241,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   auditLog: [],
   agentSettings: [],
   llmSettings: ["read", "update"],
+  mcpSettings: ["read", "update"],
+  skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
   member: ["read"],
   invitation: ["read"],
@@ -185,13 +295,14 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
-  environment: [],
+  environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
   githubAppConfig: [],
 
   // Knowledge
   knowledgeSource: ["read", "query"],
+  knowledgeSourceAutoSync: [],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -205,6 +316,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
   auditLog: [],
   agentSettings: [],
   llmSettings: [],
+  mcpSettings: [],
+  skillsSettings: [],
   knowledgeSettings: [],
   member: [],
   invitation: [],
@@ -255,6 +368,8 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:team-admin": "Manage team assignments for agents",
   "agent:admin":
     "Full administrative control over all agents, bypassing team restrictions",
+  "agent:deploy-to-restricted":
+    "Assign agents to restricted deployment environments",
   "skill:read":
     "View and use agent skills within your scope (org, your teams, your own)",
   "skill:create": "Create new agent skills",
@@ -263,6 +378,8 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:team-admin": "Manage team assignments for agent skills",
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
+  "skill:deploy-to-restricted":
+    "Assign agent skills to restricted deployment environments",
   "app:read":
     "View and run MCP Apps within your scope (org, your teams, your own)",
   "app:create": "Create new MCP Apps",
@@ -271,6 +388,8 @@ export const permissionDescriptions: Record<string, string> = {
   "app:team-admin": "Manage team assignments for MCP Apps",
   "app:admin":
     "Full administrative control over all MCP Apps, bypassing team restrictions",
+  "app:deploy-to-restricted":
+    "Assign MCP Apps to restricted deployment environments",
   "sandbox:execute":
     "Run commands and upload/download files in code execution sandboxes",
   "agentTrigger:read":
@@ -301,6 +420,8 @@ export const permissionDescriptions: Record<string, string> = {
     "Manage all MCP OAuth client registrations, bypassing team restrictions",
   "mcpGateway:admin":
     "Full administrative control over all MCP gateways, bypassing team restrictions",
+  "mcpGateway:deploy-to-restricted":
+    "Assign MCP gateways to restricted deployment environments",
   "toolPolicy:read":
     "View tools, tool invocation policies, and trusted data policies",
   "toolPolicy:create": "Register tools and create security policies",
@@ -312,6 +433,8 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:update": "Modify MCP registry entries",
   "mcpRegistry:delete": "Remove servers from the MCP registry",
   "mcpRegistry:team-admin": "Manage team assignments for MCP registry entries",
+  "mcpRegistry:deploy-to-restricted":
+    "Deploy MCP servers (catalog items) to restricted environments",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
@@ -325,10 +448,11 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpServerInstallationRequest:delete": "Delete installation requests",
   "mcpServerInstallationRequest:admin":
     "Approve or decline installation requests",
-  "environment:admin":
-    "Create, edit, and delete deployment environments (everyone can view them)",
-  "environment:deploy-to-restricted":
-    "Deploy catalog items to restricted environments",
+  "environment:read": "View and list deployment environments",
+  "environment:create": "Create deployment environments",
+  "environment:update":
+    "Modify deployment environments, including the org default environment",
+  "environment:delete": "Delete deployment environments",
   "githubAppConfig:read": "View GitHub App configurations",
   "githubAppConfig:create": "Create GitHub App configurations",
   "githubAppConfig:update": "Modify GitHub App configurations",
@@ -342,6 +466,8 @@ export const permissionDescriptions: Record<string, string> = {
   "llmProxy:team-admin": "Manage team assignments for LLM proxies",
   "llmProxy:admin":
     "Full administrative control over all LLM proxies, bypassing team restrictions",
+  "llmProxy:deploy-to-restricted":
+    "Assign LLM proxies to restricted deployment environments",
   "llmProviderApiKey:read": "View LLM provider API keys",
   "llmProviderApiKey:create": "Add new LLM provider API keys",
   "llmProviderApiKey:update":
@@ -374,10 +500,14 @@ export const permissionDescriptions: Record<string, string> = {
   "optimizationRule:delete": "Remove optimization rules",
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
+  "mcpSettings:read": "View MCP settings (online catalog availability)",
+  "mcpSettings:update": "Modify MCP settings",
+  "skillsSettings:read": "View Skills settings (online catalog availability)",
+  "skillsSettings:update": "Modify Skills settings",
   "agentSettings:read":
-    "View agent settings (default model, default agent, default tool guardrails, file uploads)",
+    "View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
   "agentSettings:update":
-    "Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
+    "Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder)",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other
@@ -434,7 +564,16 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:delete": "Delete Knowledge Bases and Connectors",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
-    "View all Knowledge Bases and Connectors, bypassing visibility restrictions",
+    "View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions",
+  "knowledgeSource:deploy-to-restricted":
+    "Assign Knowledge Bases and Connectors to restricted deployment environments",
+  "knowledgeSourceAutoSync:read":
+    "View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings",
+  "knowledgeSourceAutoSync:create":
+    "Create connectors with auto-sync permissions (access mirrors the source system)",
+  "knowledgeSourceAutoSync:update":
+    "Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs",
+  "knowledgeSourceAutoSync:delete": "Delete auto-sync-permissions connectors",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
@@ -501,6 +640,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Tool exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentToolExclusions]: {},
   [RouteId.UpdateAgentToolExclusions]: {},
+  // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
+  [RouteId.GetAgentSubagentExclusions]: {},
+  [RouteId.UpdateAgentSubagentExclusions]: {},
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -938,6 +1080,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same self-service rationale for Microsoft 365 Copilot's Entra device flow.
   [RouteId.Microsoft365CopilotDeviceAuthStart]: {},
   [RouteId.Microsoft365CopilotDeviceAuthPoll]: {},
+  // Same self-service rationale for the ChatGPT/Codex subscription device flow:
+  // it only obtains the caller's own OAuth credential for a new personal
+  // OpenAI (ChatGPT subscription) key.
+  [RouteId.OpenaiCodexDeviceAuthStart]: {},
+  [RouteId.OpenaiCodexDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },
@@ -984,6 +1131,9 @@ export const requiredEndpointPermissionsMap: Partial<
     serviceAccount: ["update"],
   },
   [RouteId.GetAllVirtualApiKeys]: {
+    llmVirtualKey: ["read"],
+  },
+  [RouteId.GetVirtualApiKey]: {
     llmVirtualKey: ["read"],
   },
   [RouteId.CreateVirtualApiKey]: {
@@ -1087,6 +1237,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateLlmSettings]: {
     llmSettings: ["update"],
   },
+  [RouteId.UpdateMcpSettings]: {
+    mcpSettings: ["update"],
+  },
+  [RouteId.UpdateSkillsSettings]: {
+    skillsSettings: ["update"],
+  },
   [RouteId.UpdateAgentSettings]: {
     agentSettings: ["update"],
   },
@@ -1097,21 +1253,23 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   },
   // Listing environments is available to any authenticated user (read is ungated).
-  [RouteId.ListEnvironments]: {},
+  [RouteId.ListEnvironments]: {
+    environment: ["read"],
+  },
   [RouteId.CreateEnvironment]: {
-    environment: ["admin"],
+    environment: ["create"],
   },
   [RouteId.UpdateEnvironment]: {
-    environment: ["admin"],
+    environment: ["update"],
   },
   [RouteId.DeleteEnvironment]: {
-    environment: ["admin"],
+    environment: ["delete"],
   },
   [RouteId.UpdateDefaultEnvironment]: {
-    environment: ["admin"],
+    environment: ["update"],
   },
   [RouteId.GetK8sCapabilities]: {
-    environment: ["admin"],
+    environment: ["update"],
   },
   [RouteId.ListGithubAppConfigs]: {
     githubAppConfig: ["read"],
@@ -1126,6 +1284,20 @@ export const requiredEndpointPermissionsMap: Partial<
     githubAppConfig: ["update"],
   },
   [RouteId.DeleteGithubAppConfig]: {
+    githubAppConfig: ["delete"],
+  },
+  // stored PATs share the githubAppConfig resource: both are org GitHub
+  // credentials managed on the same settings page by the same audience
+  [RouteId.ListGithubPats]: {
+    githubAppConfig: ["read"],
+  },
+  [RouteId.CreateGithubPat]: {
+    githubAppConfig: ["create"],
+  },
+  [RouteId.UpdateGithubPat]: {
+    githubAppConfig: ["update"],
+  },
+  [RouteId.DeleteGithubPat]: {
     githubAppConfig: ["delete"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
@@ -1350,6 +1522,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },
+  [RouteId.GetPermissionSyncCoverage]: { knowledgeSourceAutoSync: ["read"] },
+  [RouteId.GetConnectorUserGroups]: { knowledgeSourceAutoSync: ["read"] },
+  [RouteId.UpsertConnectorMemberOverride]: {
+    knowledgeSourceAutoSync: ["update"],
+  },
+  [RouteId.DeleteConnectorMemberOverride]: {
+    knowledgeSourceAutoSync: ["update"],
+  },
   [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
 
@@ -1379,6 +1560,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
+  [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
@@ -1424,6 +1606,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAuditLogs]: {
     auditLog: ["read"],
   },
+  [RouteId.GetAuditLog]: {
+    auditLog: ["read"],
+  },
 
   // Skill Share Link Routes - admin-only. Per-skill org-isolation enforced in handlers.
   // The public marketplace git endpoint stays outside this map; it is allowlisted in
@@ -1439,6 +1624,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateApp]: { app: ["create"] },
   [RouteId.GetApp]: { app: ["read"] },
   [RouteId.UpdateApp]: { app: ["update"] },
+  // Enable/disable is a lifecycle transition, not a metadata edit; gated like
+  // an update (the handler further requires scope-modify at the app's scope).
+  [RouteId.EnableApp]: { app: ["update"] },
+  [RouteId.DisableApp]: { app: ["update"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },
@@ -1462,6 +1651,17 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same trust model as diagnostics: the host page posts the viewer's render
   // screenshot, the handler re-checks app-visibility.
   [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
+  // App session recordings live client-side (IndexedDB); sharing forwards a
+  // client-assembled bundle to the public demo catalog. Any viewer of an app
+  // they can see may share their own recording; the handler re-checks app
+  // visibility and the feature flag.
+  // Reads the recording's conversation to draft the enhancement, so it takes
+  // the same permission as the chat-scoped generation routes.
+  [RouteId.EnhanceAppRecording]: { chat: ["update"] },
+  [RouteId.RenderAppRecordingVideo]: { chat: ["update"] },
+  [RouteId.GetAppRecordingRenderStatus]: { chat: ["update"] },
+  [RouteId.DownloadAppRecordingVideo]: { chat: ["update"] },
+  [RouteId.CancelAppRecordingRender]: { chat: ["update"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
@@ -1495,6 +1695,34 @@ export const requiredEndpointPermissionsMap: Partial<
   // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
   [RouteId.McpAppProxyPost]: {},
 };
+
+/**
+ * Build the user-facing message for a 403 response: what was blocked (derived
+ * from the route id) and why (the missing `resource:action` permissions, with
+ * their human-readable descriptions). Used by the backend auth middleware and
+ * by permission helpers that deny a specific resource/action, so every
+ * Forbidden error reads the same way.
+ */
+export function buildForbiddenErrorMessage(params: {
+  routeId?: string;
+  missingPermissions?: Permissions;
+}): string {
+  const activity = params.routeId ? humanizeRouteId(params.routeId) : undefined;
+  let message = activity
+    ? `You don't have permission to ${activity}.`
+    : "You don't have permission to perform this action.";
+
+  const permissionKeys = flattenPermissionKeys(params.missingPermissions);
+  if (permissionKeys.length > 0) {
+    const details = permissionKeys.map((key) => {
+      const description = permissionDescriptions[key];
+      return description ? `${key} (${description})` : key;
+    });
+    message += ` Missing permission${permissionKeys.length > 1 ? "s" : ""}: ${details.join("; ")}.`;
+  }
+
+  return message;
+}
 
 /**
  * Maps frontend routes to their required permissions.
@@ -1559,12 +1787,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/knowledge/connectors": { knowledgeSource: ["read"] },
 
   // Settings
-  "/settings/account": {},
-  "/settings/api-keys": { apiKey: ["read"] },
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
+  "/settings/mcp": { mcpSettings: ["read"] },
+  "/settings/skills": { skillsSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
-  "/settings/environments": { environment: ["admin"] },
+  "/settings/security": { agentSettings: ["read"] },
+  "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
@@ -1574,3 +1803,50 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/github": { githubAppConfig: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };
+
+// === Internal helpers
+
+/**
+ * Words in a camelCase route id that must keep their canonical casing when the
+ * id is turned into a human-readable phrase (e.g. "getMcpServerLogs" →
+ * "get MCP server logs").
+ */
+const ROUTE_WORD_CASING_OVERRIDES: Record<string, string> = {
+  a2a: "A2A",
+  acme: "ACME",
+  ai: "AI",
+  api: "API",
+  id: "ID",
+  idp: "IdP",
+  k8s: "K8s",
+  llm: "LLM",
+  llms: "LLMs",
+  mcp: "MCP",
+  oauth: "OAuth",
+  sso: "SSO",
+  url: "URL",
+};
+
+/** Turn a camelCase route id like "uploadProjectFiles" into "upload project files". */
+function humanizeRouteId(routeId: string): string {
+  return routeId
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[\s_-]+/)
+    .filter((word) => word.length > 0)
+    .map((word) => {
+      const lower = word.toLowerCase();
+      return ROUTE_WORD_CASING_OVERRIDES[lower] ?? lower;
+    })
+    .join(" ");
+}
+
+/** Flatten a Permissions object into "resource:action" keys, sorted for stable output. */
+function flattenPermissionKeys(permissions: Permissions | undefined): string[] {
+  if (!permissions) return [];
+  return Object.entries(permissions)
+    .flatMap(([resource, actions]) =>
+      (actions ?? []).map((action) => `${resource}:${action}`),
+    )
+    .sort();
+}

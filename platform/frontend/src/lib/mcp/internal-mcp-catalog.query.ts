@@ -42,6 +42,15 @@ type UpdateInternalMcpCatalogItemParams =
 export const REMOTE_SERVER_URL_NOT_ALLOWED_CODE =
   "remote_server_url_not_allowed";
 
+/**
+ * `internal_code` the backend sets when a rename targets a name already used
+ * by another root catalog in the organization (tool names embed the catalog
+ * name, so duplicates would route tool calls to the wrong server). Shown
+ * inline on the Name field. Keep in sync with the backend constant of the
+ * same value.
+ */
+export const CATALOG_NAME_CONFLICT_CODE = "catalog_name_conflict";
+
 /** Read the backend `internal_code` off an error thrown by a catalog mutation. */
 export function getCatalogMutationErrorCode(
   error: unknown,
@@ -182,14 +191,21 @@ export function useUpdateInternalMcpCatalogItem() {
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
+      // A rename re-slugs tool names without any reinstall, so the unified
+      // /tools page caches go stale on catalog updates too.
+      queryClient.invalidateQueries({ queryKey: ["tools"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
       toast.success("Catalog item updated successfully");
     },
     onError: (error) => {
-      // The network-policy error is shown inline on the Server URL field by the
-      // dialog; everything else falls back to a toast.
+      // The network-policy error is shown inline on the Server URL field and
+      // the rename conflict inline on the Name field by the dialog; everything
+      // else falls back to a toast.
+      const code = getCatalogMutationErrorCode(error);
       if (
-        getCatalogMutationErrorCode(error) ===
-        REMOTE_SERVER_URL_NOT_ALLOWED_CODE
+        code === REMOTE_SERVER_URL_NOT_ALLOWED_CODE ||
+        code === CATALOG_NAME_CONFLICT_CODE
       ) {
         return;
       }

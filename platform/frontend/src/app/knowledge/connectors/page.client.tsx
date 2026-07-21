@@ -12,6 +12,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
+import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
@@ -29,7 +30,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
+  useConnector,
   useConnectorsPaginated,
   useDeleteConnector,
 } from "@/lib/knowledge/connector.query";
@@ -91,8 +94,18 @@ function ConnectorsList() {
           >["connectorType"]),
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingConnector, setEditingConnector] =
-    useState<ConnectorItem | null>(null);
+  const editIdFromUrl = searchParams.get("edit");
+  const { data: connectorFromUrl } = useConnector(editIdFromUrl ?? undefined);
+  const {
+    entity: editingConnector,
+    open: openEditDialog,
+    close: closeEditDialog,
+  } = useDialogUrlParam<
+    ConnectorItem | archestraApiTypes.GetConnectorResponses["200"]
+  >({
+    paramName: "edit",
+    entityFromUrl: connectorFromUrl ?? null,
+  });
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
     null,
   );
@@ -185,6 +198,16 @@ function ConnectorsList() {
       },
     },
     {
+      id: "accessibleTo",
+      header: "Accessible to",
+      cell: ({ row }) => (
+        <ConnectorAccessBadge
+          visibility={row.original.visibility}
+          teamIds={row.original.teamIds}
+        />
+      ),
+    },
+    {
       id: "schedule",
       header: "Schedule",
       cell: ({ row }) => {
@@ -205,7 +228,7 @@ function ConnectorsList() {
             {
               icon: <Pencil className="h-4 w-4" />,
               label: "Edit connector",
-              onClick: () => setEditingConnector(row.original),
+              onClick: () => openEditDialog(row.original),
             },
             {
               icon: <Trash2 className="h-4 w-4" />,
@@ -222,7 +245,7 @@ function ConnectorsList() {
   return (
     <KnowledgePageLayout
       title="Connectors"
-      description="Connectors sync content from external sources — like Confluence, Jira, GitHub, Google Drive, and websites — into knowledge bases on a schedule, so your agents can search and answer from it."
+      description="Connectors sync documents from external sources — like Confluence, Jira, GitHub, Google Drive, and websites — into knowledge bases on a schedule, so your agents can search and answer from them."
       createLabel="Create Connector"
       onCreateClick={() => setIsCreateDialogOpen(true)}
       isPending={isPending && !connectors}
@@ -289,7 +312,7 @@ function ConnectorsList() {
           <EditConnectorDialog
             connector={editingConnector}
             open={!!editingConnector}
-            onOpenChange={(open) => !open && setEditingConnector(null)}
+            onOpenChange={(open) => !open && closeEditDialog()}
           />
         )}
 

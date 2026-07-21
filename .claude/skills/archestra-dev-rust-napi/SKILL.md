@@ -1,6 +1,6 @@
 ---
 name: archestra-dev-rust-napi
-description: Use when editing Rust in this repo — the NAPI crates under platform/archestra-rs (app-runtime, image, and sandbox core/-rs crate pairs plus napi-loader, with their generated TypeScript bindings) or the standalone ai-labs Rust workspace (core/runner/cli/analyzer) — including Rust build/test checks.
+description: Use when editing Rust in this repo — the NAPI crates under platform/archestra-rs (app-runtime, image, and sandbox core/-rs crate pairs plus napi-loader, with their generated TypeScript bindings) or the standalone ai-labs Rust workspace (core/runner/cli/analyzer/dashboard) — including Rust build/test checks.
 ---
 
 # Archestra Rust Coding Style
@@ -8,7 +8,7 @@ description: Use when editing Rust in this repo — the NAPI crates under platfo
 This covers all Rust in the repo:
 
 - `platform/archestra-rs/*` — embedded in Node via NAPI.
-- `ai-labs/*` — a standalone pure-Rust workspace (core/runner/cli/analyzer), no NAPI.
+- `ai-labs/*` — a standalone pure-Rust workspace (core/runner/cli/analyzer/dashboard), no NAPI.
 
 The library-quality rules below apply everywhere. Rules tagged **(NAPI only)** apply only to Rust embedded via NAPI.
 
@@ -148,4 +148,4 @@ Not:
 JS-flavored business logic written in Rust
 ```
 
-The bench is the same idea without the adapter: keep `core`/`analyzer` reusable, and let `cli`/`runner` stay thin.
+The bench is the same idea without the adapter: keep `core`/`analyzer` reusable, and let `cli`/`runner`/`dashboard` stay thin.

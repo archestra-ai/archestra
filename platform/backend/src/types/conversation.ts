@@ -18,8 +18,17 @@ const ConversationShareSummarySchema = z
   })
   .nullable();
 
-/** How a conversation was started: a person, or a scheduled trigger run. */
-export const ConversationOriginSchema = z.enum(["user", "schedule_trigger"]);
+/**
+ * How a conversation was started: a person, a scheduled trigger run, or
+ * opening an app from the apps page. `app_open` chats are drafts — hidden from
+ * the conversations list until the user writes a message (see
+ * `ConversationModel.findAll`).
+ */
+export const ConversationOriginSchema = z.enum([
+  "user",
+  "schedule_trigger",
+  "app_open",
+]);
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 
 // Override selectedProvider to use the proper enum type

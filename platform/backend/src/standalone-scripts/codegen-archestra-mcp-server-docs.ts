@@ -67,6 +67,10 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   get_agent: ToolGroup.Agents,
   list_agents: ToolGroup.Agents,
   edit_agent: ToolGroup.Agents,
+  list_hooks: ToolGroup.Agents,
+  create_hook: ToolGroup.Agents,
+  update_hook: ToolGroup.Agents,
+  delete_hook: ToolGroup.Agents,
 
   create_llm_proxy: ToolGroup.LLMProxies,
   get_llm_proxy: ToolGroup.LLMProxies,
@@ -97,6 +101,9 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   add_team_member: ToolGroup.Teams,
   update_team_member_role: ToolGroup.Teams,
   remove_team_member: ToolGroup.Teams,
+  list_team_external_groups: ToolGroup.Teams,
+  add_team_external_group: ToolGroup.Teams,
+  remove_team_external_group: ToolGroup.Teams,
 
   create_limit: ToolGroup.Limits,
   get_limits: ToolGroup.Limits,
@@ -141,8 +148,6 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   unassign_knowledge_connector_from_agent: ToolGroup.KnowledgeManagement,
 
   todo_write: ToolGroup.Chat,
-  swap_agent: ToolGroup.Chat,
-  swap_to_default_agent: ToolGroup.Chat,
   create_project_from_conversation: ToolGroup.Chat,
 
   search_tools: ToolGroup.Meta,

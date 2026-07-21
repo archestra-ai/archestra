@@ -290,7 +290,7 @@ function LoadingFallback() {
 
 function OAuthCallbackLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-2xl items-center justify-center p-6">
+    <div className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full max-w-2xl items-center justify-center p-6">
       <div className="w-full">{children}</div>
     </div>
   );

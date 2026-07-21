@@ -10,6 +10,21 @@ import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials
 export const AppScopeSchema = ResourceVisibilityScopeSchema;
 export type AppScope = z.infer<typeof AppScopeSchema>;
 
+/**
+ * The caller's relationship to an owned app, derived from their real access
+ * path — the Apps analogue of Projects' `viewerRole`:
+ * - `owner`  — they authored it (full control, incl. modifying it via chat).
+ * - `shared` — reachable through its scope (an org app, or a team they belong
+ *              to). They may view/use it; whether they may change it still
+ *              depends on the scope rule (e.g. org apps need `app:admin`).
+ * - `admin`  — reachable ONLY because they hold `app:admin` oversight (a
+ *              personal app authored by someone else, or a team app for a team
+ *              they're not in). They may view it and manage its settings, but —
+ *              like a Projects admin — must NOT modify the app itself via chat.
+ */
+export const AppViewerRoleSchema = z.enum(["owner", "shared", "admin"]);
+export type AppViewerRole = z.infer<typeof AppViewerRoleSchema>;
+
 // The launch tool that hands a host the app's `ui://` resource so it renders the
 // app. ext-apps hosts discover a renderable UI from a tool's
 // `_meta.ui.resourceUri`, so an external client needs a tool to call. Shared by
@@ -77,7 +92,18 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   id: z.string(),
   scope: AppScopeSchema,
   authorId: z.string().nullable(),
+  // The author's display name, for the personal-scope badge — an app admin
+  // sees other users' personal apps and needs to tell whose an app is. Null
+  // when the author row is gone or has no name; the card falls back to a bare
+  // "Personal" label.
+  authorName: z.string().nullable(),
+  // The caller's relationship to this app (owner/shared/admin). Drives the
+  // "Owned by <name>" oversight badge and the admin's read-but-don't-chat gate.
+  viewerRole: AppViewerRoleSchema,
   latestVersion: z.number().int(),
+  // Whether the app is live. Disabled (false) is author-only and appears in
+  // the listing only for its author, who sees a "Disabled" badge on the card.
+  enabled: z.boolean(),
   // Teams the app is shared with (via its backing catalog), for the card's
   // visibility pill. Empty unless the app is team-scoped.
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
@@ -98,6 +124,10 @@ export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   mcpServerId: z.string(),
   scope: AppScopeSchema,
   resourceUri: z.string(),
+  // The short tool name. Together with (mcpServerId, resourceUri) it is the
+  // item's pin identity: several tools of one server can share a ui://
+  // resource, so the resource alone does not identify a tile.
+  toolName: z.string(),
   // The catalog's icon, exactly as the MCP registry renders it: an emoji
   // character or a base64 image data URL. Null when the server has none (the
   // card falls back to its generic server glyph).
@@ -113,7 +143,6 @@ export const AppListItemSchema = z.discriminatedUnion("source", [
   ExternalAppListItemSchema,
 ]);
 export type AppListItem = z.infer<typeof AppListItemSchema>;
-export type ExternalAppListItem = z.infer<typeof ExternalAppListItemSchema>;
 
 /** One of the caller's accessible installs of an external app's catalog. */
 export const ExternalAppInstallSchema = z.object({
@@ -124,7 +153,6 @@ export const ExternalAppInstallSchema = z.object({
   name: z.string(),
   localInstallationStatus: z.string().nullable(),
 });
-export type ExternalAppInstall = z.infer<typeof ExternalAppInstallSchema>;
 
 /** One UI-providing resource of an external app's catalog (a server may have several). */
 export const ExternalAppResourceSchema = z.object({
@@ -136,7 +164,6 @@ export const ExternalAppResourceSchema = z.object({
   // open-in-chat handoff instead of rendering the resource with no input.
   requiresInput: z.boolean(),
 });
-export type ExternalAppResource = z.infer<typeof ExternalAppResourceSchema>;
 
 /**
  * Run-page resolution for an external app: the catalog's UI resources plus the
@@ -188,29 +215,12 @@ export const SelectAppVersionSchema = createSelectSchema(
     spec: AppSpecSchema.nullable(),
   },
 );
-export const InsertAppVersionSchema = createInsertSchema(
-  schema.appVersionsTable,
-  {
-    uiPermissions: AppUiPermissionsSchema.nullable().optional(),
-    spec: AppSpecSchema.nullable().optional(),
-  },
-).omit({ id: true, createdAt: true });
-
 export const SelectAppToolSchema = createSelectSchema(schema.appToolsTable, {
   credentialResolutionMode: CredentialResolutionModeSchema,
 });
 export const InsertAppToolSchema = createInsertSchema(schema.appToolsTable, {
   credentialResolutionMode: CredentialResolutionModeSchema.optional(),
 }).omit({ id: true, createdAt: true, updatedAt: true });
-
-export const SelectAppDataSchema = createSelectSchema(schema.appDataTable);
-export const InsertAppDataSchema = createInsertSchema(schema.appDataTable).omit(
-  {
-    id: true,
-    createdAt: true,
-    updatedAt: true,
-  },
-);
 
 export const SelectAppRenderDiagnosticsSchema = createSelectSchema(
   schema.appRenderDiagnosticsTable,
@@ -323,11 +333,8 @@ export { AppSpecSchema } from "./app-spec";
 export type App = z.infer<typeof SelectAppSchema>;
 export type InsertApp = z.infer<typeof InsertAppSchema>;
 export type AppVersion = z.infer<typeof SelectAppVersionSchema>;
-export type InsertAppVersion = z.infer<typeof InsertAppVersionSchema>;
 export type AppTool = z.infer<typeof SelectAppToolSchema>;
 export type InsertAppTool = z.infer<typeof InsertAppToolSchema>;
-export type AppData = z.infer<typeof SelectAppDataSchema>;
-export type InsertAppData = z.infer<typeof InsertAppDataSchema>;
 export type CreateApp = z.infer<typeof CreateAppSchema>;
 export type UpdateApp = z.infer<typeof UpdateAppSchema>;
 export type AppTemplate = z.infer<typeof AppTemplateSchema>;

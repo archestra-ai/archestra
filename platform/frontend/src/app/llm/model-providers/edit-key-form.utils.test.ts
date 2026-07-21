@@ -21,6 +21,7 @@ function makeValues(
     awsAccessKeyId: null,
     awsSecretAccessKey: null,
     awsSessionToken: null,
+    openaiAuthMethod: "api-key",
     ...overrides,
   };
 }

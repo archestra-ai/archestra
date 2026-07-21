@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+} from "@archestra/shared";
 import { ChevronDown, Mail, MessageCircle, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -17,6 +21,7 @@ import {
 import { CodeText } from "@/components/code-text";
 import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
+import { getManageTokenLink } from "@/components/tokens/manage-token-link";
 import {
   Collapsible,
   CollapsibleContent,
@@ -41,7 +46,6 @@ import {
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
-import { cn } from "@/lib/utils";
 import {
   AgentEmailDisabledMessage,
   EmailNotConfiguredMessage,
@@ -90,6 +94,8 @@ export function A2AConnectionInstructions({
   // so each example gets a real UUID (fresh per dialog open).
   const [sendExampleMessageId] = useState(() => crypto.randomUUID());
   const [streamExampleMessageId] = useState(() => crypto.randomUUID());
+  const [replyExampleMessageId] = useState(() => crypto.randomUUID());
+  const [approvalExampleMessageId] = useState(() => crypto.randomUUID());
 
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
   // honors the same admin curation (descriptions, default flag, hidden URLs).
@@ -135,11 +141,19 @@ export function A2AConnectionInstructions({
   // agent-card.json card) lives under /v2.
   const a2aEndpoint = `${toA2ABaseUrl(connectionUrl)}/a2a/${agent.id}`;
 
-  // Default to personal token if available, otherwise org token, then first token
+  // Default to personal token if available, otherwise org token, then the
+  // first token that can actually authenticate against this agent.
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
+  const firstUsableToken = tokens?.find((t) => t.worksWithProfile !== false);
   const defaultTokenId = userToken
     ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? tokens?.[0]?.id ?? "");
+    : (orgToken?.id ?? firstUsableToken?.id ?? "");
+
+  // Unusable tokens stay listed but greyed out with the reason.
+  const unusableTokenReason =
+    agent.scope === "personal"
+      ? "Team tokens can't access personal agents"
+      : "This agent isn't assigned to this team";
 
   // Check if personal token is selected (either explicitly or by default)
   const effectiveTokenId = selectedTokenId ?? defaultTokenId;
@@ -175,6 +189,12 @@ export function A2AConnectionInstructions({
     : hasAdminPermission && selectedTeamToken
       ? `${selectedTeamToken.tokenStart}***`
       : "ask-admin-for-access-token";
+
+  // Deep link to the settings surface where the selected token is managed.
+  const manageTokenLink = getManageTokenLink({
+    isPersonalTokenSelected,
+    selectedTeamToken: selectedTeamToken ?? null,
+  });
 
   // Agent Card URL for discovery
   const agentCardUrl = `${a2aEndpoint}/.well-known/agent-card.json`;
@@ -230,6 +250,60 @@ curl -N -X POST "${a2aEndpoint}" \\
     }
   }'`,
     [a2aEndpoint, tokenForDisplay, streamExampleMessageId],
+  );
+
+  // cURL example for continuing the same conversation across turns
+  const replyCurlCode = useMemo(
+    () => `# Continue the conversation: copy contextId from the previous reply
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "${replyExampleMessageId}",
+        "contextId": "<contextId from the previous reply>",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Do you remember my earlier question?"}]
+      }
+    }
+  }'`,
+    [a2aEndpoint, tokenForDisplay, replyExampleMessageId],
+  );
+
+  // cURL example for answering a tool-approval request
+  const approvalCurlCode = useMemo(
+    () => `# Approve or deny tool calls. When a tool needs approval, the reply
+# is a task with status.state TASK_STATE_INPUT_REQUIRED and
+# metadata.approvalRequests — answer each approvalId with a decision.
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "${approvalExampleMessageId}",
+        "taskId": "<task.id from the reply>",
+        "contextId": "<contextId from the reply>",
+        "role": "ROLE_USER",
+        "parts": [],
+        "metadata": {
+          "taskOps": {
+            "approvalDecisions": [
+              {"approvalId": "<approvalId from approvalRequests>", "approved": true}
+            ]
+          }
+        }
+      }
+    }
+  }'`,
+    [a2aEndpoint, tokenForDisplay, approvalExampleMessageId],
   );
 
   const chatDeepLinkBlock = (
@@ -439,20 +513,29 @@ curl -N -X POST "${a2aEndpoint}" \\
               {/* Team tokens (non-organization) */}
               {tokens
                 ?.filter((token) => !token.isOrganizationToken)
-                .map((token) => (
-                  <SelectItem key={token.id} value={token.id}>
-                    <div className="flex flex-col gap-0.5 items-start">
-                      <div>
-                        {token.team?.name
-                          ? `Team Token (${token.team.name})`
-                          : token.name}
+                .map((token) => {
+                  const unusable = token.worksWithProfile === false;
+                  return (
+                    <SelectItem
+                      key={token.id}
+                      value={token.id}
+                      disabled={unusable}
+                    >
+                      <div className="flex flex-col gap-0.5 items-start">
+                        <div>
+                          {token.team?.name
+                            ? `Team Token (${token.team.name})`
+                            : token.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {unusable
+                            ? unusableTokenReason
+                            : "To share with your teammates"}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        To share with your teammates
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
+                    </SelectItem>
+                  );
+                })}
               {/* Organization token */}
               {tokens
                 ?.filter((token) => token.isOrganizationToken)
@@ -470,10 +553,10 @@ curl -N -X POST "${a2aEndpoint}" \\
           </Select>
           <p className="text-xs text-muted-foreground">
             <Link
-              href="/settings/account?tab=tokens"
+              href={manageTokenLink.href}
               className="underline hover:text-foreground"
             >
-              Manage your tokens
+              {manageTokenLink.label}
             </Link>
             {canCreateOauthClients && (
               <>
@@ -531,32 +614,65 @@ curl -N -X POST "${a2aEndpoint}" \\
             fetchUserTokenMutation={fetchUserTokenMutation}
             fetchTeamTokenMutation={fetchTeamTokenMutation}
           />
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              Continue the conversation (multi-turn)
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`reply-${effectiveTokenId}`}
+                code={replyCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              Approve or deny tool calls
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`approval-${effectiveTokenId}`}
+                code={approvalCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+          <p className="text-xs text-muted-foreground">
+            Full protocol reference — streaming, multi-turn conversations, and
+            tool approvals — in the{" "}
+            <a
+              href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-foreground"
+            >
+              A2A docs
+            </a>
+            .
+          </p>
         </div>
       </WizardStep>
 
-      {layout === "dialog" ? (
-        <Collapsible className="mt-2 rounded-lg border">
-          <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
-            Other ways to reach this agent
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180",
-              )}
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-6 px-4 pb-4">
-            {chatDeepLinkBlock}
-            {dialogOnlyChannels}
-          </CollapsibleContent>
-        </Collapsible>
-      ) : (
-        <div className="mt-2 space-y-4 border-t pt-6">
-          <h3 className="text-sm font-semibold">
-            Other ways to reach this agent
-          </h3>
-          {chatDeepLinkBlock}
-        </div>
-      )}
+      <div className="mt-6 space-y-6 border-t pt-6">
+        <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+          Other ways to reach this agent
+        </h3>
+        {chatDeepLinkBlock}
+        {layout === "dialog" && dialogOnlyChannels}
+      </div>
     </div>
   );
 }

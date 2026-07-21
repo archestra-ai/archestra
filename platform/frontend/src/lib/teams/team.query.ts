@@ -3,8 +3,13 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useFeature } from "@/lib/config/config.query";
 import { throwOnApiError } from "@/lib/utils";
 
-const { getTeams, getTeamVaultFolder, getTeamLabelKeys, getTeamLabelValues } =
-  archestraApiSdk;
+const {
+  getTeams,
+  getTeam,
+  getTeamVaultFolder,
+  getTeamLabelKeys,
+  getTeamLabelValues,
+} = archestraApiSdk;
 
 type TeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
 export type Team = TeamsResponse["data"][number];
@@ -51,6 +56,19 @@ export function useTeams(params?: {
     },
     initialData: params?.initialData as Team[] | undefined,
     enabled: params?.enabled,
+  });
+}
+
+export function useTeam(id: string | undefined) {
+  return useQuery({
+    queryKey: ["teams", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await getTeam({ path: { id } });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!id,
   });
 }
 

@@ -90,6 +90,12 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               chatSecretScanEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
               chatopsTelegramEnabled: z.boolean(),
+              /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
+              kbAutoSyncPermissionsEnabled: z.boolean(),
+              /** App session recording (record/replay/download app demos). */
+              hackathonRecorderEnabled: z.boolean(),
+              /** Staging override active: recorder bypasses the hackathon date window. */
+              hackathonRecorderOverrideActive: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -140,6 +146,10 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatSecretScanEnabled: config.chat.secretScanEnabled,
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
+          kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
+          hackathonRecorderEnabled: config.hackathonRecorder.enabled,
+          hackathonRecorderOverrideActive:
+            config.hackathonRecorder.overrideActive,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

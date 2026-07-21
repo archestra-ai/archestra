@@ -260,6 +260,13 @@ export const SelectAgentSchema = AgentRowSchema.extend({
    * Populated on read paths (list/get); absent on mutation responses.
    */
   sandboxAvailable: z.boolean().optional(),
+  /**
+   * Timestamp of the most recent MCP request (any JSON-RPC method) routed
+   * through this agent, from the mcp_tool_calls log. Null when nothing was
+   * ever routed through it. Populated on paginated list reads; absent on
+   * other responses.
+   */
+  lastUsedAt: z.date().nullable().optional(),
 });
 
 // Base schema without refinement - can be used with .partial()
@@ -323,6 +330,18 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
 export const UpdateAgentSchema = UpdateAgentSchemaBase.superRefine(
   validateIncomingEmailDomain,
 );
+
+export const CloneAgentBodySchema = z.object({
+  scope: AgentScopeSchema.optional().describe(
+    "Visibility of the clone. Defaults to the source agent's scope.",
+  ),
+  teams: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Teams for a team-scoped clone. Defaults to the source agent's teams. Ignored unless the clone's scope resolves to 'team'.",
+    ),
+});
 
 export type Agent = z.infer<typeof SelectAgentSchema>;
 export type AgentAccessContext = Pick<

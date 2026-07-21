@@ -7,6 +7,7 @@ import { createVertex } from "@ai-sdk/google-vertex";
 import { createGroq } from "@ai-sdk/groq";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
@@ -42,6 +43,7 @@ import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import logger from "@/logging";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -53,8 +55,10 @@ import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 const KEYLESS_PROVIDER_API_KEY_PLACEHOLDER = "EMPTY";
 
 /**
- * Note: vLLM and Ollama use the @ai-sdk/openai provider since they expose OpenAI-compatible APIs.
- * When creating a vLLM/Ollama model, we use createOpenAI with the respective base URL.
+ * Note: vLLM uses the @ai-sdk/openai provider (createOpenAI) since it exposes an
+ * OpenAI-compatible API. Ollama uses @ai-sdk/openai-compatible instead so that
+ * reasoning ("thinking") streamed in the `reasoning_content` field — which the
+ * strict @ai-sdk/openai chat parser drops — surfaces as native reasoning parts.
  */
 
 /**
@@ -96,6 +100,17 @@ export function createDirectLLMModel({
   }
   if (cfg.apiKeyRequiredMessage && !apiKey) {
     throw new ApiError(400, cfg.apiKeyRequiredMessage);
+  }
+  if (provider === "openai" && isOpenAiCodexCredential(apiKey)) {
+    // ChatGPT-subscription (Codex) credentials only work through the LLM proxy's
+    // openai adapter, which redeems a short-lived Codex access token and targets
+    // the Codex backend. This direct AI-SDK path (built-in subagents, knowledge
+    // base) would send the encoded refresh token to api.openai.com as a bearer —
+    // a credential leak and a guaranteed 401 — so fail closed.
+    throw new ApiError(
+      400,
+      "ChatGPT subscription (Codex) credentials cannot be used on the direct LLM path (built-in subagents, knowledge base). Configure a standard OpenAI API key for these, or pick a different model.",
+    );
   }
   const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;
   const baseURL =
@@ -245,6 +260,7 @@ export async function createLLMModelForAgent(params: {
     source: apiKeySource,
     baseUrl,
     chatApiKeyId,
+    authRequired,
   } = await resolveProviderApiKey({
     organizationId,
     userId,
@@ -289,9 +305,18 @@ export async function createLLMModelForAgent(params: {
     !isAzureWithEntra &&
     !isAnthropicWithWif
   ) {
-    // Per-user providers (GitHub Copilot) need the acting user's own linked
-    // account; surface a typed error so callers can prompt them to connect
-    // rather than showing a generic "configure a key" message.
+    // Per-user credentials need the acting user's own linked account; surface
+    // a typed error so callers can prompt them to connect rather than showing
+    // a generic "configure a key" message. Two per-user cases: resolution
+    // refused a credential-level key (a ChatGPT subscription belonging to
+    // someone else) and said so via authRequired, or the provider itself is
+    // per-user (GitHub/Microsoft Copilot) and the user has no personal key.
+    if (authRequired) {
+      throw new LlmProviderAuthRequiredError(
+        authRequired.provider,
+        authRequired.providerLabel,
+      );
+    }
     if (providerRequiresPerUserCredential(provider)) {
       throw new LlmProviderAuthRequiredError(provider);
     }
@@ -551,13 +576,26 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   ollama: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "Ollama base URL is required.");
+      }
+      // Ollama is OpenAI-compatible, but streams reasoning ("thinking") in a
+      // `reasoning_content` delta field that @ai-sdk/openai's chat parser drops
+      // — so qwen3-style thinking never reaches the UI. @ai-sdk/openai-compatible
+      // parses `reasoning_content` / `reasoning` into native reasoning parts.
+      return createOpenAICompatible({
+        name: "ollama",
         apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
         baseURL,
         headers,
         fetch,
-      }).chat(modelName),
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.ollama.baseUrl,
     // No apiKeyRequiredMessage — key is optional
   },

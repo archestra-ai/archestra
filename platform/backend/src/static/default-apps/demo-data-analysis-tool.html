@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo Data Analysis Tool</title>
+  <style>
+    :root {
+      --bg: #060607;
+      --panel: #0f1012;
+      --panel-2: #16181b;
+      --border: #24272c;
+      --text: #e9edf1;
+      --muted: #8b929c;
+      --accent: #5b9dff;
+      --accent-2: #7bffcf;
+      --up: #35d29a;
+      --down: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100dvh;
+      overflow-x: hidden;
+    }
+
+    /* ---------- Intro loader ---------- */
+    #intro {
+      position: fixed; inset: 0; z-index: 50;
+      background: #000;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 2rem;
+      transition: opacity 1s ease;
+    }
+    #intro.hide { opacity: 0; pointer-events: none; }
+    #intro-text {
+      color: #fff;
+      font-size: clamp(1.3rem, 4vw, 2.4rem);
+      font-weight: 300;
+      letter-spacing: 0.01em;
+      line-height: 1.4;
+      max-width: 42rem;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.9s ease, transform 0.9s ease;
+    }
+    #intro-text.in { opacity: 1; transform: translateY(0); }
+    #intro-text strong { font-weight: 600; }
+    #skip {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 51;
+      background: transparent; border: 1px solid rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.7); font-size: 0.8rem;
+      padding: 0.4rem 0.9rem; border-radius: 999px; cursor: pointer;
+      transition: opacity 0.4s ease, color 0.2s, border-color 0.2s;
+    }
+    #skip:hover { color: #fff; border-color: rgba(255,255,255,0.6); }
+
+    /* ---------- Main app ---------- */
+    #app { opacity: 0; transition: opacity 1s ease; padding: 1.5rem clamp(1rem, 4vw, 3rem) 3rem; max-width: 1080px; margin: 0 auto; }
+    #app.show { opacity: 1; }
+
+    header.head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 1.75rem; }
+    .brand-mark { width: 34px; height: 34px; border-radius: 9px; flex: none; box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
+    .head h1 { font-size: 1.35rem; margin: 0; font-weight: 600; }
+    .head p { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+    .metrics { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .metric-btn {
+      background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+      padding: 0.55rem 1rem; border-radius: 10px; cursor: pointer; font-size: 0.85rem;
+      display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;
+    }
+    .metric-btn .dot { width: 9px; height: 9px; border-radius: 50%; }
+    .metric-btn:hover { border-color: #3a3f47; color: var(--text); }
+    .metric-btn.active { background: var(--panel-2); color: var(--text); border-color: var(--accent); }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.5rem; margin-bottom: 1.25rem;
+    }
+
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.1rem; }
+    .stat .label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat .value { font-size: 1.5rem; font-weight: 600; margin-top: 0.35rem; font-variant-numeric: tabular-nums; }
+    .stat .value.up { color: var(--up); }
+    .stat .value.down { color: var(--down); }
+
+    .chart-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.75rem; }
+    .chart-title { font-size: 0.95rem; color: var(--muted); }
+    .chart-title b { color: var(--text); font-size: 1.05rem; display: block; margin-top: 0.15rem; }
+
+    .timeframes { display: flex; gap: 0.3rem; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 0.25rem; }
+    .tf-btn { background: transparent; border: none; color: var(--muted); padding: 0.35rem 0.7rem; border-radius: 7px; cursor: pointer; font-size: 0.78rem; font-weight: 500; transition: all 0.18s; }
+    .tf-btn:hover { color: var(--text); }
+    .tf-btn.active { background: var(--accent); color: #04122b; }
+
+    .chart-wrap { position: relative; width: 100%; height: 320px; }
+    svg.chart { width: 100%; height: 100%; display: block; overflow: visible; }
+    .grid-line { stroke: var(--border); stroke-width: 1; }
+    .area-path { transition: opacity 0.3s; }
+    .line-path { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+    .hover-dot { r: 5; }
+    .axis-label { fill: var(--muted); font-size: 0.68rem; }
+    .tooltip {
+      position: absolute; pointer-events: none; background: #000; border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.4rem 0.65rem; font-size: 0.78rem; opacity: 0;
+      transition: opacity 0.15s; transform: translate(-50%, -120%); white-space: nowrap;
+    }
+    .tooltip .t-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .tooltip .t-date { color: var(--muted); font-size: 0.68rem; }
+
+    .footer-note { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.78rem; margin-top: 0.5rem; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-2); box-shadow: 0 0 8px var(--accent-2); }
+  </style>
+</head>
+<body>
+  <div id="intro">
+    <div id="intro-text"></div>
+  </div>
+  <button id="skip" type="button">Skip intro</button>
+
+  <main id="app">
+    <header class="head">
+      <svg class="brand-mark" viewBox="0 0 994 953" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="993.958" height="952.543" rx="204.92" fill="black"/>
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M390.871 664.818C427.68 664.818 460.629 641.985 473.553 607.519L565.238 363.026C586.887 305.296 544.211 243.715 482.556 243.715C445.747 243.715 412.798 266.548 399.874 301.014L308.189 545.507C286.54 603.237 329.216 664.818 390.871 664.818Z" fill="white"/>
+        <ellipse cx="638.487" cy="577.095" rx="87.7298" ry="81.1501" fill="white"/>
+      </svg>
+      <div>
+        <h1>Demo Data Analysis Tool</h1>
+        <p>Time-series explorer &middot; built in Archestra</p>
+      </div>
+    </header>
+
+    <div class="metrics" id="metrics"></div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="card">
+      <div class="chart-head">
+        <div class="chart-title">Selected metric<b id="chart-metric-name">—</b></div>
+        <div class="timeframes" id="timeframes"></div>
+      </div>
+      <div class="chart-wrap">
+        <svg class="chart" id="chart" preserveAspectRatio="none"></svg>
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+      <div class="footer-note"><span class="live-dot"></span><span id="sync-note">Selections sync via Archestra's shared data layer</span></div>
+    </div>
+  </main>
+
+  <script>
+  (function () {
+    // ---------- Intro sequence ----------
+    const introEl = document.getElementById('intro');
+    const introText = document.getElementById('intro-text');
+    const skipBtn = document.getElementById('skip');
+    const appEl = document.getElementById('app');
+
+    const messages = [
+      'This app was built as a <strong>mini app in Archestra</strong>.',
+      "It uses Archestra's <strong>data layer</strong> for persistent storage.",
+      'It can be <strong>shared with colleagues</strong> and used together.',
+      'Try <strong>creating apps</strong> yourself.'
+    ];
+
+    let introTimers = [];
+    let introDone = false;
+
+    function clearIntroTimers() { introTimers.forEach(clearTimeout); introTimers = []; }
+
+    function finishIntro() {
+      if (introDone) return;
+      introDone = true;
+      clearIntroTimers();
+      introEl.classList.add('hide');
+      skipBtn.style.opacity = '0';
+      appEl.classList.add('show');
+      setTimeout(() => { introEl.style.display = 'none'; skipBtn.style.display = 'none'; }, 1100);
+    }
+
+    function runIntro() {
+      const IN = 900, HOLD = 1500, OUT = 900;
+      let t = 400;
+      messages.forEach((msg) => {
+        introTimers.push(setTimeout(() => { introText.innerHTML = msg; introText.classList.add('in'); }, t));
+        t += IN + HOLD;
+        introTimers.push(setTimeout(() => { introText.classList.remove('in'); }, t));
+        t += OUT;
+      });
+      introTimers.push(setTimeout(finishIntro, t + 300));
+    }
+
+    skipBtn.addEventListener('click', finishIntro);
+    runIntro();
+
+    // ---------- Demo data ----------
+    const METRICS = [
+      { id: 'revenue', name: 'Revenue', unit: '$', color: '#5b9dff', base: 48000, vol: 0.9, seed: 11 },
+      { id: 'active_users', name: 'Active Users', unit: '', color: '#7bffcf', base: 12400, vol: 1.1, seed: 29 },
+      { id: 'latency', name: 'Latency', unit: 'ms', color: '#ffb454', base: 180, vol: 0.7, seed: 47 },
+      { id: 'conversion', name: 'Conversion', unit: '%', color: '#c58bff', base: 3.2, vol: 0.6, seed: 63 }
+    ];
+    const TIMEFRAMES = [
+      { id: '1D', points: 24, stepMs: 3600e3, fmt: 'time' },
+      { id: '1W', points: 7, stepMs: 86400e3, fmt: 'day' },
+      { id: '1M', points: 30, stepMs: 86400e3, fmt: 'date' },
+      { id: '3M', points: 90, stepMs: 86400e3, fmt: 'date' },
+      { id: '1Y', points: 52, stepMs: 7*86400e3, fmt: 'date' },
+      { id: 'ALL', points: 120, stepMs: 30*86400e3, fmt: 'month' }
+    ];
+
+    function mulberry32(a) {
+      return function () {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function buildSeries(metric, tf) {
+      const rnd = mulberry32(metric.seed * 1000 + tf.points);
+      const now = Date.now();
+      const pts = [];
+      let val = metric.base;
+      let trend = (rnd() - 0.45) * metric.base * 0.004;
+      for (let i = tf.points - 1; i >= 0; i--) {
+        const noise = (rnd() - 0.5) * metric.base * 0.03 * metric.vol;
+        trend += (rnd() - 0.5) * metric.base * 0.0008;
+        val = Math.max(metric.base * 0.3, val + trend + noise);
+        pts.push({ t: now - i * tf.stepMs, v: val });
+      }
+      return pts;
+    }
+
+    function fmtNum(metric, v) {
+      if (metric.unit === '$') return '$' + Math.round(v).toLocaleString();
+      if (metric.unit === '%') return v.toFixed(2) + '%';
+      if (metric.unit === 'ms') return Math.round(v) + ' ms';
+      return Math.round(v).toLocaleString();
+    }
+
+    function fmtDate(ms, fmt) {
+      const d = new Date(ms);
+      if (fmt === 'time') return d.getHours() + ':00';
+      if (fmt === 'day') return d.toLocaleDateString(undefined, { weekday: 'short' });
+      if (fmt === 'month') return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    // ---------- State ----------
+    let state = { metric: 'revenue', timeframe: '1M' };
+    let current = { series: [], metric: null, tf: null };
+
+    const metricsEl = document.getElementById('metrics');
+    const tfEl = document.getElementById('timeframes');
+    const statsEl = document.getElementById('stats');
+    const chart = document.getElementById('chart');
+    const tooltip = document.getElementById('tooltip');
+    const metricNameEl = document.getElementById('chart-metric-name');
+    const syncNote = document.getElementById('sync-note');
+
+    function renderControls() {
+      metricsEl.innerHTML = '';
+      METRICS.forEach(m => {
+        const b = document.createElement('button');
+        b.className = 'metric-btn' + (m.id === state.metric ? ' active' : '');
+        b.innerHTML = '<span class="dot" style="background:' + m.color + '"></span>' + m.name;
+        b.onclick = () => { state.metric = m.id; persist(); render(); };
+        metricsEl.appendChild(b);
+      });
+      tfEl.innerHTML = '';
+      TIMEFRAMES.forEach(tf => {
+        const b = document.createElement('button');
+        b.className = 'tf-btn' + (tf.id === state.timeframe ? ' active' : '');
+        b.textContent = tf.id;
+        b.onclick = () => { state.timeframe = tf.id; persist(); render(); };
+        tfEl.appendChild(b);
+      });
+    }
+
+    function renderStats() {
+      const s = current.series, m = current.metric;
+      const first = s[0].v, last = s[s.length - 1].v;
+      const change = ((last - first) / first) * 100;
+      const hi = Math.max(...s.map(p => p.v));
+      const lo = Math.min(...s.map(p => p.v));
+      const dirClass = change >= 0 ? 'up' : 'down';
+      const sign = change >= 0 ? '+' : '';
+      statsEl.innerHTML =
+        stat('Current', fmtNum(m, last)) +
+        stat('Change', sign + change.toFixed(2) + '%', dirClass) +
+        stat('High', fmtNum(m, hi)) +
+        stat('Low', fmtNum(m, lo));
+    }
+    function stat(label, value, cls) {
+      return '<div class="stat"><div class="label">' + label + '</div><div class="value ' + (cls||'') + '">' + value + '</div></div>';
+    }
+
+    const W = 1000, H = 320, PAD_L = 8, PAD_R = 8, PAD_T = 18, PAD_B = 26;
+
+    function renderChart() {
+      const s = current.series, m = current.metric, tf = current.tf;
+      const vals = s.map(p => p.v);
+      let min = Math.min(...vals), max = Math.max(...vals);
+      const span = (max - min) || 1; min -= span * 0.12; max += span * 0.12;
+      const iw = W - PAD_L - PAD_R, ih = H - PAD_T - PAD_B;
+      const x = i => PAD_L + (i / (s.length - 1)) * iw;
+      const y = v => PAD_T + (1 - (v - min) / (max - min)) * ih;
+
+      let grid = '';
+      const rows = 4;
+      for (let r = 0; r <= rows; r++) {
+        const gy = PAD_T + (r / rows) * ih;
+        const gv = max - (r / rows) * (max - min);
+        grid += '<line class="grid-line" x1="' + PAD_L + '" y1="' + gy + '" x2="' + (W - PAD_R) + '" y2="' + gy + '"/>';
+        grid += '<text class="axis-label" x="' + (W - PAD_R) + '" y="' + (gy - 4) + '" text-anchor="end">' + fmtNum(m, gv) + '</text>';
+      }
+
+      const linePts = s.map((p, i) => x(i) + ',' + y(p.v));
+      const linePath = 'M' + linePts.join(' L');
+      const areaPath = linePath + ' L' + x(s.length - 1) + ',' + (PAD_T + ih) + ' L' + x(0) + ',' + (PAD_T + ih) + ' Z';
+
+      const labelIdx = [];
+      const ticks = Math.min(6, s.length);
+      for (let i = 0; i < ticks; i++) labelIdx.push(Math.round(i * (s.length - 1) / (ticks - 1)));
+      let xlabels = '';
+      labelIdx.forEach(i => {
+        xlabels += '<text class="axis-label" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' + fmtDate(s[i].t, tf.fmt) + '</text>';
+      });
+
+      const gid = 'grad-' + m.id;
+      chart.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      chart.innerHTML =
+        '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%" stop-color="' + m.color + '" stop-opacity="0.35"/>' +
+          '<stop offset="100%" stop-color="' + m.color + '" stop-opacity="0"/>' +
+        '</linearGradient></defs>' +
+        grid +
+        '<path class="area-path" d="' + areaPath + '" fill="url(#' + gid + ')"/>' +
+        '<path class="line-path" d="' + linePath + '" stroke="' + m.color + '"/>' +
+        xlabels +
+        '<circle class="hover-dot" id="hdot" fill="' + m.color + '" opacity="0"/>' +
+        '<rect id="hitbox" x="0" y="0" width="' + W + '" height="' + H + '" fill="transparent"/>';
+
+      const hdot = document.getElementById('hdot');
+      const hitbox = document.getElementById('hitbox');
+      hitbox.addEventListener('mousemove', ev => {
+        const rect = chart.getBoundingClientRect();
+        const px = (ev.clientX - rect.left) / rect.width * W;
+        let idx = Math.round((px - PAD_L) / iw * (s.length - 1));
+        idx = Math.max(0, Math.min(s.length - 1, idx));
+        const p = s[idx];
+        hdot.setAttribute('cx', x(idx)); hdot.setAttribute('cy', y(p.v)); hdot.setAttribute('opacity', '1');
+        const scrX = rect.left + (x(idx) / W) * rect.width;
+        const scrY = rect.top + (y(p.v) / H) * rect.height;
+        const wrapRect = chart.parentElement.getBoundingClientRect();
+        tooltip.style.left = (scrX - wrapRect.left) + 'px';
+        tooltip.style.top = (scrY - wrapRect.top) + 'px';
+        tooltip.innerHTML = '<div class="t-val">' + fmtNum(m, p.v) + '</div><div class="t-date">' + fmtDate(p.t, tf.fmt) + '</div>';
+        tooltip.style.opacity = '1';
+      });
+      hitbox.addEventListener('mouseleave', () => { hdot.setAttribute('opacity', '0'); tooltip.style.opacity = '0'; });
+    }
+
+    function render() {
+      const m = METRICS.find(x => x.id === state.metric) || METRICS[0];
+      const tf = TIMEFRAMES.find(x => x.id === state.timeframe) || TIMEFRAMES[2];
+      current.metric = m; current.tf = tf; current.series = buildSeries(m, tf);
+      metricNameEl.textContent = m.name + '  ·  ' + tf.id;
+      renderControls();
+      renderStats();
+      renderChart();
+    }
+
+    // ---------- Persistence via Archestra data layer ----------
+    const STORAGE_KEY = 'view_state';
+    let ready = false;
+
+    async function persist() {
+      if (!ready) return;
+      try {
+        await archestra.storage.shared.set(STORAGE_KEY, { metric: state.metric, timeframe: state.timeframe, by: archestra.user && archestra.user.name });
+      } catch (e) { /* non-fatal for the demo */ }
+    }
+
+    async function init() {
+      render();
+      try {
+        await archestra.ready;
+        ready = true;
+        const entry = await archestra.storage.shared.get(STORAGE_KEY);
+        if (entry && entry.value) {
+          if (entry.value.metric) state.metric = entry.value.metric;
+          if (entry.value.timeframe) state.timeframe = entry.value.timeframe;
+          render();
+          if (entry.value.by && archestra.user && entry.value.by !== archestra.user.name) {
+            syncNote.textContent = 'Last changed by ' + entry.value.by + ' · synced via Archestra';
+          }
+        }
+      } catch (e) {
+        syncNote.textContent = 'Demo data · storage unavailable in this preview';
+      }
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

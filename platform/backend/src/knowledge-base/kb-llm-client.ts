@@ -13,6 +13,7 @@ import {
   OrganizationModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 
 export interface EmbeddingConfig {
   apiKey: string;
@@ -164,6 +165,13 @@ export async function resolveApiKeyFromChatApiKey(
 
   const apiKey = await getSecretValueForLlmProviderApiKey(chatApiKey.secretId);
   if (!apiKey) return null;
+
+  // A ChatGPT-subscription (Codex) credential only works through the proxy's
+  // openai adapter, which decodes the marker and redeems a short-lived Codex
+  // access token. KB embedding/reranking calls the provider directly (no codex
+  // decode), so the raw marker would be sent to api.openai.com as a bearer —
+  // leaking a long-lived refresh token. Skip it, like the per-user guard above.
+  if (isOpenAiCodexCredential(apiKey)) return null;
 
   return { apiKey, baseUrl, provider: chatApiKey.provider };
 }

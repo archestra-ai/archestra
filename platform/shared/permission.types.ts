@@ -38,6 +38,7 @@ export const resources = [
   "mcpRegistry",
   "mcpServerInstallation",
   "knowledgeSource",
+  "knowledgeSourceAutoSync",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
   "environment",
@@ -55,6 +56,8 @@ export const resources = [
   "secret",
   "organizationSettings",
   "llmSettings",
+  "mcpSettings",
+  "skillsSettings",
   "agentSettings",
   "agentTrigger",
   "scheduledTask",
@@ -104,6 +107,7 @@ export const resourceLabels: Record<Resource, string> = {
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
   knowledgeSource: "Knowledge Sources",
+  knowledgeSourceAutoSync: "Auto-Sync Permissions Connectors",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   environment: "Environments",
@@ -126,6 +130,8 @@ export const resourceLabels: Record<Resource, string> = {
   auditLog: "Audit Log",
   organizationSettings: "Organization Settings",
   llmSettings: "LLM Settings",
+  mcpSettings: "MCP Settings",
+  skillsSettings: "Skills Settings",
   agentSettings: "Agent Settings",
   agentTrigger: "Agent Triggers",
   scheduledTask: "Scheduled Tasks",
@@ -163,11 +169,13 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Agent settings (default model, default agent, default tool guardrails, chat file uploads)",
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
+  mcpSettings: "MCP settings (online catalog availability)",
+  skillsSettings: "Skills settings (online catalog availability)",
   mcpServerInstallation: "Installed MCP servers and their runtime",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
   environment: "Deployment environments (namespace) for catalog items",
   githubAppConfig:
-    "GitHub App credentials for authenticating skill imports and knowledge connectors",
+    "GitHub credentials (App configs and stored personal access tokens) for authenticating skill imports, skill sync, and knowledge connectors",
   optimizationRule: "LLM optimization rules for routing to cheaper models",
   member: "Users and role assignments",
   ac: "Custom RBAC roles",
@@ -183,6 +191,8 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Organization settings (appearance, authentication, etc)",
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
+  knowledgeSourceAutoSync:
+    "Knowledge connectors with auto-sync permissions — access mirrors the source system, and managing them exposes upstream identities and group memberships",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
   simpleView: "Controls if the simple view of the app is enabled",
@@ -209,6 +219,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   Agents: [
     "agent",
     "skill",
+    "skillsSettings",
     "app",
     "sandbox",
     "agentTrigger",
@@ -222,6 +233,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "mcpRegistry",
     "mcpServerInstallation",
     "mcpServerInstallationRequest",
+    "mcpSettings",
     "environment",
   ],
   LLM: [
@@ -235,7 +247,11 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeSource", "knowledgeSettings"],
+  Knowledge: [
+    "knowledgeSource",
+    "knowledgeSourceAutoSync",
+    "knowledgeSettings",
+  ],
   Other: [
     "chat",
     "project",

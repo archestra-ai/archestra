@@ -24,6 +24,18 @@ describe("address-pill action buttons", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
+  it("disables opening a new tab while a recording is in progress", () => {
+    render(<McpAppStandaloneButton appId="app-123" disabled />);
+
+    // No link to a fresh, unrecorded instance — just a disabled button.
+    expect(
+      screen.queryByRole("link", { name: /open in new tab/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /open in new tab/i }),
+    ).toBeDisabled();
+  });
+
   it("fires onClick when the fullscreen-exit button is pressed", async () => {
     const onClick = vi.fn();
     render(<McpAppFullscreenExitButton onClick={onClick} />);

@@ -8,6 +8,7 @@ import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import GithubAppConfigModel from "@/models/github-app-config";
+import GithubPatModel from "@/models/github-pat";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -92,6 +93,7 @@ export const AUDIT_DECISIONS = {
     model: EnvironmentDefaultUserLimitModel,
   },
   githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
+  githubPatsTable: { audited: true, model: GithubPatModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {
@@ -294,6 +296,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × connector; parent (agent) audited",
   },
+  agentExcludedSubagentsTable: {
+    audited: false,
+    reason: "join: agent × subagent exclusion; parent (agent) audited",
+  },
   agentExcludedToolsTable: {
     audited: false,
     reason: "join: agent × tool exclusion; parent (agent) audited",
@@ -479,9 +485,24 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
+  kbContainerAclsTable: {
+    audited: false,
+    reason:
+      "permission-sync container-audience snapshot; derived upstream data, not config",
+  },
   kbDocumentsTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",
+  },
+  kbExternalUserGroupsTable: {
+    audited: false,
+    reason:
+      "permission-sync group-membership snapshot; derived upstream data, not config",
+  },
+  kbMemberOverridesTable: {
+    audited: false,
+    reason:
+      "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated",
   },
   llmProviderApiKeyModelsTable: {
     audited: false,
@@ -512,10 +533,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ChatOps message dedup; runtime state",
   },
-  chatopsThreadAgentOverrideTable: {
-    audited: false,
-    reason: "ChatOps thread override; runtime state",
-  },
 
   // =========================================================================
   // Email / messaging ingest
@@ -536,6 +553,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "secret material; presence audited via parent resource hasSecret flag",
+  },
+  encryptionKeyCanariesTable: {
+    audited: false,
+    reason:
+      "internal startup canary for encryption-key verification; no user-facing writes",
   },
 
   // =========================================================================

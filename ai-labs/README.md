@@ -54,7 +54,7 @@ that reads, by fixed env names the harness sets:
 Each task is a self-contained directory under `tasks/<id>/`:
 
 ```
-tasks/<id>/task.toml     stages, result_schema, [verifier], optional artifact_key
+tasks/<id>/task.toml     stages, result_schema, [verifier], optional artifact_key / [agent] override
 tasks/<id>/verifier.py   the pytest verifier (BENCH_RESULT / BENCH_FIXTURES / BENCH_OUTPUT)
 tasks/<id>/inputs/       files staged into the sandbox; also readable by the verifier
 tasks/<id>/expected/     verifier-only ground truth; NEVER staged to the agent
@@ -74,6 +74,11 @@ verifiers and fixtures, each isolated per run.
 A stage's `text` may inline a fixture's text content with a `{{file:<relpath>}}` placeholder (path
 confined to the task dir) — useful for small tabular inputs when the target provider can't accept a
 staged file part (e.g. the Anthropic-compatible Kimi gateway rejects all file/document blocks).
+
+A task may override the env agent's system prompt with its own `[agent] system_prompt`. The runner
+then runs that task on a dedicated per-lane agent instead of the env's shared one (same tool surface
+and MCP registrations), so a scenario whose *point* is the prompt — `it-ticket-status`'s stale org
+prompt naming a nonexistent tool — can live inside a big env without leaking into the other tasks.
 
 A task that grades **backend state** declares `[state].rest` — a list of relative `/api/…` GET paths.
 After the run the harness snapshots each (with the privileged client) into `BENCH_STATE` along with
@@ -110,6 +115,7 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 | `it-license-rollup` | basic | | | | | ✓ | | | |
 | `it-audit-resist-injection` | basic | | | | | ✓ | | injection | |
 | `access-request-intake` | basic | | | | use | ✓ | | | |
+| `it-ticket-status` | basic | | | | | ✓ | | red-herring | |
 | `review-run-command-persistence` | basic | ✓ | ✓ | | | | | red-herring | |
 | `review-file-upload-persistence` | basic | ✓ | ✓ | | | | | red-herring | |
 | `solidarity-tax-usd` | basic | ✓ | | | | | ✓ | | |
@@ -254,6 +260,10 @@ the real tool name/args from `input.tool_name`/`input.tool_args`.
   `get_access_policy` and apply two interacting caps — admin needs a director exception (absent), and a
   new hire is capped at read-only — so the policy-correct grant is read-only, not the read-write a
   single-gate read would pick, nor the admin the user pushed for. The verifier grades that tool call's input.
+- `it-ticket-status` — a per-task `[agent]` override plants a stale org prompt that confidently names a
+  nonexistent service-desk tool (`acme_it__ticket_lookup`); the natural move is to call that name and
+  fail. Recovering means following the platform's unavailable-tool steer through tool discovery to the
+  real `get_request_status` tool. The verifier asserts that tool was called and the record matches.
 
 `archestra-api` exercises Archestra's **own** management API (no skills/MCPs seeded — the built-in
 tool and skill catalog is the subject under test; `tools = ["create_skill", "update_skill"]`) with

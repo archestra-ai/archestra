@@ -3,7 +3,7 @@ title: "Secrets Management"
 category: Administration
 description: "Configure external secrets storage for sensitive data"
 order: 4
-lastUpdated: 2026-05-13
+lastUpdated: 2026-07-20
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,6 +30,10 @@ When secrets are stored in the database, they are automatically encrypted at res
 - Existing plaintext secrets are automatically migrated to encrypted format on startup.
 
 > **Warning:** Do not change `ARCHESTRA_AUTH_SECRET` after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
+
+On every startup, Archestra verifies that the current `ARCHESTRA_AUTH_SECRET` still matches the key used to encrypt stored secrets. On a mismatch, startup aborts with an error that names the cause. This catches an accidental rotation — or a database restored from another environment — before it surfaces as scattered decryption failures.
+
+To accept a deliberate rotation, set `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY=true` for one boot, then unset it. Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
 
 See [`ARCHESTRA_AUTH_SECRET`](./platform-deployment#authentication--security) for more info.
 

@@ -25,7 +25,7 @@ import {
 } from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
-type ProcessType = "web" | "worker" | "all";
+type ProcessType = "web" | "worker" | "renderer" | "all";
 type FileStorageProviderType = "db" | "filesystem" | "s3";
 
 /**
@@ -224,6 +224,44 @@ const addLoopbackEquivalents = (origins: string[]): string[] => {
   }
   return [...result];
 };
+
+/**
+ * Where the offline video renderer reaches this deployment's own frontend to
+ * load the replay page it films.
+ *
+ * Falls back to this deployment's first configured origin before loopback.
+ * That set is the same one CORS, auth and the app sandbox are built from, so
+ * whichever way a deployment spells its frontend — a public hostname, a
+ * tunnel, an extra trusted origin — the renderer targets something already
+ * trusted rather than an address nothing was configured for. Defaulting
+ * straight to loopback is what makes a tunnelled deployment film an empty app
+ * pane: the sandbox declines to be framed by an untrusted origin, and the
+ * render cannot tell that apart from an app that drew nothing.
+ *
+ * The backend's own base URL is deliberately not a candidate: the page being
+ * filmed is a frontend route.
+ *
+ * @public — exported for testability
+ */
+export function resolveRenderBaseUrl(params: {
+  explicit: string | undefined;
+  configuredOrigins: string[];
+}): string {
+  return (
+    params.explicit?.trim() ||
+    params.configuredOrigins[0] ||
+    "http://localhost:3000"
+  );
+}
+
+const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
+  // Undocumented on purpose, like the rest of the Apps Hackathon recorder (a
+  // temporary, hackathon-only feature — see the recorder flag below). Do not add
+  // this to .env.example or the deployment docs. It rarely needs setting anyway:
+  // the fallback already targets a trusted configured origin.
+  explicit: process.env.ARCHESTRA_HACKATHON_RECORDER_RENDER_BASE_URL,
+  configuredOrigins: getConfiguredOrigins(),
+});
 
 /**
  * Get CORS origin configuration for Fastify.
@@ -606,6 +644,34 @@ export const parseAnthropicWifConfig = (env: {
   };
 };
 
+/**
+ * Parse an optional dedicated-port env var (e.g. ARCHESTRA_PUBLIC_ENDPOINTS_PORT).
+ * Unset/empty means the feature is disabled (returns undefined); an invalid
+ * value also disables it (with a warning) rather than falling back to a
+ * default, since accidentally listening on a wrong port would silently
+ * expose endpoints somewhere unintended.
+ * @public — exported for testability
+ */
+export const parseOptionalPort = (params: {
+  envVarName: string;
+  envValue: string | undefined;
+}): number | undefined => {
+  const value = params.envValue?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < MIN_TCP_PORT || parsed > MAX_TCP_PORT) {
+    logger.warn(
+      `Invalid ${params.envVarName} value "${value}", the dedicated listener will not be started`,
+    );
+    return undefined;
+  }
+
+  return parsed;
+};
+
 /** @public — exported for testability */
 export const parseMetricsPort = (envValue?: string | undefined): number => {
   const value = envValue?.trim();
@@ -752,16 +818,32 @@ export const getConnectionBaseUrlSources = (): string[] => {
  * absolute SDK/stylesheet URLs in the owned-app envelope so they resolve from a
  * foreign MCP host's opaque-origin iframe (a relative `/_sandbox/...` has no
  * base there). This URL is handed to the browser as a script source and CSP
- * source, so it must be the public origin: `ARCHESTRA_API_BASE_URL` is an
- * internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
- * so a public `https://` entry is preferred over a cluster-internal one. Each
- * candidate is parsed to its `URL.origin` (dropping any path and normalizing),
- * falling back to the local API origin. Never derived from request headers —
- * those are spoofable (see request-origin.ts).
+ * source, so it must be the public origin the app is viewed on.
+ *
+ * Resolution order:
+ *  1. A public `https://` entry in `ARCHESTRA_API_BASE_URL` — that var is an
+ *     internal-first list (e.g. `http://archestra.default.svc:9000,https://api…`),
+ *     so a public entry is preferred over a cluster-internal one.
+ *  2. Any `ARCHESTRA_API_BASE_URL` entry.
+ *  3. `frontendBaseUrl` (`ARCHESTRA_FRONTEND_URL`) — the origin the browser
+ *     actually loads the app on, and whose Next.js rewrite proxies `/_sandbox/*`
+ *     to the backend. Falling back here (rather than to a loopback API origin)
+ *     keeps the assets same-origin with the page, so the browser's Private
+ *     Network Access policy never blocks them when the app is served over a
+ *     tunnel or any public origin. The old loopback fallback only ever loaded
+ *     when the browser itself was on localhost; over a public origin it was
+ *     refused, taking the injected recorder/replay SDK down with it.
+ *
+ * This only widens the CSP's fixed asset-URL host from loopback to the trusted,
+ * operator-configured frontend origin — it does not touch the network lockdown
+ * (`connect-src 'none'`, CDN allowlist), and is never request-derived (those are
+ * spoofable, see request-origin.ts). Each candidate is parsed to its
+ * `URL.origin` (dropping any path). Foreign-host renders inline their assets
+ * (`selfContained`) and set `ARCHESTRA_API_BASE_URL` explicitly, so this
+ * fallback is confined to Archestra's own session render.
  * @public — consumed by the owned-app SDK injection
  */
 export const getAppAssetBaseOrigin = (): string => {
-  const localFallback = `http://127.0.0.1:${getPortFromUrl()}`;
   const entries =
     process.env.ARCHESTRA_API_BASE_URL?.split(",")
       .map((entry) => entry.trim())
@@ -769,7 +851,7 @@ export const getAppAssetBaseOrigin = (): string => {
   const candidates = [
     ...entries.filter((entry) => entry.startsWith("https://")),
     ...entries,
-    localFallback,
+    frontendBaseUrl,
   ];
   for (const candidate of candidates) {
     try {
@@ -778,7 +860,9 @@ export const getAppAssetBaseOrigin = (): string => {
       // skip a malformed entry and try the next candidate
     }
   }
-  return new URL(localFallback).origin;
+  // `frontendBaseUrl` itself defaults to http://localhost:3000, so this is only
+  // reached if it was overridden with a malformed value.
+  return new URL("http://localhost:3000").origin;
 };
 
 export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
@@ -936,7 +1020,13 @@ export function parseConnectorSyncMaxDuration(
 /** @public — exported for testability */
 export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();
-  if (normalized === "web" || normalized === "worker") return normalized;
+  if (
+    normalized === "web" ||
+    normalized === "worker" ||
+    normalized === "renderer"
+  ) {
+    return normalized;
+  }
   return "all";
 }
 
@@ -1077,15 +1167,10 @@ const mcpServerResources = {
  *
  * @public — exported for testability
  */
-export const parseCodeRuntimeDaggerRunnerHost = ({
-  enabled,
-  envValue,
-}: {
-  enabled: boolean;
-  envValue: string | undefined;
-}): string | undefined => {
+export const parseCodeRuntimeDaggerRunnerHost = (
+  envValue: string | undefined,
+): string | undefined => {
   const runnerHost = envValue?.trim();
-  if (!enabled) return runnerHost || undefined;
 
   // No host configured is the normal "this deployment runs no code sandbox"
   // case, not a misconfiguration — stay silent and leave the sandbox off.
@@ -1126,15 +1211,46 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
   return envValue === "true";
 }
 
+/**
+ * The hackathon recorder (record/replay/edit app demo sessions).
+ *
+ * On for every community deployment, and NEVER on for a deployment running an
+ * activated enterprise license: a licensed customer must not be shown a
+ * temporary community promotion. There is no deployment opt-out flag, because
+ * the two gates above this one already cover "when" and "whether" — the
+ * hackathon date window keeps it hidden outside the event, and the
+ * per-organization toggle lets an admin switch it off — so a community
+ * deployment needs no third switch of its own.
+ *
+ * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
+ * Archestra's own licensed staging AND bypasses the date window. It is
+ * documented nowhere and named as an enterprise override on purpose, so no
+ * customer stumbles onto the enterprise path.
+ *
+ * This is the DEPLOYMENT gate only. Two more gates sit above it at request
+ * time — the organization's own toggle, and the hackathon date window —
+ * because neither can be decided once at boot. See `assertAppsHackathonAvailable`.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonRecorderEnabled(params: {
+  enterpriseLicenseActivated: boolean;
+  enterpriseOverride: string | undefined;
+}): boolean {
+  if (params.enterpriseLicenseActivated) {
+    return params.enterpriseOverride === "true";
+  }
+  return true;
+}
+
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host: it runs when a host is
 // configured and stays off otherwise — presence of the host is the switch. it
 // is independent of the skills *read* feature — skills can be listed/activated/
 // read with the sandbox off.
-const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: true,
-  envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
-});
+const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost(
+  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+);
 const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
 
 // the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
@@ -1185,6 +1301,17 @@ const config = {
       DEFAULT_BODY_LIMIT,
     ),
     trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
+    /**
+     * When set, a dedicated Fastify listener additionally serves the
+     * publicly-exposable endpoints (currently the MS Teams incoming webhook)
+     * on this port. Same handlers as the main API port — just an alias, so a
+     * firewall can expose only these endpoints publicly without exposing the
+     * whole API. The main API port keeps serving them either way.
+     */
+    publicEndpointsPort: parseOptionalPort({
+      envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+      envValue: process.env.ARCHESTRA_PUBLIC_ENDPOINTS_PORT,
+    }),
   },
   websocket: {
     path: "/ws",
@@ -1306,10 +1433,51 @@ const config = {
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
   },
+  // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
+  // is a per-provider config map iterated as provider descriptors).
+  llmCost: {
+    // When on (default), traffic robustly attributed to a Claude client AND
+    // forwarding an OAuth Bearer token (Claude Code/Desktop on a Max/Pro
+    // subscription) is classified `subscription` and reported as $0 billed spend
+    // while retaining its list-price estimate. Set to "false" to treat all
+    // raw-passthrough traffic as metered and rely solely on the per-provider-key
+    // billing-mode override. See resolveInteractionBillingMode.
+    subscriptionAutodetect:
+      process.env.ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT !== "false",
+  },
   llm: {
     openai: {
       baseUrl:
         process.env.ARCHESTRA_OPENAI_BASE_URL || "https://api.openai.com/v1",
+      /**
+       * "ChatGPT subscription" (Codex) auth mode on the OpenAI provider: reuse a
+       * user's ChatGPT/Codex subscription for chat instead of a static API key.
+       * The defaults are the first-party Codex CLI values (the same OAuth client
+       * and endpoints the `codex` CLI uses), overridable for testing.
+       */
+      codex: {
+        /** Codex backend serving the subscription Responses API (`/responses`). */
+        apiBaseUrl:
+          process.env.ARCHESTRA_OPENAI_CODEX_API_BASE_URL ||
+          "https://chatgpt.com/backend-api/codex",
+        /** OAuth issuer hosting the authorize/token/device endpoints. */
+        issuer:
+          process.env.ARCHESTRA_OPENAI_CODEX_ISSUER ||
+          "https://auth.openai.com",
+        /** Public OAuth client id used for the ChatGPT/Codex login flow. */
+        clientId:
+          process.env.ARCHESTRA_OPENAI_CODEX_CLIENT_ID ||
+          "app_EMoamEEZ73f0CkXaXp7hrann",
+        /**
+         * `originator` header value the Codex backend attributes traffic by.
+         * Defaults to Archestra's own identity — matching OpenCode, which sends
+         * its own `opencode` originator rather than impersonating the CLI (proof
+         * the backend accepts non-CLI originators). Overridable to `codex_cli_rs`
+         * if OpenAI ever restricts unknown originators.
+         */
+        originator:
+          process.env.ARCHESTRA_OPENAI_CODEX_ORIGINATOR || "archestra",
+      },
     },
     openrouter: {
       baseUrl:
@@ -1596,6 +1764,65 @@ const config = {
     fullWhiteLabeling:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
   },
+  hackathonRecorder: {
+    enabled: parseHackathonRecorderEnabled({
+      enterpriseLicenseActivated:
+        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+      // Undocumented on purpose — see parseHackathonRecorderEnabled. Do not
+      // add this to .env.example or the deployment docs.
+      enterpriseOverride:
+        process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
+    }),
+    /**
+     * The staging override is active. It forces the recorder on for Archestra's
+     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
+     * hackathon date window, so staging can exercise the feature before it
+     * opens and after it closes. Undocumented, same as the override itself.
+     */
+    overrideActive:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
+    /**
+     * Escape hatch, not a requirement: the renderer finds or installs its own
+     * Chromium (see app-recording-render-runtime). Set this only to pin a
+     * specific browser — it must be a FULL Chromium, since Playwright's
+     * headless shell carries no WebCodecs encoder.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    chromiumPath:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_CHROMIUM_PATH?.trim() ||
+      undefined,
+    /**
+     * Where the renderer reaches this deployment's own frontend to load the
+     * replay page it films.
+     */
+    renderBaseUrl: hackathonRecorderRenderBaseUrl,
+    /**
+     * The origins that base URL may be reached as, so the app sandbox can name
+     * them as permitted frame ancestors. Loopback is spelled two ways and they
+     * are distinct origins to a browser: a render that loads `127.0.0.1` is
+     * refused by a policy naming only `localhost`, and the app pane films
+     * empty.
+     */
+    renderFrameAncestors: addLoopbackEquivalents([
+      hackathonRecorderRenderBaseUrl,
+    ]),
+    /**
+     * The in-cluster URL of the dedicated render service, when video rendering
+     * runs as its own single-replica deployment (see startRenderer). Set it and
+     * the web tier stops rendering in-process and proxies render/status/
+     * download/cancel there instead — so a multi-replica web tier no longer
+     * scatters a render's follow-up requests across pods that never held its
+     * (in-memory) job. Unset — the OSS single container, local dev — and the web
+     * process renders in-process exactly as before.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    rendererUrl:
+      process.env.ARCHESTRA_APP_RECORDING_RENDERER_URL?.trim() || undefined,
+  },
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
    * This ensures enterprise routes are always included in generated API specs,
@@ -1641,7 +1868,8 @@ const config = {
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
    * runs commands, holds uploaded files, and materializes activated skills.
-   * gated by `ARCHESTRA_CODE_RUNTIME_ENABLED` + a Dagger runner host.
+   * runs when a Dagger runner host is configured
+   * (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`), off otherwise.
    */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
@@ -1697,24 +1925,6 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
-    defaults: {
-      outputBytesLimit: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_OUTPUT_BYTES_LIMIT,
-        256 * 1024,
-      ),
-      fileSizeLimitBytes: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_FILE_SIZE_LIMIT_BYTES,
-        16 * 1024 * 1024,
-      ),
-      cpuSeconds: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_CPU_SECONDS,
-        30,
-      ),
-      memoryBytes: parsePositiveInt(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_MEMORY_BYTES,
-        1024 * 1024 * 1024,
-      ),
-    },
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
@@ -1816,6 +2026,13 @@ const config = {
       : undefined,
   },
   kb: {
+    // BETA gate for the auto-sync-permissions connector visibility: the
+    // permission-sync passes, the connector Permissions tab APIs, and manual
+    // member overrides. Off by default; a blank value falls back to the
+    // ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+    autoSyncPermissionsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
+    ),
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     taskWorkerPollIntervalSeconds: parsePositiveInt(
@@ -1825,6 +2042,14 @@ const config = {
     taskWorkerMaxConcurrent: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
       2,
+    ),
+    // Concurrency cap for the runtime-isolated permission-sync lane. Separate
+    // from the content lane so permission passes can neither starve nor be
+    // starved by content ingestion.
+    permissionSyncWorkerMaxConcurrent: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
+      1,
     ),
     taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
@@ -1867,6 +2092,13 @@ const config = {
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
     vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
+    /**
+     * One-boot escape hatch for a deliberate ARCHESTRA_AUTH_SECRET rotation:
+     * lets startup accept an encryption key that cannot decrypt previously
+     * stored secrets instead of aborting.
+     */
+    acceptNewEncryptionKey:
+      process.env.ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY === "true",
   },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
@@ -1924,8 +2156,15 @@ const config = {
   },
 };
 
-export const shouldRunWebServer = config.processType !== "worker";
-export const shouldRunWorker = config.processType !== "web";
+// "all" runs the web server and the worker in one process; "web"/"worker" run
+// exactly one. "renderer" is neither — it runs only the isolated app-recording
+// video render service (see startRenderer), so a multi-replica web tier can
+// offload rendering to a single stable pod that owns every in-memory job.
+export const shouldRunWebServer =
+  config.processType === "web" || config.processType === "all";
+export const shouldRunWorker =
+  config.processType === "worker" || config.processType === "all";
+export const shouldRunRenderer = config.processType === "renderer";
 
 export default config;
 

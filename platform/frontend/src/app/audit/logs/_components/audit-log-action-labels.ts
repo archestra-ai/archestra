@@ -22,6 +22,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
   "agent.restored": "Agent restored",
+  "agent.imported": "Agent imported",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
   "agentTool.updated": "Agent tool updated",
@@ -45,6 +46,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  "connector.permission_sync_triggered": "Connector permission sync triggered",
+  "connector.synced": "Connector synced",
   // Default user limit
   "defaultUserLimit.created": "Default user limit created",
   "defaultUserLimit.updated": "Default user limit updated",
@@ -57,6 +60,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "githubAppConfig.created": "GitHub App configuration created",
   "githubAppConfig.updated": "GitHub App configuration updated",
   "githubAppConfig.deleted": "GitHub App configuration deleted",
+  "githubPat.created": "GitHub token saved",
+  "githubPat.updated": "GitHub token updated",
+  "githubPat.deleted": "GitHub token deleted",
   // Identity provider
   "identityProvider.created": "Identity provider created",
   "identityProvider.updated": "Identity provider updated",
@@ -65,6 +71,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "internalMcpCatalog.created": "Internal catalog created",
   "internalMcpCatalog.updated": "Internal catalog updated",
   "internalMcpCatalog.deleted": "Internal catalog deleted",
+  "internalMcpCatalog.reinstalled": "Internal catalog reinstalled",
   // Invitation
   "invitation.created": "Invitation sent",
   "invitation.deleted": "Invitation canceled",
@@ -83,9 +90,15 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "llmOauthClient.created": "LLM OAuth client created",
   "llmOauthClient.updated": "LLM OAuth client updated",
   "llmOauthClient.deleted": "LLM OAuth client deleted",
+  "llmOauthClient.rotated": "LLM OAuth client secret rotated",
   // LLM provider key
   "llmProviderApiKey.created": "LLM provider key created",
   "llmProviderApiKey.deleted": "LLM provider key deleted",
+  // MCP OAuth client
+  "mcpOauthClient.created": "MCP OAuth client created",
+  "mcpOauthClient.updated": "MCP OAuth client updated",
+  "mcpOauthClient.deleted": "MCP OAuth client deleted",
+  "mcpOauthClient.rotated": "MCP OAuth client secret rotated",
   // MCP server
   "mcpServer.created": "MCP server created",
   "mcpServer.updated": "MCP server updated",
@@ -112,6 +125,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "scheduleTrigger.created": "Schedule trigger created",
   "scheduleTrigger.updated": "Schedule trigger updated",
   "scheduleTrigger.deleted": "Schedule trigger deleted",
+  "scheduleTrigger.triggered": "Schedule trigger run now",
   // Service account
   "serviceAccount.created": "Service account created",
   "serviceAccount.updated": "Service account updated",

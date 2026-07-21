@@ -14,6 +14,10 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
+import {
+  decodeOpenAiCodexCredential,
+  isOpenAiCodexCredential,
+} from "@/services/openai-codex-credentials";
 import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
@@ -45,6 +49,7 @@ import {
 } from "../utils/mcp-image";
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { createOpenAiCodexClient } from "./openai-codex-client";
 
 // =============================================================================
 // TYPE ALIASES
@@ -1069,6 +1074,26 @@ export class OpenAIStreamAdapter
 
     const delta = choice.delta;
 
+    // Forward reasoning ("thinking") deltas. OpenAI-compatible reasoning models
+    // (qwen3, DeepSeek-R1, GLM, ... via Ollama/vLLM/OpenRouter) stream their
+    // thinking in a `reasoning_content` (or `reasoning`) field that isn't part
+    // of the typed delta. A reasoning-only chunk has no `content`, so without
+    // this it would be dropped and the client never sees the thinking. Forward
+    // the raw chunk unchanged so the field reaches the client's reasoning parser.
+    // Skip when the same chunk also carries a tool call: that must go through the
+    // tool-call branch's blocking-policy buffering below (which replays the full
+    // chunk — reasoning included — only once the call is approved), so reasoning
+    // never streams unapproved tool-call data past the gate.
+    const reasoning = (delta as { reasoning_content?: unknown })
+      .reasoning_content;
+    const reasoningAlt = (delta as { reasoning?: unknown }).reasoning;
+    const hasReasoning =
+      (typeof reasoning === "string" && reasoning.length > 0) ||
+      (typeof reasoningAlt === "string" && reasoningAlt.length > 0);
+    if (hasReasoning && !delta.tool_calls) {
+      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+    }
+
     // Handle text content
     if (delta.content) {
       this.state.text += delta.content;
@@ -1469,6 +1494,18 @@ export const openaiAdapterFactory: LLMProvider<
       ? metrics.llm.getObservableFetch("openai", options.agent, options.source)
       : undefined;
 
+    // "ChatGPT subscription" (Codex) auth mode: the resolved credential is an
+    // encoded ChatGPT OAuth credential, not an `sk-…` key. Route through the
+    // Codex Responses backend instead of api.openai.com.
+    const codexCredential = decodeOpenAiCodexCredential(apiKey);
+    if (codexCredential) {
+      return createOpenAiCodexClient({
+        credential: codexCredential,
+        options,
+        innerFetch: baseFetch,
+      });
+    }
+
     // Wrap fetch to normalize non-OpenAI error responses (e.g. LiteLLM/vLLM)
     // into OpenAI-compatible format so the SDK surfaces the real error message
     // instead of "500 status code (no body)".
@@ -1653,6 +1690,15 @@ export function makeOpenAiCompatibleEmbeddingsAdapterFactory(
       apiKey: string | undefined,
       options: CreateClientOptions,
     ): OpenAIProvider {
+      // A ChatGPT-subscription (Codex) credential has no embeddings support: the
+      // duck-typed Codex client only implements chat.completions.create, so
+      // guard here for a clean 400 instead of an opaque TypeError -> 500 later.
+      if (isOpenAiCodexCredential(apiKey)) {
+        throw new ApiError(
+          400,
+          "ChatGPT subscription (Codex) credentials do not support embeddings — use a standard OpenAI API key.",
+        );
+      }
       return openaiAdapterFactory.createClient(
         apiKey,
         options,

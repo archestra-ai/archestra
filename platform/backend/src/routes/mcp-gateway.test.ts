@@ -1,7 +1,10 @@
 import {
+  AGENT_TOOL_PREFIX,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
+  SKILL_TOOL_PREFIX,
+  slugify,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
@@ -23,7 +26,16 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel, ToolModel, UserTokenModel } from "@/models";
+import {
+  AgentExcludedSubagentModel,
+  AgentModel,
+  AppModel,
+  McpServerModel,
+  SkillModel,
+  TeamTokenModel,
+  ToolModel,
+  UserTokenModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
 
@@ -199,6 +211,152 @@ describe("MCP Gateway (stateless mode)", () => {
       // If error, it should be "Server not initialized", not a session error
       expect(body.error?.message).toContain("Server not initialized");
     }
+  });
+
+  test("Auto subagent mode: tools/list advertises caller-accessible delegation tools without explicit assignment, honoring exclusions", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const caller = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      name: "Gateway Auto Caller",
+    });
+    await AgentModel.update(caller.id, { accessAllSubagents: true });
+
+    const target = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      scope: "org",
+      name: "Gateway Auto Target",
+    });
+    const excluded = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      scope: "org",
+      name: "Gateway Auto Excluded",
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(caller.id, [excluded.id]);
+
+    // A user token so the gateway resolves a real caller; Auto expansion is
+    // gated on an authenticated user.
+    const token = await UserTokenModel.create(user.id, org.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${caller.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const toolNames = response
+      .json()
+      .result.tools.map((tool: { name: string }) => tool.name);
+
+    // No agent_tools rows exist for the caller: the delegation surface must
+    // come from the Auto resolver, not the assigned-tools query.
+    expect(toolNames).toContain(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`);
+    expect(toolNames).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(excluded.name)}`,
+    );
+    // The agent never delegates to itself.
+    expect(toolNames).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(caller.name)}`,
+    );
+  });
+
+  test("skill delegation: tools/list advertises skill__ tools and tools/call routes them to the skill-delegation dispatch", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+
+    const caller = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      name: "Gateway Skill Caller",
+    });
+    const target = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      scope: "org",
+      name: "Gateway Skill Target",
+    });
+
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: "gateway-delegated-skill",
+        description: "Runs in a subagent.",
+        content: "Do the thing.",
+        agentName: target.name,
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    // A skill designating a nonexistent agent: never advertised, and its
+    // dispatch fails inside the skill-delegation resolver.
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: "gateway-orphan-skill",
+        description: "Designates a missing agent.",
+        content: "Do the thing.",
+        agentName: "Ghost Bot",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+
+    const token = await UserTokenModel.create(user.id, org.id);
+
+    const listResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${caller.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 1 },
+    });
+    expect(listResponse.statusCode).toBe(200);
+    const toolNames = listResponse
+      .json()
+      .result.tools.map((tool: { name: string }) => tool.name);
+    expect(toolNames).toContain(`${SKILL_TOOL_PREFIX}gateway_delegated_skill`);
+    expect(toolNames).not.toContain(`${SKILL_TOOL_PREFIX}gateway_orphan_skill`);
+
+    // tools/call on a skill__ name must route into the skill-delegation
+    // dispatch (executeArchestraTool), not the third-party tool gate — the
+    // orphan skill's resolver error proves the routing without running an
+    // actual subagent. The old bug surfaced here as a "not enabled for this
+    // conversation" refusal from the invocation-policy enabled-tools filter.
+    const callResponse = await callMcpTool({
+      app,
+      agentId: caller.id,
+      token: token.value,
+      name: `${SKILL_TOOL_PREFIX}gateway_orphan_skill`,
+      arguments: { message: "run it" },
+    });
+    expect(callResponse.statusCode).toBe(200);
+    const result = callResponse.json().result;
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(
+      'designates the agent "Ghost Bot"',
+    );
+    expect(result.content[0].text).not.toContain("not enabled");
   });
 
   test("derives a human 'Open <app>' title for an app launch tool, leaving its slug name and other tools' titles untouched", async ({
@@ -408,6 +566,67 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(names).toContain(TOOL_LIST_SKILLS_FULL_NAME);
     expect(names).toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(names).toContain(TOOL_RUN_TOOL_FULL_NAME);
+  });
+
+  test("Auto-tool mode exclusions: a disabled app's launch tool is withheld from tools/list until enabled, even for its own author", async ({
+    makeAgent,
+    makeApp,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    await makeMember(author.id, org.id, { role: "admin" });
+    // Org-scoped so it is otherwise dynamically discoverable regardless of any
+    // explicit assignment — isolating the disabled-exclusion behavior itself.
+    const disabledApp = await makeApp({
+      organizationId: org.id,
+      authorId: author.id,
+      scope: "org",
+      enabled: false,
+    });
+    const server = await McpServerModel.findById(disabledApp.mcpServerId!);
+    const [launchTool] = await ToolModel.findByCatalogIdWithMeta(
+      server!.catalogId,
+    );
+    const launchToolName = launchTool.name;
+
+    // "Agent auto mode": the gateway agent has accessAllTools on, so dynamic
+    // discovery — not just explicit assignment — feeds tools/list. This is the
+    // same code path "MCP Gateway auto mode" drives, so one round trip through
+    // the real /v1/mcp route proves both.
+    const gatewayAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    const token = await UserTokenModel.create(author.id, org.id);
+
+    async function listToolNames(): Promise<string[]> {
+      await initializeMcpSession({
+        app,
+        agentId: gatewayAgent.id,
+        token: token.value,
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${gatewayAgent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name);
+    }
+
+    // Withheld while disabled — even for the app's own author.
+    expect(await listToolNames()).not.toContain(launchToolName);
+
+    // Enabling surfaces it, over the same real route, for the same caller.
+    await AppModel.setEnabled(disabledApp.id, true);
+    expect(await listToolNames()).toContain(launchToolName);
   });
 
   test("returns 401 with WWW-Authenticate header for missing authorization header", async ({

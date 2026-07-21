@@ -132,7 +132,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
 
       // MCP server admins can view all requests, non-MCP server admins can only view their own requests
       if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(
+          403,
+          "You can only view your own installation requests. Viewing other users' requests requires the mcpServerInstallation:admin permission.",
+        );
       }
 
       return reply.send(installationRequest);
@@ -305,7 +308,10 @@ const mcpServerInstallationRequestRoutes: FastifyPluginAsyncZod = async (
 
       // MCP server admins can add notes to all requests, non-MCP server admins can only add notes to their own requests
       if (!isMcpServerAdmin && installationRequest.requestedBy !== user.id) {
-        throw new ApiError(403, "Forbidden");
+        throw new ApiError(
+          403,
+          "You can only add notes to your own installation requests. Updating other users' requests requires the mcpServerInstallation:admin permission.",
+        );
       }
 
       const updatedRequest = await McpServerInstallationRequestModel.addNote(

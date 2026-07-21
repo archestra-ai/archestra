@@ -35,21 +35,9 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import {
-  Queue,
-  QueueItem,
-  QueueItemAction,
-  QueueItemActions,
-  QueueItemContent,
-  QueueItemIndicator,
-  QueueList,
-  QueueSection,
-  QueueSectionContent,
-  QueueSectionLabel,
-  QueueSectionTrigger,
-} from "@/components/ai-elements/queue";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
   Tooltip,
@@ -203,7 +191,6 @@ const PromptInputContent = ({
   onCompactConversation,
   isPlaywrightSetupVisible = false,
   selectorAgentId,
-  selectorAgentName,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -261,9 +248,11 @@ const PromptInputContent = ({
   // Skills exposed as slash commands whenever the org's skill tools are on —
   // the same flag that gates the backend's activation injection.
   const skillSlashCommandsEnabled = orgData?.skillToolsEnabled ?? false;
+  // Scoped to the conversation agent's environment: a slash command must not
+  // offer a skill the backend's activation gate would refuse.
   const { data: skillsData } = useSkillsPaginated(
-    { limit: 100 },
-    { enabled: skillSlashCommandsEnabled },
+    { limit: 100, forAgentId: agentId },
+    { enabled: skillSlashCommandsEnabled && !!agentId },
   );
   const skillCommands = useMemo<SkillCommand[]>(() => {
     if (!skillSlashCommandsEnabled || !skillsData?.data) {
@@ -628,15 +617,18 @@ const PromptInputContent = ({
   const submitStatus = status === "error" ? "ready" : status;
   const isResponseInFlight = status === "submitted" || status === "streaming";
 
-  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
-  // When off, the composer behaves as before: Enter is blocked while a
-  // response streams and the submit button stops via the form-submit path.
-  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
+  // Context compaction normally locks the composer, but when queueing can
+  // absorb the message (live conversation, response in flight) the composer
+  // stays usable: Enter enqueues — the session-level drain already defers to
+  // compaction — and the button keeps its Stop role. Without this, mid-turn
+  // auto-compaction silently swallows Enter and drops keyboard focus, which
+  // reads as "queueing stopped working".
+  const canComposeDuringCompaction = !!conversationId && isResponseInFlight;
+  const composerLocked =
+    submitDisabled || (isContextCompacting && !canComposeDuringCompaction);
   // Messages queued while a response was in-flight; sent automatically (in
   // order) by the conversation's chat session once each turn settles.
-  const queuedMessages = useConversationMessageQueue(
-    isMessageQueueEnabled ? conversationId : undefined,
-  );
+  const queuedMessages = useConversationMessageQueue(conversationId);
 
   // Composer keyboard shortcuts layered on top of the primitive textarea:
   //   • Esc — stop the in-flight response (mirrors the Stop button).
@@ -660,7 +652,6 @@ const PromptInputContent = ({
       if (
         event.key === "ArrowUp" &&
         !isSlashCommandOpen &&
-        isMessageQueueEnabled &&
         conversationId &&
         controller.textInput.value === "" &&
         queuedMessages.length > 0
@@ -722,7 +713,6 @@ const PromptInputContent = ({
     [
       conversationId,
       controller.textInput,
-      isMessageQueueEnabled,
       isResponseInFlight,
       isSlashCommandOpen,
       onStop,
@@ -736,49 +726,37 @@ const PromptInputContent = ({
 
   return (
     <div className="relative">
-      {isMessageQueueEnabled && conversationId && queuedMessages.length > 0 && (
-        <Queue className="mb-2" data-testid={E2eTestId.ChatMessageQueue}>
-          <QueueSection>
-            <QueueSectionTrigger>
-              <QueueSectionLabel
-                count={queuedMessages.length}
-                label={
-                  queuedMessages.length === 1
-                    ? "queued message"
-                    : "queued messages"
+      {conversationId && queuedMessages.length > 0 && (
+        <div
+          className="mb-2 flex max-h-40 flex-col gap-1 overflow-y-auto"
+          data-testid={E2eTestId.ChatMessageQueue}
+        >
+          {queuedMessages.map((queued) => (
+            <div
+              key={queued.id}
+              className="group flex items-center gap-2 rounded-md bg-muted/50 py-1 pr-1 pl-3 text-muted-foreground text-sm transition-colors hover:bg-muted"
+              data-testid={E2eTestId.ChatMessageQueueItem}
+            >
+              <span className="min-w-0 grow truncate">
+                {queued.skill ? `/${queued.skill.name} ` : ""}
+                {queued.text}
+              </span>
+              <Button
+                aria-label="Remove queued message"
+                className="size-auto shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                data-testid={E2eTestId.ChatMessageQueueRemoveButton}
+                onClick={() =>
+                  chatMessageQueue.remove(conversationId, queued.id)
                 }
-              />
-            </QueueSectionTrigger>
-            <QueueSectionContent>
-              <QueueList>
-                {queuedMessages.map((queued) => (
-                  <QueueItem
-                    key={queued.id}
-                    className="flex-row items-start gap-2"
-                    data-testid={E2eTestId.ChatMessageQueueItem}
-                  >
-                    <QueueItemIndicator className="mt-1.5 shrink-0" />
-                    <QueueItemContent>
-                      {queued.skill ? `/${queued.skill.name} ` : ""}
-                      {queued.text}
-                    </QueueItemContent>
-                    <QueueItemActions className="shrink-0">
-                      <QueueItemAction
-                        aria-label="Remove queued message"
-                        data-testid={E2eTestId.ChatMessageQueueRemoveButton}
-                        onClick={() =>
-                          chatMessageQueue.remove(conversationId, queued.id)
-                        }
-                      >
-                        <XIcon className="size-3.5" />
-                      </QueueItemAction>
-                    </QueueItemActions>
-                  </QueueItem>
-                ))}
-              </QueueList>
-            </QueueSectionContent>
-          </QueueSection>
-        </Queue>
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
       )}
       {isSandboxCommandHintVisible && (
         <div className="absolute inset-x-0 bottom-full mb-2 px-3 text-xs text-muted-foreground">
@@ -865,15 +843,12 @@ const PromptInputContent = ({
               ref={textareaRef}
               className="px-4"
               autoFocus
-              disabled={submitDisabled || isContextCompacting}
-              // With queueing on and a live conversation, Enter during a
-              // stream submits and the submit handler queues the message.
-              // Otherwise (queueing off, or the new-chat composer while the
-              // conversation is being created) Enter stays blocked.
-              disableEnterSubmit={
-                isResponseInFlight &&
-                (!isMessageQueueEnabled || !conversationId)
-              }
+              disabled={composerLocked}
+              // In a live conversation, Enter during a stream submits and the
+              // submit handler queues the message. On the new-chat composer
+              // (no conversation to queue into yet) Enter stays blocked while
+              // the conversation is being created.
+              disableEnterSubmit={isResponseInFlight && !conversationId}
               onKeyDown={handleTextareaKeyDown}
               data-testid={E2eTestId.ChatPromptTextarea}
             />
@@ -900,7 +875,6 @@ const PromptInputContent = ({
             inputModalities={inputModalities}
             agentLlmApiKeyId={agentLlmApiKeyId}
             selectorAgentId={selectorAgentId}
-            selectorAgentName={selectorAgentName}
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             toolsUnavailable={toolsUnavailable}
@@ -921,15 +895,12 @@ const PromptInputContent = ({
                 <PromptInputSubmit
                   className="!h-8"
                   status={submitStatus}
-                  disabled={submitDisabled || isContextCompacting}
+                  disabled={composerLocked}
                   onClick={(event) => {
                     // While a response is in-flight the button shows Stop; a
                     // click stops the stream instead of submitting the form
                     // (which would queue the typed text — see onStop docs).
-                    // With queueing off, the click falls through to the form
-                    // submit, whose handler stops the stream (pre-queue
-                    // behavior).
-                    if (isMessageQueueEnabled && onStop && isResponseInFlight) {
+                    if (onStop && isResponseInFlight) {
                       event.preventDefault();
                       onStop();
                     }
@@ -988,7 +959,6 @@ const ArchestraPromptInput = ({
   onCompactConversation,
   isPlaywrightSetupVisible,
   selectorAgentId,
-  selectorAgentName,
   onAgentChange,
   modelSource,
   toolsUnavailable,
@@ -1083,7 +1053,6 @@ const ArchestraPromptInput = ({
           onCompactConversation={onCompactConversation}
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}
           selectorAgentId={selectorAgentId}
-          selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}

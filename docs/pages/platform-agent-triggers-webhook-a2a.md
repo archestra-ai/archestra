@@ -39,7 +39,7 @@ A2A validates the token the same way the [MCP gateway](/docs/mcp-authentication)
 
 | Method | Best for | Acting user | Notes |
 | --- | --- | --- | --- |
-| Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token from **Settings > Your Account** (personal), **Settings > Teams** (team), or **Settings > Organization** (org). Team and org tokens don't identify a single user. |
+| Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token from **Your Account** (personal — click your name in the sidebar), **Settings > Teams** (team), or **Settings > Organization** (org). Team and org tokens don't identify a single user. |
 | External IdP JWT (JWKS) | Callers signed in through a corporate identity provider | Yes | Bind the agent to an [identity provider](/docs/platform-identity-providers) in its settings; the caller then presents their IdP's JWT directly and Archestra resolves the user — no Archestra token to hand out. |
 | OAuth client credentials | Backend services and machine-to-machine callers | No | Register an [OAuth client](/docs/mcp-authentication) and add the agent to its allowed list. |
 | OAuth authorization code | An app acting for whoever is signed in | Yes | A confidential OAuth client that resolves the individual user. |

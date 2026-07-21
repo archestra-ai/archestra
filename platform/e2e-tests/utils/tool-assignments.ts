@@ -44,6 +44,47 @@ export async function saveOpenProfileDialog(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
 }
 
+/**
+ * Choosing a personal-scope connection prompts a confirmation ("Use this
+ * connection for everyone?") because every caller of the tool would then connect
+ * as that one owner. Confirm it so the choice applies; non-personal connections
+ * don't prompt. Returns whether a confirmation was handled.
+ */
+async function confirmPersonalCredentialPinIfPrompted(
+  page: Page,
+): Promise<boolean> {
+  const confirmButton = page
+    .getByRole("button", { name: /^Use th(is|ese) connections?$/ })
+    .first();
+  if (await confirmButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+    // Force past the actionability wait: the dialog's entrance animation keeps
+    // the button from being "stable" long enough for a normal click to land.
+    await confirmButton.click({ force: true });
+    await expect(confirmButton).toBeHidden({ timeout: 5000 });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Select a static credential in the open assignment dialog: click the option,
+ * confirm the personal-pin dialog if it appears, otherwise close the still-open
+ * dropdown. Applying the pin (confirm) leaves the edit dialog open for saving,
+ * so a trailing Escape only runs when no confirmation was shown.
+ */
+export async function selectCredentialOption(
+  page: Page,
+  credentialOption: ReturnType<Page["getByRole"]>,
+): Promise<void> {
+  // DOM-detach guard: the option list re-renders as the dropdown opens.
+  await credentialOption.click({ force: true });
+  const confirmed = await confirmPersonalCredentialPinIfPrompted(page);
+  if (!confirmed) {
+    await page.keyboard.press("Escape");
+  }
+  await page.waitForTimeout(200);
+}
+
 export async function assignCatalogCredentialToGateway(params: {
   page: Page;
   catalogItemName: string;
@@ -59,11 +100,7 @@ export async function assignCatalogCredentialToGateway(params: {
     name: params.credentialName,
   });
   await expect(credentialOption).toBeVisible({ timeout: 10_000 });
-  // Same DOM-detach issue as the visibleTokenSelect click above — the
-  // capability row re-renders briefly when the credential dropdown opens.
-  await credentialOption.click({ force: true });
-  await params.page.keyboard.press("Escape");
-  await params.page.waitForTimeout(200);
+  await selectCredentialOption(params.page, credentialOption);
   await saveOpenProfileDialog(params.page);
 }
 
@@ -86,15 +123,13 @@ async function openCatalogToolAssignment({
   const dialog = page.getByRole("dialog", { name: dialogTitle });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
 
-  const capabilitiesAnchor = dialog.getByTestId(
-    E2eTestId.AgentCapabilitiesSection,
-  );
-  await capabilitiesAnchor.scrollIntoViewIfNeeded();
+  const toolsSectionAnchor = dialog.getByTestId(E2eTestId.AgentToolsSection);
+  await toolsSectionAnchor.scrollIntoViewIfNeeded();
 
-  const capabilitiesHeading = dialog.getByRole("heading", {
-    name: "Capabilities",
+  const toolsSectionHeading = dialog.getByRole("heading", {
+    name: "Tools & Knowledge Sources",
   });
-  await expect(capabilitiesHeading).toBeVisible({ timeout: 10_000 });
+  await expect(toolsSectionHeading).toBeVisible({ timeout: 10_000 });
 
   const addButton = dialog.getByTestId(E2eTestId.AgentToolsAddButton);
   await expect(addButton).toBeVisible({ timeout: 10_000 });

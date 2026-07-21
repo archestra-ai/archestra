@@ -15,6 +15,11 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIG: Record<ConnectorSyncStatus, StatusConfig> = {
+  queued: {
+    label: "Queued",
+    className: "bg-blue-500/10 text-blue-600 border border-blue-500/30",
+    animated: false,
+  },
   success: {
     label: "Success",
     className: "bg-green-500/10 text-green-600 border border-green-500/30",

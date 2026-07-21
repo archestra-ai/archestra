@@ -22,6 +22,7 @@ import {
   useShareConversation,
   useUnshareConversation,
 } from "@/lib/chat/chat-share.query";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
@@ -184,7 +185,7 @@ export function ShareConversationDialog({
     }
 
     setHasSavedVisibleShare(true);
-    await navigator.clipboard.writeText(shareLink);
+    await copyToClipboard(shareLink);
     toast.success("Chat visibility updated and share link copied");
   }, [
     conversationId,

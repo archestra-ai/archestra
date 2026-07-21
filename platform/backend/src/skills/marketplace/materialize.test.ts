@@ -24,6 +24,7 @@ function makeSkill(
     license: null,
     compatibility: null,
     allowedTools: null,
+    agentName: null,
     templated: false,
     metadata: {},
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),

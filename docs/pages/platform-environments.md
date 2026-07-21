@@ -1,9 +1,9 @@
 ---
 title: "Environments"
 category: Administration
-description: "Isolate tools, knowledge, runtimes, and cost limits across deployment environments"
+description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-09
+lastUpdated: 2026-07-21
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,11 +11,12 @@ lastUpdated: 2026-07-09
 <!--
 This document is the canonical reference for deployment Environments. Include:
 - What an environment is and the implicit "Default" environment (null)
-- Who can view vs. manage environments (environment:admin), Settings > Environments
-- Restricted environments and the environment:deploy-to-restricted / environment:admin permissions
-- Environment isolation: how an environment scopes which tools and knowledge an
-  agent / MCP gateway / LLM proxy can use (strict matching; Default is a peer, not
-  a wildcard; built-in servers are exempt)
+- Who can view vs. manage environments (environment:read / create / update / delete), Settings > Environments
+- Restricted environments and the per-resource deploy-to-restricted permissions
+- Environment isolation: how an environment scopes which tools, knowledge,
+  skills, and delegation targets an agent / MCP gateway / LLM proxy can use
+  (strict matching; Default is a peer, not a wildcard; built-in servers and
+  built-in skills are exempt)
 - Network egress policies (namespace + egress policy applied to MCP server pods AND
   agent code sandboxes), provider support matrix, and domain presets
 - How environments scope per-environment cost limits
@@ -24,7 +25,7 @@ This document is the canonical reference for deployment Environments. Include:
 
 An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Environments partition an organization's resources so that what an agent or gateway can reach is scoped to where it runs: a "dev" gateway cannot use "prod" tools or knowledge, and spend can be capped per environment. Each environment carries a name, an optional Kubernetes namespace, and an optional network egress policy.
 
-Any member can view the list of environments; creating, editing, and deleting them requires the `environment:admin` permission. Admins manage environments in **Settings → Environments**.
+Viewing environments requires the `environment:read` permission — every predefined role includes it. Creating, editing, and deleting environments require `environment:create`, `environment:update`, and `environment:delete`. Environments are managed in **Settings → Environments**.
 
 ## The Default environment
 
@@ -32,7 +33,7 @@ Every organization has an implicit **Default** environment. Any resource whose e
 
 ## Restricted environments
 
-An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign resources to a restricted environment. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
+An environment can be marked **restricted**. Assigning a resource to a restricted environment requires the `deploy-to-restricted` permission on that resource — `mcpRegistry:deploy-to-restricted` for MCP servers, or `llmProxy:deploy-to-restricted` for LLM proxies, for example. Each resource is gated on its own permission, so an organization can allow agents, apps, and proxies in a restricted environment while still limiting who deploys MCP servers there. Unrestricted environments and Default stay open to anyone who can create the resource. The Default environment can be restricted the same way via organization settings.
 
 ## Trusted image registries
 
@@ -46,16 +47,18 @@ Acme wants engineers to install MCP servers only from its own image registry. An
 
 ![Trusted image registries editor in Settings > Environments](/docs/automated_screenshots/platform-environments_trusted-image-registries.webp)
 
-## Tool and knowledge isolation
+## Tool, knowledge, skill, and subagent isolation
 
 An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and use:
 
 - MCP tools whose server (catalog item) is in Production
 - knowledge connectors in Production
+- [Agent Skills](/docs/platform-agent-skills#environments) in Production
+- [subagent delegation targets](/docs/platform-agents#delegation) in Production
 
-Matching is strict: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Built-in servers (the Archestra control-plane server and Playwright) are exempt and always available.
+Matching is strict: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
 
-This applies to both explicitly assigned tools/knowledge and the implicit **Auto** access mode — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled.
+This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
 
 ## Network egress policies
 
@@ -175,5 +178,6 @@ Cost limits and per-user default limits can be scoped to an environment. A limit
 - [Agents](/docs/platform-agents) — sandbox runtime, network egress, and visible tools/knowledge
 - [MCP Gateway](/docs/platform-mcp-gateway) — which tools and knowledge the gateway exposes
 - [LLM Proxy](/docs/platform-llm-proxy) — cost-limit attribution for inference
+- [Agent Skills](/docs/platform-agent-skills#environments) — which skills an agent can list, load, or run
 - [Knowledge Connectors](/docs/platform-knowledge) — which environments can use the connector's knowledge
 - [Private Registry](/docs/platform-private-registry) — assigning MCP catalog entries to environments

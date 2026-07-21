@@ -1,10 +1,14 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  CHATGPT_SUBSCRIPTION_LABEL,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
+import { OpenaiCodexSignIn } from "@/components/openai-codex-sign-in";
 import { Button } from "@/components/ui/button";
 import { useCreateLlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
@@ -22,8 +26,9 @@ interface ProviderAuthRequiredCardProps {
 /**
  * Rendered in the chat stream when the model needs a per-user credential the
  * acting user hasn't linked yet (ChatErrorCode.ProviderAuthRequired). Lets them
- * connect their own account inline — for GitHub Copilot via the device-flow
- * sign-in — instead of showing a generic key error.
+ * connect their own account inline via each credential's device-flow sign-in
+ * (GitHub Copilot, Microsoft 365 Copilot, ChatGPT subscription on `openai`)
+ * instead of showing a generic key error.
  */
 export function ProviderAuthRequiredCard({
   provider,
@@ -85,9 +90,34 @@ export function ProviderAuthRequiredCard({
                 }
               }}
             />
+          ) : provider === "openai" ? (
+            // The `openai` provider itself is never per-user, so an
+            // auth-required error for it always means the ChatGPT-subscription
+            // (Codex) credential mode — connect via the ChatGPT device flow.
+            <OpenaiCodexSignIn
+              disabled={createKey.isPending}
+              onCredential={async (credential) => {
+                try {
+                  await createKey.mutateAsync({
+                    name: CHATGPT_SUBSCRIPTION_LABEL,
+                    provider: "openai",
+                    apiKey: credential,
+                    scope: "personal",
+                  });
+                  toast.success(
+                    `${CHATGPT_SUBSCRIPTION_LABEL} connected — retrying…`,
+                  );
+                  // Re-run the original prompt now that the key exists; the
+                  // create mutation already invalidated the model/key caches.
+                  onConnected?.();
+                } catch {
+                  // handleApiError already surfaced the failure
+                }
+              }}
+            />
           ) : (
             <Button asChild type="button" variant="outline" size="sm">
-              <a href="/settings">Connect in Settings</a>
+              <a href="/llm/model-providers">Connect in Model Providers</a>
             </Button>
           )}
         </div>

@@ -51,7 +51,9 @@ import {
   UpdateDefaultEnvironmentSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
+  UpdateMcpSettingsSchema,
   UpdateSecuritySettingsSchema,
+  UpdateSkillsSettingsSchema,
 } from "@/types";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -140,14 +142,22 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSecuritySettings,
         description:
-          "Update security settings (default tool guardrails, chat file uploads)",
+          "Update security settings (default tool guardrails, chat file uploads, Apps Hackathon recorder)",
         tags: ["Organization"],
         body: UpdateSecuritySettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
+      // A deployment that does not carry the Apps Hackathon must never store
+      // it as switched on — that is what keeps "never for enterprise" a
+      // property of the system rather than of a hidden UI section. Dropped
+      // rather than refused, so an unrelated security save from a stale client
+      // still goes through.
+      const { appsHackathonRecorderEnabled, ...withoutHackathon } = body;
+      const patch = config.hackathonRecorder.enabled ? body : withoutHackathon;
+
+      const organization = await OrganizationModel.patch(organizationId, patch);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
@@ -166,6 +176,50 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Update LLM settings (TOON compression, compression scope)",
         tags: ["Organization"],
         body: UpdateLlmSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/mcp-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateMcpSettings,
+        description: "Update MCP settings (online catalog availability)",
+        tags: ["Organization"],
+        body: UpdateMcpSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/skills-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateSkillsSettings,
+        description: "Update Skills settings (online catalog availability)",
+        tags: ["Organization"],
+        body: UpdateSkillsSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },

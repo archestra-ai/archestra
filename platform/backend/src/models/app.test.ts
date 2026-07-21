@@ -296,6 +296,18 @@ describe("AppAccessModel accessibility", () => {
       userId: outsider.id,
     });
     expect(outsiderIds).toEqual([orgApp.id]);
+
+    // An app admin bypasses scope: they see every non-deleted app in the org,
+    // including other users' personal apps and teams they don't belong to.
+    const adminIds = await AppAccessModel.getUserAccessibleAppIds({
+      organizationId: org.id,
+      userId: outsider.id,
+      isAppAdmin: true,
+    });
+    expect(new Set(adminIds)).toEqual(
+      new Set([orgApp.id, personalApp.id, teamApp.id]),
+    );
+    expect(adminIds).not.toContain(deletedApp.id);
   });
 
   test("userHasAppAccess honors scope and admin bypass", async ({

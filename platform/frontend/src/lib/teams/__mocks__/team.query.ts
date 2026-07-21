@@ -6,6 +6,7 @@
 import { vi } from "vitest";
 
 export const useTeams = vi.fn();
+export const useTeam = vi.fn();
 export const useTeamLabelKeys = vi.fn();
 export const useTeamLabelValues = vi.fn();
 export const useMyTeams = vi.fn();

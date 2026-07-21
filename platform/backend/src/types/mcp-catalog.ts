@@ -182,6 +182,10 @@ export const ListInternalMcpCatalogSchema =
     // registry can link to / manage the app. Populated only on the includeApps
     // path; null for everything else.
     appId: z.string().nullable().optional(),
+    // For `serverType:"app"` backings only, whether the backing app is enabled.
+    // The capability picker greys a disabled (false) app as "Disabled".
+    // Populated only on the includeApps path; null/absent for everything else.
+    appEnabled: z.boolean().nullable().optional(),
     // True when installing this item right now would be blocked by the trusted-
     // image-registry gate (gated + not approved), so the registry can prevent the
     // install up front. Populated on the list route only.
@@ -218,6 +222,10 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
+    // Frozen K8s deployment identity (multitenant) — computed by
+    // InternalMcpCatalogModel.create / the startup adopt pass, never
+    // accepted from input.
+    deploymentName: true,
     ...PRESET_COLUMNS_OMIT,
     ...CATALOG_ITEM_APPROVAL_COLUMNS_OMIT,
   });
@@ -255,6 +263,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     authorId: true,
     // Tenancy is locked after creation
     multitenant: true,
+    // Frozen at creation/adopt time — renames must never touch it
+    deploymentName: true,
     // Clone lineage is locked after creation
     clonedFrom: true,
     ...PRESET_COLUMNS_OMIT,

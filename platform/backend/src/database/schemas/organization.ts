@@ -60,6 +60,12 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCompressionScope>()
     .notNull()
     .default("organization"),
+  onlineMcpCatalogEnabled: boolean("online_mcp_catalog_enabled")
+    .notNull()
+    .default(true),
+  onlineSkillCatalogEnabled: boolean("online_skill_catalog_enabled")
+    .notNull()
+    .default(true),
   /**
    * @deprecated The "security engine on/off" toggle (permissive/restrictive) was
    * removed — the security engine is always enabled now. This column is inert:
@@ -328,8 +334,8 @@ const organizationsTable = pgTable("organization", {
 
   /**
    * When true, assigning a catalog item to the implicit "default" environment
-   * (environment_id = null) requires the `environment:admin` permission — i.e.
-   * creating a catalog item without choosing an environment is admin-gated.
+   * (environment_id = null) requires the resource-specific `deploy-to-restricted` permission — i.e.
+   * creating a catalog item without choosing an environment is gated too.
    * Mirrors the per-environment `environment.restricted` flag for the default.
    */
   defaultEnvironmentRestricted: boolean("default_environment_restricted")
@@ -362,6 +368,22 @@ const organizationsTable = pgTable("organization", {
    * by the "Enable and create a new skill" empty-state button on /skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
+
+  /**
+   * Whether this organization shows the Apps Hackathon recorder. On by
+   * default, and the way an admin who does not want the promotion turns it and
+   * every part of the feature off without touching deployment configuration.
+   *
+   * It is the middle of three gates: the deployment flag decides whether the
+   * feature exists here at all (and never opens it for a licensed enterprise
+   * deployment), this decides whether the organization wants it, and the
+   * hackathon's closing date overrides both. Enterprise deployments never
+   * reach this column — the flag above them is already off — so it can stay a
+   * plain preference rather than encoding licence rules a second time.
+   */
+  appsHackathonRecorderEnabled: boolean("apps_hackathon_recorder_enabled")
+    .notNull()
+    .default(true),
 
   /**
    * Legacy preset column (feature removed) — retained inert. Held a validation

@@ -311,9 +311,10 @@ export async function dynamicAccessContext(params: {
 
 const ARCHESTRA_SHORT_NAME_SET = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
 
-// Whether at least one knowledge connector is visible to the user (org-wide
-// visibility or scoped to one of their teams; knowledgeSource admins see all).
-// Gates the dynamic availability of query_knowledge_sources.
+// Whether at least one knowledge connector is queryable by the user (org-wide
+// or auto-sync-permissions visibility, or team-scoped to one of their teams;
+// knowledgeSource admins see all). Gates the dynamic availability of
+// query_knowledge_sources.
 async function userHasAccessibleKnowledgeConnectors(
   userId: string,
   organizationId: string,
@@ -328,6 +329,9 @@ async function userHasAccessibleKnowledgeConnectors(
     organizationId,
     canReadAll: access.canReadAll,
     viewerTeamIds: access.teamIds,
+    // Query scope: an auto-sync-permissions connector makes the query tool
+    // available to everyone; its per-chunk ACLs gate what a user retrieves.
+    visibilityScope: "query",
     environmentId,
     limit: 1,
   });

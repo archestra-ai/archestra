@@ -5339,7 +5339,7 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
   {
     key: "share",
     title: "Submit to Archestra for review!",
-    text: "Authorize Archestra to Create a Pull Request to Apps Hackathon repository on GitHub for you.\n\nFinal cut with all your edits applied.",
+    text: "Authorize Archestra to Create a Pull Request to Apps Hackathon repository on GitHub for you.\nFinal cut with all your edits applied.",
     note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
   },
   {

@@ -150,11 +150,18 @@ export function AppGalleryShareButton(props: {
     });
   }, [props.conversationId]);
 
-  // The flow runs while the dialog is up; closing it is the cancel.
+  // The flow runs while the dialog is up; closing it is the cancel. A first
+  // open with no cached token lands on the sign-in gate and TOUCHES NOTHING —
+  // no device-code request leaves until the participant clicks Sign in. With
+  // a token already in hand the submission starts straight away.
   const setDialogOpen = (next: boolean) => {
     setOpen(next);
     if (next) {
-      void run();
+      if (takeCachedGithubToken()) {
+        void run();
+      } else {
+        setState({ step: "signin" });
+      }
     } else {
       abortRef.current?.abort();
       setState({ step: "idle" });
@@ -197,8 +204,18 @@ export function AppGalleryShareButton(props: {
         open={open}
         onOpenChange={setDialogOpen}
         size="small"
-        title="Submit to Archestra for review!"
-        description="Archestra creates a pull request to the Apps Hackathon repository on GitHub for you — your final cut with all your edits applied. Nothing is published before it is reviewed."
+        // The auth phase is its own conversation — the header talks about
+        // authorizing, not submitting, until GitHub is connected.
+        title={
+          authPhase(state)
+            ? "Authorize Archestra to GitHub"
+            : "Submit to Archestra for review!"
+        }
+        description={
+          authPhase(state)
+            ? "Once authorized, Archestra will create a pull request to the Apps Hackathon repository on GitHub for you."
+            : "Archestra creates a pull request to the Apps Hackathon repository on GitHub for you — your final cut with all your edits applied. Nothing is published before it is reviewed."
+        }
       >
         <ShareDialogBody
           state={state}
@@ -217,6 +234,7 @@ export function AppGalleryShareButton(props: {
 
 type ShareState =
   | { step: "idle" }
+  | { step: "signin" }
   | { step: "connect"; userCode: string; verificationUri: string }
   | { step: "working"; stage: ShareProgressStage | "signing-in" }
   | { step: "done"; prUrl: string }
@@ -227,6 +245,15 @@ type ShareState =
       slug: string;
       login: string | null;
     };
+
+/** Sign-in gate through GitHub authorization — the "connect your account" stretch. */
+function authPhase(state: ShareState): boolean {
+  return (
+    state.step === "signin" ||
+    state.step === "connect" ||
+    (state.step === "working" && state.stage === "signing-in")
+  );
+}
 
 const STAGE_LABELS: Record<ShareProgressStage | "signing-in", string> = {
   "signing-in": "Connecting to GitHub…",
@@ -244,6 +271,22 @@ function ShareDialogBody(props: {
 }) {
   const { state } = props;
 
+  if (state.step === "signin") {
+    // Deliberately inert until clicked — mirrors the Copilot provider form's
+    // resting state; the click is what fires the device-code request.
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-fit"
+        onClick={props.onRetry}
+      >
+        <Github className="mr-2 h-4 w-4" />
+        Sign in with GitHub
+      </Button>
+    );
+  }
   if (state.step === "connect") {
     return <ConnectStep {...state} />;
   }
@@ -335,7 +378,7 @@ function ConnectStep(props: { userCode: string; verificationUri: string }) {
     <div className="space-y-2 rounded-md border p-3">
       <p className="text-xs text-muted-foreground">
         Click below to copy the code and open GitHub, then paste it and approve.
-        Your submission continues automatically once you authorize.
+        GitHub can&apos;t pre-fill the code, so you&apos;ll paste it there.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button

@@ -10,8 +10,8 @@ import {
   Download,
   ExternalLink,
   Github,
+  GitPullRequestCreateArrow,
   Loader2,
-  Share2,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -177,7 +177,10 @@ export function AppGalleryShareButton(props: {
               disabled={props.disabled}
               onClick={() => setDialogOpen(true)}
             >
-              <Share2 className="size-4" />
+              {/* The create-a-pull-request glyph, not a generic share icon —
+                  what the button does IS filing a PR, and participants know
+                  the shape from GitHub itself. */}
+              <GitPullRequestCreateArrow className="size-4" />
             </Button>
           </span>
         </TooltipTrigger>

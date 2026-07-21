@@ -63,8 +63,19 @@ const TRANSCRIPT: Awaited<ReturnType<typeof snapshotConversationTranscript>> = [
 
 function fakeIframe() {
   const postMessage = vi.fn();
-  const el = { contentWindow: { postMessage } } as unknown as HTMLIFrameElement;
-  return { el, postMessage };
+  const el = {
+    contentWindow: { postMessage },
+    // The recorder locks onto a frame only while it is in the DOM.
+    isConnected: true,
+  } as unknown as HTMLIFrameElement;
+  return {
+    el,
+    postMessage,
+    /** Model the frame leaving the DOM (surface teardown). */
+    disconnect: () => {
+      (el as unknown as { isConnected: boolean }).isConnected = false;
+    },
+  };
 }
 
 /**
@@ -198,9 +209,11 @@ describe("useAppSessionRecorder", () => {
     );
 
     // The user opens the app in the right panel: the inline frame tears down
-    // (bindIframe(null)) and the panel frame mounts. Capture must follow it.
+    // (bindIframe(null), element leaves the DOM) and the panel frame mounts.
+    // The recording's frame lock must heal onto the panel.
     act(() => {
       surface.frame.runtimeHooks.bindIframe(null);
+      inlineFrame.disconnect();
       surface.frame.runtimeHooks.bindIframe(panelFrame.el);
     });
 

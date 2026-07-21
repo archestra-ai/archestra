@@ -42,8 +42,14 @@ import { useSession } from "@/lib/auth/auth.query";
 export interface AppSessionRecorderRuntimeHooks {
   /** The live sandbox iframe (null on teardown) — control messages go here. */
   bindIframe: (el: HTMLIFrameElement | null) => void;
-  /** A raw `mcp-apps:recording-event` batch forwarded by the sandbox proxy. */
-  onRecordingEvents: (data: unknown) => void;
+  /**
+   * A raw `mcp-apps:recording-event` batch forwarded by the sandbox proxy.
+   * `frame` is the iframe the batch came from: a chat can hold several live
+   * frames of the same app at once (one per rendered app message, plus the
+   * right panel), and only the ACTIVE frame's capture may enter the recording
+   * — two frames' streams merged produce an undecodable interleaving.
+   */
+  onRecordingEvents: (data: unknown, frame?: HTMLIFrameElement) => void;
   /** One MCP exchange the runtime proxied for the app. */
   captureMcp: (exchange: {
     method: string;
@@ -146,6 +152,15 @@ class AppRecorderCore {
   private events: TimelineEvent[] = [];
   private segments: Segment[] = [];
   private activeIframe: HTMLIFrameElement | null = null;
+  /**
+   * The ONE frame whose capture this recording accepts and whose SDK receives
+   * the recording controls — locked when recording starts, re-locked only when
+   * the locked frame leaves the DOM (an app edit reloading it, the app moving
+   * between the inline card and the panel). Mount order alone never moves the
+   * lock: with several live frames of the same app, capture from more than
+   * one interleaves into an undecodable stream.
+   */
+  private recordingFrame: HTMLIFrameElement | null = null;
   private latestHtml: { html: string; version: number | null } | null = null;
   private rebroadcastTimer: ReturnType<typeof setInterval> | null = null;
   private finalize:
@@ -226,8 +241,16 @@ class AppRecorderCore {
     if (el) this.activeIframe = el;
   };
 
-  onRecordingEvents = (data: unknown) => {
+  onRecordingEvents = (data: unknown, frame?: HTMLIFrameElement) => {
     if (this.status !== "recording") return;
+    // Only the locked frame's capture enters the recording. Several live
+    // frames of the same app can coexist (each rendered app message mounts
+    // one, the right panel another) and each captures the same selectors —
+    // merge two and the streams interleave into something undecodable (video
+    // deltas land against the wrong decoder's state), which is how a replay
+    // died mid-stream with an EncodingError. Verified live: the corrupted
+    // bundles carried two alternating timestamp runs in one stream.
+    if (frame && frame !== this.recordingTarget()) return;
     const batch = (data as { events?: unknown } | null)?.events;
     if (!Array.isArray(batch)) return;
     for (const raw of batch) {
@@ -299,6 +322,9 @@ class AppRecorderCore {
       this.segments = [];
     }
     this.setStatus("recording");
+    // A fresh recording locks onto the CURRENT live frame (or, recording from
+    // scratch, onto the first frame to appear — the rebroadcast arms it).
+    this.recordingFrame = null;
     this.postControl("start");
     this.rebroadcastTimer = setInterval(() => {
       this.postControl("start");
@@ -312,6 +338,7 @@ class AppRecorderCore {
     this.setStatus("saving");
     this.clearRebroadcast();
     this.postControl("stop");
+    this.recordingFrame = null;
     // The SDK's final flush travels app → proxy → host asynchronously.
     await new Promise((resolve) => setTimeout(resolve, STOP_FLUSH_GRACE_MS));
 
@@ -368,6 +395,7 @@ class AppRecorderCore {
   private discard() {
     this.clearRebroadcast();
     this.postControl("stop");
+    this.recordingFrame = null;
     this.events = [];
     this.segments = [];
     this.setStatus("idle");
@@ -402,6 +430,19 @@ class AppRecorderCore {
     this.liveSeededSegments.add(index);
   }
 
+  /**
+   * The frame this recording is locked to, healing the lock when the locked
+   * frame has left the DOM: the latest live frame is adopted (the rebroadcast
+   * "start" then arms its SDK). Null while no live frame exists at all.
+   */
+  private recordingTarget(): HTMLIFrameElement | null {
+    if (this.recordingFrame?.isConnected) return this.recordingFrame;
+    this.recordingFrame = this.activeIframe?.isConnected
+      ? this.activeIframe
+      : null;
+    return this.recordingFrame;
+  }
+
   private postControl(action: "start" | "stop") {
     // Wildcard target origin: the app runs in a scripts-only sandboxed iframe,
     // whose opaque origin is the string "null" and cannot be named as a
@@ -409,7 +450,7 @@ class AppRecorderCore {
     // origin) varies — so there is no fixed origin to pin. Safe here because
     // the payload is a bare start/stop control with nothing secret in it; we
     // are not handing the frame data that another origin must not read.
-    this.activeIframe?.contentWindow?.postMessage(
+    this.recordingTarget()?.contentWindow?.postMessage(
       { type: RECORDING_CONTROL_TYPE, action },
       "*",
     );

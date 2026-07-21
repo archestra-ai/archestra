@@ -964,7 +964,7 @@ export function SandboxIframe({
    * messages are posted to its contentWindow through the sandbox proxy relay. */
   onIframeElement?: (el: HTMLIFrameElement | null) => void;
   /** Raw recorder batch (`mcp-apps:recording-event`) forwarded by the proxy. */
-  onRecordingEvents?: (data: unknown) => void;
+  onRecordingEvents?: (data: unknown, frame?: HTMLIFrameElement) => void;
   /** Fired when the guest bridge connects — the injected app SDK (and its
    * replay listener) is live. The session player gates replay on this so early
    * events aren't posted to a frame whose SDK hasn't attached yet. */
@@ -1139,7 +1139,10 @@ export function SandboxIframe({
       } else if (type === "mcp-apps:screenshot") {
         onScreenshotRef.current?.(event.data);
       } else if (type === "mcp-apps:recording-event") {
-        onRecordingEventsRef.current?.(event.data);
+        // The frame identifies the batch's origin: a chat can hold several
+        // live frames of the same app (one per rendered app message, plus the
+        // right panel), and the recorder must keep exactly one of them.
+        onRecordingEventsRef.current?.(event.data, iframe);
       }
     };
 

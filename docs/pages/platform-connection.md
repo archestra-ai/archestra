@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -82,9 +82,9 @@ The `claude` CLI must be on your `PATH`.
 
 The guard runs each time you start `claude`. It makes a single health request to the platform covering the configured remotes — the LLM proxy and the MCP gateway; the skills marketplace rides on the same origin — and then plays each remote's check in turn with a brief spinner. When everything is healthy, `claude` starts after about half a second per remote.
 
-The turn stops on a remote the platform reports down — "Failed to connect to …" — and prompts: `d` disconnects it from Claude Code (the same reverse-of-connect steps as the Disconnect panel), `s` continues without it. When the platform itself is unreachable, the guard retries that one request for up to 15 seconds with a status line (`s` and `d` stay live the whole time), then treats every remote as down and prompts the same way. Every path ends with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
+A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote: `d` disconnects them all from Claude Code (the same reverse-of-connect steps as the Disconnect panel), `s` continues without them. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line (`s` and `d` stay live the whole time), then treats every remote as down. Every path ends with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
 
-On macOS and Linux the guard lives at `~/.archestra/claude-startup-guard.sh`, hooked in by a marked `claude()` block in your shell profile. On Windows it is `~/.archestra/claude-startup-guard.ps1`, hooked in by the same marked block in each PowerShell edition's `profile.ps1`. Set `ARCHESTRA_CLAUDE_GUARD=0` to disable it without uninstalling. The Disconnect panel has per-OS one-liners that remove both pieces.
+On macOS and Linux the guard lives at `~/.archestra/claude-startup-guard.sh`, hooked in by a marked `claude()` block in your shell profile. On Windows it is `~/.archestra/claude-startup-guard.ps1`, hooked in by the same marked block in each PowerShell edition's `profile.ps1`. Set `ARCHESTRA_CLAUDE_GUARD=0` to disable it without uninstalling. The Disconnect panel has per-OS one-liners that remove everything the guard installed.
 
 ### Codex
 

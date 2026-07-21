@@ -1,5 +1,13 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -7,6 +15,7 @@ import {
   CLAUDE_CODE_GUARD_MARKER_END,
   CLAUDE_CODE_GUARD_MARKER_START,
   CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
+  CLAUDE_CODE_GUARD_SKIP_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -54,47 +63,187 @@ async function expectValidBash(script: string): Promise<void> {
 }
 
 /**
- * Runs the rendered guard through real bash with a stubbed `curl` on PATH.
- * stdin/stdout are pipes, so the guard takes its non-interactive path — the
- * one automation hits — which must never prompt and always exit 0. The stub
- * prints `body` for the health fetch (reachability probes pass -o, which the
- * stub honors by staying silent, keeping stdout clean).
+ * A sandboxed $HOME the guard can freely mutate: the guard file at its real
+ * install path, shell profiles carrying the wrapper marker block, a proxy
+ * settings.json, a `claude` stub that logs its argv, and a `curl` stub that
+ * answers the health fetch. Everything the guard's disconnect/uninstall
+ * actions touch lives here, never in the developer's real home.
+ */
+interface GuardHome {
+  dir: string;
+  home: string;
+  guardFile: string;
+  skipFile: string;
+  claudeLog: string;
+  settingsFile: string;
+  env: Record<string, string>;
+}
+
+const PROFILE_SENTINEL = "export ARCHESTRA_TEST_SENTINEL=1";
+
+async function makeGuardHome(params: {
+  script: string;
+  curlExitCode: number;
+  curlBody?: string;
+  /** Pre-recorded disconnected kinds, one per line. */
+  skipFileContent?: string;
+}): Promise<GuardHome> {
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-run-"));
+  const home = path.join(dir, "home");
+  const bin = path.join(dir, "bin");
+  const guardFile = path.join(home, CLAUDE_CODE_GUARD_SCRIPT_RELPATH);
+  const skipFile = path.join(home, CLAUDE_CODE_GUARD_SKIP_RELPATH);
+  const claudeLog = path.join(home, "claude-calls.log");
+  const settingsFile = path.join(home, ".claude", "settings.json");
+
+  await mkdir(path.dirname(guardFile), { recursive: true });
+  await mkdir(path.dirname(settingsFile), { recursive: true });
+  await mkdir(bin, { recursive: true });
+
+  await writeFile(guardFile, params.script, "utf8");
+  await chmod(guardFile, 0o755);
+  if (params.skipFileContent !== undefined) {
+    await writeFile(skipFile, params.skipFileContent, "utf8");
+  }
+
+  const profileBlock = `${PROFILE_SENTINEL}\n${CLAUDE_CODE_GUARD_MARKER_START}\nclaude() { command claude "$@"; }\n${CLAUDE_CODE_GUARD_MARKER_END}\n`;
+  await writeFile(path.join(home, ".zshrc"), profileBlock, "utf8");
+  await writeFile(path.join(home, ".bashrc"), profileBlock, "utf8");
+
+  await writeFile(
+    settingsFile,
+    `${JSON.stringify(
+      {
+        env: {
+          ANTHROPIC_BASE_URL: "https://archestra.example.com/v1/anthropic/p",
+          ANTHROPIC_AUTH_TOKEN: "vk-secret",
+          ANTHROPIC_CUSTOM_HEADERS:
+            "X-Archestra-Agent-Id: claude-code\nX-Archestra-Virtual-Key: vk-secret",
+          USER_OWNED_KEY: "keep-me",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const curlStub = path.join(bin, "curl");
+  await writeFile(
+    curlStub,
+    `#!/bin/sh
+case "$*" in *" -o "*) exit ${params.curlExitCode};; esac
+printf '%s' '${params.curlBody ?? '{"mcp":"ok","llm":"ok"}'}'
+exit ${params.curlExitCode}
+`,
+    "utf8",
+  );
+  const claudeStub = path.join(bin, "claude");
+  await writeFile(
+    claudeStub,
+    `#!/bin/sh
+echo "$@" >> "$HOME/claude-calls.log"
+exit 0
+`,
+    "utf8",
+  );
+  await chmod(curlStub, 0o755);
+  await chmod(claudeStub, 0o755);
+
+  return {
+    dir,
+    home,
+    guardFile,
+    skipFile,
+    claudeLog,
+    settingsFile,
+    env: {
+      ...process.env,
+      HOME: home,
+      PATH: `${bin}:${process.env.PATH}`,
+    } as Record<string, string>,
+  };
+}
+
+/**
+ * Runs the guard with stdin/stdout as pipes, so it takes its non-interactive
+ * path — the one automation hits — which must never prompt and always exit 0
+ * (execFile rejects on non-zero exit, so a resolved promise IS that
+ * assertion).
  */
 async function runGuardNonInteractive(params: {
   script: string;
   curlExitCode: number;
   curlBody?: string;
+  skipFileContent?: string;
   args?: string[];
   env?: Record<string, string>;
-}): Promise<{ stdout: string; stderr: string }> {
-  const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-run-"));
-  const guardFile = path.join(dir, "guard.sh");
-  const curlStub = path.join(dir, "curl");
-  try {
-    await writeFile(guardFile, params.script, "utf8");
-    await writeFile(
-      curlStub,
-      `#!/bin/sh
-case "$*" in *" -o "*) exit ${params.curlExitCode};; esac
-printf '%s' '${params.curlBody ?? '{"mcp":"ok","llm":"ok"}'}'
-exit ${params.curlExitCode}
-`,
-      "utf8",
-    );
-    await chmod(guardFile, 0o755);
-    await chmod(curlStub, 0o755);
-    // execFile rejects on non-zero exit, so a resolved promise IS the
-    // always-exit-0 assertion.
-    return await execFileAsync("bash", [guardFile, ...(params.args ?? [])], {
-      env: {
-        ...process.env,
-        ...params.env,
-        PATH: `${dir}:${process.env.PATH}`,
-      },
-    });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+}): Promise<{ stdout: string; stderr: string; guardHome: GuardHome }> {
+  const guardHome = await makeGuardHome(params);
+  const { stdout, stderr } = await execFileAsync(
+    "bash",
+    [guardHome.guardFile, ...(params.args ?? [])],
+    { env: { ...guardHome.env, ...params.env } },
+  );
+  return { stdout, stderr, guardHome };
+}
+
+/**
+ * A python pty driver, so the guard sees a real tty on both ends and takes
+ * its interactive path. `keys` is typed into the pty up front and sits in
+ * the input queue until the guard reads it — during the retry ladder or at
+ * the combined down prompt.
+ */
+const PTY_DRIVER = `import os, pty, select, sys
+guard = sys.argv[1]
+keys = sys.argv[2]
+pid, master = os.forkpty()
+if pid == 0:
+    os.execvp("bash", ["bash", guard])
+if keys:
+    os.write(master, keys.encode())
+out = b""
+while True:
+    try:
+        r, _, _ = select.select([master], [], [], 30)
+    except OSError:
+        break
+    if not r:
+        os.kill(pid, 9)
+        break
+    try:
+        chunk = os.read(master, 4096)
+    except OSError:
+        break
+    if not chunk:
+        break
+    out += chunk
+os.waitpid(pid, 0)
+sys.stdout.buffer.write(out)
+`;
+
+async function runGuardInteractive(params: {
+  script: string;
+  curlExitCode: number;
+  curlBody?: string;
+  skipFileContent?: string;
+  keys: string;
+}): Promise<{ output: string; guardHome: GuardHome }> {
+  const guardHome = await makeGuardHome(params);
+  const driver = path.join(guardHome.dir, "pty.py");
+  await writeFile(driver, PTY_DRIVER, "utf8");
+  const { stdout } = await execFileAsync(
+    "python3",
+    [driver, guardHome.guardFile, params.keys],
+    { env: guardHome.env, timeout: 60_000 },
+  );
+  return { output: stdout, guardHome };
+}
+
+async function readClaudeLog(guardHome: GuardHome): Promise<string> {
+  return existsSync(guardHome.claudeLog)
+    ? await readFile(guardHome.claudeLog, "utf8")
+    : "";
 }
 
 describe("buildClaudeCodeStartupGuardContext", () => {
@@ -166,14 +315,19 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).not.toContain("curl -f");
   });
 
-  test("a down resource stops the turn with the failure copy naming type and id-or-slug", () => {
+  test("every down remote gets the failure copy; ONE prompt then covers them all", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
     expect(script).toContain("✖ Failed to connect to");
     expect(script).toContain("'LLM proxy profile-123'");
     expect(script).toContain("'MCP gateway prod-gateway'");
     expect(script).toContain("'Skills marketplace acme-skills'");
+    // a single down remote keeps the singular copy…
     expect(script).toContain(
       "[d] disconnect it from Claude Code   [s] continue without it (default)",
+    );
+    // …several down remotes get the disconnect-all-at-once copy
+    expect(script).toContain(
+      "[d] disconnect them all from Claude Code   [s] continue without them (default)",
     );
   });
 
@@ -345,6 +499,129 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(stdout).toBe("");
     expect(stderr).toBe("");
   });
+
+  test("a remote the guard already disconnected is never re-checked or re-flagged", async () => {
+    // The platform still reports the gateway down (it was deleted there),
+    // but a previous launch already disconnected it from Claude Code — the
+    // skip file must silence it for good instead of re-prompting forever.
+    const { stdout, stderr } = await runGuardNonInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 0,
+      curlBody: '{"mcp":"down","llm":"ok"}',
+      skipFileContent: "mcp\n",
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toBe("");
+  });
+
+  test("with every remote already disconnected the guard uninstalls itself and gets out of the way", async () => {
+    const { stdout, stderr, guardHome } = await runGuardNonInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 7,
+      skipFileContent: "proxy\nmcp\nskills\n",
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toBe("");
+    expect(existsSync(guardHome.guardFile)).toBe(false);
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+    for (const profile of [".zshrc", ".bashrc"]) {
+      const content = await readFile(
+        path.join(guardHome.home, profile),
+        "utf8",
+      );
+      expect(content).not.toContain(CLAUDE_CODE_GUARD_MARKER_START);
+      expect(content).toContain(PROFILE_SENTINEL);
+    }
+  });
+
+  test("interactive, platform unreachable, d during the wait: disconnects EVERYTHING and removes the guard itself", async () => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 7,
+      keys: "d",
+    });
+    // every remote's connect step is reversed…
+    const log = await readClaudeLog(guardHome);
+    expect(log).toContain("mcp remove --scope user prod_gateway");
+    expect(log).toContain("mcp remove --scope local prod_gateway");
+    expect(log).toContain("plugin marketplace remove acme-skills");
+    const settings = JSON.parse(await readFile(guardHome.settingsFile, "utf8"));
+    expect(settings.env.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(settings.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(settings.env.USER_OWNED_KEY).toBe("keep-me");
+    // …and with nothing left to check, the guard removes itself entirely:
+    // script, skip file, and the profile wrapper blocks
+    expect(existsSync(guardHome.guardFile)).toBe(false);
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+    for (const profile of [".zshrc", ".bashrc"]) {
+      const content = await readFile(
+        path.join(guardHome.home, profile),
+        "utf8",
+      );
+      expect(content).not.toContain(CLAUDE_CODE_GUARD_MARKER_START);
+      expect(content).toContain(PROFILE_SENTINEL);
+    }
+    expect(output).toContain("Nothing connected is left to check");
+  });
+
+  test("interactive, one remote down, d at the prompt: disconnects only it and keeps the guard for the rest", async () => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 0,
+      curlBody: '{"mcp":"down","llm":"ok"}',
+      keys: "d",
+    });
+    expect(output).toContain("Failed to connect to MCP gateway prod-gateway");
+    expect(output).toContain("[d] disconnect it from Claude Code");
+    const log = await readClaudeLog(guardHome);
+    expect(log).toContain("mcp remove --scope user prod_gateway");
+    expect(log).not.toContain("plugin marketplace remove");
+    // the proxy stays wired up
+    const settings = JSON.parse(await readFile(guardHome.settingsFile, "utf8"));
+    expect(settings.env.ANTHROPIC_BASE_URL).toBeDefined();
+    // guard survives (other remotes still connected) and remembers the
+    // disconnect so later launches skip the gateway
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+    expect(await readFile(guardHome.skipFile, "utf8")).toBe("mcp\n");
+    const zshrc = await readFile(path.join(guardHome.home, ".zshrc"), "utf8");
+    expect(zshrc).toContain(CLAUDE_CODE_GUARD_MARKER_START);
+  });
+
+  test("interactive, several remotes down: ONE prompt disconnects them all at once", async () => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 0,
+      curlBody: '{"mcp":"down","llm":"down"}',
+      keys: "d",
+    });
+    expect(output).toContain("Failed to connect to LLM proxy profile-123");
+    expect(output).toContain("Failed to connect to MCP gateway prod-gateway");
+    expect(output).toContain("[d] disconnect them all from Claude Code");
+    const log = await readClaudeLog(guardHome);
+    expect(log).toContain("mcp remove --scope user prod_gateway");
+    expect(log).not.toContain("plugin marketplace remove");
+    const settings = JSON.parse(await readFile(guardHome.settingsFile, "utf8"));
+    expect(settings.env.ANTHROPIC_BASE_URL).toBeUndefined();
+    // skills is still healthy and connected, so the guard stays installed
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+    const skip = await readFile(guardHome.skipFile, "utf8");
+    expect(skip).toContain("proxy");
+    expect(skip).toContain("mcp");
+    expect(skip).not.toContain("skills");
+  });
+
+  test("interactive, down remotes skipped: nothing is disconnected and nothing is remembered", async () => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 0,
+      curlBody: '{"mcp":"down","llm":"ok"}',
+      keys: "s",
+    });
+    expect(output).toContain("skipped");
+    expect(await readClaudeLog(guardHome)).toBe("");
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+  });
 });
 
 describe("buildClaudeCodeStartupGuardInstallSection", () => {
@@ -355,6 +632,10 @@ describe("buildClaudeCodeStartupGuardInstallSection", () => {
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_END);
     expect(section).toContain(
       `chmod +x "$HOME/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}"`,
+    );
+    // a fresh connect re-arms checks a previous guard disconnected
+    expect(section).toContain(
+      `rm -f "$HOME/${CLAUDE_CODE_GUARD_SKIP_RELPATH}"`,
     );
     // wrapper always falls through to the real binary
     expect(section).toContain('command claude "$@"');

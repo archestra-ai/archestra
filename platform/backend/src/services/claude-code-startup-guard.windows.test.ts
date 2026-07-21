@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_GUARD_MARKER_END,
   CLAUDE_CODE_GUARD_MARKER_START,
   CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
+  CLAUDE_CODE_GUARD_SKIP_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
@@ -66,15 +67,42 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     );
   });
 
-  test("a down resource stops the turn with the failure copy naming type and id-or-slug", () => {
+  test("every down remote gets the failure copy; ONE prompt then covers them all", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain("'✖ Failed to connect to ' + $r.FailName");
     expect(script).toContain("FailName = 'LLM proxy profile-123'");
     expect(script).toContain("FailName = 'MCP gateway prod-gateway'");
     expect(script).toContain("FailName = 'Skills marketplace acme-skills'");
+    // a single down remote keeps the singular copy…
     expect(script).toContain(
       "[d] disconnect it from Claude Code   [s] continue without it (default)",
     );
+    // …several down remotes get the disconnect-all-at-once copy
+    expect(script).toContain(
+      "[d] disconnect them all from Claude Code   [s] continue without them (default)",
+    );
+    expect(script).toContain("Show-ArchDownSummaryPrompt $DownRemotes");
+  });
+
+  test("remembers disconnected remotes in the skip file and uninstalls itself once nothing is left", () => {
+    const script = renderClaudeCodeStartupGuardPowerShell(CTX);
+    expect(script).toContain(`'${CLAUDE_CODE_GUARD_SKIP_RELPATH}'`);
+    // disconnected remotes are recorded and filtered out of later launches
+    expect(script).toContain("Add-ArchDisconnected $r.Kind");
+    expect(script).toContain(
+      "$Remotes | Where-Object { $DisconnectedKinds -notcontains $_.Kind }",
+    );
+    // full self-uninstall: script, skip file, and the profile wrapper blocks
+    expect(script).toContain("function Remove-ArchGuard");
+    expect(script).toContain(
+      "Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile",
+    );
+    expect(script).toContain(`'${CLAUDE_CODE_GUARD_MARKER_START}'`);
+    expect(script).toContain(
+      "if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; exit 0 }",
+    );
+    // the all-down disconnect ends with the removal note
+    expect(script).toContain("Nothing connected is left to check");
   });
 
   test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, live keys", () => {
@@ -191,5 +219,9 @@ describe("buildWindowsClaudeCodeStartupGuardInstallSection", () => {
     expect(section).toContain("'WindowsPowerShell', 'PowerShell'");
     expect(section).toContain("function claude {");
     expect(section).toContain("& $archReal.Source @args");
+    // a fresh connect re-arms checks a previous guard disconnected
+    expect(section).toContain(
+      `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE '${CLAUDE_CODE_GUARD_SKIP_RELPATH}')`,
+    );
   });
 });

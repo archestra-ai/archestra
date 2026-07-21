@@ -162,6 +162,14 @@ export const CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH =
 export const CLAUDE_CODE_GUARD_MARKER_START =
   "# >>> archestra claude guard >>>";
 export const CLAUDE_CODE_GUARD_MARKER_END = "# <<< archestra claude guard <<<";
+/**
+ * Remotes the guard's own disconnect action already removed from Claude Code,
+ * one resource kind per line. The guard skips them on later launches (and
+ * removes itself entirely once nothing connected is left to check); connect
+ * clears the file so a fresh setup re-arms every check.
+ */
+export const CLAUDE_CODE_GUARD_SKIP_RELPATH =
+  ".archestra/claude-startup-guard.skip";
 
 /**
  * Header name for external agent ID.

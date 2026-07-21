@@ -4,6 +4,7 @@ import {
   CLAUDE_CODE_GUARD_MARKER_START,
   CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
   CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
+  CLAUDE_CODE_GUARD_SKIP_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
 } from "@archestra/shared";
 
@@ -42,12 +43,12 @@ export function getDisconnectSteps(
         {
           title: "Remove the startup guard (macOS/Linux)",
           body: `Deletes the pre-loader script and the claude() wrapper the connect script added to your shell profile. Open a new terminal afterward.`,
-          command: `for f in ~/.zshrc ~/.bashrc; do [ -f "$f" ] && sed -i.bak '/^${CLAUDE_CODE_GUARD_MARKER_START}$/,/^${CLAUDE_CODE_GUARD_MARKER_END}$/d' "$f"; done; rm -f ~/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}`,
+          command: `for f in ~/.zshrc ~/.bashrc; do [ -f "$f" ] && sed -i.bak '/^${CLAUDE_CODE_GUARD_MARKER_START}$/,/^${CLAUDE_CODE_GUARD_MARKER_END}$/d' "$f"; done; rm -f ~/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH} ~/${CLAUDE_CODE_GUARD_SKIP_RELPATH}`,
         },
         {
           title: "Remove the startup guard (Windows)",
           body: `Deletes the pre-loader script and the claude wrapper the connect script added to your PowerShell profiles. Open a new PowerShell session afterward.`,
-          command: `$s='${CLAUDE_CODE_GUARD_MARKER_START}';$e='${CLAUDE_CODE_GUARD_MARKER_END}';foreach($d in @('WindowsPowerShell','PowerShell')){$f=Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) $d) 'profile.ps1';if(Test-Path $f){$k=$true;Set-Content $f @(Get-Content $f|Where-Object{if($_-eq$s){$k=$false};$r=$k;if($_-eq$e){$k=$true;$r=$false};$r})}};Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE '${CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH}')`,
+          command: `$s='${CLAUDE_CODE_GUARD_MARKER_START}';$e='${CLAUDE_CODE_GUARD_MARKER_END}';foreach($d in @('WindowsPowerShell','PowerShell')){$f=Join-Path (Join-Path ([Environment]::GetFolderPath('MyDocuments')) $d) 'profile.ps1';if(Test-Path $f){$k=$true;Set-Content $f @(Get-Content $f|Where-Object{if($_-eq$s){$k=$false};$r=$k;if($_-eq$e){$k=$true;$r=$false};$r})}};Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE '${CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH}'),(Join-Path $env:USERPROFILE '${CLAUDE_CODE_GUARD_SKIP_RELPATH}')`,
         },
       ];
     case "cursor":

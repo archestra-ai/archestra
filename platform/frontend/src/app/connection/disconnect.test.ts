@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_GUARD_MARKER_START,
   CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
   CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
+  CLAUDE_CODE_GUARD_SKIP_RELPATH,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { getDisconnectSteps } from "./disconnect";
@@ -28,13 +29,14 @@ describe("getDisconnectSteps", () => {
     );
     expect(bashStep?.command).toContain(CLAUDE_CODE_GUARD_MARKER_START);
     expect(bashStep?.command).toContain(
-      `rm -f ~/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}`,
+      `rm -f ~/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH} ~/${CLAUDE_CODE_GUARD_SKIP_RELPATH}`,
     );
     const psStep = steps.find((step) =>
       step.title.includes("startup guard (Windows)"),
     );
     expect(psStep?.command).toContain(CLAUDE_CODE_GUARD_MARKER_START);
     expect(psStep?.command).toContain(CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH);
+    expect(psStep?.command).toContain(CLAUDE_CODE_GUARD_SKIP_RELPATH);
     // both PowerShell editions' profiles are swept
     expect(psStep?.command).toContain("'WindowsPowerShell','PowerShell'");
   });

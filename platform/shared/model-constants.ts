@@ -17,6 +17,7 @@ export const SupportedProvidersSchema = z.enum([
   "openrouter",
   "vllm",
   "ollama",
+  "ollama-native",
   "zhipuai",
   "deepseek",
   "minimax",
@@ -42,6 +43,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openrouter:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
+  "ollama-native:chat",
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
@@ -80,7 +82,8 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   xai: "xAI",
   openrouter: "OpenRouter",
   vllm: "vLLM",
-  ollama: "Ollama",
+  ollama: "Ollama (OpenAI-compatible)",
+  "ollama-native": "Ollama (Native)",
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
@@ -96,6 +99,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
  */
 const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "ollama",
+  "ollama-native",
   "vllm",
 ]);
 
@@ -232,6 +236,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   openrouter: "https://openrouter.ai/api/v1",
   vllm: "",
   ollama: "http://localhost:11434/v1",
+  "ollama-native": "http://localhost:11434",
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
@@ -313,6 +318,12 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "deepseek/deepseek-v4-pro",
   ],
   ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
+  "ollama-native": [
+    "gpt-oss:120b",
+    "llama4:maverick",
+    "llama4:scout",
+    "qwen3:235b",
+  ],
   vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
   zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
   deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
@@ -356,6 +367,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   groq: "openai/gpt-oss-120b",
   xai: "grok-4.3",
   ollama: "llama3.2",
+  "ollama-native": "llama3.2",
   vllm: "default",
   cerebras: "zai-glm-4.7",
   mistral: "mistral-medium-2604",

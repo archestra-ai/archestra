@@ -390,6 +390,7 @@ class OptimizationRuleModel {
         openrouter: [], // OpenRouter optimization rules - no defaults
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
+        "ollama-native": [],
         zhipuai: [],
         deepseek: [],
         "github-copilot": [], // Copilot model availability is subscription-specific, no defaults

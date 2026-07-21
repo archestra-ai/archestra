@@ -47,6 +47,9 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   cerebras: getOpenAIUsage,
   vllm: getOpenAIUsage,
   ollama: getOpenAIUsage,
+  // Native adapter extracts usage from its own response shape; the fetch-based
+  // extractor here would misread the native body, so null (no double-report).
+  "ollama-native": null,
   mistral: getOpenAIUsage,
   perplexity: getOpenAIUsage,
   groq: getOpenAIUsage,

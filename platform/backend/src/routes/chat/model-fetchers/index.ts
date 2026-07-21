@@ -10,7 +10,7 @@ import { fetchDeepSeekModels } from "./deepseek";
 import { fetchGeminiModels } from "./gemini";
 import { fetchGithubCopilotModels } from "./github-copilot";
 import { fetchMicrosoft365CopilotModels } from "./microsoft-365-copilot";
-import { fetchOllamaModels } from "./ollama";
+import { fetchOllamaModels, fetchOllamaNativeModels } from "./ollama";
 import { fetchOpenAiModels } from "./openai";
 import { fetchOpenrouterModels } from "./openrouter";
 import type { ModelFetcher, ModelInfo } from "./types";
@@ -116,6 +116,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   minimax: makeStaticFetcher("minimax", MINIMAX_MODELS),
   mistral: fetchMistralModels,
   ollama: fetchOllamaModels,
+  "ollama-native": fetchOllamaNativeModels,
   openai: fetchOpenAiModels,
   openrouter: fetchOpenrouterModels,
   perplexity: makeStaticFetcher("perplexity", PERPLEXITY_MODELS),

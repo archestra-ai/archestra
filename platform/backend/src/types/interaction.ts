@@ -23,6 +23,7 @@ import {
   Minimax,
   Mistral,
   Ollama,
+  OllamaNative,
   OpenAi,
   Openrouter,
   Perplexity,
@@ -350,6 +351,14 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .nullable()
       .optional(),
     response: withErrorResponse(Ollama.API.ChatCompletionResponseSchema),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["ollama-native:chat"]),
+    request: withReadFallback(OllamaNative.API.ChatRequestSchema),
+    processedRequest: withReadFallback(OllamaNative.API.ChatRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(OllamaNative.API.ChatResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["cohere:chat"]),

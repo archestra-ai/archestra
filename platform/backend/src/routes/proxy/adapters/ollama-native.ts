@@ -1,0 +1,762 @@
+/**
+ * Ollama native (`/api/chat`) LLM-proxy adapter.
+ *
+ * Unlike `./ollama.ts` (the OpenAI-compatible `/v1` adapter), this talks Ollama's
+ * first-class `/api/chat` wire on BOTH sides: the internal chat client
+ * (`ollama-ai-provider-v2`) sends native requests, and we forward native requests
+ * upstream and stream native NDJSON back. That native round-trip is what lets
+ * Archestra send and display `num_ctx`, `num_predict`, `top_k`, `repeat_penalty`,
+ * `think`, etc. — the sampling options Ollama's `/v1` endpoint silently discards.
+ *
+ * Because both sides are native there is NO wire translation: the adapter reads
+ * native shapes for policy/logging/usage and re-emits native shapes. Streaming is
+ * NDJSON (`application/x-ndjson`), one `ChatResponse`-shaped object per line, with
+ * no `[DONE]` sentinel — the final `done: true` line ends the stream.
+ */
+import type {
+  ArchestraInternalErrorCode,
+  SupportedProvider,
+} from "@archestra/shared";
+import { encode as toonEncode } from "@toon-format/toon";
+import { get } from "lodash-es";
+import config from "@/config";
+import logger from "@/logging";
+import { ModelModel } from "@/models";
+import { metrics } from "@/observability";
+import { getTokenizer } from "@/tokenizers";
+import type {
+  ChunkProcessingResult,
+  CommonMcpToolDefinition,
+  CommonMessage,
+  CommonToolCall,
+  CommonToolResult,
+  CreateClientOptions,
+  LLMProvider,
+  LLMRequestAdapter,
+  LLMResponseAdapter,
+  LLMStreamAdapter,
+  OllamaNative,
+  StreamAccumulatorState,
+  ToolCompressionStats,
+  UsageView,
+} from "@/types";
+import { unwrapToolContent } from "../utils/unwrap-tool-content";
+
+// =============================================================================
+// TYPE ALIASES
+// =============================================================================
+
+type NativeRequest = OllamaNative.Types.ChatRequest;
+type NativeResponse = OllamaNative.Types.ChatResponse;
+type NativeMessages = OllamaNative.Types.Messages;
+type NativeMessage = OllamaNative.Types.Message;
+type NativeHeaders = OllamaNative.Types.ChatHeaders;
+type NativeStreamChunk = OllamaNative.Types.ChatStreamChunk;
+
+const PROVIDER: SupportedProvider = "ollama-native";
+const NDJSON_HEADERS: Record<string, string> = {
+  "Content-Type": "application/x-ndjson",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+};
+
+/** The upstream base URL is the Ollama root; strip any `/v1` suffix. */
+function ollamaRoot(baseUrl: string | undefined): string {
+  return (baseUrl ?? config.llm["ollama-native"].baseUrl ?? "")
+    .replace(/\/+$/, "")
+    .replace(/\/v1$/, "");
+}
+
+/** Native message `content` is a string on the wire; extract plain text. */
+function nativeContentToText(content: NativeMessage["content"]): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) =>
+        typeof part === "object" &&
+        part !== null &&
+        "text" in part &&
+        typeof (part as { text?: unknown }).text === "string"
+          ? (part as { text: string }).text
+          : "",
+      )
+      .join("");
+  }
+  return "";
+}
+
+// =============================================================================
+// REQUEST ADAPTER
+// =============================================================================
+
+class OllamaNativeRequestAdapter
+  implements LLMRequestAdapter<NativeRequest, NativeMessages>
+{
+  readonly provider = PROVIDER;
+  private request: NativeRequest;
+  private modifiedModel: string | null = null;
+  private toolResultUpdates: Record<string, string> = {};
+
+  constructor(request: NativeRequest) {
+    this.request = request;
+  }
+
+  getModel(): string {
+    return this.modifiedModel ?? this.request.model;
+  }
+
+  isStreaming(): boolean {
+    return this.request.stream === true;
+  }
+
+  getMessages(): CommonMessage[] {
+    return this.toCommonFormat(this.request.messages);
+  }
+
+  getToolResults(): CommonToolResult[] {
+    const results: CommonToolResult[] = [];
+    for (const message of this.request.messages) {
+      if (message.role !== "tool") continue;
+      const toolName = this.findToolNameInMessages(
+        this.request.messages,
+        message.tool_call_id,
+      );
+      results.push({
+        id: message.tool_call_id ?? "",
+        name: toolName ?? "unknown",
+        content: parseMaybeJson(nativeContentToText(message.content)),
+        isError: false,
+      });
+    }
+    return results;
+  }
+
+  getTools(): CommonMcpToolDefinition[] {
+    if (!this.request.tools) return [];
+    return this.request.tools.map((tool) => ({
+      name: tool.function.name,
+      description: tool.function.description,
+      inputSchema: (tool.function.parameters ?? {}) as Record<string, unknown>,
+    }));
+  }
+
+  hasTools(): boolean {
+    return (this.request.tools?.length ?? 0) > 0;
+  }
+
+  getProviderMessages(): NativeMessages {
+    return this.request.messages;
+  }
+
+  getOriginalRequest(): NativeRequest {
+    return this.request;
+  }
+
+  setModel(model: string): void {
+    this.modifiedModel = model;
+  }
+
+  updateToolResult(toolCallId: string, newContent: string): void {
+    this.toolResultUpdates[toolCallId] = newContent;
+  }
+
+  applyToolResultUpdates(updates: Record<string, string>): void {
+    Object.assign(this.toolResultUpdates, updates);
+  }
+
+  async applyToonCompression(model: string): Promise<ToolCompressionStats> {
+    const { messages, stats } = await convertNativeToolResultsToToon(
+      this.request.messages,
+      model,
+    );
+    this.request = { ...this.request, messages };
+    return stats;
+  }
+
+  convertToolResultContent(messages: NativeMessages): NativeMessages {
+    // Ollama tool results are plain strings by the time they reach the proxy
+    // (ollama-ai-provider-v2 serializes structured tool output to a string), so
+    // there are no MCP image blocks to convert here. Passthrough.
+    return messages;
+  }
+
+  toProviderRequest(): NativeRequest {
+    let messages = this.request.messages;
+    if (Object.keys(this.toolResultUpdates).length > 0) {
+      messages = messages.map((message) =>
+        message.role === "tool" &&
+        message.tool_call_id &&
+        this.toolResultUpdates[message.tool_call_id] !== undefined
+          ? {
+              ...message,
+              content: this.toolResultUpdates[message.tool_call_id],
+            }
+          : message,
+      );
+    }
+    return { ...this.request, model: this.getModel(), messages };
+  }
+
+  private findToolNameInMessages(
+    messages: NativeMessages,
+    toolCallId: string | undefined,
+  ): string | null {
+    if (!toolCallId) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role === "assistant" && message.tool_calls) {
+        for (const toolCall of message.tool_calls) {
+          if (toolCall.id === toolCallId) {
+            return toolCall.function.name;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private toCommonFormat(messages: NativeMessages): CommonMessage[] {
+    const out: CommonMessage[] = [];
+    for (const message of messages) {
+      const common: CommonMessage = {
+        role: message.role as CommonMessage["role"],
+        content: nativeContentToText(message.content),
+      };
+      if (message.role === "tool") {
+        const toolName = this.findToolNameInMessages(
+          messages,
+          message.tool_call_id,
+        );
+        if (toolName) {
+          common.toolCalls = [
+            {
+              id: message.tool_call_id ?? "",
+              name: toolName,
+              content: parseMaybeJson(nativeContentToText(message.content)),
+              isError: false,
+            },
+          ];
+        }
+      }
+      out.push(common);
+    }
+    return out;
+  }
+}
+
+// =============================================================================
+// RESPONSE ADAPTER
+// =============================================================================
+
+class OllamaNativeResponseAdapter
+  implements LLMResponseAdapter<NativeResponse>
+{
+  readonly provider = PROVIDER;
+  private response: NativeResponse;
+
+  constructor(response: NativeResponse) {
+    this.response = response;
+  }
+
+  getId(): string {
+    return this.response.created_at ?? "";
+  }
+
+  getModel(): string {
+    return this.response.model;
+  }
+
+  getText(): string {
+    return this.response.message.content ?? "";
+  }
+
+  getToolCalls(): CommonToolCall[] {
+    const toolCalls = this.response.message.tool_calls ?? [];
+    return toolCalls.map((toolCall) => ({
+      id: toolCall.id ?? "",
+      name: toolCall.function.name,
+      arguments: toToolArgsObject(toolCall.function.arguments),
+    }));
+  }
+
+  hasToolCalls(): boolean {
+    return (this.response.message.tool_calls?.length ?? 0) > 0;
+  }
+
+  getUsage(): UsageView {
+    return {
+      inputTokens: this.response.prompt_eval_count ?? 0,
+      outputTokens: this.response.eval_count ?? 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+  }
+
+  getOriginalResponse(): NativeResponse {
+    return this.response;
+  }
+
+  getFinishReasons(): string[] {
+    if (this.hasToolCalls()) return ["tool_calls"];
+    return [this.response.done_reason ?? "stop"];
+  }
+
+  toRefusalResponse(
+    _refusalMessage: string,
+    contentMessage: string,
+  ): NativeResponse {
+    return {
+      ...this.response,
+      message: { role: "assistant", content: contentMessage },
+      done: true,
+      done_reason: "stop",
+    };
+  }
+}
+
+// =============================================================================
+// STREAM ADAPTER
+// =============================================================================
+
+class OllamaNativeStreamAdapter
+  implements LLMStreamAdapter<NativeStreamChunk, NativeResponse>
+{
+  readonly provider = PROVIDER;
+  readonly state: StreamAccumulatorState;
+  private createdAt: string | undefined;
+  private thinking = "";
+  // Raw native tool-call lines, buffered until policy approval then replayed.
+  private rawToolCallLines: string[] = [];
+  // Set to the refusal text when the response was replaced by a policy refusal.
+  private replacedText: string | null = null;
+
+  constructor() {
+    this.state = {
+      responseId: "",
+      model: "",
+      text: "",
+      toolCalls: [],
+      rawToolCallEvents: [],
+      usage: null,
+      stopReason: null,
+      timing: { startTime: Date.now(), firstChunkTime: null },
+    };
+  }
+
+  processChunk(chunk: NativeStreamChunk): ChunkProcessingResult {
+    if (this.state.timing.firstChunkTime === null) {
+      this.state.timing.firstChunkTime = Date.now();
+    }
+
+    this.state.model = chunk.model || this.state.model;
+    this.createdAt = chunk.created_at ?? this.createdAt;
+    if (!this.state.responseId) {
+      this.state.responseId =
+        chunk.created_at ?? `ollama-native-${chunk.model}`;
+    }
+
+    const message = chunk.message;
+    const toolCalls = message?.tool_calls ?? [];
+
+    // Tool calls arrive whole (not incremental). Buffer them for policy eval.
+    if (toolCalls.length > 0) {
+      for (const toolCall of toolCalls) {
+        this.state.toolCalls.push({
+          id: toolCall.id ?? "",
+          name: toolCall.function.name,
+          arguments: JSON.stringify(
+            toToolArgsObject(toolCall.function.arguments),
+          ),
+        });
+      }
+      const line = ndjsonLine(chunk);
+      this.rawToolCallLines.push(line);
+      this.state.rawToolCallEvents.push(chunk);
+      return { sseData: null, isToolCallChunk: true, isFinal: false };
+    }
+
+    // Final chunk: capture usage + stop reason, but don't stream it — the
+    // synthesized `done: true` line is emitted by formatEndSSE.
+    if (chunk.done) {
+      this.state.stopReason = chunk.done_reason ?? "stop";
+      this.state.usage = {
+        inputTokens: chunk.prompt_eval_count ?? 0,
+        outputTokens: chunk.eval_count ?? 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
+      return { sseData: null, isToolCallChunk: false, isFinal: true };
+    }
+
+    // Text / thinking delta — stream immediately.
+    let sseData: string | null = null;
+    if (message?.thinking) {
+      this.thinking += message.thinking;
+    }
+    if (message?.content) {
+      this.state.text += message.content;
+    }
+    if (message?.content || message?.thinking) {
+      sseData = ndjsonLine(chunk);
+    }
+
+    return { sseData, isToolCallChunk: false, isFinal: false };
+  }
+
+  getSSEHeaders(): Record<string, string> {
+    return NDJSON_HEADERS;
+  }
+
+  formatTextDeltaSSE(text: string): string {
+    return ndjsonLine({
+      model: this.state.model,
+      created_at: this.createdAt,
+      message: { role: "assistant", content: text },
+      done: false,
+    });
+  }
+
+  getRawToolCallEvents(): string[] {
+    return this.rawToolCallLines;
+  }
+
+  formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
+    return [
+      ndjsonLine({
+        model: this.state.model,
+        created_at: this.createdAt,
+        message: { role: "assistant", content: text },
+        done: false,
+      }),
+    ];
+  }
+
+  formatEndSSE(): string {
+    const doneReason = this.replacedText
+      ? "stop"
+      : (this.state.stopReason ?? "stop");
+    const finalChunk: Record<string, unknown> = {
+      model: this.state.model,
+      created_at: this.createdAt,
+      message: { role: "assistant", content: "" },
+      done: true,
+      done_reason: doneReason,
+    };
+    if (this.state.usage !== null) {
+      finalChunk.prompt_eval_count = this.state.usage.inputTokens;
+      finalChunk.eval_count = this.state.usage.outputTokens;
+    }
+    return ndjsonLine(finalChunk);
+  }
+
+  toProviderResponse(): NativeResponse {
+    const toolCalls =
+      this.replacedText || this.state.toolCalls.length === 0
+        ? undefined
+        : this.state.toolCalls.map((tc) => ({
+            id: tc.id,
+            function: {
+              name: tc.name,
+              arguments: toToolArgsObject(tc.arguments),
+            },
+          }));
+
+    return {
+      model: this.state.model,
+      created_at: this.createdAt,
+      message: {
+        role: "assistant",
+        content: this.replacedText ?? this.state.text,
+        ...(this.thinking ? { thinking: this.thinking } : {}),
+        ...(toolCalls ? { tool_calls: toolCalls } : {}),
+      },
+      done: true,
+      done_reason: this.replacedText
+        ? "stop"
+        : (this.state.stopReason ?? "stop"),
+      prompt_eval_count: this.state.usage?.inputTokens ?? 0,
+      eval_count: this.state.usage?.outputTokens ?? 0,
+    };
+  }
+}
+
+// =============================================================================
+// TOON COMPRESSION (native tool-result messages)
+// =============================================================================
+
+async function convertNativeToolResultsToToon(
+  messages: NativeMessages,
+  model: string,
+): Promise<{ messages: NativeMessages; stats: ToolCompressionStats }> {
+  const tokenizer = getTokenizer(PROVIDER);
+  let toolResultCount = 0;
+  let totalTokensBefore = 0;
+  let totalTokensAfter = 0;
+
+  const result = messages.map((message) => {
+    if (message.role !== "tool" || typeof message.content !== "string") {
+      return message;
+    }
+    try {
+      const unwrapped = unwrapToolContent(message.content);
+      const parsed = JSON.parse(unwrapped);
+      const compressed = toonEncode(parsed);
+      const tokensBefore = tokenizer.countTokens([
+        { role: "user", content: unwrapped },
+      ]);
+      const tokensAfter = tokenizer.countTokens([
+        { role: "user", content: compressed },
+      ]);
+      toolResultCount++;
+      totalTokensBefore += tokensBefore;
+      if (tokensAfter < tokensBefore) {
+        totalTokensAfter += tokensAfter;
+        return { ...message, content: compressed };
+      }
+      totalTokensAfter += tokensBefore;
+      return message;
+    } catch {
+      return message;
+    }
+  });
+
+  let costSavings = 0;
+  const tokensSaved = totalTokensBefore - totalTokensAfter;
+  if (tokensSaved > 0) {
+    costSavings = await ModelModel.calculateCostSavings(
+      model,
+      tokensSaved,
+      PROVIDER,
+    );
+  }
+
+  return {
+    messages: result,
+    stats: {
+      tokensBefore: totalTokensBefore,
+      tokensAfter: totalTokensAfter,
+      costSavings,
+      wasEffective: totalTokensAfter < totalTokensBefore,
+      hadToolResults: toolResultCount > 0,
+    },
+  };
+}
+
+// =============================================================================
+// ADAPTER FACTORY
+// =============================================================================
+
+interface OllamaNativeClient {
+  baseUrl: string;
+  fetch: typeof fetch;
+  headers: Record<string, string> | undefined;
+  apiKey: string | undefined;
+  abortSignal: AbortSignal | undefined;
+}
+
+export const ollamaNativeAdapterFactory: LLMProvider<
+  NativeRequest,
+  NativeResponse,
+  NativeMessages,
+  NativeStreamChunk,
+  NativeHeaders
+> = {
+  provider: PROVIDER,
+  interactionType: "ollama-native:chat",
+  spanName: "chat",
+
+  createRequestAdapter(request) {
+    return new OllamaNativeRequestAdapter(request);
+  },
+
+  createResponseAdapter(response) {
+    return new OllamaNativeResponseAdapter(response);
+  },
+
+  createStreamAdapter() {
+    return new OllamaNativeStreamAdapter();
+  },
+
+  extractApiKey(headers) {
+    // The header schema already strips a leading "Bearer ".
+    return headers.authorization;
+  },
+
+  getBaseUrl() {
+    return config.llm["ollama-native"].baseUrl;
+  },
+
+  createClient(
+    apiKey: string | undefined,
+    options: CreateClientOptions,
+  ): OllamaNativeClient {
+    const observableFetch = options.agent
+      ? metrics.llm.getObservableFetch(PROVIDER, options.agent, options.source)
+      : fetch;
+    return {
+      baseUrl: ollamaRoot(options.baseUrl),
+      fetch: observableFetch as typeof fetch,
+      headers: options.defaultHeaders,
+      apiKey,
+      abortSignal: options.abortSignal,
+    };
+  },
+
+  async execute(client, request): Promise<NativeResponse> {
+    const c = client as OllamaNativeClient;
+    const response = await c.fetch(`${c.baseUrl}/api/chat`, {
+      method: "POST",
+      headers: buildUpstreamHeaders(c),
+      body: JSON.stringify({ ...request, stream: false }),
+      signal: c.abortSignal,
+    });
+    if (!response.ok) {
+      throw await toUpstreamError(response);
+    }
+    return (await response.json()) as NativeResponse;
+  },
+
+  async executeStream(
+    client,
+    request,
+  ): Promise<AsyncIterable<NativeStreamChunk>> {
+    const c = client as OllamaNativeClient;
+    const response = await c.fetch(`${c.baseUrl}/api/chat`, {
+      method: "POST",
+      headers: buildUpstreamHeaders(c),
+      body: JSON.stringify({ ...request, stream: true }),
+      signal: c.abortSignal,
+    });
+    if (!response.ok || !response.body) {
+      throw await toUpstreamError(response);
+    }
+    return iterateNdjson(response.body);
+  },
+
+  extractInternalCode(): ArchestraInternalErrorCode | undefined {
+    // Ollama silently truncates rather than raising a context-overflow error,
+    // so there is no reliable structured signal to map. Sending `num_ctx` (issue
+    // 1) is what makes the window authoritative.
+    return undefined;
+  },
+
+  extractErrorMessage(error: unknown): string {
+    const ollamaMessage = get(error, "error");
+    if (typeof ollamaMessage === "string") return ollamaMessage;
+    const nested = get(error, "error.message");
+    if (typeof nested === "string") return nested;
+    if (error instanceof Error) return error.message;
+    return "Internal server error";
+  },
+};
+
+// =============================================================================
+// INTERNAL HELPERS
+// =============================================================================
+
+function buildUpstreamHeaders(
+  client: OllamaNativeClient,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    ...(client.headers ?? {}),
+    "Content-Type": "application/json",
+  };
+  if (client.apiKey) {
+    headers.Authorization = `Bearer ${client.apiKey}`;
+  }
+  return headers;
+}
+
+async function toUpstreamError(response: Response): Promise<Error> {
+  let message = `Ollama upstream returned HTTP ${response.status}`;
+  try {
+    const body = await response.text();
+    if (body) {
+      try {
+        const parsed = JSON.parse(body);
+        if (typeof parsed?.error === "string") message = parsed.error;
+        else if (typeof parsed?.error?.message === "string")
+          message = parsed.error.message;
+        else message = body;
+      } catch {
+        message = body;
+      }
+    }
+  } catch {
+    // keep the default message
+  }
+  logger.debug({ status: response.status }, "[OllamaNative] upstream error");
+  const error = new Error(message) as Error & { error: string };
+  error.error = message;
+  return error;
+}
+
+async function* iterateNdjson(
+  body: ReadableStream<Uint8Array>,
+): AsyncIterable<NativeStreamChunk> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      while (true) {
+        const newlineIndex = buffer.indexOf("\n");
+        if (newlineIndex < 0) break;
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (!line) continue;
+        const parsed = tryParseChunk(line);
+        if (parsed) yield parsed;
+      }
+    }
+    const tail = buffer.trim();
+    if (tail) {
+      const parsed = tryParseChunk(tail);
+      if (parsed) yield parsed;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function tryParseChunk(line: string): NativeStreamChunk | null {
+  try {
+    return JSON.parse(line) as NativeStreamChunk;
+  } catch {
+    logger.debug(
+      { linePreview: line.slice(0, 120) },
+      "[OllamaNative] skipping unparseable NDJSON line",
+    );
+    return null;
+  }
+}
+
+function ndjsonLine(chunk: unknown): string {
+  return `${JSON.stringify(chunk)}\n`;
+}
+
+function parseMaybeJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function toToolArgsObject(
+  args: string | Record<string, unknown>,
+): Record<string, unknown> {
+  if (typeof args !== "string") return args;
+  try {
+    const parsed = JSON.parse(args);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}

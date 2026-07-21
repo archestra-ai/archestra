@@ -1391,6 +1391,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   openrouter: openAiCompatibleErrorHandler,
   vllm: providerErrorHandler(parseOpenAIError, mapVllmErrorToCode),
   ollama: providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
+  "ollama-native": providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   "github-copilot": openAiCompatibleErrorHandler,

@@ -47,6 +47,7 @@ const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   openrouter: getTiktokenTokenizer,
   vllm: getTiktokenTokenizer,
   ollama: getTiktokenTokenizer,
+  "ollama-native": getTiktokenTokenizer,
   zhipuai: getTiktokenTokenizer,
   deepseek: getTiktokenTokenizer,
   "github-copilot": getTiktokenTokenizer,

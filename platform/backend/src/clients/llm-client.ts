@@ -23,6 +23,7 @@ import {
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
 import type { streamText } from "ai";
+import { createOllama } from "ollama-ai-provider-v2";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -581,6 +582,17 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         fetch,
       }).chat(modelName),
     defaultBaseUrl: config.llm.ollama.baseUrl,
+    // No apiKeyRequiredMessage — key is optional
+  },
+
+  // Native Ollama transport: talks `/api/chat` via ollama-ai-provider-v2 so
+  // num_ctx/num_predict/top_k/think are sent (the `/v1` path discards them). The
+  // `/api` suffix makes the client POST to `<proxy>/ollama-native/<agent>/api/chat`.
+  "ollama-native": {
+    createModel: ({ modelName, baseURL, headers, fetch }) =>
+      createOllama({ baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm["ollama-native"].baseUrl,
+    proxiedPathSuffix: "/api",
     // No apiKeyRequiredMessage — key is optional
   },
 

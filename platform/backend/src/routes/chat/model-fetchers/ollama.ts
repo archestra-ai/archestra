@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
@@ -28,31 +29,73 @@ const SHOW_CONCURRENCY = 8;
 const SHOW_TIMEOUT_MS = 5_000;
 
 /**
- * Ollama model fetcher. Lists models via the OpenAI-compatible `/v1/models`
- * endpoint, then enriches each with Ollama's native `POST /api/show` so
- * embedding models are detected authoritatively (rather than by name) and their
- * context length / default parameters are pulled through. `/api/show` failures
- * degrade gracefully per model: the model is still returned, just without
- * capabilities, so the downstream name heuristic applies.
+ * Ollama model fetcher (OpenAI-compatible `ollama` provider). Lists models via
+ * the `/v1/models` endpoint, then enriches each with Ollama's native
+ * `POST /api/show` so embedding models are detected authoritatively (rather than
+ * by name) and their context length / default parameters are pulled through.
+ * `/api/show` failures degrade gracefully per model: the model is still returned,
+ * just without capabilities, so the downstream name heuristic applies.
  */
 export async function fetchOllamaModels(
   apiKey: string,
   baseUrlOverride?: string | null,
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
-  const baseUrl = baseUrlOverride || config.llm.ollama.baseUrl;
+  return fetchOllamaModelsImpl({
+    apiKey,
+    baseUrlOverride,
+    extraHeaders,
+    provider: "ollama",
+    defaultBaseUrl: config.llm.ollama.baseUrl,
+  });
+}
+
+/**
+ * Ollama native (`/api/chat`) model fetcher. Same server and enrichment as
+ * {@link fetchOllamaModels}; models are tagged with the `ollama-native` provider
+ * so they are selectable as the native-transport variant alongside the
+ * OpenAI-compatible ones.
+ */
+export async function fetchOllamaNativeModels(
+  apiKey: string,
+  baseUrlOverride?: string | null,
+  extraHeaders?: Record<string, string> | null,
+): Promise<ModelInfo[]> {
+  return fetchOllamaModelsImpl({
+    apiKey,
+    baseUrlOverride,
+    extraHeaders,
+    provider: "ollama-native",
+    defaultBaseUrl: config.llm["ollama-native"].baseUrl,
+  });
+}
+
+async function fetchOllamaModelsImpl(params: {
+  apiKey: string;
+  baseUrlOverride?: string | null;
+  extraHeaders?: Record<string, string> | null;
+  provider: SupportedProvider;
+  defaultBaseUrl: string | undefined;
+}): Promise<ModelInfo[]> {
+  const { apiKey, baseUrlOverride, extraHeaders, provider, defaultBaseUrl } =
+    params;
+  const rawBaseUrl = baseUrlOverride || defaultBaseUrl || "";
   const token = apiKey || PLACEHOLDER_API_KEY;
 
+  // The base URL may or may not carry the `/v1` suffix (the `ollama-native`
+  // provider's root has none). Normalize to the Ollama root, then derive both
+  // endpoints: `/v1/models` for listing, `/api/show` for enrichment.
+  const root = rawBaseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const v1BaseUrl = `${root}/v1`;
+
   const { data } = await fetchModelsWithBearerAuth({
-    url: joinBaseUrl(baseUrl, "/models"),
+    url: joinBaseUrl(v1BaseUrl, "/models"),
     apiKey: token,
     errorLabel: "Ollama models",
     extraHeaders,
     schema: OllamaModelsListSchema,
   });
 
-  // `/api/show` lives at the Ollama root, not under the OpenAI-compat `/v1`.
-  const root = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
   const showUrl = joinBaseUrl(root, "/api/show");
 
   const shows = await fetchShowsBounded(data, showUrl, token, extraHeaders);
@@ -63,7 +106,7 @@ export async function fetchOllamaModels(
     return {
       id: model.id,
       displayName: model.id,
-      provider: "ollama",
+      provider,
       createdAt: model.created
         ? new Date(model.created * 1000).toISOString()
         : undefined,

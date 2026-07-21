@@ -222,13 +222,24 @@ const PROVIDER_CONFIG: Record<
     consoleName: "vLLM Docs",
   },
   ollama: {
-    name: "Ollama",
+    name: "Ollama (OpenAI-compatible)",
     icon: "/icons/ollama.png",
     placeholder: "optional-api-key",
     enabled: true,
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
     description: "For self-hosted Ollama, an API key is not required.",
+  },
+  "ollama-native": {
+    name: "Ollama (Native)",
+    icon: "/icons/ollama.png",
+    placeholder: "optional-api-key",
+    enabled: true,
+    consoleUrl: "https://ollama.ai/",
+    consoleName: "Ollama",
+    description:
+      "Native /api/chat transport — lets you set num_ctx, num_predict, top_k, thinking effort, and other Ollama parameters. An API key is not required for self-hosted Ollama.",
+    supportsEmbeddings: false,
   },
   zhipuai: {
     name: "Zhipu AI",

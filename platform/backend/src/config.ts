@@ -1487,6 +1487,24 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
     },
+    // Ollama native `/api/chat` transport. Same server as `ollama`, different
+    // endpoint (root, no `/v1`), so it defaults from the Ollama base URL with the
+    // `/v1` suffix stripped. Lets Archestra send/display num_ctx, num_predict,
+    // top_k, think, etc. that the OpenAI-compatible `/v1` endpoint discards.
+    "ollama-native": {
+      enabled: Boolean(
+        process.env.ARCHESTRA_OLLAMA_NATIVE_BASE_URL ??
+          process.env.ARCHESTRA_OLLAMA_BASE_URL ??
+          "http://localhost:11434",
+      ),
+      baseUrl: (
+        process.env.ARCHESTRA_OLLAMA_NATIVE_BASE_URL ??
+        process.env.ARCHESTRA_OLLAMA_BASE_URL ??
+        "http://localhost:11434"
+      )
+        .replace(/\/+$/, "")
+        .replace(/\/v1$/, ""),
+    },
     zhipuai: {
       baseUrl:
         process.env.ARCHESTRA_ZHIPUAI_BASE_URL ||
@@ -1616,6 +1634,9 @@ const config = {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
     },
     ollama: {
+      apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
+    },
+    "ollama-native": {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
     },
     cohere: {

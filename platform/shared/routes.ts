@@ -254,6 +254,9 @@ export const RouteId = {
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
   OllamaEmbeddingsWithDefaultAgent: "ollamaEmbeddingsWithDefaultAgent",
   OllamaEmbeddingsWithAgent: "ollamaEmbeddingsWithAgent",
+  // Proxy Routes - Ollama Native (/api/chat)
+  OllamaNativeChatWithDefaultAgent: "ollamaNativeChatWithDefaultAgent",
+  OllamaNativeChatWithAgent: "ollamaNativeChatWithAgent",
   // Proxy Routes - Zhipu AI
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",

@@ -32,6 +32,7 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   openrouter: "openrouter",
   vllm: "vllm",
   ollama: "ollama-cloud",
+  "ollama-native": "ollama-cloud",
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   minimax: "minimax",

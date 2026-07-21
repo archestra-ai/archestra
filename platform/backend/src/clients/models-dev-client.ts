@@ -483,6 +483,7 @@ export class ModelsDevClient {
       xai: ["xai/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],
+      "ollama-native": ["ollama/"],
       vllm: ["vllm/"],
       zhipuai: ["zhipuai/"],
       deepseek: ["deepseek/"],

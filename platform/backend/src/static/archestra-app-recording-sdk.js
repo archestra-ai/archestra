@@ -1019,39 +1019,44 @@
   const isHandlerAttr = (name) =>
     typeof name === "string" && /^on/i.test(name);
 
-  const SVG_NS = "http://www.w3.org/2000/svg";
-
   /**
    * Parse recorded markup into an inert fragment, in the target element's own
-   * namespace, with anything that would run removed.
+   * parsing context, with anything that would run removed.
    *
    * A replay shows what the app produced; it must never run the app a second
    * time. Script elements are re-typed before the document loads, but a DOM
    * snapshot taken mid-session can still carry inline handlers — and an
-   * `onerror` on a broken image needs no interaction at all to fire. Parsing
-   * into a detached context neither loads a resource nor runs anything; what it
-   * yields is then stripped of both.
+   * `onerror` on a broken image needs no interaction at all to fire. So the
+   * markup is parsed inside the template element's OWNER DOCUMENT, which the
+   * platform gives no browsing context: nothing there loads a resource or runs
+   * a handler. What it yields is then stripped of scripts and `on*` attributes
+   * as a second line of defence.
    *
-   * The namespace matters: the captured html is the target's innerHTML, so when
-   * the target is an SVG node (a `<svg>` chart, a `<g>` layer) its children are
-   * bare `<path>`/`<rect>`/`<g>` with no `<svg>` wrapper. Parsed by an HTML
-   * `<template>` those land in the HTML namespace as non-rendering unknown
-   * elements — the recorded chart replays blank. Parsing them with an SVG
-   * context element instead puts them in the SVG namespace, where they render.
-   * (An HTML fragment that itself contains a full `<svg>…</svg>` is unaffected:
-   * the HTML parser already switches such subtrees into foreign content.)
+   * The parsing CONTEXT matters as much as its inertness. The captured html is
+   * the target's own innerHTML, so its top-level nodes are bare children with no
+   * wrapping tag — and the HTML fragment parser decides their namespace and
+   * insertion mode from the element it is parsing INTO. Parse `<path>`/`<rect>`
+   * with a plain `<template>` and they land in the HTML namespace as
+   * non-rendering unknown elements (the recorded chart replays blank); the same
+   * befalls MathML (`<mrow>`/`<mi>`). Table rows and `<option>`s can be dropped
+   * outright. Matching the context to the target's real namespace and tag makes
+   * the parse reproduce exactly what the browser built live — SVG in the SVG
+   * namespace, MathML in MathML, an HTML integration point (`foreignObject`) or
+   * a `<tr>`/`<select>` in the right HTML insertion mode.
    */
   const inertMarkup = (html, contextEl) => {
-    const isSvg = !!contextEl && contextEl.namespaceURI === SVG_NS;
-    // An SVG context element parses its children in the SVG namespace; a
-    // `<template>` parses in HTML. Both yield an inert, un-run subtree.
-    const source = isSvg
-      ? document.createElementNS(SVG_NS, "svg")
-      : document.createElement("template");
-    source.innerHTML = html;
-    // A `<template>`'s parsed content lives on `.content`; an SVG context holds
-    // its parsed children directly.
-    const root = isSvg ? source : source.content;
+    const template = document.createElement("template");
+    // The template's content is owned by an inert document (no browsing
+    // context); creating the parse context there keeps the whole parse inert.
+    const inertDoc = template.content.ownerDocument;
+    const context =
+      contextEl && contextEl.namespaceURI
+        ? inertDoc.createElementNS(contextEl.namespaceURI, contextEl.localName)
+        : template;
+    context.innerHTML = html;
+    // A `<template>` keeps its parsed tree on `.content`; every other element
+    // holds its children directly.
+    const root = context.content || context;
     for (const node of root.querySelectorAll("script")) {
       node.remove();
     }
@@ -1060,11 +1065,10 @@
         if (isHandlerAttr(attr.name)) node.removeAttribute(attr.name);
       }
     }
-    if (!isSvg) return root;
-    // Hand back a fragment of the parsed SVG children (moving nodes keeps their
-    // SVG namespace); the throwaway `<svg>` context element is not inserted.
-    const fragment = document.createDocumentFragment();
-    while (source.firstChild) fragment.appendChild(source.firstChild);
+    // Move the parsed children into a fragment (moving preserves each node's
+    // namespace); the throwaway context element is never inserted.
+    const fragment = inertDoc.createDocumentFragment();
+    while (root.firstChild) fragment.appendChild(root.firstChild);
     return fragment;
   };
 

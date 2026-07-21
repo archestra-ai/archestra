@@ -40,37 +40,98 @@ interface ChatOpsThreadKey {
   threadId: string;
 }
 
+/**
+ * Follow-up supersede marker: when a run registers with this option and
+ * another run for the same thread AND sender is already in flight, the older
+ * of the two (by `sequence`) is aborted. A user double-texting mid-generation
+ * gets one reply — to their latest message, with the earlier message in
+ * context — instead of a stale answer followed by a fresh one.
+ *
+ * `sequence` orders the sender's messages (Telegram message_id, or a
+ * timestamp): registration order can invert message order when updates are
+ * dispatched concurrently, so the comparison decides which run survives.
+ */
+interface ChatOpsRunSupersede {
+  senderId: string;
+  sequence: number;
+}
+
+interface ChatOpsRunEntry {
+  controller: AbortController;
+  supersede?: ChatOpsRunSupersede;
+}
+
 class ChatOpsRunRegistry {
-  private readonly runs = new Map<string, Set<AbortController>>();
+  private readonly runs = new Map<string, Set<ChatOpsRunEntry>>();
 
   /**
    * Register an in-flight run for a thread. Returns the run's abort signal (to
    * thread into the agent execution) and an `unregister` callback the caller
    * MUST invoke in a `finally` once the run settles, so the controller is not
    * retained after it completes.
+   *
+   * With `supersede` set, an older in-flight run for the same thread+sender is
+   * aborted — or this run is aborted immediately when the in-flight one is
+   * newer (a late-dispatched stale message: its turn still gets recorded, but
+   * no reply is posted for it).
    */
-  register(key: ChatOpsThreadKey): {
+  register(
+    key: ChatOpsThreadKey,
+    options?: { supersede?: ChatOpsRunSupersede },
+  ): {
     signal: AbortSignal;
     unregister: () => void;
   } {
     const cacheKey = this.threadCacheKey(key);
-    const controller = new AbortController();
+    const entry: ChatOpsRunEntry = {
+      controller: new AbortController(),
+      supersede: options?.supersede,
+    };
 
-    let controllers = this.runs.get(cacheKey);
-    if (!controllers) {
-      controllers = new Set();
-      this.runs.set(cacheKey, controllers);
+    let entries = this.runs.get(cacheKey);
+    if (!entries) {
+      entries = new Set();
+      this.runs.set(cacheKey, entries);
     }
-    controllers.add(controller);
+
+    if (entry.supersede) {
+      for (const existing of entries) {
+        if (
+          !existing.supersede ||
+          existing.supersede.senderId !== entry.supersede.senderId ||
+          existing.controller.signal.aborted
+        ) {
+          continue;
+        }
+        const loser =
+          existing.supersede.sequence <= entry.supersede.sequence
+            ? existing
+            : entry;
+        loser.controller.abort();
+        logger.info(
+          {
+            provider: key.provider,
+            channelId: key.channelId,
+            threadId: key.threadId,
+            supersededSequence: loser.supersede?.sequence,
+            bySequence: (loser === existing ? entry : existing).supersede
+              ?.sequence,
+          },
+          "[ChatOps] Superseded in-flight run by the sender's follow-up message",
+        );
+      }
+    }
+
+    entries.add(entry);
 
     return {
-      signal: controller.signal,
+      signal: entry.controller.signal,
       unregister: () => {
         const set = this.runs.get(cacheKey);
         if (!set) {
           return;
         }
-        set.delete(controller);
+        set.delete(entry);
         if (set.size === 0) {
           this.runs.delete(cacheKey);
         }
@@ -84,15 +145,15 @@ class ChatOpsRunRegistry {
    * a thread with no local runs.
    */
   cancelThread(key: ChatOpsThreadKey): number {
-    const controllers = this.runs.get(this.threadCacheKey(key));
-    if (!controllers || controllers.size === 0) {
+    const entries = this.runs.get(this.threadCacheKey(key));
+    if (!entries || entries.size === 0) {
       return 0;
     }
 
     let aborted = 0;
-    for (const controller of controllers) {
-      if (!controller.signal.aborted) {
-        controller.abort();
+    for (const entry of entries) {
+      if (!entry.controller.signal.aborted) {
+        entry.controller.abort();
         aborted += 1;
       }
     }

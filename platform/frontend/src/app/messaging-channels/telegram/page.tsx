@@ -26,6 +26,56 @@ const telegramProviderConfig: ProviderConfig = {
   providerIcon: "/icons/telegram.png",
   docsUrl: getFrontendDocsUrl("platform-telegram"),
   slashCommand: "/select-agent",
+  channelsAppearNote: (
+    <>
+      <div>
+        <div className="font-medium text-foreground mb-0.5">New channels</div>
+        <p>
+          Groups appear here the moment the bot is added; your direct message
+          appears when you link your account.
+        </p>
+      </div>
+      <div>
+        <div className="font-medium text-foreground mb-0.5">Group Privacy</div>
+        <p>
+          For the bot to work in a group, either{" "}
+          <span className="font-medium text-foreground">
+            make it a group admin
+          </span>{" "}
+          or{" "}
+          <span className="font-medium text-foreground">
+            turn Group Privacy off
+          </span>
+          : open{" "}
+          <a
+            href="https://t.me/BotFather"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2"
+          >
+            @BotFather
+          </a>
+          :{" "}
+          <span className="whitespace-nowrap">
+            <code className="bg-muted px-1 py-0.5 rounded text-xs">
+              /mybots
+            </code>{" "}
+            → your bot
+          </span>{" "}
+          <span className="whitespace-nowrap">→ Bot Settings</span>{" "}
+          <span className="whitespace-nowrap">→ Group Privacy</span>{" "}
+          <span className="whitespace-nowrap">→ Turn off</span>, then remove and
+          re-add the bot to the group (Telegram caches the setting per
+          membership). Otherwise Telegram doesn't deliver group messages to the
+          bot at all — not even @mentions, only{" "}
+          <code className="bg-muted px-1 py-0.5 rounded text-xs">
+            /commands
+          </code>{" "}
+          and replies to its messages.
+        </p>
+      </div>
+    </>
+  ),
   // The DM binding is created by the account-linking step, not by assigning
   // an agent to a placeholder row.
   showVirtualDmRow: false,
@@ -117,21 +167,18 @@ export default function TelegramPage() {
     isLoading: statusesLoading,
   } = useTriggerStatuses();
 
-  // Feature-flagged: hidden from the nav, and a direct visit explains why
+  // Explicitly disabled on this deployment: hidden from the nav, and a
+  // direct visit explains why
   if (!statusesLoading && !telegramAvailable) {
     return (
       <div className="flex items-start gap-3 rounded-lg border px-4 py-3">
         <Info className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
         <span className="text-sm text-muted-foreground">
-          The Telegram integration is not enabled on this deployment. Set{" "}
+          The Telegram integration is disabled on this deployment (
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true
-          </code>{" "}
-          (or the beta master switch{" "}
-          <code className="bg-muted px-1 py-0.5 rounded text-xs">
-            ARCHESTRA_BETA=true
+            ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false
           </code>
-          ) and restart to use it.
+          ). Remove the flag and restart to use it.
         </span>
       </div>
     );

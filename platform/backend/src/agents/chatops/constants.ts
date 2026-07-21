@@ -119,6 +119,14 @@ export const THREAD_MUTE_HINT =
 export const CHATOPS_NO_REPLY_SENTINEL = "[NO_REPLY]";
 
 /**
+ * Posted to the chat when a server-side session's history was compacted into
+ * a summary — without it, the model suddenly "forgetting" details reads as
+ * the bot being broken. Plain text so it renders identically everywhere.
+ */
+export const CHATOPS_CONTEXT_COMPACTED_NOTICE =
+  "🗜️ This conversation got long, so I've summarized the older messages to keep answering well. Recent messages are kept as-is — if something important got lost, just mention it again.";
+
+/**
  * Bot commands recognized by the chatops system
  */
 export const CHATOPS_COMMANDS = {

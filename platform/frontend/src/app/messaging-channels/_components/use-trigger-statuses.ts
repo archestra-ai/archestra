@@ -40,9 +40,9 @@ export function useTriggerStatuses() {
       ? reachable && hasLlmKey && !!slack?.configured
       : hasLlmKey && !!slack?.configured;
 
-  // Telegram is feature-flagged (ARCHESTRA_CHATOPS_TELEGRAM_ENABLED); when
-  // off, the channel is hidden entirely. It uses long polling — no public
-  // URL needed, so no reachability gate.
+  // Telegram is on by default; ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false is
+  // the operator opt-out that hides the channel entirely. It uses long
+  // polling — no public URL needed, so no reachability gate.
   const telegramAvailable = !!configData?.features.chatopsTelegramEnabled;
   const telegram = chatOpsProviders?.find((p) => p.id === "telegram");
   const telegramActive =

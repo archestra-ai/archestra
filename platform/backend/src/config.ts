@@ -2124,13 +2124,12 @@ const config = {
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   },
   chatops: {
-    // Gate for the Telegram integration: per-feature flag with ARCHESTRA_BETA
-    // as the fallback (betaFeatureEnabled). Off = the provider never starts
-    // (even with a token saved in the DB), the config endpoint rejects
-    // updates, and the frontend hides the Telegram messaging channel.
-    telegramEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED,
-    ),
+    // The Telegram integration is generally available: on by default, with
+    // ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false as the operator opt-out.
+    // Off = the provider never starts (even with a token saved in the DB),
+    // the config endpoint rejects updates, and the frontend hides the
+    // Telegram messaging channel.
+    telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED !== "false",
     // Per-process cap on concurrent chatops file downloads + image shrinking.
     // Chatops events are acked to the provider before processing, so an OOM
     // during a burst of attachment-heavy messages means silent message loss —

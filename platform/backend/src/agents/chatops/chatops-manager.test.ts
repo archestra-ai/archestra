@@ -27,9 +27,11 @@ import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
 import {
+  A2AMessageModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
+  ChatOpsThreadContextModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
@@ -2185,6 +2187,8 @@ describe("ChatOpsManager.initialize — partial config", () => {
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_TELEGRAM_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN", "");
   });
 
   afterEach(() => {
@@ -2262,6 +2266,8 @@ describe("ChatOpsManager.seedConfigFromEnvVars", () => {
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_TELEGRAM_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN", "");
   });
 
   afterEach(() => {
@@ -2443,6 +2449,8 @@ describe("ChatOpsManager.initialize — Slack socket mode", () => {
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_ID", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_CONNECTION_MODE", "");
     vi.stubEnv("ARCHESTRA_CHATOPS_SLACK_APP_LEVEL_TOKEN", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_TELEGRAM_ENABLED", "");
+    vi.stubEnv("ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN", "");
   });
 
   afterEach(() => {
@@ -3709,5 +3717,454 @@ describe("buildChatOpsSessionId", () => {
     expect(buildChatOpsSessionId("ms-teams", longChannelId)).toBe(
       buildChatOpsSessionId("ms-teams", longChannelId),
     );
+  });
+});
+
+// =============================================================================
+// Server-side sessions (Telegram-style providers)
+// =============================================================================
+
+describe("ChatOpsManager server-side sessions", () => {
+  function createSessionProvider(overrides: {
+    getUserEmail: (userId: string) => Promise<string | null>;
+    sendReply?: (options: ChatReplyOptions) => Promise<string>;
+    setTypingStatus?: (
+      channelId: string,
+      threadTs: string,
+      metadata?: Record<string, unknown>,
+    ) => Promise<void>;
+    typingRefreshIntervalMs?: number;
+  }): ChatOpsProvider {
+    return {
+      providerId: "telegram",
+      displayName: "Telegram",
+      usesServerSideSessions: true,
+      ...(overrides.typingRefreshIntervalMs !== undefined && {
+        typingRefreshIntervalMs: overrides.typingRefreshIntervalMs,
+      }),
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async () => null,
+      sendReply: overrides.sendReply ?? (async () => "reply-id"),
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getUserEmail: overrides.getUserEmail,
+      getChannelName: async () => null,
+      getWorkspaceId: () => null,
+      getWorkspaceName: () => null,
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
+      downloadFiles: async () => [],
+      discoverChannels: async () => null,
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
+      ...(overrides.setTypingStatus && {
+        setTypingStatus: overrides.setTypingStatus,
+      }),
+    };
+  }
+
+  function sessionMessage(
+    overrides: Partial<IncomingChatMessage> = {},
+  ): IncomingChatMessage {
+    return {
+      messageId: `tg-msg-${crypto.randomUUID()}`,
+      channelId: "tg-chat-1",
+      workspaceId: null,
+      senderId: "tg-user-1",
+      senderName: "Alice",
+      text: "hello there",
+      rawText: "hello there",
+      timestamp: new Date(),
+      isThreadReply: false,
+      metadata: { channelType: "im", conversationType: "personal" },
+      ...overrides,
+    };
+  }
+
+  async function setUpTelegramBinding(ctx: {
+    makeOrganization: (...args: never[]) => Promise<{ id: string }>;
+    makeUser: (opts: { email: string }) => Promise<{ id: string }>;
+    makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+    makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+    makeInternalAgent: (opts: {
+      organizationId: string;
+      teams: string[];
+    }) => Promise<{ id: string }>;
+    extraEmails?: string[];
+  }): Promise<{ senderEmail: string }> {
+    const senderEmail = "alice@example.com";
+    const org = await ctx.makeOrganization();
+    const user = await ctx.makeUser({ email: senderEmail });
+    const team = await ctx.makeTeam(org.id, user.id);
+    await ctx.makeTeamMember(team.id, user.id);
+    for (const email of ctx.extraEmails ?? []) {
+      const extra = await ctx.makeUser({ email });
+      await ctx.makeTeamMember(team.id, extra.id);
+    }
+    const agent = await ctx.makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "telegram",
+      channelId: "tg-chat-1",
+      agentId: agent.id,
+    });
+    return { senderEmail };
+  }
+
+  test("persists each turn in a thread context and feeds it back as prior messages", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await setUpTelegramBinding({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+
+    let replyIndex = 0;
+    const executeSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async () => {
+        replyIndex += 1;
+        const text = `Agent reply ${replyIndex}`;
+        // Persisted assistant messages need real UUID ids (uuid column).
+        const id = crypto.randomUUID();
+        return {
+          text,
+          messageId: id,
+          finishReason: "stop",
+          responseUiMessage: {
+            id,
+            role: "assistant",
+            parts: [{ type: "text", text }],
+          },
+        };
+      });
+
+    const provider = createSessionProvider({
+      getUserEmail: async () => senderEmail,
+    });
+    const manager = new ChatOpsManager();
+
+    const first = await manager.processMessage({
+      message: sessionMessage({
+        text: "first message",
+        rawText: "first message",
+      }),
+      provider,
+    });
+    expect(first.success).toBe(true);
+
+    // The thread now maps to a persistent context holding both turns.
+    const mapping = await ChatOpsThreadContextModel.findByThread({
+      provider: "telegram",
+      channelId: "tg-chat-1",
+      workspaceId: null,
+      threadId: "tg-chat-1",
+    });
+    expect(mapping).not.toBeNull();
+    if (!mapping) throw new Error("mapping missing");
+    const persisted = await A2AMessageModel.findByContextId(mapping.contextId);
+    expect(persisted).toHaveLength(2);
+    // The stored user turn is clean — the situational framing is ephemeral.
+    const storedUserTurn = persisted[0].content as {
+      parts: Array<{ text: string }>;
+    };
+    expect(storedUserTurn.parts[0].text).toBe("first message");
+
+    // The executed turn DID carry the framing.
+    const firstCall = executeSpy.mock.calls[0][0];
+    expect(firstCall.message).toContain("(Telegram conversation");
+    expect(firstCall.message).toContain("first message");
+    expect(firstCall.messages).toEqual([]);
+
+    // Second message: the prior turns arrive as real model messages.
+    const second = await manager.processMessage({
+      message: sessionMessage({
+        text: "second message",
+        rawText: "second message",
+      }),
+      provider,
+    });
+    expect(second.success).toBe(true);
+
+    const secondCall = executeSpy.mock.calls[1][0];
+    const priorContext = JSON.stringify(secondCall.messages);
+    expect(priorContext).toContain("first message");
+    expect(priorContext).toContain("Agent reply 1");
+    expect(secondCall.message).toContain("second message");
+
+    expect(
+      await A2AMessageModel.findByContextId(mapping.contextId),
+    ).toHaveLength(4);
+  });
+
+  test("shares one thread context across group participants with sender attribution", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    await setUpTelegramBinding({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+      extraEmails: ["bob@example.com"],
+    });
+
+    const executeSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async () => {
+        const id = crypto.randomUUID();
+        return {
+          text: "Agent group reply",
+          messageId: id,
+          finishReason: "stop",
+          responseUiMessage: {
+            id,
+            role: "assistant",
+            parts: [{ type: "text", text: "Agent group reply" }],
+          },
+        };
+      });
+
+    const provider = createSessionProvider({
+      getUserEmail: async (userId) =>
+        userId === "tg-user-1" ? "alice@example.com" : "bob@example.com",
+    });
+    const manager = new ChatOpsManager();
+
+    const groupMetadata = {
+      conversationType: "groupChat",
+      botMentioned: true,
+    };
+    const fromAlice = await manager.processMessage({
+      message: sessionMessage({
+        text: "hi from alice",
+        rawText: "hi from alice",
+        metadata: groupMetadata,
+      }),
+      provider,
+    });
+    expect(fromAlice.success).toBe(true);
+
+    // A different participant continues the SAME conversation — the shared
+    // context must not be rejected by actor ownership.
+    const fromBob = await manager.processMessage({
+      message: sessionMessage({
+        senderId: "tg-user-2",
+        senderName: "Bob",
+        text: "hi from bob",
+        rawText: "hi from bob",
+        metadata: groupMetadata,
+      }),
+      provider,
+    });
+    expect(fromBob.success).toBe(true);
+
+    // Bob's run sees Alice's attributed turn as prior context.
+    const bobCall = executeSpy.mock.calls[1][0];
+    expect(JSON.stringify(bobCall.messages)).toContain("Alice: hi from alice");
+    expect(bobCall.message).toContain("Bob: hi from bob");
+
+    const mapping = await ChatOpsThreadContextModel.findByThread({
+      provider: "telegram",
+      channelId: "tg-chat-1",
+      workspaceId: null,
+      threadId: "tg-chat-1",
+    });
+    expect(mapping).not.toBeNull();
+    if (!mapping) throw new Error("mapping missing");
+    expect(
+      await A2AMessageModel.findByContextId(mapping.contextId),
+    ).toHaveLength(4);
+  });
+
+  test("re-sends the typing indicator on the provider's refresh interval during long runs", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await setUpTelegramBinding({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+
+    // Hold the agent run open long enough for several heartbeats.
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      // Persisted assistant messages need real UUID ids (uuid column).
+      const id = crypto.randomUUID();
+      return {
+        text: "Slow reply",
+        messageId: id,
+        finishReason: "stop",
+        responseUiMessage: {
+          id,
+          role: "assistant",
+          parts: [{ type: "text", text: "Slow reply" }],
+        },
+      };
+    });
+
+    const setTypingStatus = vi.fn().mockResolvedValue(undefined);
+    const provider = createSessionProvider({
+      getUserEmail: async () => senderEmail,
+      setTypingStatus,
+      typingRefreshIntervalMs: 20,
+    });
+    const manager = new ChatOpsManager();
+
+    const result = await manager.processMessage({
+      message: sessionMessage(),
+      provider,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBe(true);
+
+    // One up-front call plus several heartbeats while the run was in flight.
+    expect(setTypingStatus.mock.calls.length).toBeGreaterThanOrEqual(3);
+
+    // The heartbeat stops with the run — no further calls afterwards.
+    const callsAtCompletion = setTypingStatus.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(setTypingStatus.mock.calls.length).toBe(callsAtCompletion);
+  });
+
+  test("drops the in-flight reply when the sender follows up before it lands", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const { senderEmail } = await setUpTelegramBinding({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+
+    // First run blocks on a gate we control; the follow-up run returns fast.
+    let releaseFirstRun!: () => void;
+    const firstRunGate = new Promise<void>((resolve) => {
+      releaseFirstRun = resolve;
+    });
+    let callCount = 0;
+    const executeSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async (params) => {
+        callCount += 1;
+        const text = callCount === 1 ? "First reply" : "Second reply";
+        if (callCount === 1) {
+          await firstRunGate;
+          // Mirror the real executor: an aborted streamText call throws, so
+          // the superseded run's response is never produced nor persisted.
+          if (params.abortSignal?.aborted) {
+            throw Object.assign(new Error("This operation was aborted"), {
+              name: "AbortError",
+            });
+          }
+        }
+        const id = crypto.randomUUID();
+        return {
+          text,
+          messageId: id,
+          finishReason: "stop",
+          responseUiMessage: {
+            id,
+            role: "assistant",
+            parts: [{ type: "text", text }],
+          },
+        };
+      });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider = createSessionProvider({
+      getUserEmail: async () => senderEmail,
+      sendReply: sendReplySpy,
+    });
+    const manager = new ChatOpsManager();
+
+    const dmMetadata = (telegramMessageId: number) => ({
+      channelType: "im",
+      conversationType: "personal",
+      telegramMessageId,
+    });
+
+    // Start the first turn and wait until it is mid-generation.
+    const firstResultPromise = manager.processMessage({
+      message: sessionMessage({
+        text: "first message",
+        rawText: "first message",
+        metadata: dmMetadata(100),
+      }),
+      provider,
+    });
+    await vi.waitFor(() => expect(executeSpy).toHaveBeenCalledTimes(1));
+
+    // The follow-up supersedes it and gets the only reply — with the
+    // superseded message already in its context.
+    const secondResult = await manager.processMessage({
+      message: sessionMessage({
+        text: "second message",
+        rawText: "second message",
+        metadata: dmMetadata(101),
+      }),
+      provider,
+    });
+    releaseFirstRun();
+    const firstResult = await firstResultPromise;
+
+    expect(secondResult.success).toBe(true);
+    expect(firstResult.success).toBe(true);
+    // The superseded run posted nothing (same shape as deliberate silence).
+    expect(firstResult.agentResponse).toBe("");
+    expect(sendReplySpy).toHaveBeenCalledTimes(1);
+    expect(sendReplySpy.mock.calls[0][0].text).toContain("Second reply");
+
+    const secondCall = executeSpy.mock.calls[1][0];
+    expect(JSON.stringify(secondCall.messages)).toContain("first message");
+
+    // Both user turns are history; only the follow-up's reply persisted.
+    const mapping = await ChatOpsThreadContextModel.findByThread({
+      provider: "telegram",
+      channelId: "tg-chat-1",
+      workspaceId: null,
+      threadId: "tg-chat-1",
+    });
+    expect(mapping).not.toBeNull();
+    if (!mapping) throw new Error("mapping missing");
+    const persisted = await A2AMessageModel.findByContextId(mapping.contextId);
+    const texts = persisted.map(
+      (m) => (m.content as { parts: Array<{ text: string }> }).parts[0].text,
+    );
+    expect(texts).toContain("first message");
+    expect(texts).toContain("second message");
+    expect(texts).toContain("Second reply");
+    expect(texts).not.toContain("First reply");
   });
 });

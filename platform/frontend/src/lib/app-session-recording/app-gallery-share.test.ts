@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 import {
+  buildGallerySubmissionFiles,
   dropCachedGithubToken,
   GithubAuthError,
   submitRecordingToAppGallery,
@@ -176,6 +177,40 @@ describe("submitRecordingToAppGallery", () => {
     expect(atob((uploads[1].body as { content: string }).content)).toBe(
       "final-frame",
     );
+  });
+
+  test("uploads are byte-identical to the manual-submission package", async () => {
+    const bundle = makeBundle([
+      {
+        kind: "canvas",
+        t: 100,
+        sel: "#c",
+        data: `data:image/png;base64,${btoa("pixels")}`,
+      },
+    ] as AppRecordingBundle["recording"]["events"]);
+
+    await submitRecordingToAppGallery({
+      token: "gho_token",
+      repo: { owner: "archestra-ai", name: "app-gallery" },
+      bundle,
+      signal: new AbortController().signal,
+      onProgress: () => {},
+    });
+
+    const uploads = calls.filter((c) => c.method === "PUT");
+    const files = buildGallerySubmissionFiles(bundle);
+    // Same files, same order, same bytes — the manual fallback's downloads
+    // must match what the automatic path commits, byte for byte.
+    expect(uploads.map((u) => u.url.split("/").at(-1))).toEqual(
+      files.map((f) => f.name),
+    );
+    for (const [i, upload] of uploads.entries()) {
+      const uploadedBinary = atob((upload.body as { content: string }).content);
+      const fileBinary = Array.from(files[i].bytes, (b) =>
+        String.fromCharCode(b),
+      ).join("");
+      expect(uploadedBinary).toBe(fileBinary);
+    }
   });
 
   test("a 401 from GitHub becomes GithubAuthError", async () => {

@@ -121,7 +121,7 @@ export async function submitRecordingToAppGallery(params: {
   onProgress("branching");
   // One branch per share, so resubmissions of the same app become their own
   // pull requests instead of piling commits onto an open one.
-  const appSlug = slugify(bundle.app.name) || "app-session";
+  const appSlug = gallerySubmissionSlug(bundle);
   const branch = `submission/${appSlug}-${Date.now().toString(36)}`;
   await gh("POST", `${forkPath}/git/refs`, {
     ref: `refs/heads/${branch}`,
@@ -129,17 +129,13 @@ export async function submitRecordingToAppGallery(params: {
   });
 
   onProgress("uploading");
+  // The same builder backs the manual-submission download, so what a
+  // participant hand-uploads is byte-identical to what this commits.
   const dir = `submissions/${viewer.login}/${appSlug}`;
-  await gh("PUT", `${forkPath}/contents/${dir}/recording.json`, {
-    message: `Add app session recording: ${bundle.recording.title}`,
-    content: toBase64(new TextEncoder().encode(JSON.stringify(bundle))),
-    branch,
-  });
-  const thumbnail = extractThumbnail(bundle);
-  if (thumbnail) {
-    await gh("PUT", `${forkPath}/contents/${dir}/thumbnail.${thumbnail.ext}`, {
-      message: `Add thumbnail for: ${bundle.recording.title}`,
-      content: thumbnail.base64,
+  for (const file of buildGallerySubmissionFiles(bundle)) {
+    await gh("PUT", `${forkPath}/contents/${dir}/${file.name}`, {
+      message: `Add ${file.name} for: ${bundle.recording.title}`,
+      content: toBase64(file.bytes),
       branch,
     });
   }
@@ -157,6 +153,65 @@ export async function submitRecordingToAppGallery(params: {
     },
   );
   return { prUrl: pr.html_url };
+}
+
+/**
+ * The signed-in participant's GitHub login, or null when it can't be had
+ * (no token, revoked token, network). Best-effort — the manual-submission
+ * screen uses it to spell the exact target folder instead of a placeholder.
+ */
+export async function fetchGithubLogin(
+  token: string,
+  signal: AbortSignal,
+): Promise<string | null> {
+  try {
+    const viewer = await makeGithubClient(token, signal)<{ login: string }>(
+      "GET",
+      "/user",
+    );
+    return viewer.login;
+  } catch {
+    return null;
+  }
+}
+
+/** One file of a gallery submission, as the exact bytes the PR commits. */
+export interface GallerySubmissionFile {
+  name: string;
+  bytes: Uint8Array;
+  mimeType: string;
+}
+
+/** The folder-name slug a submission files under (`submissions/<login>/<slug>`). */
+export function gallerySubmissionSlug(bundle: AppRecordingBundle): string {
+  return slugify(bundle.app.name) || "app-session";
+}
+
+/**
+ * The complete submission package: the recording itself, plus a thumbnail
+ * when the recording carries canvas frames. The single source of the bytes
+ * for BOTH paths — the automatic PR commits these, and the manual-submission
+ * fallback downloads these — so the two are identical by construction.
+ */
+export function buildGallerySubmissionFiles(
+  bundle: AppRecordingBundle,
+): GallerySubmissionFile[] {
+  const files: GallerySubmissionFile[] = [
+    {
+      name: "recording.json",
+      bytes: new TextEncoder().encode(JSON.stringify(bundle)),
+      mimeType: "application/json",
+    },
+  ];
+  const thumbnail = extractThumbnail(bundle);
+  if (thumbnail) {
+    files.push({
+      name: `thumbnail.${thumbnail.ext}`,
+      bytes: base64ToBytes(thumbnail.base64),
+      mimeType: `image/${thumbnail.ext === "jpg" ? "jpeg" : thumbnail.ext}`,
+    });
+  }
+  return files;
 }
 
 // =============================================================================
@@ -278,6 +333,15 @@ function apiErrorMessage(error: unknown): string | null {
     if (inner?.message) return inner.message;
   }
   return null;
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 function toBase64(bytes: Uint8Array): string {

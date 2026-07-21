@@ -427,6 +427,19 @@ jobs:
 
           echo "✅ All validation checks passed"
 
+  # mac-mini routing: the heavy merge-queue jobs below (both Rust checks, the
+  # backend unit test shards, and the frontend integration tests) run on the
+  # self-hosted mac-mini-1 runners instead of Blacksmith when BOTH hold:
+  #   - the event is merge_group (only maintainer-queued code ever reaches the
+  #     self-hosted machine; label-triggered PR runs stay on Blacksmith), and
+  #   - the MAC_MINI_CI repository variable is "on" — the kill switch. Flip it
+  #     off (gh variable set MAC_MINI_CI --body off) to instantly route
+  #     everything back to Blacksmith with no workflow change; unset/missing
+  #     also means Blacksmith.
+  # The mac-mini-watchdog job below auto-flips the switch off and cancels the
+  # run if the machine stops taking jobs, so a dead mini ejects the PR from
+  # the merge queue in minutes instead of blocking it for hours.
+  #
   # Rust toolchain checks, split out of the lint job so cargo work runs in
   # parallel with the pnpm work instead of serializing ~1.5-2 min ahead of it.
   # Needs no pnpm/setup-env: the Dagger sync script is pure shell and cargo
@@ -435,7 +448,7 @@ jobs:
     name: Platform Rust Checks
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -455,6 +468,7 @@ jobs:
           rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 
       - name: Install Rust musl toolchain dependencies
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Verify Dagger version sync
@@ -463,7 +477,9 @@ jobs:
       - name: Rust musl checks
         working-directory: ./platform/archestra-rs
         env:
-          CC_x86_64_unknown_linux_musl: musl-gcc
+          # The mac-mini runners have the messense x86_64-linux-musl cross
+          # toolchain preinstalled (no musl-gcc there).
+          CC_x86_64_unknown_linux_musl: ${{ runner.os == 'Linux' && 'musl-gcc' || 'x86_64-unknown-linux-musl-gcc' }}
         run: |
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
@@ -478,7 +494,8 @@ jobs:
     name: AI Labs Rust Checks
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # mac-mini routing (see comment above platform-rust-checks)
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -518,7 +535,8 @@ jobs:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # mac-mini routing (see comment above platform-rust-checks)
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-16vcpu-ubuntu-2404' }}
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup. 15 minutes means something is hung.
     timeout-minutes: 15
@@ -571,7 +589,13 @@ jobs:
         working-directory: ./platform/backend
         env:
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/4"
+        # On the mac mini several shards share one 10-core machine; uncapped
+        # vitest worker pools oversubscribe it and PGlite setup hooks start
+        # blowing their timeouts. Cap workers there (shell check: zizmor
+        # forbids ${{ }} templating inside run blocks).
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then WORKERS="--maxWorkers=3"; else WORKERS=""; fi
+          pnpm exec vitest run --shard="${SHARD}/4" $WORKERS
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.
@@ -601,7 +625,8 @@ jobs:
     name: Frontend Integration Tests (MSW)
     # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # mac-mini routing (see comment above platform-rust-checks)
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
     permissions:
       contents: read
     defaults:
@@ -632,6 +657,9 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
+        # useblacksmith/cache only works on Blacksmith runners; the mac mini
+        # keeps its browser cache on the persistent disk instead.
+        if: runner.os == 'Linux'
         id: playwright-cache
         uses: ./.github/actions/github-cache
         with:
@@ -639,12 +667,18 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
 
       - name: Install Chromium for Playwright
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @frontend exec playwright install --with-deps chromium
 
       - name: Install Chromium system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        if: runner.os == 'Linux' && steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter @frontend exec playwright install-deps chromium
+
+      - name: Install Chromium (macOS)
+        # No system deps to install on macOS; a version already present in
+        # ~/Library/Caches/ms-playwright makes this a fast no-op.
+        if: runner.os == 'macOS'
+        run: pnpm --filter @frontend exec playwright install chromium
 
       - name: Run integration tests
         run: pnpm test:integration
@@ -664,6 +698,70 @@ jobs:
           name: playwright-integration-traces
           path: platform/frontend/test-results/
           retention-days: "7"
+
+  # Fallback for the mac-mini routing above: GitHub has no queue timeout for
+  # self-hosted runners, so if mac-mini-1 dies, its jobs would sit queued (and
+  # block the merge queue) for up to 24h. This watchdog polls this run's own
+  # jobs; if no mac-mini job has made ANY progress within the grace window it
+  # flips the MAC_MINI_CI kill switch off (routing every subsequent run back
+  # to Blacksmith) and cancels this run so the merge queue ejects the PR
+  # immediately — re-queueing then runs fully on Blacksmith. Re-enable with:
+  # gh variable set MAC_MINI_CI --body on
+  mac-mini-watchdog:
+    name: Mac Mini Watchdog
+    if: github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 12
+    permissions:
+      actions: write # Required to cancel this workflow run on failover.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # The kill switch is a repo Actions variable; GITHUB_TOKEN cannot write
+      # variables, so borrow the app already used for the RELEASE_FREEZE
+      # variable (it has actions_variables:write).
+      - name: Generate token for the kill switch
+        id: generate-token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Fail over to Blacksmith if mac-mini-1 shows no progress
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VAR_TOKEN: ${{ steps.generate-token.outputs.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Grace window: cold caches make the first mac-mini job slow to
+          # *finish*, but a healthy machine picks jobs up within seconds, and
+          # "picked up" (in_progress) already counts as progress.
+          deadline=$((SECONDS + 360))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            jobs=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
+              --jq '[.jobs[] | select((.labels // []) | index("mac-mini-1"))]')
+            total=$(echo "$jobs" | jq 'length')
+            progressed=$(echo "$jobs" | jq '[.[] | select(.status != "queued")] | length')
+            if [ "$total" -eq 0 ] || [ "$progressed" -gt 0 ]; then
+              echo "mac-mini-1 is alive ($progressed/$total routed jobs progressed)."
+              exit 0
+            fi
+            echo "Waiting: $total mac-mini jobs queued, none progressed yet..."
+            sleep 20
+          done
+          echo "::error::mac-mini-1 accepted no jobs within the grace window. Disabling MAC_MINI_CI and cancelling this run — re-queue to run on Blacksmith. Re-enable with: gh variable set MAC_MINI_CI --body on"
+          GH_TOKEN="$VAR_TOKEN" gh variable set MAC_MINI_CI --body off --repo "$REPO" \
+            || echo "::warning::Could not flip MAC_MINI_CI — flip it manually before re-queueing."
+          gh run cancel "$RUN_ID" --repo "$REPO"
+          # Give the cancellation time to land; exit 1 is only reached if it
+          # didn't, so the run still turns red instead of hanging.
+          sleep 120
+          exit 1
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests

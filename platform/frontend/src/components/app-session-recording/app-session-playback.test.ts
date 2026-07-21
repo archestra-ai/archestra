@@ -820,6 +820,38 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain(`<script data-archestra-app-sdk>sdk()`);
   });
 
+  it("stops module scripts by removing their type, not just appending one", () => {
+    // The HTML parser drops duplicate attributes and keeps the FIRST, so a
+    // replay type merely appended after `type="module"` leaves the module
+    // type in force — the script executes and the app re-simulates itself
+    // (fresh Math.random and all) on top of its own recording.
+    const html = neutralizeAppScripts(
+      `<script type="module">import * as THREE from "three"; boot()</script>`,
+    );
+    expect(html).toContain(
+      `<script type="application/archestra-replayed-script">import * as THREE`,
+    );
+    expect(html).not.toContain(`type="module"`);
+  });
+
+  it("removes the app's type however it is quoted, keeping other attributes", () => {
+    const html = neutralizeAppScripts(
+      `<script defer type='module' src="/app.js"></script>` +
+        `<script TYPE=module>a()</script>` +
+        `<script type>b()</script>`,
+    );
+    expect(html).toContain(
+      `<script defer src="/app.js" type="application/archestra-replayed-script">`,
+    );
+    expect(html).toContain(
+      `<script type="application/archestra-replayed-script">a()`,
+    );
+    expect(html).toContain(
+      `<script type="application/archestra-replayed-script">b()`,
+    );
+    expect(html).not.toMatch(/type=['"]?module/i);
+  });
+
   it("hides the replayed app's scrollbars", () => {
     // The stage gives the app its recorded width and whatever height the
     // window leaves, so a shorter window overflows the recorded content and

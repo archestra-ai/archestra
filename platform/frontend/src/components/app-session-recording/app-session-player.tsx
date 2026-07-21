@@ -4740,11 +4740,20 @@ const MAX_EXPORT_SECONDS = Math.round(APP_RECORDING_MAX_EXPORT_MS / 1000);
 export function neutralizeAppScripts(html: string): string {
   return (
     REPLAY_CHROME_CSS +
-    html.replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) =>
-      /data-archestra-app-(sdk|bootstrap)/i.test(attrs)
-        ? tag
-        : `<script${attrs} type="application/archestra-replayed-script">`,
-    )
+    html.replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) => {
+      if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
+      // Any `type` the app set must be REMOVED, not merely followed by the
+      // replay type: the HTML parser drops duplicate attributes and keeps the
+      // FIRST, so `<script type="module" type="application/…">` still parses
+      // as a module — and executes. That is how a module-based app re-ran
+      // itself inside its own replay, rolling fresh Math.random state and
+      // repainting its canvas over the recorded frames.
+      const rest = attrs.replace(
+        /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
+        "",
+      );
+      return `<script${rest} type="application/archestra-replayed-script">`;
+    })
   );
 }
 

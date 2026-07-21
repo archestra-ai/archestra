@@ -125,6 +125,86 @@ describe("computeDiffLines", () => {
     expect(added[0].text).toContain('"Y"');
   });
 
+  it("array diff: insertion at front marks only the inserted element as added", () => {
+    const lines = computeDiffLines(
+      { members: ["b", "c"] },
+      { members: ["a", "b", "c"] },
+    );
+    const added = lines.filter((l) => l.kind === "added");
+    const removed = lines.filter((l) => l.kind === "removed");
+    expect(added).toHaveLength(1);
+    expect(added[0].text).toContain('"a"');
+    expect(removed).toHaveLength(0);
+    const bLine = lines.find((l) => l.text.includes('"b"'));
+    const cLine = lines.find((l) => l.text.includes('"c"'));
+    expect(bLine?.kind).toBe("context");
+    expect(cLine?.kind).toBe("context");
+  });
+
+  it("array diff: removal from the middle marks only the removed element", () => {
+    const lines = computeDiffLines(
+      { members: ["a", "b", "c"] },
+      { members: ["a", "c"] },
+    );
+    const removed = lines.filter((l) => l.kind === "removed");
+    const added = lines.filter((l) => l.kind === "added");
+    expect(removed).toHaveLength(1);
+    expect(removed[0].text).toContain('"b"');
+    expect(added).toHaveLength(0);
+  });
+
+  it("single-line string change keeps the JSON.stringify rendering", () => {
+    const lines = computeDiffLines({ name: "Old name" }, { name: "New name" });
+    const removed = lines.find((l) => l.kind === "removed");
+    const added = lines.find((l) => l.kind === "added");
+    expect(removed?.text).toBe('"name": "Old name"');
+    expect(added?.text).toBe('"name": "New name"');
+  });
+
+  it("multi-line string change renders a per-line diff with collapsed context", () => {
+    const context = ["L1", "L2", "L3", "L4", "L5", "L6"];
+    const tail = ["S1", "S2", "S3", "S4"];
+    const beforeText = [...context, "old middle", ...tail].join("\n");
+    const afterText = [...context, "new middle", ...tail].join("\n");
+    const lines = computeDiffLines(
+      { content: beforeText },
+      { content: afterText },
+    );
+
+    const header = lines.find((l) => l.text.includes("multiline text"));
+    expect(header?.kind).toBe("context");
+    expect(header?.text).toBe('"content": (multiline text, 11 lines)');
+
+    // Only the differing middle line is marked, raw and unescaped.
+    const removed = lines.filter((l) => l.kind === "removed");
+    const added = lines.filter((l) => l.kind === "added");
+    expect(removed).toHaveLength(1);
+    expect(removed[0].text).toBe("old middle");
+    expect(added).toHaveLength(1);
+    expect(added[0].text).toBe("new middle");
+
+    // The 6-line prefix run collapses to first/last 2 with a marker; the
+    // 4-line suffix run stays fully expanded.
+    expect(lines.some((l) => l.text === "⋯ 2 unchanged lines")).toBe(true);
+    expect(lines.some((l) => l.text === "L3")).toBe(false);
+    for (const t of ["L1", "L2", "L5", "L6", ...tail]) {
+      const line = lines.find((l) => l.text === t);
+      expect(line?.kind).toBe("context");
+    }
+    // No giant escaped one-liner remains.
+    expect(lines.some((l) => l.text.includes("\\n"))).toBe(false);
+  });
+
+  it("multi-line string with differing line counts reports both counts", () => {
+    const lines = computeDiffLines({ content: "a\nb" }, { content: "a\nb\nc" });
+    const header = lines.find((l) => l.text.includes("multiline text"));
+    expect(header?.text).toBe('"content": (multiline text, 2 → 3 lines)');
+    const added = lines.filter((l) => l.kind === "added");
+    expect(added).toHaveLength(1);
+    expect(added[0].text).toBe("c");
+    expect(lines.filter((l) => l.kind === "removed")).toHaveLength(0);
+  });
+
   it("recurses into nested objects and only emits changed leaf keys", () => {
     const lines = computeDiffLines(
       { id: "abc", config: { region: "us-east-1", retries: 3 } },

@@ -4,6 +4,7 @@ import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
@@ -27,6 +28,7 @@ import {
   useAuditLog,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMembersPaginated } from "@/lib/member.query";
@@ -407,6 +409,9 @@ export function AuditLogTable() {
     });
   }, [dateTimePicker, updateUrlParams]);
 
+  // Null under full white-labeling — the hint then renders without the link.
+  const apiReferenceUrl = getFrontendDocsUrl("platform-api-reference");
+
   if (isAuditLogsLoadError) {
     return (
       <div className="space-y-4">
@@ -420,6 +425,30 @@ export function AuditLogTable() {
 
   return (
     <div className="space-y-4">
+      {/* SIEM pointer: programmatic export goes through the audit-logs API —
+          there is no separate export/streaming surface. The link hides itself
+          under full white-labeling; the endpoint hint stays. */}
+      <p className="text-sm text-muted-foreground">
+        Need these events in a SIEM or archive? Poll{" "}
+        <code className="font-mono">GET /api/audit-logs</code> with a service
+        account API key and a date-range filter — that is the recommended
+        integration point.
+        {apiReferenceUrl && (
+          <>
+            {" "}
+            See the{" "}
+            <ExternalDocsLink
+              href={apiReferenceUrl}
+              className="hover:underline"
+              showIcon={false}
+            >
+              API reference
+            </ExternalDocsLink>
+            .
+          </>
+        )}
+      </p>
+
       <TableFilters>
         <SearchInput
           objectNamePlural="audit events"

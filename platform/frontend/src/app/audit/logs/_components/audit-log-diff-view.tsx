@@ -20,7 +20,9 @@ type DiffLineWithKey = DiffLine & { rowKey: string };
 function assignStableRowKeys(lines: DiffLine[]): DiffLineWithKey[] {
   const counts = new Map<string, number>();
   return lines.map((line) => {
-    const base = `${line.kind}|${line.indent}|${line.text}`;
+    // Truncate so multi-KB values don't become multi-KB React keys; the
+    // counter suffix below still disambiguates collisions.
+    const base = `${line.kind}|${line.indent}|${line.text.slice(0, 200)}`;
     const n = counts.get(base) ?? 0;
     counts.set(base, n + 1);
     const rowKey = n === 0 ? base : `${base}#${n}`;
@@ -198,6 +200,19 @@ function diffObjectAsBlock(
       return;
     }
 
+    // Multi-line strings (e.g. a skill's markdown `content`) diff line by
+    // line instead of as two giant JSON-escaped one-liners.
+    if (
+      typeof beforeValue === "string" &&
+      typeof afterValue === "string" &&
+      (beforeValue.includes("\n") || afterValue.includes("\n"))
+    ) {
+      out.push(
+        ...diffMultilineString(key, beforeValue, afterValue, indent + 1),
+      );
+      return;
+    }
+
     // Mixed types or primitive vs primitive → emit removed then added.
     out.push(...renderField(key, beforeValue, "removed", indent + 1, !isLast));
     out.push(...renderField(key, afterValue, "added", indent + 1, !isLast));
@@ -208,9 +223,10 @@ function diffObjectAsBlock(
 }
 
 /**
- * Position-by-position array diff. Equal elements stay as context; mismatches
- * render the before element as removed immediately followed by the after
- * element as added — like `git diff` on a sorted list.
+ * LCS-aligned array diff. Equal elements stay as context; elements only in
+ * `before` render as removed, only in `after` as added — so inserting one
+ * element at the front of a sorted list marks just that element, not every
+ * subsequent position.
  */
 function diffArrayAsBlock(
   key: string,
@@ -223,31 +239,153 @@ function diffArrayAsBlock(
     { kind: "context", indent, text: `${quoteKey(key)}: [` },
   ];
 
-  const max = Math.max(before.length, after.length);
-  for (let i = 0; i < max; i++) {
-    const isLast = i === max - 1;
-    const inBefore = i < before.length;
-    const inAfter = i < after.length;
-    if (inBefore && inAfter) {
-      const a = before[i];
-      const b = after[i];
-      if (deepEqual(a, b)) {
-        out.push(...renderValueAsItem(a, "context", indent + 1, !isLast));
-      } else {
-        out.push(
-          ...renderValueAsItem(a, "removed", indent + 1, !isLast),
-          ...renderValueAsItem(b, "added", indent + 1, !isLast),
-        );
-      }
-    } else if (inBefore) {
-      out.push(...renderValueAsItem(before[i], "removed", indent + 1, !isLast));
-    } else if (inAfter) {
-      out.push(...renderValueAsItem(after[i], "added", indent + 1, !isLast));
-    }
-  }
+  const ops = alignArrayElements(before, after);
+  ops.forEach((op, i) => {
+    const isLast = i === ops.length - 1;
+    out.push(...renderValueAsItem(op.value, op.kind, indent + 1, !isLast));
+  });
 
   out.push({ kind: "context", indent, text: terminated ? "]," : "]" });
   return out;
+}
+
+type ArrayDiffOp = { kind: DiffKind; value: unknown };
+
+/**
+ * Aligns two arrays via a longest-common-subsequence over their serialized
+ * elements. Audit arrays are short (tens of elements), so the O(n*m) table
+ * is fine.
+ */
+function alignArrayElements(
+  before: unknown[],
+  after: unknown[],
+): ArrayDiffOp[] {
+  const beforeKeys = before.map(serializeForAlignment);
+  const afterKeys = after.map(serializeForAlignment);
+  const n = before.length;
+  const m = after.length;
+  // lcs[i][j] = LCS length of before[i..] vs after[j..].
+  const lcs: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array<number>(m + 1).fill(0),
+  );
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i][j] =
+        beforeKeys[i] === afterKeys[j]
+          ? lcs[i + 1][j + 1] + 1
+          : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+
+  const ops: ArrayDiffOp[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (beforeKeys[i] === afterKeys[j]) {
+      ops.push({ kind: "context", value: before[i] });
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      // Prefer removals first so a replacement reads `-` then `+`.
+      ops.push({ kind: "removed", value: before[i] });
+      i++;
+    } else {
+      ops.push({ kind: "added", value: after[j] });
+      j++;
+    }
+  }
+  while (i < n) {
+    ops.push({ kind: "removed", value: before[i] });
+    i++;
+  }
+  while (j < m) {
+    ops.push({ kind: "added", value: after[j] });
+    j++;
+  }
+  return ops;
+}
+
+function serializeForAlignment(value: unknown): string {
+  // JSON.stringify is typed as `string` but yields undefined for undefined.
+  const serialized: string | undefined = JSON.stringify(value);
+  return serialized ?? "undefined";
+}
+
+/**
+ * Line-by-line diff for a changed multi-line string value. Emits a context
+ * header (`"key": (multiline text, N lines)`) followed by raw, unescaped
+ * per-line rows aligned via common prefix/suffix trimming: unchanged leading
+ * and trailing lines render as context (long runs collapsed), the differing
+ * middle as removed/added rows. The block is annotation, not JSON, so no
+ * trailing comma is emitted.
+ */
+function diffMultilineString(
+  key: string,
+  before: string,
+  after: string,
+  indent: number,
+): DiffLine[] {
+  const beforeLines = before.split("\n");
+  const afterLines = after.split("\n");
+  const counts =
+    beforeLines.length === afterLines.length
+      ? `${beforeLines.length} lines`
+      : `${beforeLines.length} → ${afterLines.length} lines`;
+  const out: DiffLine[] = [
+    {
+      kind: "context",
+      indent,
+      text: `${quoteKey(key)}: (multiline text, ${counts})`,
+    },
+  ];
+
+  // Longest common prefix and suffix; the differing middle becomes -/+ rows.
+  const maxCommon = Math.min(beforeLines.length, afterLines.length);
+  let prefix = 0;
+  while (prefix < maxCommon && beforeLines[prefix] === afterLines[prefix]) {
+    prefix++;
+  }
+  let suffix = 0;
+  while (
+    suffix < maxCommon - prefix &&
+    beforeLines[beforeLines.length - 1 - suffix] ===
+      afterLines[afterLines.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  const lineIndent = indent + 1;
+  out.push(...renderContextRun(beforeLines.slice(0, prefix), lineIndent));
+  for (const line of beforeLines.slice(prefix, beforeLines.length - suffix)) {
+    out.push({ kind: "removed", indent: lineIndent, text: line });
+  }
+  for (const line of afterLines.slice(prefix, afterLines.length - suffix)) {
+    out.push({ kind: "added", indent: lineIndent, text: line });
+  }
+  out.push(
+    ...renderContextRun(
+      beforeLines.slice(beforeLines.length - suffix),
+      lineIndent,
+    ),
+  );
+  return out;
+}
+
+/** Collapses runs of more than 4 context lines to first/last 2 with a marker. */
+function renderContextRun(lines: string[], indent: number): DiffLine[] {
+  const asContext = (text: string): DiffLine => ({
+    kind: "context",
+    indent,
+    text,
+  });
+  if (lines.length <= 4) {
+    return lines.map(asContext);
+  }
+  return [
+    ...lines.slice(0, 2).map(asContext),
+    { kind: "context", indent, text: `⋯ ${lines.length - 4} unchanged lines` },
+    ...lines.slice(-2).map(asContext),
+  ];
 }
 
 /**

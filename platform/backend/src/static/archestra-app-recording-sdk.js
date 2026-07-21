@@ -159,9 +159,70 @@
    * emitted only when the bytes change, so a still or paused app costs nothing.
    */
   const CANVAS_SAMPLE_MS = 100;
+  /**
+   * Captured frames are capped at this many pixels. Encode cost is linear in
+   * pixel count, and a full-viewport canvas on a 2x display is ~6MP — encoding
+   * that every sample is a main-thread stall that dragged a recorded WebGL
+   * app below usability. The player scales the replayed app to fit anyway, so
+   * pixels past roughly 720p never reach a viewer's eye.
+   */
+  const CANVAS_CAPTURE_MAX_PIXELS = 1280 * 720;
   const canvasLastFrame = new WeakMap();
+  /** Canvases with a capture currently encoding — see the backpressure note. */
+  const canvasCaptureBusy = new WeakSet();
   let canvasTimer = null;
-  const sampleCanvases = () => {
+  let scratchCanvas = null;
+
+  /**
+   * Read one canvas's current pixels into a WebP data URL, off the app's
+   * critical path: an oversized bitmap is first downscaled into a reused
+   * scratch canvas, and the encode goes through toBlob — which snapshots the
+   * bitmap at call time and encodes off the main thread — rather than
+   * toDataURL, whose whole encode runs synchronously on it. `sync` forces the
+   * synchronous path for the one capture that cannot wait (the final frame at
+   * stop, taken just before the recording gate closes). Calls `done` with
+   * null when the canvas can't be captured (tainted, zero-sized, encoder
+   * failure) — a skipped frame must never break the app.
+   */
+  const captureCanvas = (canvas, sync, done) => {
+    try {
+      const pixels = canvas.width * canvas.height;
+      if (!pixels) return done(null);
+      let source = canvas;
+      if (pixels > CANVAS_CAPTURE_MAX_PIXELS) {
+        const scale = Math.sqrt(CANVAS_CAPTURE_MAX_PIXELS / pixels);
+        if (!scratchCanvas) scratchCanvas = document.createElement("canvas");
+        // Assigning the size also clears the scratch between captures.
+        scratchCanvas.width = Math.max(1, Math.round(canvas.width * scale));
+        scratchCanvas.height = Math.max(1, Math.round(canvas.height * scale));
+        const ctx = scratchCanvas.getContext("2d");
+        if (!ctx) return done(null);
+        ctx.drawImage(canvas, 0, 0, scratchCanvas.width, scratchCanvas.height);
+        source = scratchCanvas;
+      }
+      if (!sync && typeof source.toBlob === "function") {
+        source.toBlob(
+          (blob) => {
+            if (!blob) return done(null);
+            const reader = new FileReader();
+            reader.onload = () => done(String(reader.result || "") || null);
+            reader.onerror = () => done(null);
+            reader.readAsDataURL(blob);
+          },
+          "image/webp",
+          0.85,
+        );
+        return;
+      }
+      // WebP keeps a flat-colour game screen to a couple of kilobytes.
+      done(source.toDataURL("image/webp", 0.85));
+    } catch {
+      // A canvas holding cross-origin pixels is tainted and throws — skip it.
+      done(null);
+    }
+  };
+
+  const sampleCanvases = (sync) => {
     let canvases;
     try {
       canvases = document.querySelectorAll("canvas");
@@ -169,18 +230,21 @@
       return;
     }
     for (const canvas of canvases) {
-      let data;
-      try {
-        // WebP keeps a flat-colour game screen to a couple of kilobytes. A
-        // canvas holding cross-origin pixels is tainted and throws — skip it
-        // rather than let a recording break the app.
-        data = canvas.toDataURL("image/webp", 0.85);
-      } catch {
-        continue;
-      }
-      if (canvasLastFrame.get(canvas) === data) continue;
-      canvasLastFrame.set(canvas, data);
-      push({ kind: "canvas", sel: selectorFor(canvas).slice(0, 1000), data });
+      // One capture in flight per canvas: a tick that lands while the previous
+      // frame is still encoding is skipped, not queued, so on a machine where
+      // encoding outpaces the interval the capture rate backs off by itself
+      // instead of stacking encodes. The stop-time sync capture bypasses the
+      // gate — any in-flight encode it overlaps can only complete after the
+      // recording gate has closed, where its late push is discarded.
+      if (!sync && canvasCaptureBusy.has(canvas)) continue;
+      if (!sync) canvasCaptureBusy.add(canvas);
+      captureCanvas(canvas, sync, (data) => {
+        canvasCaptureBusy.delete(canvas);
+        if (!data) return;
+        if (canvasLastFrame.get(canvas) === data) return;
+        canvasLastFrame.set(canvas, data);
+        push({ kind: "canvas", sel: selectorFor(canvas).slice(0, 1000), data });
+      });
     }
   };
 
@@ -436,7 +500,9 @@
     if (!recording) return;
     // One last look before the gate closes, so the recording ends on the frame
     // the app actually finished on rather than a sample interval short of it.
-    sampleCanvases();
+    // Synchronous: an async capture would land after the gate closed and be
+    // discarded.
+    sampleCanvases(true);
     recording = false;
     for (const fn of teardownFns) {
       try {

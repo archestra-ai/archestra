@@ -625,6 +625,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // (X-Archestra-Virtual-Key attribution). llmVirtualKey:create + llmProxy read
   // access are enforced in the handler.
   [RouteId.CreateConnectionPassthroughKey]: {},
+  /**
+   * Existence check for a connected remote, used by the Claude Code startup
+   * guard on machines with no session. Returns only ok/missing.
+   * Note: Auth is skipped in middleware for this route.
+   */
+  [RouteId.GetConnectionHealth]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)

@@ -13,6 +13,7 @@ import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
   ARCHESTRA_CATALOG_PROXY_PREFIX,
+  CONNECTION_HEALTH_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
@@ -171,6 +172,11 @@ export class Authnz {
       (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public config for login and invitation UI
       (method === "GET" && url === PUBLIC_CONFIG_PATH) ||
+      // Public existence check for connected remotes (Claude Code startup
+      // guard) — the querystring rides along on request.url
+      (method === "GET" &&
+        (url === CONNECTION_HEALTH_PATH ||
+          url.startsWith(`${CONNECTION_HEALTH_PATH}?`))) ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
       (method === "GET" && url === ORGANIZATION_APPEARANCE_SETTINGS_PATH) ||
       // Incoming email webhooks - Microsoft Graph calls these directly

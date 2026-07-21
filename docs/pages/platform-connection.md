@@ -80,9 +80,9 @@ The `claude` CLI must be on your `PATH`.
 
 #### Startup Guard
 
-The guard runs each time you start `claude`. It checks that the configured Archestra remotes — the LLM proxy, the MCP gateway, and the skills marketplace — answer. When everything answers, it hands off to `claude` in well under a second.
+The guard runs each time you start `claude`. It checks the configured Archestra remotes — the LLM proxy, the MCP gateway, and the skills marketplace — two ways: that they answer, and that they still exist on the platform. Each check shows a brief spinner; when everything passes, `claude` starts after about half a second per remote.
 
-When a remote is unreachable, the guard retries it for 15 seconds and shows a status line. Press `s` to skip the remote for this session, or `d` to disconnect it from Claude Code — the same reverse-of-connect steps as the Disconnect panel. Skipping and disconnecting both end with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
+A remote that was deleted on the platform gets an immediate prompt — press `d` to disconnect it from Claude Code (recommended), the same reverse-of-connect steps as the Disconnect panel. An unreachable remote is retried for 15 seconds with a status line; press `s` to skip it for this session or `d` to disconnect. Every path ends with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
 
 On macOS and Linux the guard lives at `~/.archestra/claude-startup-guard.sh`, hooked in by a marked `claude()` block in your shell profile. On Windows it is `~/.archestra/claude-startup-guard.ps1`, hooked in by the same marked block in each PowerShell edition's `profile.ps1`. Set `ARCHESTRA_CLAUDE_GUARD=0` to disable it without uninstalling. The Disconnect panel has per-OS one-liners that remove both pieces.
 

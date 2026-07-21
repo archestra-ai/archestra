@@ -23,10 +23,14 @@ const CTX: ClaudeCodeStartupGuardContext = {
     provider: "anthropic",
     providerLabel: "Anthropic",
     url: "https://archestra.example.com/v1/anthropic/profile-123",
+    healthUrl:
+      "https://archestra.example.com/api/connection-health?kind=llm-proxy&ref=profile-123",
   },
   mcp: {
     serverName: "prod_gateway",
     url: "https://archestra.example.com/v1/mcp/prod-gateway",
+    healthUrl:
+      "https://archestra.example.com/api/connection-health?kind=mcp-gateway&ref=prod-gateway",
   },
   skills: {
     marketplaceName: "acme-skills",
@@ -51,14 +55,29 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     }
   });
 
-  test("treats any HTTP response as reachable, on both PowerShell editions", () => {
+  test("gateway and proxy get existence checks; skills stays reachability-only", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
-    expect(script).toContain("Invoke-WebRequest");
-    expect(script).toContain("-TimeoutSec 3");
-    // reachable when the server answered, even with an error status: both
-    // WebException (5.1) and HttpResponseException (7+) carry .Response then.
+    expect(script).toContain(`'${CTX.proxy?.healthUrl}'`);
+    expect(script).toContain(`'${CTX.mcp?.healthUrl}'`);
+    expect(script).toContain(`'"status":"missing"'`);
+    // skills entry carries an empty HealthUrl
+    expect(script).toContain("HealthUrl = ''");
+    // reachable-but-erroring servers still count as reachable on both editions
     expect(script).toContain(
       "$_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response",
+    );
+    expect(script).toContain("-TimeoutSec 3");
+  });
+
+  test("a missing remote prompts immediately instead of burning the retry budget", () => {
+    const script = renderClaudeCodeStartupGuardPowerShell(CTX);
+    expect(script).toContain("Show-ArchMissingPrompt");
+    expect(script).toContain("was removed on ");
+    expect(script).toContain(
+      "[d] disconnect it from Claude Code (recommended)   [s] keep it (default)",
+    );
+    expect(script).toMatch(
+      /if \(\$state -eq 'missing'\) \{ Show-ArchMissingPrompt \$r\.Label \$r\.Kind; return \}\n {2}\$start =/,
     );
   });
 
@@ -74,12 +93,37 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("Get-Random -Minimum 0 -Maximum 2");
   });
 
-  test("never blocks: opt-out env var, non-interactive stderr warnings, default-skip prompt, exit 0", () => {
+  test("paces every check with an animated spinner and a minimum display time", () => {
+    const script = renderClaudeCodeStartupGuardPowerShell(CTX);
+    expect(script).toContain(
+      "$Frames = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')",
+    );
+    expect(script).toContain("$MinCheckFrames = 7");
+    expect(script).toContain("$FrameSleepMs = 80");
+    expect(script).toContain("Show-ArchSpin");
+  });
+
+  test("renders the Archestra mark for the default brand, plain title when white-labeled", () => {
+    const branded = renderClaudeCodeStartupGuardPowerShell(CTX);
+    expect(branded).toContain("▟██▙");
+    expect(branded).toContain("Secure access to your AI tools");
+
+    const whiteLabel = renderClaudeCodeStartupGuardPowerShell({
+      ...CTX,
+      appName: "Acme AI",
+    });
+    expect(whiteLabel).not.toContain("▟██▙");
+    expect(whiteLabel).toContain("Pre-loader");
+  });
+
+  test("never blocks: opt-out env var, non-interactive stderr warnings for down AND removed, exit 0", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
     expect(script).toContain("[Console]::IsInputRedirected");
     expect(script).toContain("[Console]::Error.WriteLine");
     expect(script).toContain("'-p' -or $a -eq '--print'");
+    expect(script).toContain("' is unreachable — claude may fail");
+    expect(script).toContain("' was removed on '");
     expect(script).toContain(
       "[s] continue without it (default)   [d] disconnect it from Claude Code",
     );
@@ -88,7 +132,6 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
 
   test("disconnect actions mirror connect and dodge the wrapper function", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
-    // resolve the real exe: plain `claude` would recurse into the wrapper
     expect(script).toContain(
       "Get-Command -Name claude -CommandType Application",
     );
@@ -112,6 +155,8 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
         provider: "bedrock",
         providerLabel: "AWS Bedrock",
         url: "https://archestra.example.com/v1/bedrock/profile-123",
+        healthUrl:
+          "https://archestra.example.com/api/connection-health?kind=llm-proxy&ref=profile-123",
       },
     });
     for (const key of CLAUDE_CODE_PROXY_ENV_KEYS.bedrock) {
@@ -146,13 +191,10 @@ describe("buildWindowsClaudeCodeStartupGuardInstallSection", () => {
   test("writes the guard as BOM'd UTF-8 and hooks every PowerShell edition's profile idempotently", () => {
     const section = buildWindowsClaudeCodeStartupGuardInstallSection(CTX);
     expect(section).toContain(`'${CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH}'`);
-    // BOM so Windows PowerShell 5.1 reads the UTF-8 glyphs correctly.
     expect(section).toContain("New-Object System.Text.UTF8Encoding $true");
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_START);
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_END);
-    // Both editions keep separate profile directories.
     expect(section).toContain("'WindowsPowerShell', 'PowerShell'");
-    // The wrapper always falls through to the real binary.
     expect(section).toContain("function claude {");
     expect(section).toContain("& $archReal.Source @args");
   });

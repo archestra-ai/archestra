@@ -7,6 +7,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
+import { buildClaudeCodeStartupGuardContext } from "./claude-code-startup-guard";
 import { buildWindowsClaudeCodeStartupGuardInstallSection } from "./claude-code-startup-guard.windows";
 import {
   claudeCodeOAuthNextStep,
@@ -374,19 +375,9 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automaticall
 
   if (ctx.mcp || ctx.proxy || ctx.skills) {
     sections.push(
-      buildWindowsClaudeCodeStartupGuardInstallSection({
-        appName: ctx.appName,
-        mcp: ctx.mcp,
-        proxy: ctx.proxy
-          ? {
-              provider:
-                ctx.proxy.provider === "bedrock" ? "bedrock" : "anthropic",
-              providerLabel: ctx.proxy.providerLabel,
-              url: ctx.proxy.url,
-            }
-          : null,
-        skills: ctx.skills,
-      }),
+      buildWindowsClaudeCodeStartupGuardInstallSection(
+        buildClaudeCodeStartupGuardContext(ctx),
+      ),
     );
   }
 

@@ -47,6 +47,7 @@ import {
   type Organization,
 } from "@/types";
 import {
+  CONNECTION_HEALTH_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   SKILL_MARKETPLACE_PREFIX,
 } from "../route-paths";
@@ -146,7 +147,55 @@ const CreateConnectionPassthroughKeyResponseSchema = z.object({
   name: z.string(),
 });
 
+/**
+ * Which agentType each guard-probed remote kind maps to. The kinds are the
+ * public wire names used in guard health URLs.
+ */
+const CONNECTION_HEALTH_KINDS = {
+  "mcp-gateway": "mcp_gateway",
+  "llm-proxy": "llm_proxy",
+} as const;
+
+const ConnectionHealthQuerySchema = z.object({
+  kind: z.enum(["mcp-gateway", "llm-proxy"]),
+  /** Agent id or slug, exactly as embedded in the client's configured URL. */
+  ref: z.string().min(1).max(256),
+});
+
+const ConnectionHealthResponseSchema = z.object({
+  /**
+   * "ok" when the remote still exists, "missing" when it does not. Always a
+   * 200: the startup guard treats any non-200 (e.g. the 404 an older backend
+   * returns for this then-unknown route) as "can't tell" and falls back to
+   * reachability-only, so version skew can never read as a deleted remote.
+   */
+  status: z.enum(["ok", "missing"]),
+});
+
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    CONNECTION_HEALTH_PATH,
+    {
+      schema: {
+        operationId: RouteId.GetConnectionHealth,
+        description:
+          "Whether a connected remote (MCP gateway or LLM proxy) still exists. " +
+          "Public: used by the Claude Code startup guard before every launch, from machines with no session. " +
+          "Deliberately discloses nothing beyond ok/missing for a caller-supplied id or slug.",
+        tags: ["Connection Setups"],
+        querystring: ConnectionHealthQuerySchema,
+        response: constructResponseSchema(ConnectionHealthResponseSchema),
+      },
+    },
+    async ({ query }) => {
+      const exists = await AgentModel.existsByIdOrSlugAndType({
+        idOrSlug: query.ref,
+        agentType: CONNECTION_HEALTH_KINDS[query.kind],
+      });
+      return { status: exists ? ("ok" as const) : ("missing" as const) };
+    },
+  );
+
   fastify.post(
     "/api/connection-setups",
     {

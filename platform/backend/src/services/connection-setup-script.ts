@@ -13,7 +13,10 @@ import type {
   ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
-import { buildClaudeCodeStartupGuardInstallSection } from "./claude-code-startup-guard";
+import {
+  buildClaudeCodeStartupGuardContext,
+  buildClaudeCodeStartupGuardInstallSection,
+} from "./claude-code-startup-guard";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 
 /**
@@ -527,19 +530,9 @@ fi`);
 
   if (ctx.mcp || ctx.proxy || ctx.skills) {
     sections.push(
-      buildClaudeCodeStartupGuardInstallSection({
-        appName: ctx.appName,
-        mcp: ctx.mcp,
-        proxy: ctx.proxy
-          ? {
-              provider:
-                ctx.proxy.provider === "bedrock" ? "bedrock" : "anthropic",
-              providerLabel: ctx.proxy.providerLabel,
-              url: ctx.proxy.url,
-            }
-          : null,
-        skills: ctx.skills,
-      }),
+      buildClaudeCodeStartupGuardInstallSection(
+        buildClaudeCodeStartupGuardContext(ctx),
+      ),
     );
   }
 

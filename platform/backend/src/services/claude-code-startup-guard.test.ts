@@ -24,10 +24,14 @@ const CTX: ClaudeCodeStartupGuardContext = {
     provider: "anthropic",
     providerLabel: "Anthropic",
     url: "https://archestra.example.com/v1/anthropic/profile-123",
+    healthUrl:
+      "https://archestra.example.com/api/connection-health?kind=llm-proxy&ref=profile-123",
   },
   mcp: {
     serverName: "prod_gateway",
     url: "https://archestra.example.com/v1/mcp/prod-gateway",
+    healthUrl:
+      "https://archestra.example.com/api/connection-health?kind=mcp-gateway&ref=prod-gateway",
   },
   skills: {
     marketplaceName: "acme-skills",
@@ -50,11 +54,14 @@ async function expectValidBash(script: string): Promise<void> {
 /**
  * Runs the rendered guard through real bash with a stubbed `curl` on PATH.
  * stdin/stdout are pipes, so the guard takes its non-interactive path — the
- * one automation hits — which must never prompt and always exit 0.
+ * one automation hits — which must never prompt and always exit 0. The stub
+ * prints `body` for health probes (the reachability probe passes -o, which
+ * the stub honors by staying silent, keeping stdout clean).
  */
 async function runGuardNonInteractive(params: {
   script: string;
   curlExitCode: number;
+  curlBody?: string;
   args?: string[];
   env?: Record<string, string>;
 }): Promise<{ stdout: string; stderr: string }> {
@@ -65,7 +72,11 @@ async function runGuardNonInteractive(params: {
     await writeFile(guardFile, params.script, "utf8");
     await writeFile(
       curlStub,
-      `#!/bin/sh\nexit ${params.curlExitCode}\n`,
+      `#!/bin/sh
+case "$*" in *" -o "*) exit ${params.curlExitCode};; esac
+printf '%s' '${params.curlBody ?? '{"status":"ok"}'}'
+exit ${params.curlExitCode}
+`,
       "utf8",
     );
     await chmod(guardFile, 0o755);
@@ -105,12 +116,31 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     }
   });
 
-  test("keeps the reachability probe a connectivity check (no curl -f) with tight timeouts", () => {
+  test("gateway and proxy get existence checks; skills stays reachability-only", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
+    expect(script).toContain(`'${CTX.proxy?.healthUrl}'`);
+    expect(script).toContain(`'${CTX.mcp?.healthUrl}'`);
+    // health probe reads the body (missing marker), reachability discards it
+    expect(script).toContain(`'"status":"missing"'`);
     expect(script).toContain(
       'curl -sS -o /dev/null --connect-timeout 2 --max-time 3 "$1"',
     );
     expect(script).not.toContain("curl -f");
+    // skills has no health URL: an empty entry in the parallel array
+    expect(script).toMatch(/GUARD_HEALTH_URLS=\([^)]*''\)/);
+  });
+
+  test("a missing remote prompts immediately instead of burning the retry budget", () => {
+    const script = renderClaudeCodeStartupGuardScript(CTX);
+    expect(script).toContain("prompt_missing");
+    expect(script).toContain("was removed on %s");
+    expect(script).toContain(
+      "[d] disconnect it from Claude Code (recommended)   [s] keep it (default)",
+    );
+    // rc 2 short-circuits before the retry ladder starts
+    expect(script).toMatch(
+      /if \[ "\$rc" = "2" ]; then prompt_missing "\$1" "\$3"; return 0; fi\n {2}start=/,
+    );
   });
 
   test("encodes the retry contract: 15s budget, notice at 3s, hang-tight at 10s, live skip/disconnect keys", () => {
@@ -121,12 +151,38 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("few more seconds, hang tight...");
     expect(script).toContain("trying to connect...");
     expect(script).toContain("[s] skip  [d] disconnect");
-    // backoff doubles and is capped, with jitter
     expect(script).toContain("next_delay=$((next_delay * 2))");
     expect(script).toContain("RANDOM % 2");
   });
 
-  test("the failure prompt defaults to continuing and always lets claude launch", () => {
+  test("paces every check with an animated spinner and a minimum display time", () => {
+    const script = renderClaudeCodeStartupGuardScript(CTX);
+    expect(script).toContain(
+      "FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')",
+    );
+    expect(script).toContain("MIN_CHECK_FRAMES=7");
+    expect(script).toContain("FRAME_SLEEP=0.08");
+    // sub-second ticks on bash 4+, 1s fallback for macOS system bash 3.2
+    expect(script).toContain(
+      'if [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi',
+    );
+    expect(script).toContain('read -rs -n 1 -t "$TICK" key');
+  });
+
+  test("renders the Archestra mark for the default brand, plain title when white-labeled", () => {
+    const branded = renderClaudeCodeStartupGuardScript(CTX);
+    expect(branded).toContain("▟██▙");
+    expect(branded).toContain("Secure access to your AI tools");
+
+    const whiteLabel = renderClaudeCodeStartupGuardScript({
+      ...CTX,
+      appName: "Acme AI",
+    });
+    expect(whiteLabel).not.toContain("▟██▙");
+    expect(whiteLabel).toContain("Pre-loader");
+  });
+
+  test("the unreachable prompt defaults to continuing and always lets claude launch", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
     expect(script).toContain(
       "[s] continue without it (default)   [d] disconnect it from Claude Code",
@@ -136,6 +192,11 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("disconnect actions mirror the connect steps for each remote", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
+    // the variables the disconnect actions dereference MUST be assigned —
+    // under set -u a missing assignment kills the guard exactly when the
+    // user presses d (caught live; pinned here)
+    expect(script).toContain("MCP_SERVER_NAME='prod_gateway'");
+    expect(script).toContain("SKILLS_MARKETPLACE_NAME='acme-skills'");
     expect(script).toContain(
       'command claude mcp remove --scope user "$MCP_SERVER_NAME"',
     );
@@ -148,7 +209,6 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     for (const key of CLAUDE_CODE_PROXY_ENV_KEYS.anthropic) {
       expect(script).toContain(`"${key}"`);
     }
-    // headers are stripped line-wise, never the whole key of a user who added their own
     expect(script).toContain('"x-archestra-agent-id"');
     expect(script).toContain('"x-archestra-virtual-key"');
   });
@@ -160,6 +220,8 @@ describe("renderClaudeCodeStartupGuardScript", () => {
         provider: "bedrock",
         providerLabel: "AWS Bedrock",
         url: "https://archestra.example.com/v1/bedrock/profile-123",
+        healthUrl:
+          "https://archestra.example.com/api/connection-health?kind=llm-proxy&ref=profile-123",
       },
     });
     for (const key of CLAUDE_CODE_PROXY_ENV_KEYS.bedrock) {
@@ -179,11 +241,13 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("MCP gateway (prod_gateway)");
   });
 
-  test("non-interactive run with reachable remotes is silent and exits 0", async () => {
-    const { stderr } = await runGuardNonInteractive({
+  test("non-interactive run with healthy remotes is silent and exits 0", async () => {
+    const { stdout, stderr } = await runGuardNonInteractive({
       script: renderClaudeCodeStartupGuardScript(CTX),
       curlExitCode: 0,
+      curlBody: '{"status":"ok"}',
     });
+    expect(stdout).toBe("");
     expect(stderr).toBe("");
   });
 
@@ -196,6 +260,34 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(stderr).toContain("LLM proxy (Anthropic) is unreachable");
     expect(stderr).toContain("MCP gateway (prod_gateway) is unreachable");
     expect(stderr).toContain("Skills marketplace (acme-skills) is unreachable");
+  });
+
+  test("non-interactive run with deleted remotes reports them as removed — the false-green regression", async () => {
+    // The backend answers (so reachability is fine) but says the resources no
+    // longer exist. The old reachability-only guard showed green here.
+    const { stdout, stderr } = await runGuardNonInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 0,
+      curlBody: '{"status":"missing"}',
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toContain("LLM proxy (Anthropic) was removed on Archestra");
+    expect(stderr).toContain(
+      "MCP gateway (prod_gateway) was removed on Archestra",
+    );
+    // skills has no existence check — reachable means silent
+    expect(stderr).not.toContain("Skills marketplace");
+  });
+
+  test("an older backend without the health route degrades to reachability-only, never false-missing", async () => {
+    // A 404 body from the then-unknown route carries no "missing" marker.
+    const { stderr } = await runGuardNonInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 0,
+      curlBody:
+        '{"error":{"message":"Route GET:/api/connection-health not found"}}',
+    });
+    expect(stderr).toBe("");
   });
 
   test("ARCHESTRA_CLAUDE_GUARD=0 disables the guard entirely", async () => {

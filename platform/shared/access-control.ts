@@ -1309,6 +1309,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.TestEmbeddingConnection]: {
     knowledgeSettings: ["update"],
   },
+  [RouteId.TestRerankerConnection]: {
+    knowledgeSettings: ["update"],
+  },
 
   /**
    * Get public identity providers route (minimal info for login page)

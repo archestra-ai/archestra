@@ -1,7 +1,6 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
-  addNomicTaskPrefix,
   isModelSelectionComplete,
   providerRequiresPerUserCredential,
   RouteId,
@@ -15,9 +14,6 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { callEmbedding } from "@/knowledge-base/embedding-clients";
-import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
-import logger from "@/logging";
 import {
   AgentModel,
   InteractionModel,
@@ -28,7 +24,6 @@ import {
   LlmProviderApiKeyModel,
   McpToolCallModel,
   MemberModel,
-  ModelModel,
   OrganizationModel,
   TeamModel,
   ToolModel,
@@ -36,6 +31,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
+import { knowledgeSettingsService } from "@/services/knowledge-settings";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -500,72 +496,119 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId, body }, reply) => {
       const currentOrg = await OrganizationModel.getById(organizationId);
 
-      // Embedding model is locked once both key and model have been saved
+      // Effective (post-save) embedding + reranker pairs. Distinguish "not
+      // changing" (undefined) from "clearing" (null) so a cleared field is seen
+      // as cleared, not masked back to its current value.
+      const effectiveEmbeddingKeyId =
+        body.embeddingChatApiKeyId !== undefined
+          ? body.embeddingChatApiKeyId
+          : (currentOrg?.embeddingChatApiKeyId ?? null);
+      const effectiveEmbeddingModel =
+        body.embeddingModel !== undefined
+          ? body.embeddingModel
+          : (currentOrg?.embeddingModel ?? null);
+      const effectiveRerankerKeyId =
+        body.rerankerChatApiKeyId !== undefined
+          ? body.rerankerChatApiKeyId
+          : (currentOrg?.rerankerChatApiKeyId ?? null);
+      const effectiveRerankerModel =
+        body.rerankerModel !== undefined
+          ? body.rerankerModel
+          : (currentOrg?.rerankerModel ?? null);
+
+      // Embedding is locked once fully configured: changing OR clearing it (any
+      // difference from the current pair, incl. a null clear) must go through the
+      // drop-embedding route, which also deletes the now-stale vectors and resets
+      // connector checkpoints.
       const isEmbeddingConfigLocked =
         !!currentOrg?.embeddingChatApiKeyId && !!currentOrg?.embeddingModel;
+      if (
+        isEmbeddingConfigLocked &&
+        (effectiveEmbeddingKeyId !== currentOrg?.embeddingChatApiKeyId ||
+          effectiveEmbeddingModel !== currentOrg?.embeddingModel)
+      ) {
+        throw new ApiError(
+          400,
+          "Embedding configuration cannot be changed once set. Drop the existing configuration to reconfigure — all documents will need to be re-embedded.",
+          "embedding_validation_failed",
+        );
+      }
 
-      if (body.embeddingModel) {
-        if (
-          isEmbeddingConfigLocked &&
-          body.embeddingModel !== currentOrg.embeddingModel
-        ) {
+      // Only validate the embedding/reranker pairs when the patch actually
+      // touches them: a patch to an unrelated knowledge setting (e.g.
+      // permissionSyncSchedule) must not be blocked by — or fire a live probe
+      // for — pre-existing embedding state it doesn't change.
+      const patchTouchesEmbedding =
+        body.embeddingChatApiKeyId !== undefined ||
+        body.embeddingModel !== undefined;
+      const patchTouchesReranker =
+        body.rerankerChatApiKeyId !== undefined ||
+        body.rerankerModel !== undefined;
+
+      // Embedding is mandatory: a half-configured pair (a key with no model, or a
+      // model with no key) is invalid and blocks save. To clear the embedding
+      // entirely, use the drop-embedding route.
+      if (
+        patchTouchesEmbedding &&
+        Boolean(effectiveEmbeddingKeyId) !== Boolean(effectiveEmbeddingModel)
+      ) {
+        throw new ApiError(
+          400,
+          "Both an embedding API key and model are required. To clear the embedding configuration, use Drop.",
+          "embedding_validation_failed",
+        );
+      }
+
+      // Validate BOTH configurations by actually exercising them (a real embedding
+      // call, a real structured-output reranker call) — not just checking fields
+      // are filled. Embedding is validated when set; the reranker is optional but
+      // must be valid when set, and a half-configured reranker blocks save. The
+      // failing field is carried in the ApiError's internal_code so the UI can
+      // show it per-field.
+      if (
+        patchTouchesEmbedding &&
+        effectiveEmbeddingKeyId &&
+        effectiveEmbeddingModel
+      ) {
+        const result = await knowledgeSettingsService.validateEmbeddingConfig({
+          keyId: effectiveEmbeddingKeyId,
+          model: effectiveEmbeddingModel,
+          organizationId,
+        });
+        if (!result.ok) {
           throw new ApiError(
             400,
-            "Embedding model cannot be changed once configured. Changing models requires re-embedding all documents.",
+            result.error ?? "Embedding validation failed.",
+            "embedding_validation_failed",
           );
         }
       }
 
       if (
-        isEmbeddingConfigLocked &&
-        body.embeddingChatApiKeyId !== undefined &&
-        body.embeddingChatApiKeyId !== currentOrg.embeddingChatApiKeyId
+        patchTouchesReranker &&
+        Boolean(effectiveRerankerKeyId) !== Boolean(effectiveRerankerModel)
       ) {
         throw new ApiError(
           400,
-          "Embedding API key cannot be changed once configured. Drop the embedding configuration before selecting a different key.",
+          "Both a reranker API key and model are required, or clear both.",
+          "reranker_validation_failed",
         );
       }
-
-      // Validate embedding API key exists
-      if (body.embeddingChatApiKeyId) {
-        const chatApiKey = await LlmProviderApiKeyModel.findById(
-          body.embeddingChatApiKeyId,
-        );
-        if (!chatApiKey) {
-          throw new ApiError(404, "Embedding API key not found");
-        }
-      }
-
-      const shouldValidateEmbeddingSelection =
-        body.embeddingChatApiKeyId !== undefined ||
-        body.embeddingModel !== undefined;
-      const effectiveEmbeddingKeyId =
-        body.embeddingChatApiKeyId ?? currentOrg?.embeddingChatApiKeyId ?? null;
-      const effectiveEmbeddingModel =
-        body.embeddingModel ?? currentOrg?.embeddingModel ?? null;
-
       if (
-        shouldValidateEmbeddingSelection &&
-        effectiveEmbeddingKeyId &&
-        effectiveEmbeddingModel
+        patchTouchesReranker &&
+        effectiveRerankerKeyId &&
+        effectiveRerankerModel
       ) {
-        const resolved = await resolveApiKeyFromChatApiKey(
-          effectiveEmbeddingKeyId,
-        );
-        if (!resolved) {
-          throw new ApiError(400, "Could not resolve embedding API key");
-        }
-
-        const model = await ModelModel.findByProviderAndModelId(
-          resolved.provider,
-          effectiveEmbeddingModel,
-        );
-
-        if (model?.embeddingDimensions === null || !model) {
+        const result = await knowledgeSettingsService.validateRerankerConfig({
+          keyId: effectiveRerankerKeyId,
+          model: effectiveRerankerModel,
+          organizationId,
+        });
+        if (!result.ok) {
           throw new ApiError(
             400,
-            "Embedding model must be marked as an embedding model with configured dimensions in LLM Providers > Models.",
+            result.error ?? "Reranker validation failed.",
+            "reranker_validation_failed",
           );
         }
       }
@@ -641,70 +684,49 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body }, reply) => {
-      // Validate API key exists
-      const chatApiKey = await LlmProviderApiKeyModel.findById(
-        body.embeddingChatApiKeyId,
-      );
-      if (!chatApiKey) {
-        throw new ApiError(404, "API key not found");
-      }
+    async ({ body, organizationId }, reply) => {
+      const result = await knowledgeSettingsService.validateEmbeddingConfig({
+        keyId: body.embeddingChatApiKeyId,
+        model: body.embeddingModel,
+        organizationId,
+      });
+      return reply.send({
+        success: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
+    },
+  );
 
-      // Resolve the actual secret
-      const resolved = await resolveApiKeyFromChatApiKey(
-        body.embeddingChatApiKeyId,
-      );
-      if (!resolved) {
-        return reply.send({
-          success: false,
-          error: "Could not resolve API key secret",
-        });
-      }
-
-      const model = await ModelModel.findByProviderAndModelId(
-        resolved.provider,
-        body.embeddingModel,
-      );
-      if (!model?.embeddingDimensions) {
-        return reply.send({
-          success: false,
-          error:
-            "Embedding model must be marked as an embedding model with configured dimensions in LLM Providers > Models.",
-        });
-      }
-
-      try {
-        const response = await callEmbedding({
-          inputs: [
-            addNomicTaskPrefix(
-              body.embeddingModel,
-              "hello world",
-              "search_document",
-            ),
-          ],
-          model: body.embeddingModel,
-          apiKey: resolved.apiKey,
-          baseUrl: resolved.baseUrl,
-          dimensions: model.embeddingDimensions,
-          provider: resolved.provider,
-        });
-
-        if (response.data.length > 0) {
-          return reply.send({ success: true });
-        }
-
-        return reply.send({
-          success: false,
-          error: "No embedding data returned",
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        logger.error(
-          { err },
-          "[testEmbeddingConnection] embedding call failed",
-        );
-        return reply.send({ success: false, error: message });
-      }
+  fastify.post(
+    "/api/organization/knowledge-settings/test-reranker",
+    {
+      schema: {
+        operationId: RouteId.TestRerankerConnection,
+        description:
+          "Test the reranker connection with a sample structured-output call",
+        tags: ["Organization"],
+        body: z.object({
+          rerankerChatApiKeyId: z.string().uuid(),
+          rerankerModel: z.string().min(1),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            error: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async ({ body, organizationId }, reply) => {
+      const result = await knowledgeSettingsService.validateRerankerConfig({
+        keyId: body.rerankerChatApiKeyId,
+        model: body.rerankerModel,
+        organizationId,
+      });
+      return reply.send({
+        success: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      });
     },
   );
 

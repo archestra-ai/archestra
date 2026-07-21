@@ -2,7 +2,9 @@
 
 import { isProviderApiKeyOptional } from "@archestra/shared";
 import {
+  AlertCircle,
   ArrowUpRight,
+  CheckCircle2,
   Info,
   Loader2,
   Lock,
@@ -60,9 +62,15 @@ import {
   useDropEmbeddingConfig,
   useOrganization,
   useTestEmbeddingConnection,
+  useTestRerankerConnection,
   useUpdateKnowledgeSettings,
 } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
+import {
+  type ConnectionStatus,
+  type SectionStatus,
+  saveResultStatuses,
+} from "./knowledge-validation";
 
 const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
@@ -442,6 +450,43 @@ function DropEmbeddingConfigDialog({
   );
 }
 
+function ConnectionStatusPill({ status }: { status: ConnectionStatus }) {
+  const pill = {
+    untested: {
+      label: "Not tested",
+      className: "bg-muted text-muted-foreground",
+      icon: null,
+    },
+    testing: {
+      label: "Testing…",
+      className: "bg-muted text-muted-foreground",
+      icon: <Loader2 className="h-3 w-3 animate-spin" />,
+    },
+    connected: {
+      label: "Connected",
+      className: "bg-green-500/10 text-green-600 dark:text-green-400",
+      icon: <CheckCircle2 className="h-3 w-3" />,
+    },
+    failed: {
+      label: "Failed",
+      className: "bg-destructive/10 text-destructive",
+      icon: <AlertCircle className="h-3 w-3" />,
+    },
+  }[status];
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+        pill.className,
+      )}
+    >
+      {pill.icon}
+      {pill.label}
+    </span>
+  );
+}
+
 function KnowledgeSettingsContent() {
   const { data: organization, isPending } = useOrganization();
   const {
@@ -455,7 +500,18 @@ function KnowledgeSettingsContent() {
     "Failed to update knowledge settings",
   );
   const testConnection = useTestEmbeddingConnection();
+  const testRerankerConnection = useTestRerankerConnection();
   const [showDropDialog, setShowDropDialog] = useState(false);
+
+  // Per-section connection status (the pill + inline reason on each card).
+  const [embeddingStatus, setEmbeddingStatus] = useState<SectionStatus>({
+    status: "untested",
+    error: null,
+  });
+  const [rerankerStatus, setRerankerStatus] = useState<SectionStatus>({
+    status: "untested",
+    error: null,
+  });
 
   const [embeddingModel, setEmbeddingModel] = useState<string | null>(null);
   const [embeddingChatApiKeyId, setEmbeddingChatApiKeyId] = useState<
@@ -513,6 +569,32 @@ function KnowledgeSettingsContent() {
     }
   }, [organization]);
 
+  // Changing a section's key/model invalidates its last connection result.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on config change only
+  useEffect(() => {
+    setEmbeddingStatus({ status: "untested", error: null });
+  }, [embeddingChatApiKeyId, embeddingModel]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on config change only
+  useEffect(() => {
+    setRerankerStatus({ status: "untested", error: null });
+  }, [rerankerChatApiKeyId, rerankerModel]);
+
+  // A stable signature of each section's current config. An in-flight test or
+  // save captures the signature it ran against and only applies its result if
+  // the signature still matches — so a result that resolves after the user
+  // changed the key/model (or cleared it) isn't attributed to the new config.
+  const embeddingConfigSig = `${embeddingChatApiKeyId ?? ""}|${embeddingModel ?? ""}`;
+  const rerankerConfigSig = `${rerankerChatApiKeyId ?? ""}|${rerankerModel ?? ""}`;
+  const embeddingConfigSigRef = useRef(embeddingConfigSig);
+  const rerankerConfigSigRef = useRef(rerankerConfigSig);
+  // Sync the refs during render (not in an effect): the value is derived purely
+  // from committed state, so writing it here keeps the ref in lock-step with the
+  // current config. An effect would lag by a commit, leaving a window where an
+  // in-flight test/save resolves against a stale signature and applies its result
+  // to the just-changed config.
+  embeddingConfigSigRef.current = embeddingConfigSig;
+  rerankerConfigSigRef.current = rerankerConfigSig;
+
   const serverEmbeddingKeyId = organization?.embeddingChatApiKeyId ?? null;
   const serverEmbeddingModel = serverEmbeddingKeyId
     ? (organization?.embeddingModel ?? null)
@@ -529,9 +611,11 @@ function KnowledgeSettingsContent() {
   // Embedding model is locked once both key and model have been saved
   const isEmbeddingModelLocked =
     !!serverEmbeddingKeyId && !!serverEmbeddingModel;
-  const showTestConnection =
-    !!embeddingChatApiKeyId && !!embeddingModel && !isEmbeddingModelLocked;
-  const showEmbeddingFooter = isEmbeddingModelLocked || showTestConnection;
+  const embeddingConfigured = !!embeddingChatApiKeyId && !!embeddingModel;
+  const rerankerConfigured = !!rerankerChatApiKeyId && !!rerankerModel;
+  // A section's connection can be tested whenever it is fully configured —
+  // including a locked embedding, to confirm it still works.
+  const showEmbeddingFooter = isEmbeddingModelLocked || embeddingConfigured;
 
   // Check if keys exist for pulsing logic
   const hasApiKeys = useMemo(() => (apiKeys ?? []).length > 0, [apiKeys]);
@@ -549,13 +633,84 @@ function KnowledgeSettingsContent() {
     hasSelectableKeys: isInitialLoading ? true : hasApiKeys,
   });
 
+  const handleTestEmbedding = async () => {
+    if (!embeddingChatApiKeyId || !embeddingModel) return;
+    const sig = embeddingConfigSig;
+    setEmbeddingStatus({ status: "testing", error: null });
+    let next: SectionStatus;
+    try {
+      const result = await testConnection.mutateAsync({
+        embeddingChatApiKeyId,
+        embeddingModel,
+      });
+      next = result.success
+        ? { status: "connected", error: null }
+        : { status: "failed", error: result.error ?? "Connection failed." };
+    } catch {
+      next = { status: "failed", error: "Connection test failed." };
+    }
+    // Drop the result if the config changed while the test was in flight.
+    if (embeddingConfigSigRef.current !== sig) return;
+    setEmbeddingStatus(next);
+  };
+
+  const handleTestReranker = async () => {
+    if (!rerankerChatApiKeyId || !rerankerModel) return;
+    const sig = rerankerConfigSig;
+    setRerankerStatus({ status: "testing", error: null });
+    let next: SectionStatus;
+    try {
+      const result = await testRerankerConnection.mutateAsync({
+        rerankerChatApiKeyId,
+        rerankerModel,
+      });
+      next = result.success
+        ? { status: "connected", error: null }
+        : { status: "failed", error: result.error ?? "Connection failed." };
+    } catch {
+      next = { status: "failed", error: "Connection test failed." };
+    }
+    if (rerankerConfigSigRef.current !== sig) return;
+    setRerankerStatus(next);
+  };
+
   const handleSave = async () => {
-    await updateKnowledgeSettings.mutateAsync({
-      embeddingModel: embeddingModel ?? undefined,
-      embeddingChatApiKeyId: embeddingChatApiKeyId ?? null,
-      rerankerChatApiKeyId: rerankerChatApiKeyId ?? null,
-      rerankerModel: rerankerModel ?? null,
+    // Snapshot what we're validating so a save that resolves after the user
+    // edited a section doesn't stamp its result onto the changed config.
+    const embeddingSig = embeddingConfigSig;
+    const rerankerSig = rerankerConfigSig;
+    const savedEmbeddingConfigured = embeddingConfigured;
+    const savedRerankerConfigured = rerankerConfigured;
+    // Drive each configured section's pill through the save; the checks run
+    // server-side and resolve to connected / failed (with the reason) per field.
+    if (savedEmbeddingConfigured) {
+      setEmbeddingStatus({ status: "testing", error: null });
+    }
+    if (savedRerankerConfigured) {
+      setRerankerStatus({ status: "testing", error: null });
+    }
+    let saveError: unknown = null;
+    try {
+      await updateKnowledgeSettings.mutateAsync({
+        embeddingModel: embeddingModel ?? undefined,
+        embeddingChatApiKeyId: embeddingChatApiKeyId ?? null,
+        rerankerChatApiKeyId: rerankerChatApiKeyId ?? null,
+        rerankerModel: rerankerModel ?? null,
+      });
+    } catch (error) {
+      saveError = error;
+    }
+    const next = saveResultStatuses({
+      error: saveError,
+      embeddingConfigured: savedEmbeddingConfigured,
+      rerankerConfigured: savedRerankerConfigured,
     });
+    if (embeddingConfigSigRef.current === embeddingSig) {
+      setEmbeddingStatus(next.embedding);
+    }
+    if (rerankerConfigSigRef.current === rerankerSig) {
+      setRerankerStatus(next.reranker);
+    }
   };
 
   const handleCancel = () => {
@@ -595,7 +750,12 @@ function KnowledgeSettingsContent() {
       <SettingsSectionStack>
         <Card>
           <CardHeader>
-            <CardTitle>Embedding Configuration</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>Embedding Configuration</CardTitle>
+              {embeddingConfigured && (
+                <ConnectionStatusPill status={embeddingStatus.status} />
+              )}
+            </div>
             <CardDescription className="leading-relaxed">
               Choose the API key and embedding model used for knowledge base
               documents. Only keys with synced models that have configured
@@ -676,6 +836,13 @@ function KnowledgeSettingsContent() {
                         </span>
                       </p>
                     )}
+                  {embeddingStatus.status === "failed" &&
+                    embeddingStatus.error && (
+                      <p className="flex items-start gap-2 text-sm text-destructive sm:pl-28">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>{embeddingStatus.error}</span>
+                      </p>
+                    )}
                   <DropEmbeddingConfigDialog
                     open={showDropDialog}
                     onOpenChange={setShowDropDialog}
@@ -703,26 +870,22 @@ function KnowledgeSettingsContent() {
               >
                 {({ hasPermission }) => (
                   <div className="flex flex-wrap justify-end gap-2">
-                    {showTestConnection && (
+                    {embeddingConfigured && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={!hasPermission || testConnection.isPending}
-                        onClick={() => {
-                          if (!embeddingChatApiKeyId || !embeddingModel) return;
-                          testConnection.mutate({
-                            embeddingChatApiKeyId,
-                            embeddingModel,
-                          });
-                        }}
+                        disabled={
+                          !hasPermission || embeddingStatus.status === "testing"
+                        }
+                        onClick={handleTestEmbedding}
                       >
-                        {testConnection.isPending ? (
+                        {embeddingStatus.status === "testing" ? (
                           <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <Zap className="mr-1 h-3.5 w-3.5" />
                         )}
-                        Test Connection
+                        Test connection
                       </Button>
                     )}
                     {isEmbeddingModelLocked && (
@@ -746,10 +909,16 @@ function KnowledgeSettingsContent() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Reranking Configuration</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>Reranking Configuration</CardTitle>
+              {rerankerConfigured && (
+                <ConnectionStatusPill status={rerankerStatus.status} />
+              )}
+            </div>
             <CardDescription>
               Configure the LLM used to rerank knowledge base search results for
-              improved relevance. Any LLM provider and model can be used.
+              improved relevance. Any LLM provider and model can be used —
+              reranking is optional.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -784,26 +953,62 @@ function KnowledgeSettingsContent() {
                       }
                     />
                   </CardRow>
-                  {(rerankerChatApiKeyId || rerankerModel) && (
-                    <div className="sm:pl-28">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!hasPermission}
-                        onClick={() => {
-                          setRerankerChatApiKeyId(null);
-                          setRerankerModel(null);
-                        }}
-                      >
-                        Clear reranking configuration
-                      </Button>
-                    </div>
-                  )}
+                  {rerankerStatus.status === "failed" &&
+                    rerankerStatus.error && (
+                      <p className="flex items-start gap-2 text-sm text-destructive sm:pl-28">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>{rerankerStatus.error}</span>
+                      </p>
+                    )}
                 </div>
               )}
             </WithPermissions>
           </CardContent>
+          {(rerankerChatApiKeyId || rerankerModel) && (
+            <CardFooter className="-mb-6 mt-2 flex flex-col gap-3 rounded-b-xl border-t bg-muted/30 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <span />
+              <WithPermissions
+                permissions={{ knowledgeSettings: ["update"] }}
+                noPermissionHandle="tooltip"
+              >
+                {({ hasPermission }) => (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!hasPermission}
+                      onClick={() => {
+                        setRerankerChatApiKeyId(null);
+                        setRerankerModel(null);
+                      }}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Clear reranking configuration
+                    </Button>
+                    {rerankerConfigured && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          !hasPermission || rerankerStatus.status === "testing"
+                        }
+                        onClick={handleTestReranker}
+                      >
+                        {rerankerStatus.status === "testing" ? (
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        Test connection
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </WithPermissions>
+            </CardFooter>
+          )}
         </Card>
 
         <SettingsSaveBar

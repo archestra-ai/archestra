@@ -1,8 +1,22 @@
 archestra:
   replicaCount: 4
 
+  # Staging runs on a 5-node pool that the cluster autoscaler cannot grow past
+  # its max, and the chart's default 2-vCPU request per pod (sized for
+  # production latency) left the nodes 90%+ requested while <10% utilized —
+  # deploy-surge pods sat Pending on every commit-to-main rollout. Staging pods
+  # actually use well under 500m, and there is no CPU limit, so pods can still
+  # burst to whatever is free on the node.
+  resources:
+    requests:
+      cpu: "500m"
+
   worker:
     replicaCount: 3
+    # Same reasoning as archestra.resources above; workers idle even lower.
+    resources:
+      requests:
+        cpu: "250m"
 
   # The Apps Hackathon video renderer runs as its own single-replica Deployment
   # (render jobs live in one process's memory) so the 4-replica web tier's polls
@@ -78,7 +92,15 @@ archestra:
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL: "https://backend.archestra.dev/api/webhooks/incoming-email"
     ARCHESTRA_CHAT_DEFAULT_PROVIDER: "anthropic"
     ARCHESTRA_CHAT_DEFAULT_MODEL: "claude-opus-4-5-20251101"
-    ARCHESTRA_DATABASE_POOL_MAX: "8"
+    # 20 connections per Node process. The old value of 8 predates the Cloud
+    # SQL migration (it protected the fragile in-cluster Postgres) and caused
+    # silent connection-checkout queueing: every API request runs an auth
+    # lookup plus per-route query fanout, so bursts exhausted 8 connections and
+    # requests waited (up to the 10s connect timeout) for a free client —
+    # visible as trivial indexed selects with p95 ~370ms. Budget: 8 Node
+    # processes (4 web + 3 worker + 1 renderer) x 20 = 160, comfortably under
+    # Cloud SQL max_connections=200 with headroom for migration jobs.
+    ARCHESTRA_DATABASE_POOL_MAX: "20"
 
   diagnostics:
     enabled: true

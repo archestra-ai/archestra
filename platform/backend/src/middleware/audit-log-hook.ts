@@ -299,11 +299,16 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // do not mutate org state — exclude them to avoid false-positive audit noise.
   { kind: "exact", value: "/api/skills/github/discover" },
   { kind: "exact", value: "/api/skills/github/preview" },
-  // Read-only embedding connection test: probes the provider but mutates no org
-  // state. Auditing it recorded a misleading "Success" outcome on failed probes.
+  // Read-only embedding/reranker connection tests: probe the provider but mutate
+  // no org state. Auditing them recorded a misleading "Success" outcome on failed
+  // probes (they return HTTP 200 with `{ success: false }`).
   {
     kind: "exact",
     value: "/api/organization/knowledge-settings/test-embedding",
+  },
+  {
+    kind: "exact",
+    value: "/api/organization/knowledge-settings/test-reranker",
   },
 
   // Per-user UI state / onboarding — personal preference, not an access change

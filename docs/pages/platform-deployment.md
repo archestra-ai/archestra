@@ -210,6 +210,12 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 **Orchestrator Settings**:
 
 - `archestra.orchestrator.baseImage` - Base Docker image for MCP server containers (defaults to official Archestra MCP server base image)
+- `archestra.orchestrator.mcpServerResources.requests.cpu` - CPU request for generated MCP server containers (default: `50m`)
+- `archestra.orchestrator.mcpServerResources.requests.memory` - Memory request for generated MCP server containers (default: `128Mi`)
+- `archestra.orchestrator.mcpServerResources.requests.ephemeralStorage` - Ephemeral-storage request for generated MCP server containers (default: `256Mi`)
+- `archestra.orchestrator.mcpServerResources.limits.memory` - Memory limit for generated MCP server containers (default: `512Mi`)
+- `archestra.orchestrator.mcpServerResources.limits.ephemeralStorage` - Ephemeral-storage limit for generated MCP server containers (default: `1Gi`)
+- `archestra.orchestrator.failedPodReapIntervalSeconds` - How often Failed or Evicted MCP server pods are garbage-collected (default: `600`, `0` disables)
 
 **Kubernetes Settings**:
 
@@ -1244,6 +1250,25 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
   - Can be overridden per individual MCP server.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for generated MCP server containers, as a Kubernetes quantity.
+  - Default: `50m`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST`** - Memory request for generated MCP server containers.
+  - Default: `128Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT`** - Memory limit for generated MCP server containers.
+  - Default: `512Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST`** - Ephemeral-storage request for generated MCP server containers. Keeps the Kubernetes scheduler aware of disk usage so nodes are not over-packed into DiskPressure evictions.
+  - Default: `256Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT`** - Ephemeral-storage limit for generated MCP server containers.
+  - Default: `1Gi`
+
+- **`ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS`** - How often the platform deletes Failed or Evicted MCP server pods left behind by node-pressure evictions.
+  - Default: `600`
+  - Set to `0` to disable.
 
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
   - Default: `true`

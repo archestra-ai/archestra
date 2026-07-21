@@ -254,10 +254,14 @@ const interactionsTable = pgTable(
       "interactions_session_thread_created_at_idx",
     ).on(table.sessionId, table.threadId, table.createdAt.desc()),
     parentIdIdx: index("interactions_parent_id_idx").on(table.parentId),
-    // Note: Additional pg_trgm GIN indexes for search are created in migration 0116_pg_trgm_indexes.sql:
-    // - interactions_request_trgm_idx: GIN index on (request::text)
-    // - interactions_response_trgm_idx: GIN index on (response::text)
-    // These can't be defined in Drizzle schema as they require ::text cast and gin_trgm_ops operator class.
+    // Note: interactions deliberately has NO trgm/GIN indexes on the request/
+    // response payload columns. Migration 0116 used to create them for a
+    // free-text log search that no longer exists (the LLM logs UI filters by
+    // dropdowns + exact session id), and GIN over multi-hundred-KB payloads
+    // write-amplified every hot-path insert. If payload search ever returns,
+    // build it on a bounded column — not on (request::text)/(response::text) —
+    // and create the index CONCURRENTLY out of band (see the
+    // archestra-dev-interactions-migrations skill).
   }),
 );
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.12](https://github.com/archestra-ai/archestra/compare/platform-v1.3.11...platform-v1.3.12) (2026-07-21)
+
+
+### Bug Fixes
+
+* **chat:** show reasoning/thinking blocks for OpenAI-compatible models ([#6729](https://github.com/archestra-ai/archestra/issues/6729)) ([d67a4d0](https://github.com/archestra-ai/archestra/commit/d67a4d062121bd29d1ff4a7de4fd9bbbb0ca0918))
+* **orchestrator:** resource-govern MCP server pods and reap Failed/Evicted pods ([#6591](https://github.com/archestra-ai/archestra/issues/6591)) ([dca1965](https://github.com/archestra-ai/archestra/commit/dca1965b6bfe30e29590ac29bc2349bd46633ac5))
+
+
+### Performance Improvements
+
+* **db:** stop creating payload trgm GIN indexes on interactions ([#6731](https://github.com/archestra-ai/archestra/issues/6731)) ([759f420](https://github.com/archestra-ai/archestra/commit/759f420f720c7f91acda67a2a73efaf8bea0d2c8))
+* **llm-proxy:** resolve lean GatewayAgent on the hot path + pool saturation metrics ([#6733](https://github.com/archestra-ai/archestra/issues/6733)) ([6f76027](https://github.com/archestra-ai/archestra/commit/6f76027d7e0fb5bff5a024fb6a8954fc7a485bbe))
+
 ## [1.3.11](https://github.com/archestra-ai/archestra/compare/platform-v1.3.10...platform-v1.3.11) (2026-07-21)
 
 

@@ -15,9 +15,19 @@ END$$;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
-    -- Interactions table indexes (for LLM proxy logs search)
-    CREATE INDEX IF NOT EXISTS "interactions_request_trgm_idx" ON "interactions" USING gin ((request::text) gin_trgm_ops);
-    CREATE INDEX IF NOT EXISTS "interactions_response_trgm_idx" ON "interactions" USING gin ((response::text) gin_trgm_ops);
+    -- NOTE: this migration originally also created payload trgm indexes on
+    -- interactions (interactions_request_trgm_idx on (request::text) and
+    -- interactions_response_trgm_idx on (response::text)). The free-text
+    -- search they served no longer exists — the LLM logs UI filters by
+    -- dropdowns + exact session id — while the GIN indexes write-amplified
+    -- every hot-path interactions insert and grew to multiple GB of dead
+    -- weight. They were removed here (inert for already-migrated databases:
+    -- drizzle applies migrations by journal timestamp, so editing this file
+    -- only affects fresh installs). Existing deployments drop them out of
+    -- band, per archestra-dev-interactions-migrations (a transactional
+    -- DROP INDEX would take a write-blocking lock on the proxy's hot path):
+    --   DROP INDEX CONCURRENTLY IF EXISTS interactions_request_trgm_idx;
+    --   DROP INDEX CONCURRENTLY IF EXISTS interactions_response_trgm_idx;
 
     -- Conversations table index (for chat title search in LLM proxy logs)
     CREATE INDEX IF NOT EXISTS "conversations_title_trgm_idx" ON "conversations" USING gin (title gin_trgm_ops);

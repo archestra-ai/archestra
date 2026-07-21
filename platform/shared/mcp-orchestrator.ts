@@ -13,6 +13,16 @@ export const MCP_ORCHESTRATOR_DEFAULTS = {
   resourceRequestMemory: "128Mi",
   /** Default CPU request for containers */
   resourceRequestCpu: "50m",
+  /**
+   * Default ephemeral-storage request for containers. Without it the
+   * scheduler is blind to disk usage (logs, temp files, runtime package
+   * installs) and over-packs nodes until kubelet DiskPressure evictions.
+   */
+  resourceRequestEphemeralStorage: "256Mi",
+  /** Default memory limit for containers */
+  resourceLimitMemory: "512Mi",
+  /** Default ephemeral-storage limit for containers */
+  resourceLimitEphemeralStorage: "1Gi",
 } as const;
 
 /**

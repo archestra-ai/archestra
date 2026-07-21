@@ -9,6 +9,9 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
+  isValidK8sCpuQuantity,
+  isValidK8sMemoryQuantity,
+  MCP_ORCHESTRATOR_DEFAULTS,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -1049,6 +1052,31 @@ export const parseAuditLogRetentionDays = (
   return parsed;
 };
 
+/**
+ * Parse a Kubernetes resource quantity (memory/CPU/ephemeral-storage) from an
+ * environment variable, falling back to the default when unset or invalid.
+ *
+ * @public — exported for testability
+ */
+export function parseK8sResourceQuantity(params: {
+  envName: string;
+  value: string | undefined;
+  validator: (value: string) => boolean;
+  defaultValue: string;
+}): string {
+  const trimmed = params.value?.trim();
+  if (!trimmed) {
+    return params.defaultValue;
+  }
+  if (!params.validator(trimmed)) {
+    logger.warn(
+      `Invalid ${params.envName} value "${trimmed}", using default "${params.defaultValue}"`,
+    );
+    return params.defaultValue;
+  }
+  return trimmed;
+}
+
 /** @public — consumed by config.test.ts */
 export function parseCommaSeparatedList(value: string): string[] {
   return value
@@ -1086,6 +1114,51 @@ export const getAnalyticsConfig = () => {
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
   `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:${appVersion}`;
+
+/**
+ * Default resource requests/limits applied to generated MCP server
+ * containers. Ephemeral-storage governance is required so the scheduler
+ * accounts for disk usage — without it nodes get over-packed until kubelet
+ * DiskPressure eviction cascades kick in.
+ */
+const mcpServerResources = {
+  requests: {
+    cpu: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST,
+      validator: isValidK8sCpuQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestCpu,
+    }),
+    memory: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestMemory,
+    }),
+    ephemeralStorage: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST",
+      value:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceRequestEphemeralStorage,
+    }),
+  },
+  limits: {
+    memory: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT",
+      value: process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceLimitMemory,
+    }),
+    ephemeralStorage: parseK8sResourceQuantity({
+      envName: "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT",
+      value:
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT,
+      validator: isValidK8sMemoryQuantity,
+      defaultValue: MCP_ORCHESTRATOR_DEFAULTS.resourceLimitEphemeralStorage,
+    }),
+  },
+};
 
 /**
  * resolves the Dagger runner host. A misconfigured host returns `undefined`
@@ -1758,6 +1831,20 @@ const config = {
   codegenMode: process.env.CODEGEN === "true",
   orchestrator: {
     mcpServerBaseImage,
+    mcpServerResources,
+    /**
+     * How often (in seconds) to sweep Failed/Evicted MCP server pods.
+     * DiskPressure eviction cascades can leave hundreds of Failed pod
+     * corpses behind that nothing else cleans up. Set to 0 to disable.
+     */
+    failedPodReapIntervalSeconds:
+      process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS?.trim() ===
+      "0"
+        ? 0
+        : parsePositiveInt(
+            process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
+            600,
+          ),
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,

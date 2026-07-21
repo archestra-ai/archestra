@@ -65,6 +65,11 @@ vi.mock("@/config", async () =>
         namespace: "test-namespace",
         kubeconfig: undefined,
         loadKubeconfigFromCurrentCluster: false,
+        // Pin to empty: configModuleMock inherits the real config, so an
+        // ambient ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES (dev .env,
+        // CI's copied .env.example) would add sweep namespaces and double
+        // every reap/cleanup call count.
+        environmentNamespaces: [],
       },
     },
   }),
@@ -187,6 +192,14 @@ vi.mock("./k8s-deployment", () => {
     fetchPlatformPodNodeSelector: vi.fn().mockResolvedValue(undefined),
     fetchPlatformPodTolerations: vi.fn().mockResolvedValue(undefined),
   };
+});
+
+// Some tests stub findById with a sticky mockResolvedValue; vi.clearAllMocks()
+// clears calls but NOT implementations, so under randomized test order the
+// catalog leaked into unrelated tests (extra sweep namespaces, throwing paths).
+// Reset the implementation after every test.
+afterEach(() => {
+  vi.mocked(InternalMcpCatalogModel.findById).mockReset();
 });
 
 describe("validateKubeconfig", () => {

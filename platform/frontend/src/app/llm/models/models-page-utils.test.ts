@@ -1,3 +1,4 @@
+import { MAX_CONFIGURABLE_NUM_CTX } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   buildConfiguredParameters,
@@ -184,6 +185,27 @@ describe("configured parameters round-trip", () => {
       getConfiguredParameterDefaults({ configuredParameters: null }),
     ).toEqual(EMPTY_CONFIGURED_PARAMETERS);
   });
+
+  it("clears a persisted seed when the form is emptied", () => {
+    // The seed carry-forward is for edits alongside other fields. Applying it
+    // unconditionally returned `{seed}` for an emptied form, so a saved seed
+    // could never be removed through the UI.
+    expect(
+      buildConfiguredParameters(EMPTY_CONFIGURED_PARAMETERS, { seed: 42 }),
+    ).toBeNull();
+  });
+
+  it("preserves whitespace inside a stop sequence", () => {
+    // The trailing space is what makes "Human: " match; trimming each line
+    // silently rewrote the sequence on every unrelated save.
+    const saved = { stop: ["Human: ", "  indented"] };
+
+    expect(
+      buildConfiguredParameters(
+        getConfiguredParameterDefaults({ configuredParameters: saved }),
+      ),
+    ).toEqual(saved);
+  });
 });
 
 describe("validateConfiguredParameter", () => {
@@ -206,6 +228,19 @@ describe("validateConfiguredParameter", () => {
     expect(validateConfiguredParameter({ name: "top_k", value: "--3" })).toBe(
       "Must be a number",
     );
+  });
+
+  it("caps num_ctx at the backend backstop even without a context length", () => {
+    // The per-row `contextLength` check is skipped when it is null — the common
+    // case for a freshly pulled Ollama model — so without this bound the value
+    // reached the backend and came back as a bare 400 with no field message.
+    expect(
+      validateConfiguredParameter({
+        name: "num_ctx",
+        value: "20000000",
+        contextLength: null,
+      }),
+    ).toBe(`Must be ${MAX_CONFIGURABLE_NUM_CTX} or less`);
   });
 
   it("mirrors the backend bounds", () => {

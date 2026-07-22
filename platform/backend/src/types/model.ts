@@ -1,4 +1,7 @@
 import {
+  MAX_CONFIGURABLE_NUM_CTX,
+  MAX_STOP_SEQUENCE_LENGTH,
+  MAX_STOP_SEQUENCES,
   ModelInputModalitySchema,
   ModelOutputModalitySchema,
   SupportedEmbeddingDimensionsSchema,
@@ -44,12 +47,15 @@ export const ReasoningEffortSchema = z.enum(["none", "low", "medium", "high"]);
 export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
 
 /**
- * Absolute ceiling for a configured `num_ctx`, sitting comfortably above the
- * largest advertised context window in circulation. This is only a guard against
- * a runaway typo; the meaningful limit is the model's own `contextLength`, which
- * the update route enforces per row.
+ * Re-exported from `@archestra/shared` so backend callers keep importing these
+ * from the module that owns the schema they bound. The frontend form imports
+ * the same constants directly to mirror these rules.
  */
-export const MAX_CONFIGURABLE_NUM_CTX = 10_000_000;
+export type {
+  MAX_CONFIGURABLE_NUM_CTX,
+  MAX_STOP_SEQUENCE_LENGTH,
+  MAX_STOP_SEQUENCES,
+};
 
 /**
  * Admin-configured, per-model generation parameters that Archestra SENDS on
@@ -69,12 +75,23 @@ export const ConfiguredParametersSchema = z.object({
   top_k: z.number().int().min(0).optional(),
   repeat_penalty: z.number().min(0).optional(),
   seed: z.number().int().optional(),
-  stop: z.array(z.string()).optional(),
   /**
-   * Upper bound is a sanity backstop only — the update route additionally
-   * rejects anything above the model's own architectural `contextLength`. An
-   * unbounded value here would make Ollama allocate (or refuse) an absurd KV
-   * cache while Archestra kept displaying the inflated window.
+   * Bounded on both axes: this row is world-readable to anyone with
+   * `llmModel:read` and is serialized into every native turn, so an unbounded
+   * array would be a cheap way to bloat both. Ollama only ever uses a handful
+   * of stop sequences.
+   */
+  stop: z
+    .array(z.string().max(MAX_STOP_SEQUENCE_LENGTH))
+    .max(MAX_STOP_SEQUENCES)
+    .optional(),
+  /**
+   * Upper bound is a sanity backstop. The update route additionally rejects
+   * anything above the model's own architectural `contextLength` — but only
+   * when that is known: a proxy-discovered row can have a null `contextLength`,
+   * and then this bound is the only ceiling. An unbounded value here would make
+   * Ollama allocate (or refuse) an absurd KV cache while Archestra kept
+   * displaying the inflated window.
    */
   num_ctx: z.number().int().min(1).max(MAX_CONFIGURABLE_NUM_CTX).optional(),
   /** `-1` = generate until the context fills, `-2` = fill the context. */

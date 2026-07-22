@@ -133,4 +133,68 @@ describe("ChatRequestSchema", () => {
     });
     expect(parsed.messages[0].tool_name).toBe("fetch_url");
   });
+
+  // Go's encoding/json matches struct fields "exact first, then
+  // case-insensitive", so a variant-cased key binds to the same Ollama field
+  // and — arriving later in the object — overwrites the sanitized value. That
+  // silently undoes the OptionsSchema strip and the keep_alive clamp.
+  describe("case-variant key bypass", () => {
+    const base = {
+      model: "llama3.2",
+      messages: [{ role: "user", content: "hi" }],
+    };
+
+    test("drops a variant-cased duplicate of a guarded key", () => {
+      const parsed = ChatRequestSchema.parse({
+        ...base,
+        options: { num_ctx: 4096 },
+        keep_alive: 300,
+        Options: { num_gpu: 0, num_thread: 64 },
+        Keep_alive: -1,
+      });
+
+      expect(parsed.options).toEqual({ num_ctx: 4096 });
+      expect(parsed.keep_alive).toBe(300);
+      expect(parsed).not.toHaveProperty("Options");
+      expect(parsed).not.toHaveProperty("Keep_alive");
+    });
+
+    test("drops a lone variant with no lowercase sibling", () => {
+      // The nastier shape: with no `options` key at all, Go still binds
+      // `Options` to the same field, so the guard is bypassed outright.
+      const parsed = ChatRequestSchema.parse({
+        ...base,
+        OPTIONS: { num_gpu: 0 },
+      });
+      expect(parsed).not.toHaveProperty("OPTIONS");
+      expect(parsed).not.toHaveProperty("options");
+    });
+
+    test("guards every field, not just options and keep_alive", () => {
+      const parsed = ChatRequestSchema.parse({
+        ...base,
+        stream: false,
+        Stream: true,
+        Think: true,
+        Model: "other-model",
+      });
+      expect(parsed.stream).toBe(false);
+      expect(parsed.model).toBe("llama3.2");
+      expect(parsed).not.toHaveProperty("Stream");
+      expect(parsed).not.toHaveProperty("Think");
+      expect(parsed).not.toHaveProperty("Model");
+    });
+
+    test("still forwards unknown keys that collide with nothing", () => {
+      // The looseObject is deliberate — Ollama keeps adding fields and the
+      // proxy stays transparent to them.
+      const parsed = ChatRequestSchema.parse({
+        ...base,
+        logprobs: true,
+        _debug_render_only: true,
+      });
+      expect(parsed.logprobs).toBe(true);
+      expect(parsed._debug_render_only).toBe(true);
+    });
+  });
 });

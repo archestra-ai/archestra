@@ -186,4 +186,29 @@ describe("parseThinkingTags with an unpaired closing tag", () => {
       { type: "text", text: "Answer" },
     ]);
   });
+
+  it("renders a bare closer as text rather than nothing at all", () => {
+    // The orphan path produced [] for this, and [] is truthy, so it
+    // short-circuited the main parser's fallback — the message rendered as
+    // nothing, taking the copy/edit/feedback actions with it.
+    expect(parseThinkingTags("</think>")).toEqual([
+      { type: "text", text: "</think>" },
+    ]);
+  });
+
+  it("does not restructure text that discusses the closing tag twice", () => {
+    const text = "Use </think> to close it. Always write </think> at the end.";
+    expect(parseThinkingTags(text)).toEqual([{ type: "text", text }]);
+  });
+
+  it("does not split a code fence that contains a closing tag", () => {
+    // Splitting here would leave both halves with an unbalanced fence.
+    const text = "Here is an example:\n```\n</think>\n```\nDone.";
+    expect(parseThinkingTags(text)).toEqual([{ type: "text", text }]);
+  });
+
+  it("does not split an inline code span that contains a closing tag", () => {
+    const text = "The `</think>` tag closes reasoning.";
+    expect(parseThinkingTags(text)).toEqual([{ type: "text", text }]);
+  });
 });

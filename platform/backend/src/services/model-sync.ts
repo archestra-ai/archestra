@@ -380,7 +380,7 @@ function inferEmbeddingDimensions(
   // authoritative path above wins whenever capabilities are reported. Match the
   // base name so an optional `:tag` suffix is ignored, and gate to Ollama so a
   // same-named model on another provider isn't mis-tagged.
-  if (provider === "ollama") {
+  if (provider === "ollama" || provider === "ollama-native") {
     const base = id.split(":")[0];
     if (base === "mxbai-embed-large" || base === "bge-m3") {
       return 1024;

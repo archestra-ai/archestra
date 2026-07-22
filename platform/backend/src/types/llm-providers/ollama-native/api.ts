@@ -7,8 +7,13 @@
  * `ollama-native` provider). Streaming is NDJSON (`application/x-ndjson`), one
  * `ChatResponse`-shaped object per line.
  */
+
+import {
+  MAX_CONFIGURABLE_NUM_CTX,
+  MAX_STOP_SEQUENCE_LENGTH,
+  MAX_STOP_SEQUENCES,
+} from "@archestra/shared";
 import { z } from "zod";
-import { MAX_CONFIGURABLE_NUM_CTX } from "../../model";
 import { MessageSchema, ToolCallSchema } from "./messages";
 import { ToolSchema } from "./tools";
 
@@ -44,7 +49,10 @@ export const OptionsSchema = z.object({
   repeat_last_n: z.number().int().optional(),
   presence_penalty: z.number().optional(),
   frequency_penalty: z.number().optional(),
-  stop: z.array(z.string()).optional(),
+  stop: z
+    .array(z.string().max(MAX_STOP_SEQUENCE_LENGTH))
+    .max(MAX_STOP_SEQUENCES)
+    .optional(),
   num_keep: z.number().int().optional(),
   // Context sizing — the point of the native transport.
   num_ctx: z.number().int().min(1).max(MAX_CONFIGURABLE_NUM_CTX).optional(),
@@ -69,24 +77,35 @@ export const KeepAliveSchema = z
 /** `think`: boolean, or one of "low" | "medium" | "high" | "max". */
 export const ThinkSchema = z.union([z.boolean(), z.string()]);
 
+const CHAT_REQUEST_SHAPE = {
+  model: z.string(),
+  messages: z.array(MessageSchema),
+  tools: z.array(ToolSchema).optional(),
+  format: z.unknown().optional(),
+  options: OptionsSchema.optional(),
+  stream: z.boolean().nullable().optional(),
+  keep_alive: KeepAliveSchema.optional(),
+  think: ThinkSchema.optional(),
+  // ollama-ai-provider-v2 also emits these top-level; declare them so the
+  // route body validator doesn't strip them before the proxy forwards.
+  temperature: z.number().nullable().optional(),
+  top_p: z.number().nullable().optional(),
+  max_output_tokens: z.number().nullable().optional(),
+  truncate: z.boolean().optional(),
+  shift: z.boolean().optional(),
+};
+
+/**
+ * Lowercased names of every key this schema validates, used to drop
+ * case-variant duplicates — see {@link dropCaseVariantDuplicates}.
+ */
+const KNOWN_CHAT_REQUEST_KEYS = new Set(
+  Object.keys(CHAT_REQUEST_SHAPE).map((key) => key.toLowerCase()),
+);
+
 export const ChatRequestSchema = z
-  .looseObject({
-    model: z.string(),
-    messages: z.array(MessageSchema),
-    tools: z.array(ToolSchema).optional(),
-    format: z.unknown().optional(),
-    options: OptionsSchema.optional(),
-    stream: z.boolean().nullable().optional(),
-    keep_alive: KeepAliveSchema.optional(),
-    think: ThinkSchema.optional(),
-    // ollama-ai-provider-v2 also emits these top-level; declare them so the
-    // route body validator doesn't strip them before the proxy forwards.
-    temperature: z.number().nullable().optional(),
-    top_p: z.number().nullable().optional(),
-    max_output_tokens: z.number().nullable().optional(),
-    truncate: z.boolean().optional(),
-    shift: z.boolean().optional(),
-  })
+  .looseObject(CHAT_REQUEST_SHAPE)
+  .transform(dropCaseVariantDuplicates)
   .describe("Ollama native /api/chat request");
 
 const ResponseMessageSchema = z.looseObject({
@@ -128,6 +147,37 @@ export const ChatHeadersSchema = z.object({
 // =============================================================================
 // INTERNAL HELPERS
 // =============================================================================
+
+/**
+ * Removes unknown top-level keys that differ from a known key only by case.
+ *
+ * The request body is a `looseObject` on purpose: Ollama keeps adding fields
+ * (`logprobs`, `_debug_render_only`, …) and the proxy should stay transparent
+ * to them. But Go's `encoding/json` matches struct fields by "exact match
+ * first, then case-insensitive", and Ollama declares `Options map[string]any
+ * \`json:"options"\`` and `KeepAlive *Duration \`json:"keep_alive,omitempty"\``.
+ * So `{"options": <sanitized>, "Options": <raw>}` binds BOTH to `Options`, and
+ * the later one wins — silently undoing the strip in {@link OptionsSchema} and
+ * the clamp in {@link KeepAliveSchema}, the two controls that stop one virtual
+ * key from exhausting a shared host's VRAM or pinning a model in memory.
+ *
+ * A lone variant (`Options` with no lowercase sibling) is the same bypass, so
+ * this drops every case-variant of a known key rather than only duplicates.
+ * Keys that collide with nothing we validate still pass through untouched.
+ */
+function dropCaseVariantDuplicates<T extends Record<string, unknown>>(
+  request: T,
+): T {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(request)) {
+    const isCaseVariant =
+      !(key in CHAT_REQUEST_SHAPE) &&
+      KNOWN_CHAT_REQUEST_KEYS.has(key.toLowerCase());
+    if (isCaseVariant) continue;
+    out[key] = value;
+  }
+  return out as T;
+}
 
 /** Go duration units Ollama accepts, expressed in seconds. */
 const KEEP_ALIVE_UNIT_SECONDS: Record<string, number> = {

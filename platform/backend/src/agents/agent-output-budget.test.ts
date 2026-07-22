@@ -109,7 +109,13 @@ describe("resolveAgentMaxOutputTokens", () => {
       // A 0, negative or fractional window would otherwise become the output
       // budget — and, once folded into `options.num_predict`, cap every
       // generation at a nonsense length.
-      for (const contextLength of [0, -1, 8192.5, Number.NaN]) {
+      for (const contextLength of [
+        0,
+        -1,
+        8192.5,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+      ]) {
         expect(
           resolveAgentMaxOutputTokens({
             outputLength: null,

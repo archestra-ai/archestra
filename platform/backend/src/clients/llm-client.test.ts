@@ -8,7 +8,7 @@ import {
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
-import { streamText } from "ai";
+import { generateText, streamText } from "ai";
 import { vi } from "vitest";
 import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
@@ -84,11 +84,13 @@ vi.mock("ollama-ai-provider-v2", async (importOriginal) => {
   };
 });
 
+import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
+import type { ConfiguredParameters } from "@/types/model";
 import {
   createDirectLLMModel,
   createLLMModel,
   createLLMModelForAgent,
-  OLLAMA_THINK_EXPLICIT_KEY,
+  OLLAMA_THINK_EXPLICIT_HEADER,
 } from "./llm-client";
 
 describe("createDirectLLMModel", () => {
@@ -262,7 +264,109 @@ describe("createDirectLLMModel", () => {
   // answer. These pin the reconciliation against the real request body, since
   // asserting on the provider-options bag alone passed while the wire was wrong.
   describe("ollama-native think reconciliation", () => {
-    const nativeFetch = () => {
+    // Boundary test: drive the REAL ollama-ai-provider-v2 and assert on the body
+    // it actually builds. The previous version of these tests hand-wrote the
+    // request body, so it could not see that the package strips unknown keys
+    // from `providerOptions.ollama.options` — the explicit-thinking marker used
+    // to ride there, never survived the parse, and `think` was dropped on every
+    // setting. The marker is a header now precisely because headers bypass that
+    // Zod parse; a hand-written body would once again prove nothing.
+    const wireBodyFor = async (
+      configured: ConfiguredParameters | null,
+    ): Promise<Record<string, unknown>> => {
+      let sent: Record<string, unknown> | undefined;
+      const mockFetch = vi.fn(
+        async (_input: unknown, init: RequestInit | undefined) => {
+          sent = JSON.parse(init?.body as string);
+          return new Response("upstream stub", { status: 500 });
+        },
+      );
+      // Must be stubbed BEFORE the model is built: createOllamaNativeFetch
+      // captures `globalThis.fetch` at construction time.
+      vi.stubGlobal("fetch", mockFetch);
+
+      const turn = buildOllamaNativeProviderOptions({ configured });
+      const model = createDirectLLMModel({
+        provider: "ollama-native",
+        apiKey: undefined,
+        modelName: "qwen3:4b",
+        baseUrl: "http://localhost:11434",
+      });
+
+      // The stubbed upstream fails the call; the request body is captured
+      // before that, which is all these assertions need.
+      await generateText({
+        model,
+        prompt: "hi",
+        maxRetries: 0,
+        ...(turn ? { providerOptions: turn.providerOptions } : {}),
+        ...(turn?.headers ? { headers: turn.headers } : {}),
+      }).catch(() => {});
+
+      if (!sent) {
+        throw new Error("Expected a request to reach the fetch wrapper");
+      }
+      return sent;
+    };
+
+    it("omits think entirely when no thinking choice was configured", async () => {
+      // The package defaults `think` to false, which actively DISABLES thinking
+      // rather than deferring to the model — a qwen3-class model then returns
+      // its chain of thought as message `content` closed by a bare `</think>`.
+      const body = await wireBodyFor({ num_ctx: 4096 });
+      expect(body).not.toHaveProperty("think");
+    });
+
+    it("sends think:false when an admin explicitly turned thinking off", async () => {
+      const body = await wireBodyFor({ reasoning_effort: "none" });
+      expect(body.think).toBe(false);
+    });
+
+    it("sends think:true when an admin explicitly turned thinking on", async () => {
+      const body = await wireBodyFor({ reasoning_effort: "medium" });
+      expect(body.think).toBe(true);
+    });
+
+    it("never leaks the internal marker header upstream", async () => {
+      let sentHeaders: Record<string, string> | undefined;
+      const mockFetch = vi.fn(
+        async (_input: unknown, init: RequestInit | undefined) => {
+          sentHeaders = init?.headers as Record<string, string>;
+          return new Response("upstream stub", { status: 500 });
+        },
+      );
+      vi.stubGlobal("fetch", mockFetch);
+
+      const turn = buildOllamaNativeProviderOptions({
+        configured: { reasoning_effort: "none" },
+      });
+      const model = createDirectLLMModel({
+        provider: "ollama-native",
+        apiKey: undefined,
+        modelName: "qwen3:4b",
+        baseUrl: "http://localhost:11434",
+      });
+      await generateText({
+        model,
+        prompt: "hi",
+        maxRetries: 0,
+        providerOptions: turn?.providerOptions,
+        headers: turn?.headers,
+      }).catch(() => {});
+
+      const keys = Object.keys(sentHeaders ?? {}).map((k) => k.toLowerCase());
+      expect(keys).not.toContain(OLLAMA_THINK_EXPLICIT_HEADER);
+    });
+
+    it("keeps the configured sampling options on the wire", async () => {
+      const body = await wireBodyFor({ num_ctx: 4096, top_k: 40 });
+      expect(body.options).toMatchObject({ num_ctx: 4096, top_k: 40 });
+    });
+
+    it("passes a non-JSON body through untouched", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", mockFetch);
+
       createDirectLLMModel({
         provider: "ollama-native",
         apiKey: undefined,
@@ -275,75 +379,13 @@ describe("createDirectLLMModel", () => {
           "Expected ollama-native fetch wrapper to be configured",
         );
       }
-      return wrapped;
-    };
 
-    const sentBody = (mockFetch: ReturnType<typeof vi.fn>) =>
-      JSON.parse(mockFetch.mock.calls[0][1].body as string);
-
-    it("drops the package's defaulted think:false so Ollama applies its own default", async () => {
-      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
-      vi.stubGlobal("fetch", mockFetch);
-
-      await nativeFetch()("http://localhost:11434/api/chat", {
-        method: "POST",
-        body: JSON.stringify({ model: "qwen3:4b", think: false }),
-      });
-
-      expect(sentBody(mockFetch)).not.toHaveProperty("think");
-      vi.unstubAllGlobals();
-    });
-
-    it("keeps an explicitly configured think:false", async () => {
-      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
-      vi.stubGlobal("fetch", mockFetch);
-
-      await nativeFetch()("http://localhost:11434/api/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          model: "qwen3:4b",
-          think: false,
-          options: { [OLLAMA_THINK_EXPLICIT_KEY]: true, num_ctx: 4096 },
-        }),
-      });
-
-      const body = sentBody(mockFetch);
-      expect(body.think).toBe(false);
-      // The marker is internal and must never reach Ollama.
-      expect(body.options).toEqual({ num_ctx: 4096 });
-      vi.unstubAllGlobals();
-    });
-
-    it("keeps an explicitly configured think:true and drops an options bag left empty", async () => {
-      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
-      vi.stubGlobal("fetch", mockFetch);
-
-      await nativeFetch()("http://localhost:11434/api/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          model: "qwen3:4b",
-          think: true,
-          options: { [OLLAMA_THINK_EXPLICIT_KEY]: true },
-        }),
-      });
-
-      const body = sentBody(mockFetch);
-      expect(body.think).toBe(true);
-      expect(body).not.toHaveProperty("options");
-      vi.unstubAllGlobals();
-    });
-
-    it("passes a non-JSON body through untouched", async () => {
-      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
-      vi.stubGlobal("fetch", mockFetch);
-
-      await nativeFetch()("http://localhost:11434/api/chat", {
+      await wrapped("http://localhost:11434/api/chat", {
         method: "POST",
         body: "not json",
       });
 
       expect(mockFetch.mock.calls[0][1].body).toBe("not json");
-      vi.unstubAllGlobals();
     });
   });
 

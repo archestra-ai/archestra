@@ -117,7 +117,7 @@ describe("LlmProviderApiKeyForm dirty tracking", () => {
     const user = userEvent.setup();
     renderForm({ provider: "ollama-native" });
 
-    await user.click(screen.getByRole("tab", { name: "OpenAI-compatible" }));
+    await user.click(screen.getByRole("radio", { name: "OpenAI-compatible" }));
 
     await waitFor(() => {
       expect(form.getValues("provider")).toBe("ollama");
@@ -134,7 +134,7 @@ describe("LlmProviderApiKeyForm Ollama transport", () => {
     await user.type(screen.getByLabelText(/api key/i), "secret-token");
     await user.type(screen.getByLabelText(/base url/i), "http://gpu-box:11434");
 
-    await user.click(screen.getByRole("tab", { name: "OpenAI-compatible" }));
+    await user.click(screen.getByRole("radio", { name: "OpenAI-compatible" }));
 
     await waitFor(() => {
       expect(form.getValues("provider")).toBe("ollama");
@@ -153,7 +153,11 @@ describe("LlmProviderApiKeyForm Ollama transport", () => {
   // that support it), so collapsing to `ollama-native` unconditionally left the
   // sole Ollama entry permanently disabled — no way to add a key at all.
   it("selects the caller-allowed transport when only one is permitted", async () => {
-    renderForm({ provider: "ollama" }, ["ollama"]);
+    // Deliberately starts on the transport the caller does NOT allow. Starting
+    // on "ollama" made the provider assertion vacuous — the effect returns
+    // early when the value already matches, so the test passed against the
+    // pre-fix source that always collapsed to "ollama-native".
+    renderForm({ provider: "ollama-native" }, ["ollama"]);
 
     await waitFor(() => {
       expect(form.getValues("provider")).toBe("ollama");
@@ -162,19 +166,32 @@ describe("LlmProviderApiKeyForm Ollama transport", () => {
     // nothing to offer — and offering it would let the form mint a key the
     // caller's own setup instructions do not describe.
     expect(
-      screen.queryByRole("tab", { name: "OpenAI-compatible" }),
+      screen.queryByRole("radio", { name: "OpenAI-compatible" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("tab", { name: "Native" }),
+      screen.queryByRole("radio", { name: "Native" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("clears the API key when leaving Ollama for another provider", async () => {
+    // The credential-preservation skip is Ollama-to-Ollama only: the pair is
+    // one server with one credential. Any other destination is a different
+    // service, so weakening that `&&` to `||` would submit an Ollama key to it.
+    renderForm({ provider: "ollama-native", apiKey: "secret-token" });
+
+    form.setValue("provider", "openai");
+
+    await waitFor(() => {
+      expect(form.getValues("apiKey")).toBeFalsy();
+    });
   });
 
   it("offers both transports when the caller does not restrict the list", async () => {
     renderForm({ provider: "ollama-native" });
 
-    expect(screen.getByRole("tab", { name: "Native" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Native" })).toBeInTheDocument();
     expect(
-      screen.getByRole("tab", { name: "OpenAI-compatible" }),
+      screen.getByRole("radio", { name: "OpenAI-compatible" }),
     ).toBeInTheDocument();
   });
 });

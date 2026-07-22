@@ -68,10 +68,16 @@ export type LLMModel = Parameters<typeof streamText>[0]["model"];
 /**
  * Marks native Ollama `think` as explicitly chosen by an admin rather than
  * defaulted by ollama-ai-provider-v2. Set by `buildOllamaNativeProviderOptions`
- * inside the `options` bag; consumed and removed by `createOllamaNativeFetch`
- * before the request is sent, so Ollama never sees it.
+ * as a request header; consumed and removed by `createOllamaNativeFetch` before
+ * the request is sent, so neither the Archestra proxy nor Ollama ever sees it.
+ *
+ * It is a header rather than a field in the `options` bag because
+ * ollama-ai-provider-v2 parses `providerOptions.ollama` through a closed Zod
+ * object whose `options` shape lists ten fixed keys — Zod strips everything
+ * else, so a marker riding in that bag never reaches the wrapper. Headers pass
+ * through `combineHeaders` untouched by any schema.
  */
-export const OLLAMA_THINK_EXPLICIT_KEY = "__archestraThinkExplicit";
+export const OLLAMA_THINK_EXPLICIT_HEADER = "x-archestra-ollama-think";
 
 /**
  * Check if API key is required for the given provider
@@ -717,10 +723,14 @@ function createTracedFetch(): typeof globalThis.fetch {
  * sends no `think` field at all, which is why it behaves correctly.
  *
  * The package offers no way to omit the field, so `buildOllamaNativeProviderOptions`
- * marks a deliberate choice with OLLAMA_THINK_EXPLICIT_KEY inside the `options`
- * bag. Here that marker is consumed and removed: with it, `think` stands as
+ * marks a deliberate choice with the OLLAMA_THINK_EXPLICIT_HEADER request header.
+ * Here that header is consumed and removed: with it, `think` stands as
  * configured; without it, `think` is dropped so Ollama applies the model's own
  * default.
+ *
+ * The header is always stripped, including on the pass-through paths below — the
+ * request goes to Archestra's own LLM proxy first, and an internal marker must
+ * not travel any further than this wrapper.
  *
  * This wraps Archestra's own client only. Callers that POST to
  * `/v1/ollama-native/…` themselves never pass through here and keep whatever
@@ -732,39 +742,76 @@ function createOllamaNativeFetch(
   const baseFetch = providedFetch ?? globalThis.fetch;
 
   return (input, init) => {
+    const { hasExplicitThink, headers } = takeThinkMarkerHeader(init?.headers);
+    const forwarded: RequestInit | undefined =
+      init === undefined ? undefined : { ...init, headers };
+
     if (typeof init?.body !== "string") {
-      return baseFetch(input, init);
+      return baseFetch(input, forwarded);
     }
 
     let body: Record<string, unknown>;
     try {
       const parsed: unknown = JSON.parse(init.body);
       if (typeof parsed !== "object" || parsed === null) {
-        return baseFetch(input, init);
+        return baseFetch(input, forwarded);
       }
       body = parsed as Record<string, unknown>;
     } catch {
       // Not JSON we understand — forward verbatim rather than guessing.
-      return baseFetch(input, init);
+      return baseFetch(input, forwarded);
     }
 
-    const options = body.options;
-    const hasExplicitThink =
-      typeof options === "object" &&
-      options !== null &&
-      OLLAMA_THINK_EXPLICIT_KEY in options;
-
-    if (hasExplicitThink) {
-      const bag = options as Record<string, unknown>;
-      delete bag[OLLAMA_THINK_EXPLICIT_KEY];
-      // The marker may have been the only entry; an empty bag is noise upstream.
-      if (Object.keys(bag).length === 0) delete body.options;
-    } else if ("think" in body) {
+    if (!hasExplicitThink && "think" in body) {
       delete body.think;
     }
 
-    return baseFetch(input, { ...init, body: JSON.stringify(body) });
+    // The package emits an `options` bag even when every key resolved to
+    // nothing; an empty object is noise upstream.
+    const options = body.options;
+    if (
+      typeof options === "object" &&
+      options !== null &&
+      Object.keys(options).length === 0
+    ) {
+      delete body.options;
+    }
+
+    return baseFetch(input, { ...forwarded, body: JSON.stringify(body) });
   };
+}
+
+/**
+ * Splits the internal think marker out of a request's headers, returning the
+ * headers to actually send. `HeadersInit` has three shapes and the AI SDK uses
+ * more than one of them, so normalize to a plain object rather than assuming.
+ */
+function takeThinkMarkerHeader(headers: HeadersInit | undefined): {
+  hasExplicitThink: boolean;
+  headers: Record<string, string>;
+} {
+  const out: Record<string, string> = {};
+  let hasExplicitThink = false;
+
+  const take = (key: string, value: string) => {
+    if (key.toLowerCase() === OLLAMA_THINK_EXPLICIT_HEADER) {
+      hasExplicitThink = true;
+      return;
+    }
+    out[key] = value;
+  };
+
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      take(key, value);
+    });
+  } else if (Array.isArray(headers)) {
+    for (const [key, value] of headers) take(key, value);
+  } else if (headers) {
+    for (const [key, value] of Object.entries(headers)) take(key, value);
+  }
+
+  return { hasExplicitThink, headers: out };
 }
 
 /**

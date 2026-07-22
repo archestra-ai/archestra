@@ -25,6 +25,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeams } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils";
 import { LlmProviderSelectItems } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -139,6 +140,14 @@ const OLLAMA_TRANSPORTS = [
   "ollama-native",
   "ollama",
 ] as const satisfies readonly CreateLlmProviderApiKeyBody["provider"][];
+
+const OLLAMA_TRANSPORT_OPTIONS = [
+  { value: "ollama-native", label: "Native" },
+  { value: "ollama", label: "OpenAI-compatible" },
+] as const satisfies readonly {
+  value: CreateLlmProviderApiKeyBody["provider"];
+  label: string;
+}[];
 
 const PROVIDER_CONFIG: Record<
   CreateLlmProviderApiKeyBody["provider"],
@@ -805,38 +814,53 @@ export function LlmProviderApiKeyForm({
         */}
         {showOllamaTransport && (
           <div className="space-y-2">
-            <Label id="llm-provider-api-key-ollama-transport">Transport</Label>
-            <Tabs
-              value={provider}
-              onValueChange={(value) =>
-                form.setValue(
-                  "provider",
-                  value as CreateLlmProviderApiKeyBody["provider"],
-                )
-              }
+            {/*
+              A radiogroup rather than Tabs: this picks a value, it does not
+              switch between panels. Radix Tabs sets `aria-controls` on every
+              trigger unconditionally, so with no TabsContent both triggers
+              pointed at an element id that is never rendered.
+            */}
+            <span
+              id="llm-provider-api-key-ollama-transport"
+              className="text-sm font-medium leading-none"
             >
-              <TabsList
-                className="grid w-full grid-cols-2"
-                aria-labelledby="llm-provider-api-key-ollama-transport"
-              >
-                {/*
-                  The transport is baked into the stored provider, so an
-                  existing key cannot switch without being recreated.
-                */}
-                <TabsTrigger
-                  value="ollama-native"
-                  disabled={isEditMode || isPending || disableProvider}
-                >
-                  Native
-                </TabsTrigger>
-                <TabsTrigger
-                  value="ollama"
-                  disabled={isEditMode || isPending || disableProvider}
-                >
-                  OpenAI-compatible
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+              Transport
+            </span>
+            <fieldset
+              className="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+              aria-labelledby="llm-provider-api-key-ollama-transport"
+              disabled={isEditMode || isPending || disableProvider}
+            >
+              {/*
+                The transport is baked into the stored provider, so an
+                existing key cannot switch without being recreated.
+              */}
+              {OLLAMA_TRANSPORT_OPTIONS.map((option) => {
+                const selected = provider === option.value;
+                return (
+                  <label
+                    key={option.value}
+                    className={cn(
+                      "cursor-pointer rounded-md px-3 py-1.5 text-center text-sm font-medium transition-colors",
+                      "has-disabled:cursor-not-allowed has-disabled:opacity-50",
+                      selected
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="llm-provider-api-key-ollama-transport-option"
+                      value={option.value}
+                      checked={selected}
+                      onChange={() => form.setValue("provider", option.value)}
+                      className="sr-only"
+                    />
+                    {option.label}
+                  </label>
+                );
+              })}
+            </fieldset>
             <p className="text-xs text-muted-foreground">
               {provider === "ollama-native"
                 ? "Ollama's own /api/chat. Supports per-model parameters such as num_ctx and thinking."

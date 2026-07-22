@@ -63,22 +63,37 @@ function toText(content: NativeMessage["content"]): string {
   return "";
 }
 
+/** Key holding tool-call argument text that could not be read as an object. */
+const UNPARSED_TOOL_ARGS_KEY = "__archestra_unparsed_arguments";
+
+/** Prefix for ids synthesized for an id-less native tool part. */
+const SYNTHETIC_TOOL_PART_ID_PREFIX = "archestra-ollama-native-";
+
+/**
+ * Arguments that do not parse into an object are preserved verbatim rather than
+ * collapsed to `{}`, matching the proxy adapter. Showing no arguments at all to
+ * someone auditing a tool call is worse than showing the raw text.
+ */
 function toArgsObject(
   args: string | Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  if (args && typeof args === "object") return args;
+  if (args && typeof args === "object" && !Array.isArray(args)) return args;
   if (typeof args === "string") {
     try {
-      const parsed = JSON.parse(args);
-      return parsed && typeof parsed === "object" ? parsed : {};
+      const parsed: unknown = JSON.parse(args);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : { [UNPARSED_TOOL_ARGS_KEY]: args };
     } catch {
-      return {};
+      return { [UNPARSED_TOOL_ARGS_KEY]: args };
     }
   }
+  if (Array.isArray(args)) return { [UNPARSED_TOOL_ARGS_KEY]: args };
   return {};
 }
 
 class OllamaNativeChatInteraction implements InteractionUtils {
+  private syntheticToolCallSeq = 0;
   private request: NativeRequest;
   private response: NativeResponse;
   modelName: string;
@@ -140,16 +155,22 @@ class OllamaNativeChatInteraction implements InteractionUtils {
   }
 
   getLastAssistantResponse(): string {
-    return this.response.message.content ?? "";
+    return this.response?.message?.content ?? "";
   }
 
+  // Optional-chained throughout: a failed turn persists an `{ error }` sentinel
+  // in place of the response, and a throw here is caught upstream by falling
+  // back to an empty message list — which would drop the whole request side of
+  // the log entry, exactly when someone is trying to see what was sent.
   mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+    // Deterministic per call, so repeated renders produce identical ids.
+    this.syntheticToolCallSeq = 0;
     return [
       ...this.mapRequestToUiMessages(dualLlmAnalyses),
       this.mapMessageToUi({
         role: "assistant",
-        content: this.response.message.content,
-        tool_calls: this.response.message.tool_calls ?? undefined,
+        content: this.response?.message?.content ?? "",
+        tool_calls: this.response?.message?.tool_calls ?? undefined,
       }),
     ];
   }
@@ -169,8 +190,15 @@ class OllamaNativeChatInteraction implements InteractionUtils {
       if (message.role === "assistant" && message.tool_calls) {
         const parts: PartialUIMessage["parts"] = [...uiMessage.parts];
         // Results that could belong to this assistant turn, in arrival order.
+        // Bounded at the next assistant message: results after that belong to a
+        // later turn, and an unbounded slice let a turn whose own result is
+        // missing (aborted turn, truncated history) claim one by name and
+        // render another turn's output under this call.
+        const nextAssistant = messages.findIndex(
+          (m, index) => index > i && m.role === "assistant",
+        );
         const followingResults = messages
-          .slice(i + 1)
+          .slice(i + 1, nextAssistant === -1 ? undefined : nextAssistant)
           .filter((m) => m.role === "tool");
         const claimed = new Set<number>();
 
@@ -215,6 +243,21 @@ class OllamaNativeChatInteraction implements InteractionUtils {
     return uiMessages;
   }
 
+  /**
+   * A non-empty id for a tool part.
+   *
+   * The native wire carries no tool-call ids, so every part used to fall back
+   * to `""`. The log view keys parts with `part.toolCallId ?? partKey`, and
+   * `??` does not catch the empty string — so a turn with two calls rendered
+   * four siblings all keyed `""`. Synthesize the way the proxy adapter already
+   * does for tool results.
+   */
+  private toolPartId(explicit: string | undefined, toolName: string): string {
+    if (explicit) return explicit;
+    this.syntheticToolCallSeq += 1;
+    return `${SYNTHETIC_TOOL_PART_ID_PREFIX}${toolName}-${this.syntheticToolCallSeq}`;
+  }
+
   private mapMessageToUi(message: {
     role: string;
     content?: NativeMessage["content"];
@@ -236,7 +279,7 @@ class OllamaNativeChatInteraction implements InteractionUtils {
       parts.push({
         type: "dynamic-tool",
         toolName: resolvedToolName,
-        toolCallId: message.tool_call_id ?? "",
+        toolCallId: this.toolPartId(message.tool_call_id, resolvedToolName),
         state: "output-available",
         input: {},
         output,
@@ -248,7 +291,7 @@ class OllamaNativeChatInteraction implements InteractionUtils {
           parts.push({
             type: "dynamic-tool",
             toolName: toolCall.function.name,
-            toolCallId: toolCall.id ?? "",
+            toolCallId: this.toolPartId(toolCall.id, toolCall.function.name),
             state: "input-available",
             input: toArgsObject(toolCall.function.arguments),
           });

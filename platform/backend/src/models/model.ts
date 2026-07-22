@@ -150,7 +150,13 @@ function formatCachePrice(perMillion: number): string {
 function readOllamaDefaultNumCtx(
   defaultParameters: ModelDefaultParameters | null | undefined,
 ): number | null {
-  const raw = defaultParameters?.num_ctx;
+  // A Modelfile may set the same PARAMETER twice, which the fetcher collects
+  // into an array. Ollama itself is last-wins, so take the final entry rather
+  // than rejecting the whole value and falling back to the architectural
+  // window — that fallback is the very overstatement this resolution exists
+  // to prevent.
+  const collected = defaultParameters?.num_ctx;
+  const raw = Array.isArray(collected) ? collected.at(-1) : collected;
   if (typeof raw === "number") return raw;
   if (typeof raw !== "string") return null;
   const parsed = Number(raw.trim());

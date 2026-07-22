@@ -434,11 +434,14 @@ export async function executeA2AMessage(
     // interactive chat route. Ollama reads the output cap from
     // `options.num_predict`; the top-level `maxOutputTokens` above is discarded
     // by the native endpoint, so the budget has to be folded in here too.
-    const ollamaProviderOptions =
+    const ollamaTurn =
       provider === "ollama-native"
         ? buildOllamaNativeProviderOptions({
             configured: modelRow?.configuredParameters,
             maxOutputTokens,
+            effectiveContextLength: modelRow
+              ? ModelModel.resolveEffectiveContextLength(modelRow)
+              : null,
           })
         : undefined;
 
@@ -469,8 +472,14 @@ export async function executeA2AMessage(
       //   instead: the SDK maps maxOutputTokens to the legacy max_tokens for
       //   model names its reasoning heuristic doesn't recognize (e.g. the bare
       //   `chat-latest` alias), and newer models reject max_tokens outright.
-      ...(ollamaProviderOptions
-        ? { maxOutputTokens, providerOptions: ollamaProviderOptions }
+      ...(ollamaTurn
+        ? {
+            maxOutputTokens,
+            providerOptions: ollamaTurn.providerOptions,
+            // Carries the explicit-thinking marker to the fetch wrapper, which
+            // strips it before the request leaves this process.
+            ...(ollamaTurn.headers ? { headers: ollamaTurn.headers } : {}),
+          }
         : provider === "openai" && !requiresOpenAiResponsesApi(selectedModel)
           ? {
               providerOptions: {

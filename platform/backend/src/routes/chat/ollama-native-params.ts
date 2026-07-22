@@ -16,17 +16,30 @@
  * renders as the assistant's answer. Omitting `think` is what the OpenAI-compatible
  * `/v1` provider does, and why thinking behaves correctly there.
  *
- * The package gives no way to omit the field, so {@link OLLAMA_THINK_EXPLICIT_KEY}
- * rides along in the `options` bag to mark the intent as deliberate. The fetch
+ * The package gives no way to omit the field, so {@link OLLAMA_THINK_EXPLICIT_HEADER}
+ * is returned as a request header to mark the intent as deliberate. The fetch
  * wrapper in `clients/llm-client.ts` reads it, strips it, and drops `think` when
  * it is absent. The marker never leaves this process.
+ *
+ * It has to be a header: the package parses `providerOptions.ollama` through a
+ * closed Zod object, so anything smuggled inside the `options` bag is stripped
+ * before the request body is built and the wrapper would never see it.
  */
-import { OLLAMA_THINK_EXPLICIT_KEY } from "@/clients/llm-client";
+import { OLLAMA_THINK_EXPLICIT_HEADER } from "@/clients/llm-client";
 import type { ConfiguredParameters } from "@/types/model";
 
 type OllamaProviderOptions = {
   options?: Record<string, number | number[] | string[] | boolean>;
   think?: boolean;
+};
+
+/**
+ * The `providerOptions` and `headers` to merge into this turn's `streamText`
+ * config. `headers` is empty unless the thinking choice was set explicitly.
+ */
+export type OllamaNativeTurnConfig = {
+  providerOptions: { ollama: OllamaProviderOptions };
+  headers?: Record<string, string>;
 };
 
 export function buildOllamaNativeProviderOptions(params: {
@@ -38,18 +51,48 @@ export function buildOllamaNativeProviderOptions(params: {
    * Folded into `options.num_predict` — see {@link resolveNumPredict}.
    */
   maxOutputTokens?: number;
-}): { ollama: OllamaProviderOptions } | undefined {
-  const { configured, requestTemperature, maxOutputTokens } = params;
+  /**
+   * The window this turn actually runs with (`ModelModel.resolveEffectiveContextLength`),
+   * already clamped to the model's architectural ceiling. Sent in place of the
+   * raw configured `num_ctx` so the wire cannot disagree with what the context
+   * ring and the Models table display.
+   */
+  effectiveContextLength?: number | null;
+  /**
+   * Estimated prompt size for this turn. `num_ctx` is shared between prompt and
+   * generation, so the budget is additionally trimmed to what the prompt leaves
+   * — see {@link resolveNumPredict}.
+   */
+  promptTokens?: number | null;
+}): OllamaNativeTurnConfig | undefined {
+  const {
+    configured,
+    requestTemperature,
+    maxOutputTokens,
+    effectiveContextLength,
+    promptTokens,
+  } = params;
 
   const options: Record<string, number | number[] | string[] | boolean> = {};
   const setNumber = (key: string, value: number | undefined) => {
     if (value !== undefined) options[key] = value;
   };
 
-  setNumber("num_ctx", configured?.num_ctx);
+  // Only send `num_ctx` when an admin configured one — the effective length
+  // also covers a Modelfile value, which Ollama already applies on its own.
+  if (configured?.num_ctx !== undefined) {
+    setNumber("num_ctx", effectiveContextLength ?? configured.num_ctx);
+  }
   setNumber(
     "num_predict",
-    resolveNumPredict(configured?.num_predict, maxOutputTokens),
+    resolveNumPredict({
+      configured: configured?.num_predict,
+      budget: maxOutputTokens,
+      remainingContext: resolveRemainingContext({
+        effectiveContextLength,
+        promptTokens,
+      }),
+    }),
   );
   setNumber("top_k", configured?.top_k);
   setNumber("top_p", configured?.top_p);
@@ -73,12 +116,11 @@ export function buildOllamaNativeProviderOptions(params: {
   //
   // Set only when a value was explicitly chosen. Left unset, the package emits
   // `think: false`, which the fetch wrapper strips so Ollama applies the model's
-  // own default — see the note at the top of this file. The marker must be
-  // written before `options` is attached below, or a turn whose only setting is
-  // the thinking choice would have no `options` bag to carry it.
+  // own default — see the note at the top of this file.
+  let headers: Record<string, string> | undefined;
   if (configured?.reasoning_effort !== undefined) {
     ollama.think = configured.reasoning_effort !== "none";
-    options[OLLAMA_THINK_EXPLICIT_KEY] = true;
+    headers = { [OLLAMA_THINK_EXPLICIT_HEADER]: "1" };
   }
 
   if (Object.keys(options).length > 0) ollama.options = options;
@@ -86,7 +128,7 @@ export function buildOllamaNativeProviderOptions(params: {
   if (ollama.options === undefined && ollama.think === undefined) {
     return undefined;
   }
-  return { ollama };
+  return { providerOptions: { ollama }, headers };
 }
 
 // =============================================================================
@@ -104,12 +146,45 @@ export function buildOllamaNativeProviderOptions(params: {
  * context fills) and `-2` (fill the context) — so a plain `Math.min` would
  * select the sentinel and remove the cap entirely. Treat a negative configured
  * value as "no explicit cap" and let the budget win.
+ *
+ * `remainingContext` trims the result again. Unlike the other providers, Ollama
+ * draws prompt and generation from the same `num_ctx`, so a budget resolved
+ * purely from the window size can exceed what the prompt actually left. The
+ * overflow gate deliberately does not reject those requests — for Ollama the
+ * budget is often exactly half the window, so gating on it would refuse every
+ * prompt above 50% — the budget is simply fitted to the space instead.
  */
-function resolveNumPredict(
-  configured: number | undefined,
-  budget: number | undefined,
-): number | undefined {
-  if (budget === undefined) return configured;
-  if (configured === undefined || configured < 0) return budget;
-  return Math.min(configured, budget);
+function resolveNumPredict(params: {
+  configured: number | undefined;
+  budget: number | undefined;
+  remainingContext: number | undefined;
+}): number | undefined {
+  const { configured, budget, remainingContext } = params;
+
+  const capped =
+    budget === undefined
+      ? configured
+      : configured === undefined || configured < 0
+        ? budget
+        : Math.min(configured, budget);
+
+  if (capped === undefined || capped < 0 || remainingContext === undefined) {
+    return capped;
+  }
+  return Math.min(capped, remainingContext);
+}
+
+/**
+ * How much of the window is left for generation once the prompt is in it.
+ * Undefined when either input is unknown, and floored at 1 so a prompt that
+ * already fills the window still asks for a token rather than sending
+ * `num_predict: 0`, which Ollama reads as "generate nothing".
+ */
+function resolveRemainingContext(params: {
+  effectiveContextLength: number | null | undefined;
+  promptTokens: number | null | undefined;
+}): number | undefined {
+  const { effectiveContextLength, promptTokens } = params;
+  if (!effectiveContextLength || promptTokens == null) return undefined;
+  return Math.max(1, effectiveContextLength - promptTokens);
 }

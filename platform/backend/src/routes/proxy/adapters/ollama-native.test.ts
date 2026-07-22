@@ -39,6 +39,17 @@ function chunk(overrides: Record<string, unknown> = {}) {
   } as OllamaNative.Types.ChatStreamChunk;
 }
 
+/** A minimal upstream client; the transport describes below shadow this. */
+function client(fetchImpl: typeof fetch, baseUrl = "http://ollama.test") {
+  return {
+    baseUrl,
+    fetch: fetchImpl,
+    headers: undefined,
+    apiKey: undefined,
+    abortSignal: undefined,
+  };
+}
+
 describe("ollamaNativeAdapterFactory — identity", () => {
   test("declares the native provider + discriminator", () => {
     expect(factory.provider).toBe("ollama-native");
@@ -539,6 +550,15 @@ describe("execute / executeStream — upstream transport", () => {
         "http://localhost:11434/api/chat",
       );
     });
+
+    test("a /v1 suffix is stripped even when a query follows it", async () => {
+      // Stripping against the raw string missed this: the value does not end in
+      // "/v1", so the suffix survived and every request landed on the
+      // OpenAI-compatible path and 404'd.
+      expect(await captureUrl("http://ollama.test:11434/v1?token=abc")).toBe(
+        "http://ollama.test:11434/api/chat",
+      );
+    });
   });
 
   test("iterateNdjson reassembles a JSON object split across reads", async () => {
@@ -772,5 +792,200 @@ describe("streaming details", () => {
       type: "error",
       error: { message: "upstream died" },
     });
+  });
+});
+
+describe("tool-call arguments that are not an object", () => {
+  // The client receives the original argument text in the replayed raw line, so
+  // collapsing these to {} would let an argument-inspecting policy evaluate
+  // empty arguments while the client executes the real ones.
+  const argumentsFor = (raw: unknown): Record<string, unknown> => {
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk(
+      chunk({
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [{ function: { name: "t", arguments: raw } }],
+        },
+      }),
+    );
+    return JSON.parse(adapter.state.toolCalls[0].arguments);
+  };
+
+  test("unparseable JSON is preserved verbatim", () => {
+    const args = argumentsFor('{"path":"/etc/pas');
+    expect(args.__archestra_unparsed_arguments).toBe('{"path":"/etc/pas');
+  });
+
+  test("a valid JSON scalar is preserved rather than reshaped", () => {
+    expect(argumentsFor("42").__archestra_unparsed_arguments).toBe("42");
+  });
+
+  test("a JSON array is preserved rather than cast to an object", () => {
+    // `typeof [] === "object"`, so this used to reach policy evaluation as an
+    // array — a shape it cannot read named arguments from.
+    expect(argumentsFor("[1,2]").__archestra_unparsed_arguments).toBe("[1,2]");
+  });
+
+  test("a normal object is passed through untouched", () => {
+    expect(argumentsFor({ path: "/tmp" })).toEqual({ path: "/tmp" });
+  });
+});
+
+describe("stream transport edge cases", () => {
+  test("a 2xx response with no body surfaces as 502, not 200", async () => {
+    // toUpstreamError stamps response.status, so without the override this
+    // threw ApiError(200) and a failure surfaced as a success status.
+    const fetchImpl = (async () =>
+      new Response(null, { status: 200 })) as unknown as typeof fetch;
+
+    await expect(
+      factory.executeStream(client(fetchImpl), request({ stream: true })),
+    ).rejects.toMatchObject({ status: 502 });
+  });
+
+  test("an unparseable NDJSON line is skipped rather than throwing", async () => {
+    const valid = JSON.stringify(
+      chunk({ message: { role: "assistant", content: "a" } }),
+    );
+    const fetchImpl = (async () =>
+      new Response(`{not json\n${valid}\n`, {
+        status: 200,
+      })) as unknown as typeof fetch;
+
+    const stream = await factory.executeStream(
+      client(fetchImpl),
+      request({ stream: true }),
+    );
+    const chunks = [];
+    for await (const c of stream) chunks.push(c);
+    expect(chunks).toHaveLength(1);
+  });
+
+  test("a final line with no trailing newline is still yielded", async () => {
+    const line = JSON.stringify(
+      chunk({ done: true, done_reason: "stop", eval_count: 3 }),
+    );
+    const fetchImpl = (async () =>
+      new Response(line, { status: 200 })) as unknown as typeof fetch;
+
+    const stream = await factory.executeStream(
+      client(fetchImpl),
+      request({ stream: true }),
+    );
+    const chunks = [];
+    for await (const c of stream) chunks.push(c);
+    expect(chunks).toHaveLength(1);
+  });
+
+  test("a multi-byte character split across reads is decoded intact", async () => {
+    // The existing split test slices ASCII, so it exercises the line buffer but
+    // never the incremental UTF-8 decoder.
+    const encoder = new TextEncoder();
+    const line = `${JSON.stringify(
+      chunk({ message: { role: "assistant", content: "日本語" } }),
+    )}\n`;
+    const bytes = encoder.encode(line);
+    const splitAt = bytes.indexOf(encoder.encode("日")[0]) + 1;
+
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, splitAt));
+        controller.enqueue(bytes.slice(splitAt));
+        controller.close();
+      },
+    });
+    const fetchImpl = (async () =>
+      new Response(body, { status: 200 })) as unknown as typeof fetch;
+
+    const stream = await factory.executeStream(
+      client(fetchImpl),
+      request({ stream: true }),
+    );
+    const chunks = [];
+    for await (const c of stream) chunks.push(c);
+    expect(chunks[0]?.message?.content).toBe("日本語");
+  });
+
+  test("breaking out of the stream cancels the upstream body", async () => {
+    // Without this, Ollama keeps generating into a connection nobody reads and
+    // the undici body is held until GC.
+    let cancelled = false;
+    const line = `${JSON.stringify(
+      chunk({ message: { role: "assistant", content: "a" } }),
+    )}\n`;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(line));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetchImpl = (async () =>
+      new Response(body, { status: 200 })) as unknown as typeof fetch;
+
+    const stream = await factory.executeStream(
+      client(fetchImpl),
+      request({ stream: true }),
+    );
+    for await (const _ of stream) break;
+
+    expect(cancelled).toBe(true);
+  });
+});
+
+describe("upstream timing metrics", () => {
+  test("carries Ollama's own durations onto the synthesized final frame", () => {
+    // The real final chunk is swallowed, so without this every tokens/sec
+    // readout divides by an undefined eval_duration and reports NaN.
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk(
+      chunk({
+        done: true,
+        done_reason: "stop",
+        prompt_eval_count: 11,
+        eval_count: 22,
+        total_duration: 5_000_000_000,
+        load_duration: 1_000_000,
+        prompt_eval_duration: 2_000_000,
+        eval_duration: 3_000_000_000,
+      }),
+    );
+
+    const final = JSON.parse(String(adapter.formatEndSSE()));
+    expect(final).toMatchObject({
+      done: true,
+      prompt_eval_count: 11,
+      eval_count: 22,
+      total_duration: 5_000_000_000,
+      eval_duration: 3_000_000_000,
+    });
+  });
+
+  test("a replayed tool-call line does not repeat the usage counters", () => {
+    // formatEndSSE emits them on the synthesized frame, so leaving them on the
+    // replay makes an accumulating client count the turn twice.
+    const adapter = factory.createStreamAdapter();
+    adapter.processChunk(
+      chunk({
+        done: true,
+        done_reason: "stop",
+        prompt_eval_count: 11,
+        eval_count: 22,
+        eval_duration: 3_000_000_000,
+        message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [{ function: { name: "t", arguments: {} } }],
+        },
+      }),
+    );
+
+    const replayed = JSON.parse(String(adapter.getRawToolCallEvents()[0]));
+    expect(replayed).not.toHaveProperty("prompt_eval_count");
+    expect(replayed).not.toHaveProperty("eval_count");
+    expect(replayed).not.toHaveProperty("eval_duration");
   });
 });

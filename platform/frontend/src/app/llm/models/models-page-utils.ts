@@ -1,6 +1,7 @@
 import {
   type archestraApiTypes,
   compareModelsForDisplay,
+  MAX_CONFIGURABLE_NUM_CTX,
 } from "@archestra/shared";
 
 export type ModelsPageModelTypeFilter = "all" | "chat" | "embedding";
@@ -60,7 +61,11 @@ export const OLLAMA_NATIVE_PARAM_RULES: Record<
   keyof Omit<ConfiguredParametersFormValues, "reasoning_effort" | "stop">,
   NumericParameterRule
 > = {
-  num_ctx: { min: 1, integer: true },
+  // The max mirrors the server backstop. It is the only ceiling when the row's
+  // architectural `contextLength` is null — the common case for a freshly
+  // pulled Ollama model — and without it those values reached the backend and
+  // returned a bare 400, which is what this table exists to prevent.
+  num_ctx: { min: 1, max: MAX_CONFIGURABLE_NUM_CTX, integer: true },
   num_predict: { min: -2, integer: true },
   temperature: { min: 0 },
   top_p: { min: 0, max: 1 },
@@ -155,9 +160,6 @@ export function buildConfiguredParameters(
   persisted?: ConfiguredParametersBody,
 ): ConfiguredParametersBody {
   const result: NonNullable<ConfiguredParametersBody> = {};
-  if (persisted?.seed !== undefined && persisted.seed !== null) {
-    result.seed = persisted.seed;
-  }
   const num = (s: string): number | undefined => {
     const trimmed = s.trim();
     if (!trimmed) return undefined;
@@ -177,13 +179,23 @@ export function buildConfiguredParameters(
   if (repeatPenalty !== undefined) result.repeat_penalty = repeatPenalty;
   const temperature = num(values.temperature);
   if (temperature !== undefined) result.temperature = temperature;
-  const stop = values.stop
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // Only blank lines are dropped. Trimming each line would silently rewrite a
+  // stop sequence whose trailing space is the point of it ("Human: ").
+  const stop = values.stop.split("\n").filter((line) => line.trim().length > 0);
   if (stop.length > 0) result.stop = stop;
   if (values.reasoning_effort)
     result.reasoning_effort = values.reasoning_effort;
+
+  // Carried forward only alongside something else. `seed` has no form field, so
+  // writing it unconditionally made an otherwise-emptied form return `{seed}`
+  // instead of null — leaving no way to clear a saved seed through the UI.
+  if (
+    Object.keys(result).length > 0 &&
+    persisted?.seed !== undefined &&
+    persisted.seed !== null
+  ) {
+    result.seed = persisted.seed;
+  }
 
   return Object.keys(result).length > 0 ? result : null;
 }

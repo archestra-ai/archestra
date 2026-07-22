@@ -1340,17 +1340,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // `options.num_predict`, and the top-level `maxOutputTokens` the
                 // AI SDK emits is discarded by the native endpoint.
                 if (provider === "ollama-native") {
-                  const ollamaProviderOptions =
-                    buildOllamaNativeProviderOptions({
-                      configured: modelRow?.configuredParameters,
-                      requestTemperature: temperature,
-                      maxOutputTokens: streamTextConfig.maxOutputTokens,
-                    });
-                  if (ollamaProviderOptions) {
+                  const ollamaTurn = buildOllamaNativeProviderOptions({
+                    configured: modelRow?.configuredParameters,
+                    requestTemperature: temperature,
+                    maxOutputTokens: streamTextConfig.maxOutputTokens,
+                    effectiveContextLength: modelRow
+                      ? ModelModel.resolveEffectiveContextLength(modelRow)
+                      : null,
+                    // Ollama shares num_ctx between prompt and generation, so
+                    // the budget is trimmed to what this prompt leaves.
+                    promptTokens: latestBreakdown?.usedTokens ?? null,
+                  });
+                  if (ollamaTurn) {
                     streamTextConfig.providerOptions = {
                       ...streamTextConfig.providerOptions,
-                      ...ollamaProviderOptions,
+                      ...ollamaTurn.providerOptions,
                     };
+                    // Carries the explicit-thinking marker to the fetch wrapper,
+                    // which strips it before the request leaves this process.
+                    if (ollamaTurn.headers) {
+                      streamTextConfig.headers = {
+                        ...streamTextConfig.headers,
+                        ...ollamaTurn.headers,
+                      };
+                    }
                   }
                 }
 

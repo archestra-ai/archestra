@@ -509,3 +509,20 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     perplexity: null,
     nvidia: null,
   };
+
+/**
+ * Absolute ceiling for a configured Ollama `num_ctx`, sitting comfortably above
+ * the largest advertised context window in circulation. This is only a guard
+ * against a runaway typo; the meaningful limit is the model's own
+ * `contextLength`, which the update route enforces per row — except on rows
+ * whose architectural length is unknown (proxy-discovered models), where this
+ * is the only ceiling.
+ *
+ * Shared so the models-page form can mirror the server rule rather than letting
+ * an out-of-range value reach the backend and come back as a bare 400.
+ */
+export const MAX_CONFIGURABLE_NUM_CTX = 10_000_000;
+
+/** Ollama only ever honours a handful of stop sequences. */
+export const MAX_STOP_SEQUENCES = 16;
+export const MAX_STOP_SEQUENCE_LENGTH = 256;

@@ -1,4 +1,4 @@
-import { OLLAMA_THINK_EXPLICIT_KEY } from "@/clients/llm-client";
+import { OLLAMA_THINK_EXPLICIT_HEADER } from "@/clients/llm-client";
 import { describe, expect, test } from "@/test";
 import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 
@@ -25,7 +25,7 @@ describe("buildOllamaNativeProviderOptions", () => {
         temperature: 0.5,
       },
     });
-    expect(result).toEqual({
+    expect(result?.providerOptions).toEqual({
       ollama: {
         options: {
           num_ctx: 8192,
@@ -39,36 +39,29 @@ describe("buildOllamaNativeProviderOptions", () => {
         },
       },
     });
+    expect(result?.headers).toBeUndefined();
   });
 
   test("omits unset fields so Ollama's own defaults are inherited", () => {
     const result = buildOllamaNativeProviderOptions({
       configured: { num_ctx: 4096 },
     });
-    expect(result).toEqual({ ollama: { options: { num_ctx: 4096 } } });
+    expect(result?.providerOptions).toEqual({
+      ollama: { options: { num_ctx: 4096 } },
+    });
   });
 
   test("maps reasoning effort to a boolean think (v6 package constraint)", () => {
     expect(
       buildOllamaNativeProviderOptions({
         configured: { reasoning_effort: "none" },
-      }),
-    ).toEqual({
-      ollama: {
-        think: false,
-        options: { [OLLAMA_THINK_EXPLICIT_KEY]: true },
-      },
-    });
+      })?.providerOptions,
+    ).toEqual({ ollama: { think: false } });
     expect(
       buildOllamaNativeProviderOptions({
         configured: { reasoning_effort: "medium" },
-      }),
-    ).toEqual({
-      ollama: {
-        think: true,
-        options: { [OLLAMA_THINK_EXPLICIT_KEY]: true },
-      },
-    });
+      })?.providerOptions,
+    ).toEqual({ ollama: { think: true } });
   });
 
   test("a request-body temperature overrides the configured one", () => {
@@ -76,8 +69,8 @@ describe("buildOllamaNativeProviderOptions", () => {
       configured: { temperature: 0.2, num_ctx: 2048 },
       requestTemperature: 0.9,
     });
-    expect(result?.ollama.options?.temperature).toBe(0.9);
-    expect(result?.ollama.options?.num_ctx).toBe(2048);
+    expect(result?.providerOptions.ollama.options?.temperature).toBe(0.9);
+    expect(result?.providerOptions.ollama.options?.num_ctx).toBe(2048);
   });
 
   test("falsy sampling values survive (0 is a meaningful setting)", () => {
@@ -86,7 +79,7 @@ describe("buildOllamaNativeProviderOptions", () => {
     const result = buildOllamaNativeProviderOptions({
       configured: { temperature: 0, top_p: 0, seed: 0, top_k: 0 },
     });
-    expect(result?.ollama.options).toEqual({
+    expect(result?.providerOptions.ollama.options).toEqual({
       temperature: 0,
       top_p: 0,
       seed: 0,
@@ -98,22 +91,20 @@ describe("buildOllamaNativeProviderOptions", () => {
   // `createOllamaNativeFetch` (clients/llm-client.test.ts): the package emits
   // `think: ollamaOptions?.think ?? false` regardless of what is set here, so an
   // assertion on this bag alone cannot tell whether thinking is actually on.
-  test("an unset reasoning_effort sets neither `think` nor the explicit marker", () => {
+  test("an unset reasoning_effort sets neither `think` nor the explicit header", () => {
     const result = buildOllamaNativeProviderOptions({
       configured: { num_ctx: 4096 },
     });
-    expect(result?.ollama).not.toHaveProperty("think");
-    expect(result?.ollama.options).not.toHaveProperty(
-      OLLAMA_THINK_EXPLICIT_KEY,
-    );
+    expect(result?.providerOptions.ollama).not.toHaveProperty("think");
+    expect(result?.headers).toBeUndefined();
   });
 
   test("an explicit reasoning_effort marks the choice as deliberate", () => {
     const result = buildOllamaNativeProviderOptions({
       configured: { reasoning_effort: "medium" },
     });
-    expect(result?.ollama.think).toBe(true);
-    expect(result?.ollama.options?.[OLLAMA_THINK_EXPLICIT_KEY]).toBe(true);
+    expect(result?.providerOptions.ollama.think).toBe(true);
+    expect(result?.headers?.[OLLAMA_THINK_EXPLICIT_HEADER]).toBe("1");
   });
 
   test('"none" is a deliberate choice, so the marker still rides along', () => {
@@ -122,8 +113,52 @@ describe("buildOllamaNativeProviderOptions", () => {
     const result = buildOllamaNativeProviderOptions({
       configured: { reasoning_effort: "none" },
     });
-    expect(result?.ollama.think).toBe(false);
-    expect(result?.ollama.options?.[OLLAMA_THINK_EXPLICIT_KEY]).toBe(true);
+    expect(result?.providerOptions.ollama.think).toBe(false);
+    expect(result?.headers?.[OLLAMA_THINK_EXPLICIT_HEADER]).toBe("1");
+  });
+
+  test("the marker never rides in the options bag", () => {
+    // It used to. ollama-ai-provider-v2 parses `providerOptions.ollama` through
+    // a closed Zod object, so anything inside `options` that is not one of its
+    // ten known keys is stripped before the body is built — the wrapper never
+    // saw the marker and unconditionally deleted `think`.
+    const result = buildOllamaNativeProviderOptions({
+      configured: { reasoning_effort: "none", num_ctx: 4096 },
+    });
+    expect(result?.providerOptions.ollama.options).toEqual({ num_ctx: 4096 });
+  });
+});
+
+describe("num_ctx → the effective window", () => {
+  test("sends the effective window rather than the raw configured value", () => {
+    // `resolveEffectiveContextLength` clamps to the architectural ceiling.
+    // Sending the unclamped stored value would let the wire disagree with the
+    // context ring and the Models table.
+    const result = buildOllamaNativeProviderOptions({
+      configured: { num_ctx: 131072 },
+      effectiveContextLength: 8192,
+    });
+    expect(result?.providerOptions.ollama.options?.num_ctx).toBe(8192);
+  });
+
+  test("falls back to the configured value when no effective length is known", () => {
+    const result = buildOllamaNativeProviderOptions({
+      configured: { num_ctx: 4096 },
+      effectiveContextLength: null,
+    });
+    expect(result?.providerOptions.ollama.options?.num_ctx).toBe(4096);
+  });
+
+  test("sends no num_ctx when the admin configured none", () => {
+    // The effective length also covers a Modelfile `num_ctx`, which Ollama
+    // already applies on its own — echoing it back would be noise.
+    const result = buildOllamaNativeProviderOptions({
+      configured: { top_k: 40 },
+      effectiveContextLength: 8192,
+    });
+    expect(result?.providerOptions.ollama.options).not.toHaveProperty(
+      "num_ctx",
+    );
   });
 });
 
@@ -136,7 +171,7 @@ describe("output budget → options.num_predict", () => {
       configured: null,
       maxOutputTokens: 4096,
     });
-    expect(result?.ollama.options?.num_predict).toBe(4096);
+    expect(result?.providerOptions.ollama.options?.num_predict).toBe(4096);
   });
 
   test("the tighter of budget and configured value wins", () => {
@@ -144,14 +179,14 @@ describe("output budget → options.num_predict", () => {
       buildOllamaNativeProviderOptions({
         configured: { num_predict: 512 },
         maxOutputTokens: 4096,
-      })?.ollama.options?.num_predict,
+      })?.providerOptions.ollama.options?.num_predict,
     ).toBe(512);
 
     expect(
       buildOllamaNativeProviderOptions({
         configured: { num_predict: 8192 },
         maxOutputTokens: 4096,
-      })?.ollama.options?.num_predict,
+      })?.providerOptions.ollama.options?.num_predict,
     ).toBe(4096);
   });
 
@@ -163,7 +198,7 @@ describe("output budget → options.num_predict", () => {
         buildOllamaNativeProviderOptions({
           configured: { num_predict: sentinel },
           maxOutputTokens: 4096,
-        })?.ollama.options?.num_predict,
+        })?.providerOptions.ollama.options?.num_predict,
       ).toBe(4096);
     }
   });
@@ -172,7 +207,7 @@ describe("output budget → options.num_predict", () => {
     expect(
       buildOllamaNativeProviderOptions({
         configured: { num_predict: -1 },
-      })?.ollama.options?.num_predict,
+      })?.providerOptions.ollama.options?.num_predict,
     ).toBe(-1);
   });
 
@@ -180,6 +215,8 @@ describe("output budget → options.num_predict", () => {
     const result = buildOllamaNativeProviderOptions({
       configured: { num_ctx: 4096 },
     });
-    expect(result?.ollama.options).not.toHaveProperty("num_predict");
+    expect(result?.providerOptions.ollama.options).not.toHaveProperty(
+      "num_predict",
+    );
   });
 });

@@ -261,3 +261,137 @@ describe("OllamaNativeChatInteraction", () => {
     });
   });
 });
+
+describe("OllamaNativeChatInteraction — result correlation and resilience", () => {
+  it("never hands the same result to two calls of the same tool", () => {
+    // The whole reason the `claimed` set exists. Both existing correlation
+    // tests use distinct tool names, so deleting that set left them green.
+    const uiMessages = new OllamaNativeChatInteraction(
+      interaction({
+        messages: [
+          { role: "user", content: "search twice" },
+          {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              { function: { name: "search", arguments: {} } },
+              { function: { name: "search", arguments: {} } },
+            ],
+          },
+          { role: "tool", tool_name: "search", content: "first" },
+          { role: "tool", tool_name: "search", content: "second" },
+        ],
+      }),
+    ).mapToUiMessages();
+
+    const outputs = uiMessages
+      .flatMap((m) => m.parts ?? [])
+      .filter((p) => String(p.type) === "dynamic-tool")
+      .filter((p) => "output" in p)
+      .map((p) => (p as { output: unknown }).output);
+
+    expect(outputs).toEqual(["first", "second"]);
+  });
+
+  it("does not let a later turn's result attach to an earlier call", () => {
+    // An aborted turn leaves its own result missing; without bounding the
+    // search at the next assistant message it claimed the next turn's by name.
+    const uiMessages = new OllamaNativeChatInteraction(
+      interaction({
+        messages: [
+          { role: "user", content: "go" },
+          {
+            role: "assistant",
+            content: "",
+            tool_calls: [{ function: { name: "search", arguments: {} } }],
+          },
+          {
+            role: "assistant",
+            content: "",
+            tool_calls: [{ function: { name: "search", arguments: {} } }],
+          },
+          { role: "tool", tool_name: "search", content: "TURN2-RESULT" },
+        ],
+      }),
+    ).mapToUiMessages();
+
+    const assistantTurns = uiMessages.filter((m) => m.role === "assistant");
+    const firstTurnOutputs = (assistantTurns[0]?.parts ?? []).filter(
+      (p) => String(p.type) === "dynamic-tool" && "output" in p,
+    );
+    expect(firstTurnOutputs).toHaveLength(0);
+  });
+
+  it("survives a stored error response instead of dropping the request", () => {
+    // A failed turn persists an `{ error }` sentinel. Throwing here made the
+    // caller fall back to an empty list, hiding what was actually sent.
+    const uiMessages = new OllamaNativeChatInteraction({
+      request: {
+        messages: [
+          { role: "user", content: "hi" },
+          { role: "assistant", content: "partial" },
+        ],
+      },
+      response: { error: "upstream 503" },
+      model: "llama3.2",
+    } as unknown as Interaction).mapToUiMessages();
+
+    expect(uiMessages.some((m) => m.role === "user")).toBe(true);
+  });
+
+  it("gives every id-less tool part a distinct id", () => {
+    // The native wire carries no ids. Falling back to "" gave every part the
+    // same React key, because `?? ` does not catch the empty string.
+    const uiMessages = new OllamaNativeChatInteraction(
+      interaction({
+        messages: [
+          { role: "user", content: "go" },
+          {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              { function: { name: "a", arguments: {} } },
+              { function: { name: "b", arguments: {} } },
+            ],
+          },
+          { role: "tool", tool_name: "a", content: "ra" },
+          { role: "tool", tool_name: "b", content: "rb" },
+        ],
+      }),
+    ).mapToUiMessages();
+
+    const ids = uiMessages
+      .flatMap((m) => m.parts ?? [])
+      .filter((p) => String(p.type) === "dynamic-tool")
+      .map((p) => (p as { toolCallId: string }).toolCallId);
+
+    expect(ids.length).toBeGreaterThan(1);
+    expect(ids).not.toContain("");
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("preserves unparseable tool arguments rather than showing none", () => {
+    const uiMessages = new OllamaNativeChatInteraction(
+      interaction({
+        messages: [
+          { role: "user", content: "go" },
+          {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              { function: { name: "a", arguments: '{"path":"/etc/pas' } },
+            ],
+          },
+        ],
+      }),
+    ).mapToUiMessages();
+
+    const input = uiMessages
+      .flatMap((m) => m.parts ?? [])
+      .filter((p) => String(p.type) === "dynamic-tool")
+      .map((p) => (p as { input: Record<string, unknown> }).input)
+      .find((i) => i && "__archestra_unparsed_arguments" in i);
+
+    expect(input?.__archestra_unparsed_arguments).toBe('{"path":"/etc/pas');
+  });
+});

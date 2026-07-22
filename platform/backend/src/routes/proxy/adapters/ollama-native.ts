@@ -88,11 +88,28 @@ export function getUsageTokens(response: {
   };
 }
 
-/** The upstream base URL is the Ollama root; strip any `/v1` suffix. */
+/**
+ * The upstream base URL is the Ollama root; strip any `/v1` suffix.
+ *
+ * Stripped against the parsed pathname, not the raw string: a base URL carrying
+ * a query (`http://h:11434/v1?token=x`) does not end in `/v1`, so a plain
+ * string replace left the suffix in place and every request 404'd on the
+ * OpenAI-compatible path.
+ */
 function ollamaRoot(baseUrl: string | undefined): string {
-  return (baseUrl ?? config.llm["ollama-native"].baseUrl ?? "")
-    .replace(/\/+$/, "")
-    .replace(/\/v1$/, "");
+  const raw = baseUrl ?? config.llm["ollama-native"].baseUrl ?? "";
+  if (!raw) return "";
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    // Not absolute — fall back to the string form rather than throwing.
+    return raw.replace(/\/+$/, "").replace(/\/v1$/, "");
+  }
+
+  url.pathname = url.pathname.replace(/\/+$/, "").replace(/\/v1$/, "");
+  return url.toString().replace(/\/+$/, "");
 }
 
 /** Native message `content` is a string on the wire; extract plain text. */
@@ -382,6 +399,8 @@ class OllamaNativeStreamAdapter
   private rawToolCallLines: string[] = [];
   // Set to the refusal text when the response was replaced by a policy refusal.
   private replacedText: string | null = null;
+  /** Ollama's own timing counters, read off the swallowed final chunk. */
+  private upstreamMetrics: Record<string, number | undefined> = {};
 
   constructor() {
     this.state = {
@@ -424,6 +443,17 @@ class OllamaNativeStreamAdapter
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       };
+      // The real final chunk is swallowed (formatEndSSE synthesizes its
+      // replacement), so carry Ollama's own timings across or they never reach
+      // the client. `ollama --verbose`, the n8n Ollama node and any tokens/sec
+      // readout divide by `eval_duration`; dropping it yields NaN against
+      // Archestra while the same request works direct to Ollama.
+      this.upstreamMetrics = {
+        total_duration: chunk.total_duration,
+        load_duration: chunk.load_duration,
+        prompt_eval_duration: chunk.prompt_eval_duration,
+        eval_duration: chunk.eval_duration,
+      };
     }
 
     // Accumulate assistant text/thinking before the tool-call branch returns: a
@@ -453,9 +483,21 @@ class OllamaNativeStreamAdapter
       // terminating frame, so replaying a chunk that carried both tool calls
       // and `done: true` would emit a second one — ignored or a parse error
       // depending on the client. The stop reason and usage were already read
-      // off the original above.
+      // off the original above, and the counters are stripped here for the same
+      // reason: formatEndSSE emits them on the synthesized frame, so leaving
+      // them on the replayed line makes an accumulating client count twice.
       this.rawToolCallLines.push(
-        ndjsonLine({ ...chunk, done: false, done_reason: undefined }),
+        ndjsonLine({
+          ...chunk,
+          done: false,
+          done_reason: undefined,
+          prompt_eval_count: undefined,
+          eval_count: undefined,
+          total_duration: undefined,
+          load_duration: undefined,
+          prompt_eval_duration: undefined,
+          eval_duration: undefined,
+        }),
       );
       return {
         sseData: null,
@@ -520,6 +562,9 @@ class OllamaNativeStreamAdapter
     if (this.state.usage !== null) {
       finalChunk.prompt_eval_count = this.state.usage.inputTokens;
       finalChunk.eval_count = this.state.usage.outputTokens;
+    }
+    for (const [key, value] of Object.entries(this.upstreamMetrics)) {
+      if (value !== undefined) finalChunk[key] = value;
     }
     return ndjsonLine(finalChunk);
   }
@@ -770,7 +815,10 @@ function chatUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
   url.search = "";
   url.hash = "";
-  url.pathname = `${url.pathname.replace(/\/+$/, "")}/api/chat`;
+  // `/v1` is the OpenAI-compatible endpoint; the native API is served from the
+  // root. `createClient` already strips it, but a base URL can reach here
+  // unnormalized, and appending `/api/chat` under `/v1` is always a 404.
+  url.pathname = `${url.pathname.replace(/\/+$/, "").replace(/\/v1$/, "")}/api/chat`;
   return url.toString();
 }
 
@@ -911,16 +959,27 @@ function toToolArgsObject(
   try {
     parsed = JSON.parse(args);
   } catch {
+    // Length only, never the content: tool arguments routinely carry user data
+    // and sometimes the secrets being handed to the tool. No sibling adapter
+    // logs argument content at any level.
     logger.warn(
-      { argsPreview: args.slice(0, 120) },
+      { argsLength: args.length },
       "[OllamaNative] tool call arguments are not valid JSON; preserving raw text for policy evaluation",
     );
     return { [UNPARSED_TOOL_ARGS_KEY]: args };
   }
-  if (typeof parsed === "object" && parsed !== null) {
+  // An array is `typeof "object"` but is not an argument object; casting it
+  // would hand policy evaluation a shape it cannot read keys from.
+  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
     return parsed as Record<string, unknown>;
   }
-  // Valid JSON, but a scalar rather than an argument object.
+  // Valid JSON, but a scalar or array rather than an argument object. Warn for
+  // the same reason as the branch above — silently reshaping arguments is what
+  // lets policy and client disagree.
+  logger.warn(
+    { argsLength: args.length, parsedType: typeof parsed },
+    "[OllamaNative] tool call arguments are not a JSON object; preserving raw text for policy evaluation",
+  );
   return { [UNPARSED_TOOL_ARGS_KEY]: args };
 }
 

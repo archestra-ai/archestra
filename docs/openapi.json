@@ -270157,7 +270157,7 @@
             "in": "query",
             "name": "forAgentId",
             "required": false,
-            "description": "Restrict results to skills visible from this agent's environment (strict match, built-in skills exempt)."
+            "description": "Restrict results to skills visible from this agent's environment (skills with no environment assignments and built-in skills are visible everywhere)."
           },
           {
             "schema": {
@@ -270219,12 +270219,6 @@
                               "team",
                               "org"
                             ]
-                          },
-                          "environmentId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "name": {
                             "type": "string"
@@ -270365,6 +270359,25 @@
                               "additionalProperties": false
                             }
                           },
+                          "environments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "authorName": {
                             "nullable": true,
                             "type": "string"
@@ -270378,7 +270391,6 @@
                           "organizationId",
                           "authorId",
                           "scope",
-                          "environmentId",
                           "name",
                           "description",
                           "content",
@@ -270404,6 +270416,7 @@
                           "updatedAt",
                           "fileCount",
                           "teams",
+                          "environments",
                           "authorName",
                           "usageUserCount"
                         ],
@@ -270759,12 +270772,14 @@
                       "type": "string"
                     }
                   },
-                  "environmentId": {
-                    "description": "Environment the skill belongs to; null (or omitted on create) is the Default environment. Agents only see skills in their own environment.",
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "environmentIds": {
+                    "description": "Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.",
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
                   },
                   "allowedTools": {
                     "description": "Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.",
@@ -270808,12 +270823,6 @@
                         "team",
                         "org"
                       ]
-                    },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string"
@@ -271003,6 +271012,25 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "environments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -271010,7 +271038,6 @@
                     "organizationId",
                     "authorId",
                     "scope",
-                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -271035,7 +271062,8 @@
                     "createdAt",
                     "updatedAt",
                     "files",
-                    "teams"
+                    "teams",
+                    "environments"
                   ],
                   "additionalProperties": false
                 }
@@ -271349,12 +271377,6 @@
                             "org"
                           ]
                         },
-                        "environmentId": {
-                          "nullable": true,
-                          "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                        },
                         "name": {
                           "type": "string"
                         },
@@ -271543,6 +271565,25 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "environments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -271550,7 +271591,6 @@
                         "organizationId",
                         "authorId",
                         "scope",
-                        "environmentId",
                         "name",
                         "description",
                         "content",
@@ -271575,7 +271615,8 @@
                         "createdAt",
                         "updatedAt",
                         "files",
-                        "teams"
+                        "teams",
+                        "environments"
                       ],
                       "additionalProperties": false
                     },
@@ -272202,12 +272243,6 @@
                         "org"
                       ]
                     },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "name": {
                       "type": "string"
                     },
@@ -272396,6 +272431,25 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "environments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -272403,7 +272457,6 @@
                     "organizationId",
                     "authorId",
                     "scope",
-                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -272428,7 +272481,8 @@
                     "createdAt",
                     "updatedAt",
                     "files",
-                    "teams"
+                    "teams",
+                    "environments"
                   ],
                   "additionalProperties": false
                 }
@@ -272734,12 +272788,14 @@
                       "type": "string"
                     }
                   },
-                  "environmentId": {
-                    "description": "Environment the skill belongs to; null (or omitted on create) is the Default environment. Agents only see skills in their own environment.",
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  "environmentIds": {
+                    "description": "Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.",
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
                   },
                   "allowedTools": {
                     "description": "Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.",
@@ -272793,12 +272849,6 @@
                         "team",
                         "org"
                       ]
-                    },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "name": {
                       "type": "string"
@@ -272988,6 +273038,25 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "environments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -272995,7 +273064,6 @@
                     "organizationId",
                     "authorId",
                     "scope",
-                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -273020,7 +273088,8 @@
                     "createdAt",
                     "updatedAt",
                     "files",
-                    "teams"
+                    "teams",
+                    "environments"
                   ],
                   "additionalProperties": false
                 }
@@ -274173,12 +274242,6 @@
                         "org"
                       ]
                     },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "name": {
                       "type": "string"
                     },
@@ -274367,6 +274430,25 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "environments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -274374,7 +274456,6 @@
                     "organizationId",
                     "authorId",
                     "scope",
-                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -274399,7 +274480,8 @@
                     "createdAt",
                     "updatedAt",
                     "files",
-                    "teams"
+                    "teams",
+                    "environments"
                   ],
                   "additionalProperties": false
                 }
@@ -274723,12 +274805,6 @@
                         "org"
                       ]
                     },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
                     "name": {
                       "type": "string"
                     },
@@ -274917,6 +274993,25 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "environments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -274924,7 +275019,6 @@
                     "organizationId",
                     "authorId",
                     "scope",
-                    "environmentId",
                     "name",
                     "description",
                     "content",
@@ -274949,7 +275043,8 @@
                     "createdAt",
                     "updatedAt",
                     "files",
-                    "teams"
+                    "teams",
+                    "environments"
                   ],
                   "additionalProperties": false
                 }
@@ -276648,12 +276743,6 @@
                               "org"
                             ]
                           },
-                          "environmentId": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
                           "name": {
                             "type": "string"
                           },
@@ -276777,7 +276866,6 @@
                           "organizationId",
                           "authorId",
                           "scope",
-                          "environmentId",
                           "name",
                           "description",
                           "content",

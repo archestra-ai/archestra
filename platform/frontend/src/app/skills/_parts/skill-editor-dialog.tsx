@@ -25,7 +25,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { EnvironmentSelector } from "@/components/environment-selector";
+import { EnvironmentMultiSelector } from "@/components/environment-multi-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -151,8 +151,8 @@ export function SkillEditorDialog({
   const [files, setFiles] = useState<ResourceFile[]>([]);
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
-  // null = the Default environment; agents only see same-environment skills.
-  const [environmentId, setEnvironmentId] = useState<string | null>(null);
+  // empty = not restricted (available to agents in every environment).
+  const [environmentIds, setEnvironmentIds] = useState<string[]>([]);
   // null = the SKILL.md manifest is open; otherwise an index into `files`.
   const [openFileIndex, setOpenFileIndex] = useState<number | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
@@ -205,13 +205,15 @@ export function SkillEditorDialog({
       );
       setScope(skill.scope);
       setTeamIds(skill.teams.map((team) => team.id));
-      setEnvironmentId(skill.environmentId ?? null);
+      setEnvironmentIds(
+        skill.environments.map((environment) => environment.id),
+      );
     } else if (!isEdit) {
       setManifest(BLANK_TEMPLATE);
       setFiles([]);
       setScope("personal");
       setTeamIds([]);
-      setEnvironmentId(null);
+      setEnvironmentIds([]);
     }
     setOpenFileIndex(null);
     setAddingIn(null);
@@ -241,7 +243,7 @@ export function SkillEditorDialog({
       ...(isSyncedSkill ? {} : { files }),
       scope,
       teamIds: scope === "team" ? teamIds : [],
-      environmentId,
+      environmentIds,
     };
     const result = isEdit
       ? await updateSkill.mutateAsync({ id: skillId, body })
@@ -663,12 +665,12 @@ export function SkillEditorDialog({
                 teamIds={teamIds}
                 onTeamIdsChange={setTeamIds}
               />
-              <EnvironmentSelector
-                value={environmentId}
-                onChange={setEnvironmentId}
+              <EnvironmentMultiSelector
+                value={environmentIds}
+                onChange={setEnvironmentIds}
                 resource="skill"
-                hideWhenOnlyDefault
-                helpText="Agents only see skills in their own environment."
+                hideWhenNoEnvironments
+                helpText="Restrict this skill to specific environments. Leave empty to make it available to agents in every environment."
               />
             </>
           )}

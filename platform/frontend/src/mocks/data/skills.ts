@@ -95,7 +95,6 @@ export function makeImportedSkill(
     organizationId: "test-org",
     authorId: "test-user-admin",
     scope: "personal",
-    environmentId: null,
     agentName: null,
     name: catalogSkillSeed.name,
     description: catalogSkillSeed.description,

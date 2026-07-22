@@ -11,7 +11,7 @@ import {
 describe("PUT /api/skills/:id", () => {
   const ctx = useRouteTestApp(skillRoutes);
 
-  test("moves a skill to another environment", async () => {
+  test("replaces a skill's environment assignments", async () => {
     const skill = (
       await ctx.app.inject({
         method: "POST",
@@ -19,28 +19,49 @@ describe("PUT /api/skills/:id", () => {
         payload: { content: MANIFEST },
       })
     ).json();
-    const env = await EnvironmentModel.create({
+    const staging = await EnvironmentModel.create({
       organizationId: ctx.organizationId,
       name: "Staging",
+    });
+    const production = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Production",
     });
 
     const response = await ctx.app.inject({
       method: "PUT",
       url: `/api/skills/${skill.id}`,
-      payload: { content: MANIFEST, environmentId: env.id },
+      payload: {
+        content: MANIFEST,
+        environmentIds: [staging.id, production.id],
+      },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().environmentId).toBe(env.id);
+    expect(
+      response
+        .json()
+        .environments.map((e: { id: string }) => e.id)
+        .sort(),
+    ).toEqual([production.id, staging.id].sort());
 
-    // ...and back to the Default environment with an explicit null.
-    const back = await ctx.app.inject({
+    // omitting environmentIds leaves the assignments untouched...
+    const untouched = await ctx.app.inject({
       method: "PUT",
       url: `/api/skills/${skill.id}`,
-      payload: { content: MANIFEST, environmentId: null },
+      payload: { content: MANIFEST },
     });
-    expect(back.statusCode).toBe(200);
-    expect(back.json().environmentId).toBeNull();
+    expect(untouched.statusCode).toBe(200);
+    expect(untouched.json().environments).toHaveLength(2);
+
+    // ...and an explicit [] clears them (available in every environment).
+    const cleared = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${skill.id}`,
+      payload: { content: MANIFEST, environmentIds: [] },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().environments).toEqual([]);
   });
 
   test("updates the manifest and replaces resource files", async () => {
@@ -288,10 +309,12 @@ describe("PUT /api/skills/:id on a GitHub-synced skill", () => {
     const response = await ctx.app.inject({
       method: "PUT",
       url: `/api/skills/${skill.id}`,
-      payload: { content: echoManifest, environmentId: env.id },
+      payload: { content: echoManifest, environmentIds: [env.id] },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().environmentId).toBe(env.id);
+    expect(response.json().environments).toEqual([
+      { id: env.id, name: "Sync Staging" },
+    ]);
     // still synced, still at version 1 — nothing content-wise changed
     expect(response.json().githubSyncInterval).toBe("1d");
     expect(response.json().latestVersion).toBe(1);

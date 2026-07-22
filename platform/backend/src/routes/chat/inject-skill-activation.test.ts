@@ -206,7 +206,8 @@ test("leaves the message unchanged when the skill is outside the agent's environ
   const skill = await seedSkill(org.id, "Research");
   await SkillModel.updateWithFiles({
     id: skill.id,
-    skill: { environmentId: otherEnv.id },
+    skill: { scope: "org" },
+    environmentIds: [otherEnv.id],
   });
 
   const messages: ChatMessage[] = [

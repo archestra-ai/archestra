@@ -60,8 +60,9 @@ describe("skill delegation (agent-designated skills)", () => {
 
   async function seedSkill(
     organizationId: string,
-    overrides: Partial<InsertSkill> = {},
+    overrides: Partial<InsertSkill> & { environmentIds?: string[] } = {},
   ) {
+    const { environmentIds, ...skillOverrides } = overrides;
     const skill = await SkillModel.createWithFiles({
       skill: {
         organizationId,
@@ -71,9 +72,10 @@ describe("skill delegation (agent-designated skills)", () => {
         metadata: {},
         sourceType: "manual",
         scope: "org",
-        ...overrides,
+        ...skillOverrides,
       },
       files: [],
+      environmentIds,
     });
     if (!skill) throw new Error("failed to seed skill");
     return skill;
@@ -186,7 +188,7 @@ describe("skill delegation (agent-designated skills)", () => {
     await seedSkill(organization.id, {
       name: "cross-env-skill",
       agentName: "Research Bot",
-      environmentId: otherEnv.id,
+      environmentIds: [otherEnv.id],
     });
     // ...and a Default-env skill designating a cross-environment agent has no
     // resolvable target, so it is not advertised either.

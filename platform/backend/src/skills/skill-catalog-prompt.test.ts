@@ -104,7 +104,7 @@ describe("buildSkillCatalogPrompt (sandbox available)", () => {
 });
 
 describe("buildSkillCatalogPrompt environment scoping", () => {
-  test("hides skills from another environment and keeps built-ins visible", async ({
+  test("hides environment-assigned skills elsewhere; unassigned and built-in skills are visible everywhere", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -128,7 +128,7 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
       skill: {
         organizationId,
         name: "default-env-skill",
-        description: "Lives in the Default environment.",
+        description: "Has no environment assignments (available everywhere).",
         content: "Default env instructions.",
         metadata: {},
         sourceType: "manual",
@@ -142,12 +142,12 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
         name: "other-env-skill",
         description: "Lives in the other environment.",
         content: "Other env instructions.",
-        environmentId: otherEnv.id,
         metadata: {},
         sourceType: "manual",
         scope: "org",
       },
       files: [],
+      environmentIds: [otherEnv.id],
     });
     // built-in skills are exempt from environment isolation, mirroring the
     // built-in catalog exemption on tools.
@@ -181,7 +181,9 @@ describe("buildSkillCatalogPrompt environment scoping", () => {
     });
     expect(otherCatalog).toContain("other-env-skill");
     expect(otherCatalog).toContain("built-in-skill");
-    expect(otherCatalog).not.toContain("default-env-skill");
+    // a skill with no environment assignments is available everywhere,
+    // including environments other than the Default one.
+    expect(otherCatalog).toContain("default-env-skill");
   });
 });
 

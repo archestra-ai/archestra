@@ -134,6 +134,13 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("$MinCheckFrames = 3");
     expect(script).toContain("$FrameSleepMs = 250");
     expect(script).toContain("function Show-ArchSpinTick");
+    // every row is visible from the start — pending rows dim below the
+    // probing one, two leading spaces reserving the glyph column so text
+    // aligns across pending, probing, and probed rows
+    expect(script).toContain(
+      "foreach ($r in $ActiveRemotes) { Write-Arch ('  ' + $r.Label) DarkGray }",
+    );
+    expect(script).toContain("Write-Host -NoNewline ('  ' + $text)");
     // colors go out as raw VT codes — console-API colors die on the
     // alternate screen buffer under conpty; checks are the brand purple
     expect(script).toContain("Magenta = '95'");

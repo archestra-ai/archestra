@@ -342,7 +342,9 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain(
       "Disconnect all $ACTIVE_TOTAL unreachable resources from Claude now? (Y/n)",
     );
-    expect(script).toContain("printf '\\033[s\\n\\n%s \\033[u'");
+    expect(script).toContain(
+      "printf '\\033[s\\033[%dB\\r\\033[2K%s \\033[u' \"$((ACTIVE_TOTAL + 1))\"",
+    );
     expect(script).toContain("next_delay=$((next_delay * 2))");
     expect(script).toContain("RANDOM % 2");
     // the budget running out downs everything
@@ -358,6 +360,12 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("spin_tick()");
     // a tick appends; it never clears or rewrites the line
     expect(script).not.toMatch(/spin_tick\(\) \{[^}]*2K/);
+    // every row is visible from the start — pending rows dim below the
+    // probing one, two leading spaces reserving the glyph column so text
+    // aligns across pending, probing, and probed rows
+    expect(script).toContain(`printf '  %s%s%s\\n' "$C_DIM"`);
+    expect(script).toContain(`printf '\\033[%dA' "$ACTIVE_TOTAL"`);
+    expect(script).toContain("printf '  %s' \"$1\"");
     // alternate screen in, restored on ANY exit — the terminal stays clean
     // after claude exits
     expect(script).toContain("\\033[?1049h");

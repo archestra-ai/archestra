@@ -31,9 +31,11 @@ import type { SetupScriptContext } from "./connection-setup-script";
  *   line below it — and a "hang tight" nudge after 10s. `y`/`n` answer it
  *   the whole wait. If the budget runs out, every remote is treated as
  *   down;
- * - then plays the pre-loader animation resource by resource (~0.35s of
- *   appended trailing dots — append-only output cannot flicker): a check for
- *   ok, "Failed to connect to <type> (<id-or-slug>)" for a down one — and
+ * - then plays the pre-loader animation resource by resource (~0.75s of
+ *   appended trailing dots — append-only output cannot flicker). Every row
+ *   is on screen from the start: the probing row bright, pending rows dim
+ *   below it, text aligned into the glyph column. A row lands on a check
+ *   for ok, "Failed to connect to <type> (<id-or-slug>)" for a down one — and
  *   after the whole turn, ONE "Disconnect … from Claude? (Y/n)" prompt covers
  *   every down remote. Everything draws on the alternate screen, so the
  *   terminal is clean again after claude exits;
@@ -318,19 +320,22 @@ if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi
 
 line_reset() { printf '\\r\\033[2K'; }
 
-# Progress is a dim line growing trailing dots — each tick only APPENDS one
-# character, never rewrites the line, so nothing can flicker by
-# construction. (Glyph spinners redraw in place every frame; every terminal
-# renders that as some degree of strobing — caught live on Windows
-# Terminal.) The line wraps back after a few dots so a slow disconnect
-# can't grow it forever.
+# Progress is the row's text growing dim trailing dots — each tick only
+# APPENDS one character, never rewrites the line, so nothing can flicker
+# by construction. (Glyph spinners redraw in place every frame; every
+# terminal renders that as some degree of strobing — caught live on
+# Windows Terminal.) The line wraps back after a few dots so a slow
+# disconnect can't grow it forever. The probing row prints bright — dim is
+# reserved for the pending rows waiting below it — and its two leading
+# spaces reserve the glyph column, so the first text character lines up
+# across pending, probing, and probed rows.
 SPIN_TEXT=''
 SPIN_DOTS=0
 spin_start() { # $1 line text
   SPIN_TEXT="$1"
   SPIN_DOTS=0
   line_reset
-  printf '%s%s%s' "$C_DIM" "$1" "$C_RESET"
+  printf '  %s' "$1"
 }
 spin_tick() {
   SPIN_DOTS=$((SPIN_DOTS + 1))
@@ -428,6 +433,7 @@ disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on
 # silently removes itself too — the Disconnected rows say everything.
 prompt_down_all() {
   printf '\\n'
+  line_reset
   if [ "$DOWN_COUNT" -eq 1 ]; then
     set -- $DOWN_IDXS
     printf 'Disconnect %s from Claude now? (Y/n) ' "\${GUARD_FAIL_NAMES[$1]}"
@@ -470,10 +476,12 @@ show_wait_prompt() {
   else
     wait_prompt="Disconnect all $ACTIVE_TOTAL unreachable resources from Claude now? (Y/n)"
   fi
-  printf '\\033[s\\n\\n%s \\033[u' "$wait_prompt"
+  # one blank line below the whole row block (the pending rows are already
+  # on screen beneath the probing one)
+  printf '\\033[s\\033[%dB\\r\\033[2K%s \\033[u' "$((ACTIVE_TOTAL + 1))" "$wait_prompt"
 }
 clear_wait_prompt() {
-  [ "$WAIT_PROMPT_SHOWN" = "1" ] && printf '\\033[J'
+  [ "$WAIT_PROMPT_SHOWN" = "1" ] && printf '\\033[s\\033[%dB\\r\\033[2K\\033[u' "$((ACTIVE_TOTAL + 1))"
   WAIT_PROMPT_SHOWN=0
   return 0
 }
@@ -556,6 +564,12 @@ finish_guard() {
   exit 0
 }
 ${guardHeader(ctx)}
+# Every row is on screen from the start: probed rows keep their glyph, the
+# probing row is bright, and everything still waiting sits dim below it.
+for i in $ACTIVE_IDXS; do
+  printf '  %s%s%s\\n' "$C_DIM" "\${GUARD_LABELS[$i]}" "$C_RESET"
+done
+printf '\\033[%dA' "$ACTIVE_TOTAL"
 if [ -n "$HEALTH_URL" ]; then
   spin_start "\${GUARD_LABELS[$FIRST_ACTIVE]}"
   wait_for_health || true
@@ -570,6 +584,7 @@ fi
 if [ "$SKIP_ALL" = "1" ]; then
   line_reset
   printf '%s○%s %sSkipped — remotes stay configured; Claude may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+  printf '\\033[J'
   finish_guard
 fi
 DOWN_IDXS=''
@@ -766,6 +781,7 @@ function disconnectProxyFunction(ctx: ClaudeCodeStartupGuardContext): string {
   const bedrockNote =
     provider === "bedrock"
       ? `
+  line_reset
   printf '%s  If you exported AWS_BEARER_TOKEN_BEDROCK in your shell profile, remove it there too.%s\\n' "$C_DIM" "$C_RESET"`
       : "";
 
@@ -811,6 +827,7 @@ ARCHESTRA_GUARD_PY
 # the background while the spinner plays.
 proxy_disconnect_notes() {
   if ! command -v python3 >/dev/null 2>&1; then
+    line_reset
     printf '%s  python3 not found — remove these keys from the env block of ~/.claude/settings.json manually: ${envKeys.join(", ")} (and our lines in ${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}).%s\\n' "$C_WARN" "$C_RESET"
   fi${bedrockNote}
   return 0

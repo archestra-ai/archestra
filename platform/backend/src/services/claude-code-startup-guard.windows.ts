@@ -23,7 +23,9 @@ import {
  *   gateway/proxy, existence via the public connection-health endpoint
  *   (reachability alone cannot catch a remote deleted on the platform — the
  *   data-plane answers uniformly without auth);
- * - checks show ~0.35s of appended trailing dots (append-only output cannot
+ * - every row is on screen from the start (probing row bright, pending rows
+ *   dim below it, text aligned into the glyph column); checks show ~0.75s
+ *   of appended trailing dots (append-only output cannot
  *   flicker), all on the alternate screen so the terminal is clean after
  *   claude exits; an unreachable platform gets the 15s capped-backoff retry
  *   ladder with jitter, status line at 3s, "hang tight" at 10s, and the
@@ -233,12 +235,15 @@ function Clear-ArchLine {
   Write-Host -NoNewline ("\`r" + (' ' * [Math]::Max($w - 1, 1)) + "\`r")
 }
 
-# Progress is a dim line growing trailing dots — each tick only APPENDS one
-# character, never rewrites the line, so nothing can flicker by
-# construction. (Glyph spinners redraw in place every frame; every terminal
-# renders that as some degree of strobing — caught live on Windows
-# Terminal.) The line wraps back after a few dots so a slow disconnect
-# can't grow it forever.
+# Progress is the row's text growing dim trailing dots — each tick only
+# APPENDS one character, never rewrites the line, so nothing can flicker
+# by construction. (Glyph spinners redraw in place every frame; every
+# terminal renders that as some degree of strobing — caught live on
+# Windows Terminal.) The line wraps back after a few dots so a slow
+# disconnect can't grow it forever. The probing row prints bright — dim is
+# reserved for the pending rows waiting below it — and its two leading
+# spaces reserve the glyph column, so the first text character lines up
+# across pending, probing, and probed rows.
 $Script:SpinText = ''
 $Script:SpinDots = 0
 function Show-ArchSpinStart([string]$Label, [string]$Suffix) {
@@ -247,7 +252,7 @@ function Show-ArchSpinStart([string]$Label, [string]$Suffix) {
   $Script:SpinText = $text
   $Script:SpinDots = 0
   Clear-ArchLine
-  Write-Arch $text DarkGray -NoNewline
+  Write-Host -NoNewline ('  ' + $text)
 }
 function Show-ArchSpinTick {
   $Script:SpinDots++
@@ -323,6 +328,7 @@ function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
     ctx.proxy?.provider === "bedrock"
       ? `
   if ($Kind -eq 'proxy') {
+    Clear-ArchLine
     Write-Arch '  If you set AWS_BEARER_TOKEN_BEDROCK in your environment, remove it there too.' DarkGray
   }`
       : ""
@@ -345,6 +351,7 @@ function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on late
 # silently removes itself too — the Disconnected rows say everything.
 function Show-ArchDownSummaryPrompt($downRemotes) {
   Write-Host ''
+  Clear-ArchLine
   if ($downRemotes.Count -eq 1) {
     Write-Host -NoNewline ('Disconnect ' + $downRemotes[0].FailName + ' from Claude now? (Y/n) ')
   } else {
@@ -384,8 +391,11 @@ function Get-ArchWaitPromptText {
 function Show-ArchWaitPrompt {
   if ($Script:WaitPromptShown) { return }
   $Script:WaitPromptShown = $true
+  # one blank line below the whole row block (on VT the pending rows are
+  # already on screen beneath the probing one; without VT rows still draw
+  # one at a time, so the prompt sits two lines below the row)
   if ($UseVt) {
-    Write-Host -NoNewline ("$Esc" + '7' + "\`r\`n\`r\`n" + (Get-ArchWaitPromptText) + "$Esc" + '8')
+    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[" + ($ActiveRemotes.Count + 1) + 'B' + "\`r" + "$Esc[2K" + (Get-ArchWaitPromptText) + "$Esc" + '8')
   } else {
     try {
       $x = [Console]::CursorLeft; $y = [Console]::CursorTop
@@ -400,7 +410,7 @@ function Clear-ArchWaitPrompt {
   if (-not $Script:WaitPromptShown) { return }
   $Script:WaitPromptShown = $false
   if ($UseVt) {
-    Write-Host -NoNewline ("$Esc" + '[J')
+    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[" + ($ActiveRemotes.Count + 1) + 'B' + "\`r" + "$Esc[2K" + "$Esc" + '8')
   } else {
     try {
       $x = [Console]::CursorLeft; $y = [Console]::CursorTop
@@ -479,6 +489,13 @@ function Exit-ArchGuard {
 if ($Script:AltScreen) { Write-Host -NoNewline ("$Esc[?1049h$Esc[H$Esc[2J") }
 else { try { Clear-Host } catch { } }
 ${guardHeader(ctx)}
+# Every row is on screen from the start: probed rows keep their glyph, the
+# probing row is bright, and everything still waiting sits dim below it.
+# (Legacy consoles without VT keep the one-row-at-a-time rendering.)
+if ($UseVt) {
+  foreach ($r in $ActiveRemotes) { Write-Arch ('  ' + $r.Label) DarkGray }
+  Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'A')
+}
 if ($HealthUrl) {
   Show-ArchSpinStart $ActiveRemotes[0].Label ''
   Wait-ArchHealth
@@ -494,6 +511,7 @@ if ($Script:SkipAll) {
   Clear-ArchLine
   Write-Arch '○' Yellow -NoNewline
   Write-Arch (' Skipped — remotes stay configured; Claude may fail to reach them this session') DarkGray
+  if ($UseVt) { Write-Host -NoNewline ("$Esc" + '[J') }
   Exit-ArchGuard
 }
 $DownRemotes = @()

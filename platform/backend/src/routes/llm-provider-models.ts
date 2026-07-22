@@ -359,32 +359,18 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectModelSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId }, reply) => {
+    async ({ params: { id }, body }, reply) => {
       const existing = await ModelModel.findById(id);
       if (!existing) {
         throw new ApiError(404, "Model not found");
       }
 
-      // `configuredParameters` is the only field here that Archestra SENDS to
-      // the provider rather than merely displaying, and model rows are global
-      // (no organizationId), so one write reaches every organization. The route
-      // gate is the coarse `llmModel:update`; this narrows the runtime-control
-      // subset to admins. The body schema cannot express any of these checks —
-      // it carries no provider, no context length, and no caller.
+      // Validated here rather than in the body schema, which carries neither the
+      // provider nor the context length. The route gate (`llmModel:update`) is
+      // the only permission check: model rows are global, but so are the pricing
+      // and `ignored` fields an editor can already write, so singling out
+      // generation parameters bought a 403 class without a matching guarantee.
       if (body.configuredParameters !== undefined) {
-        const isLlmModelAdmin = await userHasPermission(
-          user.id,
-          organizationId,
-          "llmModel",
-          "admin",
-        );
-        if (!isLlmModelAdmin) {
-          throw new ApiError(
-            403,
-            "Setting per-model generation parameters is admin only",
-          );
-        }
-
         if (existing.provider !== "ollama-native") {
           throw new ApiError(
             400,

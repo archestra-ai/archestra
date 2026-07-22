@@ -9,7 +9,14 @@ export type ModelsPageModelTypeFilter = "all" | "chat" | "embedding";
 type ConfiguredParametersBody =
   archestraApiTypes.UpdateModelData["body"]["configuredParameters"];
 
-/** String-typed form fields for the native Ollama configured parameters. */
+/**
+ * String-typed form fields for the native Ollama configured parameters.
+ *
+ * `seed` is deliberately absent: it is not a knob worth exposing per model, and
+ * a fixed seed is rarely what anyone wants across every turn. It still exists in
+ * the backend schema, and {@link buildConfiguredParameters} carries any persisted
+ * value through untouched rather than dropping it on the next save.
+ */
 export interface ConfiguredParametersFormValues {
   num_ctx: string;
   num_predict: string;
@@ -17,7 +24,6 @@ export interface ConfiguredParametersFormValues {
   top_p: string;
   repeat_penalty: string;
   temperature: string;
-  seed: string;
   stop: string;
   reasoning_effort: "" | "none" | "low" | "medium" | "high";
 }
@@ -35,7 +41,6 @@ export const EMPTY_CONFIGURED_PARAMETERS: ConfiguredParametersFormValues = {
   top_p: "",
   repeat_penalty: "",
   temperature: "",
-  seed: "",
   stop: "",
   reasoning_effort: "",
 };
@@ -61,7 +66,6 @@ export const OLLAMA_NATIVE_PARAM_RULES: Record<
   top_p: { min: 0, max: 1 },
   top_k: { min: 0, integer: true },
   repeat_penalty: { min: 0 },
-  seed: { integer: true },
 };
 
 /**
@@ -124,7 +128,6 @@ export function getConfiguredParameterDefaults(
     top_p: numToStr(cp.top_p),
     repeat_penalty: numToStr(cp.repeat_penalty),
     temperature: numToStr(cp.temperature),
-    seed: numToStr(cp.seed),
     stop: cp.stop?.join("\n") ?? "",
     reasoning_effort: cp.reasoning_effort ?? "",
   };
@@ -142,11 +145,19 @@ export function getConfiguredParameterDefaults(
  *
  * `stop` is newline-delimited. Comma-delimiting split any stop sequence
  * containing a comma in two on the next unrelated save.
+ *
+ * `persisted` carries forward fields the form no longer renders — today just
+ * `seed`. Because the route replaces the object wholesale, omitting it here
+ * would delete a saved seed the moment anything else was edited.
  */
 export function buildConfiguredParameters(
   values: ConfiguredParametersFormValues,
+  persisted?: ConfiguredParametersBody,
 ): ConfiguredParametersBody {
   const result: NonNullable<ConfiguredParametersBody> = {};
+  if (persisted?.seed !== undefined && persisted.seed !== null) {
+    result.seed = persisted.seed;
+  }
   const num = (s: string): number | undefined => {
     const trimmed = s.trim();
     if (!trimmed) return undefined;
@@ -166,8 +177,6 @@ export function buildConfiguredParameters(
   if (repeatPenalty !== undefined) result.repeat_penalty = repeatPenalty;
   const temperature = num(values.temperature);
   if (temperature !== undefined) result.temperature = temperature;
-  const seed = num(values.seed);
-  if (seed !== undefined) result.seed = seed;
   const stop = values.stop
     .split("\n")
     .map((s) => s.trim())

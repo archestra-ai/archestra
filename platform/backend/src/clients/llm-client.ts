@@ -66,6 +66,14 @@ const KEYLESS_PROVIDER_API_KEY_PLACEHOLDER = "EMPTY";
 export type LLMModel = Parameters<typeof streamText>[0]["model"];
 
 /**
+ * Marks native Ollama `think` as explicitly chosen by an admin rather than
+ * defaulted by ollama-ai-provider-v2. Set by `buildOllamaNativeProviderOptions`
+ * inside the `options` bag; consumed and removed by `createOllamaNativeFetch`
+ * before the request is sent, so Ollama never sees it.
+ */
+export const OLLAMA_THINK_EXPLICIT_KEY = "__archestraThinkExplicit";
+
+/**
  * Check if API key is required for the given provider
  */
 export function isApiKeyRequired(
@@ -601,7 +609,13 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // `/api` suffix makes the client POST to `<proxy>/ollama-native/<agent>/api/chat`.
   "ollama-native": {
     createModel: ({ modelName, baseURL, headers, fetch }) =>
-      createOllama({ baseURL, headers, fetch }).chat(modelName),
+      createOllama({
+        baseURL,
+        headers,
+        // The package always emits `think`, defaulting it to false — see
+        // createOllamaNativeFetch.
+        fetch: createOllamaNativeFetch(fetch),
+      }).chat(modelName),
     defaultBaseUrl: config.llm["ollama-native"].baseUrl,
     proxiedPathSuffix: "/api",
     // No apiKeyRequiredMessage — key is optional
@@ -689,6 +703,67 @@ function createTracedFetch(): typeof globalThis.fetch {
       headers,
       dispatcher,
     } as RequestInit);
+  };
+}
+
+/**
+ * Wraps fetch to reconcile `think` on native Ollama `/api/chat` requests.
+ *
+ * ollama-ai-provider-v2 emits `think: ollamaOptions?.think ?? false`, so a caller
+ * that says nothing still sends an explicit `think: false`. That is not a no-op:
+ * it disables thinking, and a qwen3-class model then returns its entire chain of
+ * thought as message `content` — closed by a bare `</think>` with no opening tag
+ * — which renders as the assistant's answer. The OpenAI-compatible `/v1` provider
+ * sends no `think` field at all, which is why it behaves correctly.
+ *
+ * The package offers no way to omit the field, so `buildOllamaNativeProviderOptions`
+ * marks a deliberate choice with OLLAMA_THINK_EXPLICIT_KEY inside the `options`
+ * bag. Here that marker is consumed and removed: with it, `think` stands as
+ * configured; without it, `think` is dropped so Ollama applies the model's own
+ * default.
+ *
+ * This wraps Archestra's own client only. Callers that POST to
+ * `/v1/ollama-native/…` themselves never pass through here and keep whatever
+ * `think` they sent.
+ */
+function createOllamaNativeFetch(
+  providedFetch?: typeof globalThis.fetch,
+): typeof globalThis.fetch {
+  const baseFetch = providedFetch ?? globalThis.fetch;
+
+  return (input, init) => {
+    if (typeof init?.body !== "string") {
+      return baseFetch(input, init);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(init.body);
+      if (typeof parsed !== "object" || parsed === null) {
+        return baseFetch(input, init);
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      // Not JSON we understand — forward verbatim rather than guessing.
+      return baseFetch(input, init);
+    }
+
+    const options = body.options;
+    const hasExplicitThink =
+      typeof options === "object" &&
+      options !== null &&
+      OLLAMA_THINK_EXPLICIT_KEY in options;
+
+    if (hasExplicitThink) {
+      const bag = options as Record<string, unknown>;
+      delete bag[OLLAMA_THINK_EXPLICIT_KEY];
+      // The marker may have been the only entry; an empty bag is noise upstream.
+      if (Object.keys(bag).length === 0) delete body.options;
+    } else if ("think" in body) {
+      delete body.think;
+    }
+
+    return baseFetch(input, { ...init, body: JSON.stringify(body) });
   };
 }
 

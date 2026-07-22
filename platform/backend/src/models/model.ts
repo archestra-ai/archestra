@@ -19,6 +19,7 @@ import type {
   CreateModel,
   Model,
   ModelCapabilities,
+  ModelDefaultParameters,
   PatchModelBody,
   PriceSource,
 } from "@/types";
@@ -134,6 +135,26 @@ function combineCacheSource(
  */
 function formatCachePrice(perMillion: number): string {
   return Number.parseFloat(perMillion.toFixed(8)).toString();
+}
+
+/**
+ * Read the Modelfile `num_ctx` out of the provider-reported defaults.
+ *
+ * `defaultParameters` is parsed from Ollama's free-form `parameters` text block,
+ * so the value arrives as a string as often as a number, and an unrecognised
+ * block can put anything here. Coerce narrowly and let the caller's
+ * `sanitizeOutputLimit` reject whatever is left — this feeds the context ring
+ * and the compaction threshold, so a bad parse must fall back rather than
+ * propagate.
+ */
+function readOllamaDefaultNumCtx(
+  defaultParameters: ModelDefaultParameters | null | undefined,
+): number | null {
+  const raw = defaultParameters?.num_ctx;
+  if (typeof raw === "number") return raw;
+  if (typeof raw !== "string") return null;
+  const parsed = Number(raw.trim());
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 class ModelModel {
@@ -816,31 +837,53 @@ class ModelModel {
    * Uses getEffectivePricing for pricing resolution.
    */
   /**
-   * The context window to DISPLAY and gate on. A native-Ollama model with a
-   * configured `num_ctx` enforces exactly that window (Archestra sends it on
-   * every turn), so it takes precedence over the architectural `context_length`
-   * — which would otherwise overstate the window and produce the "context ring
-   * shows 262K while Ollama truncates at 8K" symptom. Falls back to the stored
-   * architectural value when no valid `num_ctx` is configured.
+   * The context window to DISPLAY and gate on, resolved in three tiers:
    *
-   * Gated on `ollama-native` and clamped to the architectural window. Both are
-   * defence in depth for the update route, which already rejects those cases:
-   * this value drives the context ring, the A2A step-context guard, and the
-   * output-token budget, so a `num_ctx` that is either larger than the real
-   * window or attached to a provider that never receives it would push
-   * auto-compaction far past the point where the conversation still fits.
+   * 1. A native-Ollama model with a configured `num_ctx` enforces exactly that
+   *    window, because Archestra sends it on every turn.
+   * 2. Otherwise, a Modelfile `num_ctx` reported by `/api/show` — Ollama applies
+   *    it whether or not we send anything, and it is what actually truncates.
+   * 3. Otherwise the architectural `context_length`.
+   *
+   * `context_length` alone overstates the window whenever Ollama is capped,
+   * producing the "ring shows 262K while Ollama truncates at 8K" symptom: no
+   * compaction fires, the model loses its system prompt, and nothing errors.
+   * Tier 2 costs nothing — `parseOllamaParameters` already stores the value and
+   * it was simply never read.
+   *
+   * Clamped to the architectural window, and tier 1 is gated on `ollama-native`
+   * since `/v1` cannot carry `num_ctx`. Both are defence in depth for the update
+   * route, which already rejects those cases: this drives the context ring, the
+   * A2A step-context guard and the output-token budget, so an inflated value
+   * pushes auto-compaction past the point where the conversation still fits.
+   *
+   * A server-level `OLLAMA_CONTEXT_LENGTH` cap remains invisible here — it is
+   * absent from `/api/show` and readable only from `/api/ps` while the model is
+   * loaded. Setting `num_ctx` explicitly is the escape hatch for that case.
    */
   static resolveEffectiveContextLength(model: Model): number | null {
-    if (model.provider !== "ollama-native") {
-      return model.contextLength;
+    const architectural = model.contextLength;
+    const isOllama =
+      model.provider === "ollama" || model.provider === "ollama-native";
+
+    const configured =
+      model.provider === "ollama-native"
+        ? sanitizeOutputLimit(model.configuredParameters?.num_ctx)
+        : null;
+    // Only Ollama's fetcher writes `defaultParameters` today, but gate it
+    // anyway: `num_ctx` means "the window Ollama enforces" and would be
+    // meaningless — and silently shrink the window — coming from anywhere else.
+    const modelfile = isOllama
+      ? sanitizeOutputLimit(readOllamaDefaultNumCtx(model.defaultParameters))
+      : null;
+
+    const resolved = configured ?? modelfile;
+    if (resolved === null) {
+      return architectural;
     }
-    const configured = sanitizeOutputLimit(model.configuredParameters?.num_ctx);
-    if (configured === null) {
-      return model.contextLength;
-    }
-    return model.contextLength === null
-      ? configured
-      : Math.min(configured, model.contextLength);
+    return architectural === null
+      ? resolved
+      : Math.min(resolved, architectural);
   }
 
   static toCapabilities(model: Model | null): ModelCapabilities {

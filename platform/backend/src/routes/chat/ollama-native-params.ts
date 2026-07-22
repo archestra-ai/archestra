@@ -1,5 +1,5 @@
 /**
- * Builds the AI SDK `providerOptions` that carry a model's admin-configured
+ * Builds the AI SDK `providerOptions` that carry a model's configured
  * generation parameters to the native Ollama (`ollama-native`) provider on every
  * chat turn. The ollama-ai-provider-v2 provider-options key is `ollama`; its
  * `options` bag is forwarded verbatim into the native `/api/chat` request.
@@ -9,15 +9,23 @@
  * sent, so an unset parameter inherits Ollama's default rather than forcing one.
  *
  * Note on thinking: ollama-ai-provider-v2 emits `think: ollamaOptions?.think ??
- * false`, so omitting the field does NOT inherit Ollama's default — it disables
- * thinking. An unset `reasoning_effort` and an explicit "none" are therefore
- * identical on the wire. Sending Ollama's native effort levels needs the string
- * form the package does not yet accept.
+ * false`, collapsing "caller said nothing" into an explicit `false` on the wire.
+ * That is not the same as omitting the field — `think: false` actively disables
+ * thinking, and a qwen3-class model then emits its whole chain of thought as
+ * message `content` (terminated by a bare `</think>` with no opening tag), which
+ * renders as the assistant's answer. Omitting `think` is what the OpenAI-compatible
+ * `/v1` provider does, and why thinking behaves correctly there.
+ *
+ * The package gives no way to omit the field, so {@link OLLAMA_THINK_EXPLICIT_KEY}
+ * rides along in the `options` bag to mark the intent as deliberate. The fetch
+ * wrapper in `clients/llm-client.ts` reads it, strips it, and drops `think` when
+ * it is absent. The marker never leaves this process.
  */
+import { OLLAMA_THINK_EXPLICIT_KEY } from "@/clients/llm-client";
 import type { ConfiguredParameters } from "@/types/model";
 
 type OllamaProviderOptions = {
-  options?: Record<string, number | number[] | string[]>;
+  options?: Record<string, number | number[] | string[] | boolean>;
   think?: boolean;
 };
 
@@ -33,7 +41,7 @@ export function buildOllamaNativeProviderOptions(params: {
 }): { ollama: OllamaProviderOptions } | undefined {
   const { configured, requestTemperature, maxOutputTokens } = params;
 
-  const options: Record<string, number | number[] | string[]> = {};
+  const options: Record<string, number | number[] | string[] | boolean> = {};
   const setNumber = (key: string, value: number | undefined) => {
     if (value !== undefined) options[key] = value;
   };
@@ -57,15 +65,23 @@ export function buildOllamaNativeProviderOptions(params: {
   if (temperature !== undefined) options.temperature = temperature;
 
   const ollama: OllamaProviderOptions = {};
-  if (Object.keys(options).length > 0) ollama.options = options;
 
   // ollama-ai-provider-v2 (AI SDK v6 line) accepts `think` as a boolean only, so
-  // the effort enum maps to on/off here: `none` → false, any level → true.
-  // Level granularity (low vs medium vs high) is a documented follow-up gated on
-  // sending the native `think` string directly.
+  // the stored enum maps to on/off here: `none` → false, anything else → true.
+  // The UI offers only Inherit/On/Off for that reason; older rows may still hold
+  // "low"/"high", which all mean on.
+  //
+  // Set only when a value was explicitly chosen. Left unset, the package emits
+  // `think: false`, which the fetch wrapper strips so Ollama applies the model's
+  // own default — see the note at the top of this file. The marker must be
+  // written before `options` is attached below, or a turn whose only setting is
+  // the thinking choice would have no `options` bag to carry it.
   if (configured?.reasoning_effort !== undefined) {
     ollama.think = configured.reasoning_effort !== "none";
+    options[OLLAMA_THINK_EXPLICIT_KEY] = true;
   }
+
+  if (Object.keys(options).length > 0) ollama.options = options;
 
   if (ollama.options === undefined && ollama.think === undefined) {
     return undefined;

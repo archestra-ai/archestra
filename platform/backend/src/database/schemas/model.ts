@@ -135,7 +135,10 @@ const modelsTable = pgTable(
 
     /**
      * Provider-reported default generation parameters (Ollama `/api/show`).
-     * Display-only metadata; nothing applies these at request time.
+     * Not sent at request time — Ollama already applies them itself. `num_ctx`
+     * is read by `resolveEffectiveContextLength`, because a Modelfile cap is
+     * what actually truncates the prompt and the architectural `context_length`
+     * would otherwise overstate the window; the rest is display-only.
      */
     defaultParameters:
       jsonb("default_parameters").$type<ModelDefaultParameters>(),

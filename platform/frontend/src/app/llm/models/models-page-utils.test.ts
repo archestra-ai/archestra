@@ -123,12 +123,35 @@ describe("configured parameters round-trip", () => {
     const formValues = getConfiguredParameterDefaults({
       configuredParameters: saved,
     });
-    const rebuilt = buildConfiguredParameters(formValues);
+    const rebuilt = buildConfiguredParameters(formValues, saved);
 
     // The update route replaces configuredParameters wholesale, so any field
     // these two disagree on is silently dropped the next time the dialog is
     // opened and saved.
     expect(rebuilt).toEqual(saved);
+  });
+
+  it("preserves a persisted seed the form no longer renders", () => {
+    // `seed` was removed from the dialog, but the route replaces the object
+    // wholesale — without carrying it through, editing the temperature would
+    // silently delete a seed an admin set earlier.
+    const saved = { temperature: 0.7, seed: 42 };
+
+    const rebuilt = buildConfiguredParameters(
+      getConfiguredParameterDefaults({ configuredParameters: saved }),
+      saved,
+    );
+
+    expect(rebuilt).toEqual(saved);
+  });
+
+  it("does not invent a seed when none was persisted", () => {
+    expect(
+      buildConfiguredParameters(
+        getConfiguredParameterDefaults({ configuredParameters: { top_k: 40 } }),
+        { top_k: 40 },
+      ),
+    ).toEqual({ top_k: 40 });
   });
 
   it("preserves a stop sequence containing a comma", () => {
@@ -149,6 +172,7 @@ describe("configured parameters round-trip", () => {
     expect(
       buildConfiguredParameters(
         getConfiguredParameterDefaults({ configuredParameters: saved }),
+        saved,
       ),
     ).toEqual(saved);
   });
@@ -178,7 +202,7 @@ describe("validateConfiguredParameter", () => {
     expect(
       validateConfiguredParameter({ name: "temperature", value: "0.7x" }),
     ).toBe("Must be a number");
-    expect(validateConfiguredParameter({ name: "seed", value: "--3" })).toBe(
+    expect(validateConfiguredParameter({ name: "top_k", value: "--3" })).toBe(
       "Must be a number",
     );
   });
@@ -196,7 +220,7 @@ describe("validateConfiguredParameter", () => {
     expect(
       validateConfiguredParameter({ name: "num_ctx", value: "8192.5" }),
     ).toBe("Must be a whole number");
-    expect(validateConfiguredParameter({ name: "seed", value: "1.5" })).toBe(
+    expect(validateConfiguredParameter({ name: "top_k", value: "1.5" })).toBe(
       "Must be a whole number",
     );
     expect(

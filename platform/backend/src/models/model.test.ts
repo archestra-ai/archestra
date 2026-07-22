@@ -1404,6 +1404,86 @@ describe("ModelModel", () => {
       ).toBe(200000);
     });
 
+    test("resolveEffectiveContextLength uses a Modelfile num_ctx when nothing is configured", async () => {
+      // Reproduced against Ollama 0.32.0: `qwen3-8k` is qwen3:4b built with
+      // `PARAMETER num_ctx 8192`. /api/show reports the architectural 262144 in
+      // model_info AND the 8192 cap in the parameters block, which we already
+      // parse into defaultParameters and previously never read — so the ring
+      // promised 262K while Ollama truncated at 8K and compaction never fired.
+      const created = await ModelModel.create({
+        externalId: "ollama/qwen3-8k",
+        provider: "ollama-native",
+        modelId: "qwen3-8k:latest",
+        contextLength: 262144,
+        defaultParameters: { num_ctx: 8192, temperature: 0.6 },
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBe(8192);
+
+      // A configured value still outranks the Modelfile — Archestra sends it,
+      // and a request-level num_ctx is highest precedence in Ollama.
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 32768 },
+      });
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(32768);
+    });
+
+    test("resolveEffectiveContextLength applies a Modelfile num_ctx on the /v1 transport too", async () => {
+      // The Modelfile cap is a property of the model, not of the transport.
+      const created = await ModelModel.create({
+        externalId: "ollama/qwen3-8k-v1",
+        provider: "ollama",
+        modelId: "qwen3-8k-v1",
+        contextLength: 262144,
+        defaultParameters: { num_ctx: 8192 },
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBe(8192);
+    });
+
+    test("resolveEffectiveContextLength ignores an unusable Modelfile num_ctx", async () => {
+      // defaultParameters is parsed from a free-form text block, so the value
+      // arrives as a string as often as a number and can be junk outright. A bad
+      // parse must fall back to the architectural window rather than propagate
+      // into the context ring and the compaction threshold.
+      const created = await ModelModel.create({
+        externalId: "ollama/stringy",
+        provider: "ollama-native",
+        modelId: "stringy",
+        contextLength: 262144,
+        defaultParameters: { num_ctx: "8192" },
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      // A numeric string is still a real cap — coerce it.
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBe(8192);
+
+      for (const num_ctx of ["not-a-number", "0", "-1", "8192.5"]) {
+        const junk = await ModelModel.create({
+          externalId: `ollama/junk-${num_ctx}`,
+          provider: "ollama-native",
+          modelId: `junk-${num_ctx}`,
+          contextLength: 262144,
+          defaultParameters: { num_ctx },
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          lastSyncedAt: new Date(),
+        });
+        expect(ModelModel.resolveEffectiveContextLength(junk)).toBe(262144);
+      }
+    });
+
     test("resolveEffectiveContextLength falls back when contextLength is null", async () => {
       const created = await makeNativeModel();
       expect(created.contextLength).toBeNull();

@@ -1,3 +1,4 @@
+import { OLLAMA_THINK_EXPLICIT_KEY } from "@/clients/llm-client";
 import { describe, expect, test } from "@/test";
 import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 
@@ -52,12 +53,22 @@ describe("buildOllamaNativeProviderOptions", () => {
       buildOllamaNativeProviderOptions({
         configured: { reasoning_effort: "none" },
       }),
-    ).toEqual({ ollama: { think: false } });
+    ).toEqual({
+      ollama: {
+        think: false,
+        options: { [OLLAMA_THINK_EXPLICIT_KEY]: true },
+      },
+    });
     expect(
       buildOllamaNativeProviderOptions({
         configured: { reasoning_effort: "medium" },
       }),
-    ).toEqual({ ollama: { think: true } });
+    ).toEqual({
+      ollama: {
+        think: true,
+        options: { [OLLAMA_THINK_EXPLICIT_KEY]: true },
+      },
+    });
   });
 
   test("a request-body temperature overrides the configured one", () => {
@@ -83,11 +94,36 @@ describe("buildOllamaNativeProviderOptions", () => {
     });
   });
 
-  test("an unset reasoning_effort omits `think` entirely", () => {
+  // These pin the *intent* signal only. The wire behaviour lives in
+  // `createOllamaNativeFetch` (clients/llm-client.test.ts): the package emits
+  // `think: ollamaOptions?.think ?? false` regardless of what is set here, so an
+  // assertion on this bag alone cannot tell whether thinking is actually on.
+  test("an unset reasoning_effort sets neither `think` nor the explicit marker", () => {
     const result = buildOllamaNativeProviderOptions({
       configured: { num_ctx: 4096 },
     });
     expect(result?.ollama).not.toHaveProperty("think");
+    expect(result?.ollama.options).not.toHaveProperty(
+      OLLAMA_THINK_EXPLICIT_KEY,
+    );
+  });
+
+  test("an explicit reasoning_effort marks the choice as deliberate", () => {
+    const result = buildOllamaNativeProviderOptions({
+      configured: { reasoning_effort: "medium" },
+    });
+    expect(result?.ollama.think).toBe(true);
+    expect(result?.ollama.options?.[OLLAMA_THINK_EXPLICIT_KEY]).toBe(true);
+  });
+
+  test('"none" is a deliberate choice, so the marker still rides along', () => {
+    // Without the marker this would be indistinguishable from "unset" and the
+    // wrapper would strip `think`, silently turning thinking back on.
+    const result = buildOllamaNativeProviderOptions({
+      configured: { reasoning_effort: "none" },
+    });
+    expect(result?.ollama.think).toBe(false);
+    expect(result?.ollama.options?.[OLLAMA_THINK_EXPLICIT_KEY]).toBe(true);
   });
 });
 

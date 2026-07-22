@@ -66,10 +66,29 @@ vi.mock("@ai-sdk/openai", async (importOriginal) => {
   };
 });
 
+// Capture the fetch option passed to createOllama, so the native `think`
+// reconciliation can be asserted against the body that actually goes out.
+const capturedCreateOllamaOptions = vi.hoisted(() => ({
+  fetch: undefined as typeof globalThis.fetch | undefined,
+}));
+vi.mock("ollama-ai-provider-v2", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ollama-ai-provider-v2")>();
+  return {
+    ...actual,
+    createOllama: (options: Parameters<typeof actual.createOllama>[0]) => {
+      capturedCreateOllamaOptions.fetch = (
+        options as { fetch?: typeof globalThis.fetch }
+      ).fetch;
+      return actual.createOllama(options);
+    },
+  };
+});
+
 import {
   createDirectLLMModel,
   createLLMModel,
   createLLMModelForAgent,
+  OLLAMA_THINK_EXPLICIT_KEY,
 } from "./llm-client";
 
 describe("createDirectLLMModel", () => {
@@ -236,6 +255,98 @@ describe("createDirectLLMModel", () => {
   // createDirectLLMModel doesn't expose a `fetch` parameter — the azure createModel
   // closure always uses `providedFetch ?? globalThis.fetch`. We stub globalThis.fetch
   // to observe the URL that fetchWithVersion passes through.
+  // ollama-ai-provider-v2 emits `think: ollamaOptions?.think ?? false`, turning
+  // "the caller said nothing" into an explicit `think: false` on the wire. That
+  // disables thinking, and a qwen3-class model then returns its chain of thought
+  // as message `content` closed by a bare `</think>` — which renders as the
+  // answer. These pin the reconciliation against the real request body, since
+  // asserting on the provider-options bag alone passed while the wire was wrong.
+  describe("ollama-native think reconciliation", () => {
+    const nativeFetch = () => {
+      createDirectLLMModel({
+        provider: "ollama-native",
+        apiKey: undefined,
+        modelName: "qwen3:4b",
+        baseUrl: "http://localhost:11434",
+      });
+      const wrapped = capturedCreateOllamaOptions.fetch;
+      if (!wrapped) {
+        throw new Error(
+          "Expected ollama-native fetch wrapper to be configured",
+        );
+      }
+      return wrapped;
+    };
+
+    const sentBody = (mockFetch: ReturnType<typeof vi.fn>) =>
+      JSON.parse(mockFetch.mock.calls[0][1].body as string);
+
+    it("drops the package's defaulted think:false so Ollama applies its own default", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await nativeFetch()("http://localhost:11434/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ model: "qwen3:4b", think: false }),
+      });
+
+      expect(sentBody(mockFetch)).not.toHaveProperty("think");
+      vi.unstubAllGlobals();
+    });
+
+    it("keeps an explicitly configured think:false", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await nativeFetch()("http://localhost:11434/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          model: "qwen3:4b",
+          think: false,
+          options: { [OLLAMA_THINK_EXPLICIT_KEY]: true, num_ctx: 4096 },
+        }),
+      });
+
+      const body = sentBody(mockFetch);
+      expect(body.think).toBe(false);
+      // The marker is internal and must never reach Ollama.
+      expect(body.options).toEqual({ num_ctx: 4096 });
+      vi.unstubAllGlobals();
+    });
+
+    it("keeps an explicitly configured think:true and drops an options bag left empty", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await nativeFetch()("http://localhost:11434/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          model: "qwen3:4b",
+          think: true,
+          options: { [OLLAMA_THINK_EXPLICIT_KEY]: true },
+        }),
+      });
+
+      const body = sentBody(mockFetch);
+      expect(body.think).toBe(true);
+      expect(body).not.toHaveProperty("options");
+      vi.unstubAllGlobals();
+    });
+
+    it("passes a non-JSON body through untouched", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await nativeFetch()("http://localhost:11434/api/chat", {
+        method: "POST",
+        body: "not json",
+      });
+
+      expect(mockFetch.mock.calls[0][1].body).toBe("not json");
+      vi.unstubAllGlobals();
+    });
+  });
+
   describe("azure fetchWithVersion", () => {
     it("appends api-version to string URL", async () => {
       const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));

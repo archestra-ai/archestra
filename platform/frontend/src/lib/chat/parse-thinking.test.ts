@@ -118,7 +118,46 @@ describe("hasThinkingTags", () => {
   });
 
   it("should match partial tags", () => {
-    // This is intentional - we just check for opening tag presence
+    // This is intentional - we just check for tag presence
     expect(hasThinkingTags("Incomplete <think>")).toBe(true);
+  });
+
+  it("should match a closing tag with no opening tag", () => {
+    // Ollama prefills the opening <think> when asked to suppress thinking, so a
+    // model that reasons anyway emits only the closer. Testing for "<think>"
+    // alone let the whole reasoning block render as the assistant's answer.
+    expect(hasThinkingTags("Reasoning...</think>\n\nAnswer")).toBe(true);
+  });
+});
+
+describe("parseThinkingTags with an unpaired closing tag", () => {
+  // Reproduced against Ollama 0.32.0: qwen3:4b with `think: false` returns its
+  // whole chain of thought as `content`, terminated by a bare </think>, then the
+  // real answer.
+  it("splits reasoning from the answer at the stray closer", () => {
+    const result = parseThinkingTags(
+      'Okay, the user said "hi". I should greet them.\n</think>\n\nHello! How can I assist you today?',
+    );
+
+    expect(result).toEqual([
+      {
+        type: "reasoning",
+        text: 'Okay, the user said "hi". I should greet them.',
+      },
+      { type: "text", text: "Hello! How can I assist you today?" },
+    ]);
+  });
+
+  it("treats the whole text as reasoning when nothing follows the closer", () => {
+    expect(parseThinkingTags("Still reasoning</think>")).toEqual([
+      { type: "reasoning", text: "Still reasoning" },
+    ]);
+  });
+
+  it("leaves a properly paired block to the normal parser", () => {
+    expect(parseThinkingTags("<think>Reasoning</think>Answer")).toEqual([
+      { type: "reasoning", text: "Reasoning" },
+      { type: "text", text: "Answer" },
+    ]);
   });
 });

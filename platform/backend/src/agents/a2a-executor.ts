@@ -428,7 +428,7 @@ export async function executeA2AMessage(
         : null,
     });
 
-    // Send admin-configured per-model generation parameters (num_ctx,
+    // Send the per-model generation parameters (num_ctx,
     // num_predict, top_k, think, …) on native Ollama turns, mirroring the
     // interactive chat route. Ollama reads the output cap from
     // `options.num_predict`; the top-level `maxOutputTokens` above is discarded

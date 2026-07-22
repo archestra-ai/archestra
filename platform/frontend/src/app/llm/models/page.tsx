@@ -601,6 +601,14 @@ function EditModelDialog({
   });
   const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
 
+  // Top-level field errors, surfaced next to the submit button — see the footer
+  // for why. Nested `configuredParameters.*` errors are deliberately not
+  // included: those inputs spread `field` onto a real DOM node, so
+  // react-hook-form focuses and scrolls to them on its own.
+  const blockingErrors = Object.values(form.formState.errors)
+    .map((error) => (error as { message?: string } | undefined)?.message)
+    .filter((message): message is string => Boolean(message));
+
   useEffect(() => {
     if (open) {
       form.reset(getDefaults(model));
@@ -628,11 +636,16 @@ function EditModelDialog({
       inputModalities: values.inputModalities as ModelInputModality[],
       outputModalities: values.outputModalities as ModelOutputModality[],
       // Configured parameters are only applied by the native Ollama provider;
-      // for other providers leave the field untouched.
-      ...(model.provider === "ollama-native"
+      // for other providers leave the field untouched. Sent only when actually
+      // edited: the update replaces the object wholesale, so including it on an
+      // unrelated save (a price tweak) would rewrite parameters the form no
+      // longer renders — `seed` among them.
+      ...(model.provider === "ollama-native" &&
+      form.formState.dirtyFields.configuredParameters
         ? {
             configuredParameters: buildConfiguredParameters(
               values.configuredParameters,
+              model.configuredParameters,
             ),
           }
         : {}),
@@ -659,6 +672,20 @@ function EditModelDialog({
       onSubmit={form.handleSubmit(handleSubmit)}
       footer={
         <>
+          {/* The dialog body scrolls while this footer is pinned, so a field
+              error can render hundreds of pixels above the fold — and the
+              modality fields never forward a ref, so react-hook-form cannot
+              scroll to them either. Without this, a blocked submit looks
+              exactly like a button that does nothing. */}
+          {blockingErrors.length > 0 && (
+            <p
+              role="alert"
+              className="mr-auto text-sm text-destructive"
+              data-testid="edit-model-form-errors"
+            >
+              {blockingErrors.join(". ")}
+            </p>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -1054,7 +1081,7 @@ function EditModelDialog({
                       : "."}
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   {OLLAMA_NATIVE_PARAM_FIELDS.map((param) => (
                     <FormField
                       key={param.name}
@@ -1089,59 +1116,75 @@ function EditModelDialog({
                     />
                   ))}
                 </div>
-                <FormField
-                  control={form.control}
-                  name="configuredParameters.stop"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="font-mono text-xs">stop</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          rows={3}
-                          placeholder={ollamaDefaultPlaceholder(model, "stop")}
-                          {...field}
-                        />
-                      </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        One stop sequence per line.
-                      </p>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="configuredParameters.reasoning_effort"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Thinking effort</FormLabel>
-                      <Select
-                        value={field.value || "inherit"}
-                        onValueChange={(value) =>
-                          field.onChange(value === "inherit" ? "" : value)
-                        }
-                      >
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="configuredParameters.stop"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-mono text-xs">
+                          stop
+                        </FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Inherit" />
-                          </SelectTrigger>
+                          <Textarea
+                            rows={3}
+                            placeholder={ollamaDefaultPlaceholder(
+                              model,
+                              "stop",
+                            )}
+                            {...field}
+                          />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="inherit">Inherit</SelectItem>
-                          <SelectItem value="none">Off</SelectItem>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Only applies to thinking-capable models. Effort levels
-                        currently map to on/off for the underlying Ollama
-                        provider, and "Inherit" leaves thinking off.
-                      </p>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <p className="text-xs text-muted-foreground">
+                          One sequence per line.
+                        </p>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="configuredParameters.reasoning_effort"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Thinking</FormLabel>
+                        <Select
+                          // Rows saved before this control collapsed to on/off
+                          // still hold "low"/"high"; both mean thinking is on.
+                          value={
+                            field.value
+                              ? field.value === "none"
+                                ? "none"
+                                : "medium"
+                              : "inherit"
+                          }
+                          onValueChange={(value) =>
+                            field.onChange(value === "inherit" ? "" : value)
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Inherit" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {/* Ollama's `think` is a boolean on this provider,
+                                so low/medium/high would all be identical on the
+                                wire — offering them implied a granularity that
+                                does not exist. */}
+                            <SelectItem value="inherit">Inherit</SelectItem>
+                            <SelectItem value="medium">On</SelectItem>
+                            <SelectItem value="none">Off</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Thinking-capable models only. "Inherit" uses Ollama's
+                          own default.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
             </>
           )}
@@ -1165,7 +1208,6 @@ const OLLAMA_NATIVE_PARAM_FIELDS: Array<{
   { name: "top_p" },
   { name: "top_k" },
   { name: "repeat_penalty" },
-  { name: "seed" },
 ];
 
 function ollamaDefaultPlaceholder(

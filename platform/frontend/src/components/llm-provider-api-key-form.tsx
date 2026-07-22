@@ -112,6 +112,26 @@ export function deserializeExtraHeaders(
 export type LlmProviderApiKeyResponse =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
 
+function isOllamaProvider(provider: string): boolean {
+  return provider === "ollama" || provider === "ollama-native";
+}
+
+/**
+ * Ollama ships as two providers because the transports differ on the wire, but
+ * they are one product behind one base URL. The picker shows a single "Ollama"
+ * entry plus a separate transport control, so one of the pair stands in for both
+ * in the provider list.
+ *
+ * `ollama-native` is the better general default — it carries the per-model
+ * parameters `/v1` silently discards — but it cannot do embeddings, so for an
+ * embedding key the OpenAI-compatible transport is the only valid one and must
+ * be the entry shown. Collapsing to native unconditionally made Ollama
+ * unselectable in the embedding dialog.
+ */
+function ollamaTransportForContext(forEmbedding: boolean): string {
+  return forEmbedding ? "ollama" : "ollama-native";
+}
+
 const PROVIDER_CONFIG: Record<
   CreateLlmProviderApiKeyBody["provider"],
   {
@@ -409,6 +429,10 @@ export function LlmProviderApiKeyForm({
       ),
     [allowedProviders],
   );
+  // Which of the two Ollama transports represents "Ollama" in the provider list.
+  const ollamaListedTransport = ollamaTransportForContext(forEmbedding);
+  // Embeddings only work on the `/v1` transport, so there is nothing to choose.
+  const showOllamaTransport = isOllamaProvider(provider) && !forEmbedding;
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
 
   const existingPrimaryKey = useMemo(() => {
@@ -635,7 +659,9 @@ export function LlmProviderApiKeyForm({
           <div className="space-y-2">
             <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
             <Select
-              value={provider}
+              value={
+                isOllamaProvider(provider) ? ollamaListedTransport : provider
+              }
               onValueChange={(value) =>
                 form.setValue(
                   "provider",
@@ -653,6 +679,23 @@ export function LlmProviderApiKeyForm({
               <SelectContent>
                 <LlmProviderSelectItems
                   options={Object.entries(PROVIDER_CONFIG)
+                    // The two Ollama transports are one product with one set of
+                    // credentials, so they collapse to a single entry here and
+                    // the transport is chosen below. Listing both read as two
+                    // unrelated providers.
+                    .filter(
+                      ([key]) =>
+                        !isOllamaProvider(key) || key === ollamaListedTransport,
+                    )
+                    .map(
+                      ([key, config]) =>
+                        [
+                          key,
+                          key === ollamaListedTransport
+                            ? { ...config, name: "Ollama" }
+                            : config,
+                        ] as const,
+                    )
                     .sort(([, a], [, b]) => a.name.localeCompare(b.name))
                     .map(([key, config]) => {
                       const providerKey =
@@ -686,6 +729,42 @@ export function LlmProviderApiKeyForm({
               </SelectContent>
             </Select>
           </div>
+
+          {showOllamaTransport && (
+            <div className="space-y-2">
+              <Label htmlFor="llm-provider-api-key-ollama-transport">
+                Transport
+              </Label>
+              <Select
+                value={provider}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "provider",
+                    value as CreateLlmProviderApiKeyBody["provider"],
+                  )
+                }
+                // The transport is baked into the stored provider, so an
+                // existing key cannot switch without being recreated.
+                disabled={isEditMode || isPending || disableProvider}
+              >
+                <SelectTrigger
+                  id="llm-provider-api-key-ollama-transport"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ollama-native">Native</SelectItem>
+                  <SelectItem value="ollama">OpenAI-compatible</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {provider === "ollama-native"
+                  ? "Ollama's own /api/chat. Supports per-model parameters such as num_ctx and thinking."
+                  : "Ollama's OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored."}
+              </p>
+            </div>
+          )}
 
           {mode === "full" && (
             <div className="space-y-2">

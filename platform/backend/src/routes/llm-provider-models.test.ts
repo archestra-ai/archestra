@@ -793,7 +793,7 @@ describe("chat model routes", () => {
       expect(response.statusCode).toBe(200);
     });
 
-    test("requires admin to set generation parameters", async () => {
+    test("generation parameters need no permission beyond the route's own", async () => {
       const model = await makeNativeModel();
       mockUserHasPermission.mockResolvedValue(false);
 
@@ -803,12 +803,16 @@ describe("chat model routes", () => {
         payload: { configuredParameters: { num_predict: 1 } },
       });
 
-      // Model rows are global — no organizationId — so one write reaches every
-      // organization. Editors keep the display-only pricing/modality fields.
-      expect(response.statusCode).toBe(403);
+      // An extra `llmModel:admin` gate used to live here. Model rows are global,
+      // but so are the pricing and `ignored` fields an editor could already
+      // write, so it drew a line the rest of the route does not — while locking
+      // custom roles (frozen permission snapshots) out of every edit on an
+      // ollama-native model. `llmModel:update` is the only gate now.
+      expect(response.statusCode).toBe(200);
+      expect(mockUserHasPermission).not.toHaveBeenCalled();
     });
 
-    test("a pricing-only update still works without admin", async () => {
+    test("a pricing-only update still works", async () => {
       const model = await makeNativeModel();
       mockUserHasPermission.mockResolvedValue(false);
 

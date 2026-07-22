@@ -400,7 +400,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 ### Setup
 
-1. Go to **Model Providers** and add a new key with provider **Ollama**
+1. Go to **Model Providers** and add a new key with provider **Ollama**, then set **Transport** to **OpenAI-compatible**
 2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
 3. API key can be left blank for self-hosted Ollama
 
@@ -449,18 +449,18 @@ Open **LLM → Models**, edit a native Ollama model, and set any parameter under
 | `top_p`          | 0 – 1                           |                                                                             |
 | `top_k`          | Integer ≥ 0                     |                                                                             |
 | `repeat_penalty` | ≥ 0                             |                                                                             |
-| `seed`           | Any integer                     | Fix for reproducible output                                                 |
 | `stop`           | One sequence per line           | Newline-delimited, so a stop sequence may itself contain commas             |
+| Thinking         | Inherit / On / Off              | Thinking-capable models only. **Inherit** uses Ollama's own default          |
 
 A configured `num_ctx` also becomes the context window Archestra displays and enforces — so the context ring matches what Ollama actually allows, instead of the model's architectural maximum. See [Context Window Visualizer](/docs/platform-chat#context-window-visualizer).
 
 The operator-wide output ceiling (`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`) is applied on top of `num_predict`; whichever is tighter wins.
 
-Setting these parameters requires **admin** permission. They live on a globally shared model row, so one change applies to every organization — unlike the pricing and modality fields, which editors can also change.
+Editing these parameters needs the same permission as the rest of the model row (`llmModel:update`), which editors and admins both have.
 
 ### Setup
 
-1. Go to **Model Providers** and add a new key with provider **Ollama (Native)**
+1. Go to **Model Providers** and add a new key with provider **Ollama**, leaving **Transport** on **Native** (the default)
 2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
 
 The default base URL is `http://localhost:11434`. Override it per-key in the UI or globally via `ARCHESTRA_OLLAMA_NATIVE_BASE_URL`.
@@ -475,7 +475,7 @@ The default base URL is `http://localhost:11434`. Override it per-key in the UI 
 ### Important Notes
 
 - **No `/v1` suffix**: the native API is served from the server root. `http://localhost:11434` is correct; `http://localhost:11434/v1` is not, and points at the OpenAI-compatible API instead.
-- **Thinking effort**: currently maps to on/off for the underlying provider — a follow-up will send Ollama's exact effort levels. Leaving it on **Inherit** disables thinking rather than deferring to the model's default.
+- **Thinking**: on or off, not an effort scale — the underlying provider accepts only a boolean, so distinct effort levels would be identical on the wire. **Inherit** sends nothing and lets Ollama decide, which is what thinking-capable models expect. Turning thinking **Off** on a model that reasons anyway can make it emit its reasoning as the visible answer; that is the model ignoring the instruction, not Archestra.
 - **Model availability**: models must be pulled first using `ollama pull <model-name>`.
 - **Running Archestra in Docker**: as with the OpenAI-compatible provider, `localhost` inside a container resolves to the container. Use `http://host.docker.internal:11434` as the Base URL — note there is no `/v1` here.
 

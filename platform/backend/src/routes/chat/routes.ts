@@ -1294,7 +1294,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     : null,
                 });
 
-                // Send admin-configured per-model generation parameters
+                // Send the per-model generation parameters
                 // (num_ctx, num_predict, top_k, think, …) on native Ollama turns.
                 // These are the values `/v1` cannot carry; the native adapter
                 // forwards them into the `/api/chat` `options` bag. Must run

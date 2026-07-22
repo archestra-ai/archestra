@@ -120,12 +120,12 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("Get-Random -Minimum 0 -Maximum 2");
   });
 
-  test("paces every check with ~0.5s of appended dots, on the alternate screen", () => {
+  test("paces every check with ~0.75s of appended dots, on the alternate screen", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
-    // ~0.5s per row, one appended dot per ~160ms tick — append-only output
+    // ~0.75s per row, one appended dot per ~250ms tick — append-only output
     // cannot flicker (glyph spinners strobed on Windows Terminal)
     expect(script).toContain("$MinCheckFrames = 3");
-    expect(script).toContain("$FrameSleepMs = 160");
+    expect(script).toContain("$FrameSleepMs = 250");
     expect(script).toContain("function Show-ArchSpinTick");
     // colors go out as raw VT codes — console-API colors die on the
     // alternate screen buffer under conpty; checks are the brand purple

@@ -198,11 +198,11 @@ RETRY_TOTAL_SECONDS=15
 NOTICE_AFTER_SECONDS=3
 HANG_TIGHT_AFTER_SECONDS=10
 
-# Each resource's turn shows ~0.5s of animation — enough to read as a
+# Each resource's turn shows ~0.75s of animation — enough to read as a
 # deliberate step, short enough to never feel like waiting. A tick appends
-# one unhurried trailing dot every ~160ms.
+# one unhurried trailing dot every ~250ms.
 MIN_CHECK_FRAMES=3
-FRAME_SLEEP=0.16
+FRAME_SLEEP=0.25
 
 # Only drive the terminal (and prompt) when a human is watching: a real tty on
 # both ends and no -p/--print run. Otherwise check once, warn on stderr, and

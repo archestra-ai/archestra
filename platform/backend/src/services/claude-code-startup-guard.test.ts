@@ -345,12 +345,12 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("HEALTH_STATE='down'");
   });
 
-  test("paces every check with ~0.5s of appended dots, on the alternate screen", () => {
+  test("paces every check with ~0.75s of appended dots, on the alternate screen", () => {
     const script = renderClaudeCodeStartupGuardScript(CTX);
-    // ~0.5s per row, one appended dot per ~160ms tick — append-only output
+    // ~0.75s per row, one appended dot per ~250ms tick — append-only output
     // cannot flicker (glyph spinners strobed on Windows Terminal)
     expect(script).toContain("MIN_CHECK_FRAMES=3");
-    expect(script).toContain("FRAME_SLEEP=0.16");
+    expect(script).toContain("FRAME_SLEEP=0.25");
     expect(script).toContain("spin_tick()");
     // a tick appends; it never clears or rewrites the line
     expect(script).not.toMatch(/spin_tick\(\) \{[^}]*2K/);

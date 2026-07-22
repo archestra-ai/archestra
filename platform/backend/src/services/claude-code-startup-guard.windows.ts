@@ -141,11 +141,11 @@ $RetryTotalSeconds = 15
 $NoticeAfterSeconds = 3
 $HangTightAfterSeconds = 10
 
-# Each check shows ~0.5s of animation — enough to read as a deliberate
+# Each check shows ~0.75s of animation — enough to read as a deliberate
 # step, short enough to never feel like waiting. A tick appends one
-# unhurried trailing dot every ~160ms.
+# unhurried trailing dot every ~250ms.
 $MinCheckFrames = 3
-$FrameSleepMs = 160
+$FrameSleepMs = 250
 
 # Only drive the terminal (and prompt) when a human is watching: a real
 # console on both ends and no -p/--print run. Otherwise probe once per remote,

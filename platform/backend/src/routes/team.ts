@@ -9,7 +9,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { enterpriseTier } from "@/enterprise-tier";
-import { OrganizationModel, TeamLabelModel, TeamModel } from "@/models";
+import { TeamLabelModel, TeamModel } from "@/models";
 import {
   canManageTeamMembers,
   canReadTeam,
@@ -114,10 +114,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      await requireTeamCompressionScope(
-        organizationId,
-        convertToolResultsToToon,
-      );
       return reply.send(
         await TeamModel.create({
           name,
@@ -197,11 +193,6 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!canUpdateTeams) {
         throw new ApiError(403, "You are not authorized to update this team");
       }
-
-      await requireTeamCompressionScope(
-        organizationId,
-        body.convertToolResultsToToon,
-      );
 
       const team = await TeamModel.update(id, body);
 
@@ -692,26 +683,4 @@ async function assertNotRemovingLastTeamAdmin(params: {
     throw new ApiError(404, "Team member not found");
   }
   throw new ApiError(400, "Cannot remove the last admin from a team");
-}
-
-// requireTeamCompressionScope rejects team-level convertToolResultsToToon=true
-// writes when the organization's compressionScope is not "team" — the runtime
-// TOON cascade (routes/proxy/utils/toon-conversion.ts) only consults team
-// flags under team scope, so setting it under "organization" scope would be
-// silently inert. Returning 400 here surfaces the misconfiguration at
-// write-time instead of at first-request time.
-async function requireTeamCompressionScope(
-  organizationId: string,
-  convertToolResultsToToon: boolean | undefined,
-): Promise<void> {
-  if (convertToolResultsToToon !== true) {
-    return;
-  }
-  const org = await OrganizationModel.getById(organizationId);
-  if (org && org.compressionScope !== "team") {
-    throw new ApiError(
-      400,
-      `convertToolResultsToToon=true requires organization.compressionScope to be "team" (currently "${org.compressionScope}"). Update the organization first, or omit the field.`,
-    );
-  }
 }

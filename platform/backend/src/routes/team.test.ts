@@ -1,35 +1,13 @@
 import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
 import { OrganizationModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-const { hasPermissionMock } = vi.hoisted(() => ({
-  hasPermissionMock: vi.fn(),
-}));
+vi.mock("@/auth");
 
-vi.mock("@/auth", async () => {
-  const actual = await vi.importActual<typeof import("@/auth")>("@/auth");
-  return {
-    ...actual,
-    hasPermission: hasPermissionMock,
-  };
-});
-
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      enterpriseFeatures: {
-        ...actual.default.enterpriseFeatures,
-        core: true,
-      },
-    },
-  };
-});
+import { hasPermission } from "@/auth";
 
 describe("team route TOON compression contract", () => {
   let app: FastifyInstanceWithZod;
@@ -38,7 +16,7 @@ describe("team route TOON compression contract", () => {
 
   beforeEach(async ({ makeAdmin, makeMember, makeOrganization }) => {
     vi.clearAllMocks();
-    hasPermissionMock.mockResolvedValue({ success: true });
+    vi.mocked(hasPermission).mockResolvedValue({ success: true, error: null });
 
     adminUser = await makeAdmin();
     const organization = await makeOrganization();
@@ -86,26 +64,33 @@ describe("team route TOON compression contract", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = response.json();
-      expect(body.convertToolResultsToToon).toBe(true);
+      expect(response.json().convertToolResultsToToon).toBe(true);
     });
 
-    test("rejects convertToolResultsToToon=true with 400 when org scope is 'organization'", async () => {
-      // Default compressionScope is 'organization' — no patch needed.
+    test("persists convertToolResultsToToon=true even when org scope is 'organization'", async () => {
+      // Default compressionScope is 'organization'. The team-level opt-in is
+      // stored (and honored at runtime) regardless of the org scope, so a
+      // client can create the team before flipping the org scope (#4454).
       const response = await app.inject({
         method: "POST",
         url: "/api/teams",
         payload: {
-          name: "Mismatched TOON",
+          name: "TOON Before Scope Change",
           convertToolResultsToToon: true,
         },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.error.message).toMatch(
-        /requires organization\.compressionScope to be "team"/,
-      );
+      expect(body.convertToolResultsToToon).toBe(true);
+
+      // The flag survived to storage, not just the create response echo.
+      const fetched = await app.inject({
+        method: "GET",
+        url: `/api/teams/${body.id}`,
+      });
+      expect(fetched.statusCode).toBe(200);
+      expect(fetched.json().convertToolResultsToToon).toBe(true);
     });
 
     test("accepts omitted convertToolResultsToToon and defaults to false", async () => {
@@ -116,12 +101,10 @@ describe("team route TOON compression contract", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = response.json();
-      expect(body.convertToolResultsToToon).toBe(false);
+      expect(response.json().convertToolResultsToToon).toBe(false);
     });
 
     test("accepts convertToolResultsToToon=false regardless of org scope", async () => {
-      // No-op declaration of the default — must not be rejected.
       const response = await app.inject({
         method: "POST",
         url: "/api/teams",
@@ -132,13 +115,12 @@ describe("team route TOON compression contract", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = response.json();
-      expect(body.convertToolResultsToToon).toBe(false);
+      expect(response.json().convertToolResultsToToon).toBe(false);
     });
   });
 
   describe("PUT /api/teams/:id", () => {
-    test("rejects convertToolResultsToToon=true with 400 when org scope is 'organization'", async ({
+    test("persists convertToolResultsToToon=true even when org scope is 'organization'", async ({
       makeTeam,
     }) => {
       const team = await makeTeam(organizationId, adminUser.id);
@@ -149,11 +131,8 @@ describe("team route TOON compression contract", () => {
         payload: { convertToolResultsToToon: true },
       });
 
-      expect(response.statusCode).toBe(400);
-      const body = response.json();
-      expect(body.error.message).toMatch(
-        /requires organization\.compressionScope to be "team"/,
-      );
+      expect(response.statusCode).toBe(200);
+      expect(response.json().convertToolResultsToToon).toBe(true);
     });
 
     test("persists convertToolResultsToToon=true when org scope is 'team'", async ({
@@ -171,8 +150,7 @@ describe("team route TOON compression contract", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = response.json();
-      expect(body.convertToolResultsToToon).toBe(true);
+      expect(response.json().convertToolResultsToToon).toBe(true);
     });
   });
 });

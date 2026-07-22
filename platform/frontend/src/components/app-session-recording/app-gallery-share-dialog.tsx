@@ -197,15 +197,6 @@ export function AppGalleryShareButton(props: {
     }
   }, [galleryRepo, props.conversationId]);
 
-  // Popup blockers only honor window.open during a click. With a token
-  // already cached this click goes straight to submission, so the tab that
-  // will hold the pull request is claimed NOW, as a placeholder. (First-time
-  // runs claim the GitHub sign-in tab from its own click in ConnectStep.)
-  const startRun = useCallback(() => {
-    if (takeCachedGithubToken()) claimPlaceholderTab(githubTabRef);
-    void run();
-  }, [run]);
-
   // The fallback when the automatic flow fails: hand the participant the
   // exact files the PR would have carried, plus the browser-only steps to
   // file it themselves. Uses the cached token (when sign-in got that far) to
@@ -249,7 +240,7 @@ export function AppGalleryShareButton(props: {
     setOpen(next);
     if (next) {
       if (takeCachedGithubToken()) {
-        startRun();
+        void run();
       } else {
         setState({ step: "signin" });
       }
@@ -308,6 +299,10 @@ export function AppGalleryShareButton(props: {
         open={open}
         onOpenChange={setDialogOpen}
         size="small"
+        // A mid-flight submission must not be lost to a stray outside click
+        // or Esc — the X button is the one deliberate way out.
+        preventCloseOnInteractOutside
+        preventCloseOnEscape
         title={chrome.title}
         // No rule under the header — these are short single-purpose screens,
         // and the line just chops them in half.
@@ -320,7 +315,7 @@ export function AppGalleryShareButton(props: {
         <ShareDialogBody
           state={state}
           repo={galleryRepo}
-          onRetry={startRun}
+          onRetry={run}
           onManual={openManual}
           onOpenGithub={(verificationUri) =>
             claimGithubTab(githubTabRef, verificationUri)
@@ -858,41 +853,28 @@ function downloadSubmissionFile(file: GallerySubmissionFile) {
 // =============================================================================
 //
 // Popup blockers only honor window.open during a user gesture, and the PR URL
-// exists long after the last click — a plain open at completion is silently
-// eaten. So the flow claims a tab while it still HAS a gesture and navigates
-// it later (navigating a window this page opened needs no popup permission):
-// sign-in runs claim the GitHub device-code tab the participant approves in;
-// cached-token runs claim a placeholder at the Share/Retry click itself. One
-// shared window name keeps repeat clicks reusing a single tab.
+// exists long after the last click — a plain open at completion is usually
+// eaten. So the sign-in run claims the GitHub device-code tab (opened by its
+// own click in ConnectStep) and NAVIGATES it to the finished PR — navigating
+// a window this page opened needs no popup permission, and the participant
+// just approved there anyway. The window name keeps repeat clicks reusing
+// one tab. Cached-token runs deliberately claim NOTHING: a tab opened at the
+// Share/Retry click steals focus from the dialog mid-submission (it read as
+// flickering), so they rely on the best-effort open at completion plus the
+// dialog's own links.
 
 const GITHUB_TAB_NAME = "archestra-app-gallery-github";
 
 type GithubTabRef = { current: Window | null };
 
 /**
- * Open (or re-point) the named helper tab and keep its handle. Deliberately
- * NO "noopener" — that would return null, and the handle is the whole point;
- * the tab only ever holds github.com or this page's own placeholder.
+ * Open (or re-point) the named GitHub tab and keep its handle. Deliberately
+ * NO "noopener" — that would return null, and the handle is the whole point.
  */
 function claimGithubTab(ref: GithubTabRef, url: string): Window | null {
   const tab = window.open(url, GITHUB_TAB_NAME);
   if (tab) ref.current = tab;
   return tab;
-}
-
-/** Claim a blank tab now (during the click) for a PR that doesn't exist yet. */
-function claimPlaceholderTab(ref: GithubTabRef): void {
-  const tab = claimGithubTab(ref, "about:blank");
-  if (!tab) return;
-  try {
-    tab.document.title = "Opening pull request…";
-    tab.document.body.textContent = "Preparing your pull request on GitHub…";
-    tab.document.body.style.cssText =
-      "font-family:system-ui,sans-serif;padding:2rem;color:#555";
-  } catch {
-    // A reused tab can still be on github.com from an earlier run — cosmetic
-    // only, it gets the real PR URL either way.
-  }
 }
 
 /** Land the finished (or already-existing) pull request in the claimed tab. */
@@ -913,14 +895,7 @@ function showPrInGithubTab(ref: GithubTabRef, prUrl: string): void {
   window.open(prUrl, "_blank", "noopener");
 }
 
-/** Forget the claimed tab, closing it only while it is still our placeholder. */
+/** Forget the claimed tab — the participant's GitHub page is left to them. */
 function releaseGithubTab(ref: GithubTabRef): void {
-  const tab = ref.current;
   ref.current = null;
-  if (!tab || tab.closed) return;
-  try {
-    if (tab.location.href === "about:blank") tab.close();
-  } catch {
-    // Cross-origin means the participant's GitHub page — leave it to them.
-  }
 }

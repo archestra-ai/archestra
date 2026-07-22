@@ -26,6 +26,8 @@ export type FormDialogProps = {
   size?: DialogSize;
   children: React.ReactNode;
   preventCloseOnInteractOutside?: boolean;
+  /** Block Esc from closing — the X button stays the only dismissal. */
+  preventCloseOnEscape?: boolean;
   /**
    * When the form holds unsaved data, closing it (Esc, outside-click, or the
    * X button) shows a "Discard unsaved changes?" confirmation instead of
@@ -53,6 +55,7 @@ export function FormDialog({
   size = "medium",
   children,
   preventCloseOnInteractOutside,
+  preventCloseOnEscape,
   isDirty = false,
   className,
   headerClassName,
@@ -68,6 +71,9 @@ export function FormDialog({
             preventCloseOnInteractOutside
               ? (e) => e.preventDefault()
               : undefined
+          }
+          onEscapeKeyDown={
+            preventCloseOnEscape ? (e) => e.preventDefault() : undefined
           }
         >
           <DialogDismissProvider requestClose={guard.requestClose}>

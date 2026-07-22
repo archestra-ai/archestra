@@ -196,6 +196,13 @@ describe("MCP Server Install - explicit target user", () => {
       await makeMember(admin.id, organizationId);
       await makeMember(target.id, organizationId);
       const catalog = await makeOrgCatalog(makeInternalMcpCatalog, admin.id);
+      connectAndGetToolsMock.mockResolvedValue([
+        {
+          name: "list_items",
+          description: "",
+          inputSchema: { type: "object" },
+        },
+      ]);
 
       currentUser = admin;
       const first = await install({
@@ -213,6 +220,26 @@ describe("MCP Server Install - explicit target user", () => {
       expect(second.statusCode).toBe(200);
       expect(second.json().id).toBe(first.json().id);
       expect(second.json().ownerId).toBe(target.id);
+
+      // The duplicate-return branch re-assigns catalog tools; they must land
+      // on the target's gateway (idempotently), never the caller's.
+      const targetGateway = await AgentModel.getPersonalMcpGateway(
+        target.id,
+        organizationId,
+      );
+      if (!targetGateway) throw new Error("target gateway was not created");
+      expect(
+        await AgentToolModel.findToolIdsByAgent(targetGateway.id),
+      ).toHaveLength(1);
+      const callerGateway = await AgentModel.getPersonalMcpGateway(
+        admin.id,
+        organizationId,
+      );
+      if (callerGateway) {
+        expect(
+          await AgentToolModel.findToolIdsByAgent(callerGateway.id),
+        ).toHaveLength(0);
+      }
     });
 
     test("a non-admin caller targeting another user gets 403 and no install is created", async ({

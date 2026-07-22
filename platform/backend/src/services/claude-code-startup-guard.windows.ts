@@ -140,9 +140,11 @@ $NoticeAfterSeconds = 3
 $HangTightAfterSeconds = 10
 
 # Each check is padded to ~0.2s of animation — enough to read as a
-# deliberate step, short enough to never feel like waiting.
-$MinCheckFrames = 4
-$FrameSleepMs = 50
+# deliberate step, short enough to never feel like waiting. Frames advance
+# every 100ms: the classic spinner cadence — faster reads as trembling, not
+# spinning.
+$MinCheckFrames = 2
+$FrameSleepMs = 100
 
 # Only drive the terminal (and prompt) when a human is watching: a real
 # console on both ends and no -p/--print run. Otherwise probe once per remote,

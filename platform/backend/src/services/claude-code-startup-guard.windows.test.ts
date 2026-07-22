@@ -121,8 +121,10 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain(
       "$Frames = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')",
     );
-    expect(script).toContain("$MinCheckFrames = 4");
-    expect(script).toContain("$FrameSleepMs = 50");
+    // ~100ms per frame — the classic spinner cadence; faster reads as
+    // trembling (caught live on Windows Terminal)
+    expect(script).toContain("$MinCheckFrames = 2");
+    expect(script).toContain("$FrameSleepMs = 100");
     // ticks repaint only the spinner glyph — full-line repaints flicker
     expect(script).toContain("function Show-ArchSpinTick");
     // alternate screen in/out — the terminal stays clean after claude exits

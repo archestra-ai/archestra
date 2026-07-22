@@ -351,8 +351,10 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain(
       "FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')",
     );
-    expect(script).toContain("MIN_CHECK_FRAMES=4");
-    expect(script).toContain("FRAME_SLEEP=0.05");
+    // ~100ms per frame — the classic spinner cadence; faster reads as
+    // trembling (caught live on Windows Terminal)
+    expect(script).toContain("MIN_CHECK_FRAMES=2");
+    expect(script).toContain("FRAME_SLEEP=0.1");
     // ticks repaint only the spinner glyph — full-line repaints flicker
     expect(script).toContain("spin_tick()");
     expect(script).not.toMatch(/spin_tick\(\) \{[^}]*2K/);

@@ -201,9 +201,11 @@ NOTICE_AFTER_SECONDS=3
 HANG_TIGHT_AFTER_SECONDS=10
 
 # Each resource's turn is padded to ~0.2s of animation — enough to read as a
-# deliberate step, short enough to never feel like waiting.
-MIN_CHECK_FRAMES=4
-FRAME_SLEEP=0.05
+# deliberate step, short enough to never feel like waiting. Frames advance
+# every 100ms: the classic spinner cadence — faster reads as trembling, not
+# spinning.
+MIN_CHECK_FRAMES=2
+FRAME_SLEEP=0.1
 
 # Only drive the terminal (and prompt) when a human is watching: a real tty on
 # both ends and no -p/--print run. Otherwise check once, warn on stderr, and

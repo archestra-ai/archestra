@@ -1,0 +1,60 @@
+{
+  "name": "agenttools__remote-mcp",
+  "display_name": "Wolfram",
+  "icon": "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2ZXJzaW9uPSIxLjEiIHZpZXdCb3g9IjAgMCA5NzAgOTcwIj4KICA8IS0tIEdlbmVyYXRvcjogQWRvYmUgSWxsdXN0cmF0b3IgMzAuMy4wLCBTVkcgRXhwb3J0IFBsdWctSW4gLiBTVkcgVmVyc2lvbjogMi4xLjMgQnVpbGQgMTgyKSAgLS0+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5zdDAgewogICAgICAgIGZpbGw6ICNkMTA7CiAgICAgIH0KICAgIDwvc3R5bGU+CiAgPC9kZWZzPgogIDxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik04MTIuMzc2LDQ4NS4wNDFsMTMzLjQ0Ni0xNDkuNzIyLTE5NS45NDUtNDIuNzIyLDE5Ljk2Ny0xOTkuNTY5LTE4My42NDUsODAuNjE2TDQ4NC45OTUuNDY2bC0xMDEuMTM0LDE3My4xNTgtMTgzLjYxNC04MC42NTgsMTkuOTIxLDE5OS41NzEtMTk1Ljk2OCw0Mi42NzcsMTMzLjQyMywxNDkuNzUzTDI0LjE3OSw2MzQuNjhsMTk1Ljk0Niw0Mi43MjktMTkuOTU5LDE5OS41NTUsMTgzLjYzNi04MC42MDgsMTAxLjIwNCwxNzMuMTc2LDEwMS4xMzItMTczLjE0OSwxODMuNjIsODAuNjQ5LTE5LjkyMS0xOTkuNTY3LDE5NS45NjUtNDIuNjc4LTEzMy40MjctMTQ5Ljc0NVpNODI1LjAxOSw1NjkuNTE0bC02OS4wNzItMjMuNjI2LTQ4Ljc0My02My4zNSw2MC4yNywyMi4zOTIsNTcuNTQ2LDY0LjU4NFpNNTUzLjIzNiw3NjAuMDA3bC00NC44NTgsNzYuODAydi03Ny4zMjZsNDYuNTI1LTY3Ljg4NS0xLjY2Nyw2OC40MDlaTTQxNy4wMSwyNzEuMzcxbC03Ni4xMjItMjcuMDY5LTQyLjI1MS01Ny4wNDcsODAuMTEyLDM1LjE5MSwzOC4yNjIsNDguOTI1Wk01OTEuMzA1LDIyMi40NjZsODAuMDctMzUuMTQ5LTQyLjI1NSw1Ni45ODItNzYuMDc1LDI3LjA1MywzOC4yNjEtNDguODg2Wk03MDEuODksMzAyLjU1NWwtMzcuMzYzLDUyLjk4OCwyLjI5OS04My41OTQsNDQuMDc0LTU5LjQzNC05LjAwOSw5MC4wNFpNNDg1LjAwMSw3MTAuODg3bC02Ni41MTctOTcuMDU2LDY2LjUxNy05MC4yNTcsNjYuNTE2LDkwLjI1Ny02Ni41MTYsOTcuMDU2Wk0zNTMuODkyLDQxNS4zMjNsLTMuMjQ0LTExNy45MjYsMTEwLjk3NCwzOS40NjJ2MTE0Ljc2M2wtMTA3LjczLTM2LjI5OVpNNTA4LjM3OSwzMzYuODZsMTEwLjk3Mi0zOS40NjItMy4yNDQsMTE3LjkyNi0xMDcuNzI5LDM2LjI5OXYtMTE0Ljc2M1pNMjY4LjE1MywzMDIuNTA5bC04Ljk4Mi04OS45ODEsNDQuMDA0LDU5LjQxNCwyLjI5OCw4My41NDEtMzcuMzE5LTUyLjk3M1pNMzM5LjMyMiw0NTkuNzUzbDEwNy44NSwzNi4zNC02Ni40NjksOTAuMTkyLTExMy4wODgtMzMuMzM1LDcxLjcwNy05My4xOTZaTTQxNS4wNjQsNjkxLjU1bDQ2LjU1OSw2Ny45MzR2NzcuMzY4bC00NC45MTktNzYuODYzLTEuNjQtNjguNDM5Wk01MjIuODI5LDQ5Ni4wOTNsMTA3Ljg0OS0zNi4zNCw3MS43MDcsOTMuMTk2LTExMy4wODgsMzMuMzM1LTY2LjQ2OC05MC4xOTJaTTg1Ny42NjgsMzYzLjk1M2wtODMuNDMzLDkzLjYwOS05OC42MDQtMzYuNjMzLDU5LjA3OC04My43ODMsMTIyLjk1OCwyNi44MDhaTTQ4NS4wMDYsOTMuMTU1bDYzLjMyNCwxMDguMzU5LTYzLjMyMiw4MC45MDYtNjMuMjgyLTgwLjkxOCw2My4yODEtMTA4LjM0OFpNMTEyLjM1MywzNjMuODY5bDEyMi45NjgtMjYuNzc5LDU5LjA1Myw4My44MjMtOTguNjAyLDM2LjU4NS04My40MTktOTMuNjI5Wk0yMDIuNTIxLDUwNC44NjZsNjAuMzE1LTIyLjM3OS00OC43NzgsNjMuMzk2LTY5LjEzNCwyMy42MDQsNTcuNTk4LTY0LjYyWk0xNTUuMTc3LDYxNS4zOTJsNzMuNjI5LTI1LjEzOCw4MC45OTcsMjMuODc3LTY1LjQ1MSwyMC43MDctODkuMTc0LTE5LjQ0NVpNMjY3LjE5LDY3Ni42NTNsOTkuOTg5LTMxLjYzNCwyLjU1MSwxMDYuNDUyLTExNS4wNzUsNTAuNTEzLDEyLjUzNS0xMjUuMzNaTTYwMC4yMTMsNzUxLjQ5OGwyLjU5NS0xMDYuNDcxLDk5Ljk2MywzMS42NjYsMTIuNTEyLDEyNS4zNDYtMTE1LjA3LTUwLjU0MVpNNzI1LjYyMSw2MzQuODg1bC02NS40NzMtMjAuNzQsODEuMDQtMjMuODg5LDczLjY2MywyNS4xOTctODkuMjMsMTkuNDMzWiIvPgo8L3N2Zz4=",
+  "description": "The Wolfram MCP Server transforms your AI environment into a rigorous computational powerhouse. By integrating Wolfram Language and Wolfram|Alpha, this server provides access to curated data and sophisticated algorithms. When a user submits a query, the LLM works with Wolfram to convert it into Wolfram Language for precise evaluation, and these exact results are incorporated into the response provided by the LLM.",
+  "long_description": "Whether you are solving complex differential equations, analyzing chemical structures or querying real-time socioeconomic data, the MCP Server ensures your AI has the \"computational brain\" necessary to deliver verified, high-level technical results that can be trusted.",
+  "author": {
+    "name": "Wolfram Research",
+    "url": "https://www.wolfram.com/"
+  },
+  "homepage": "https://www.wolfram.com/",
+  "documentation": "https://www.wolfram.com/artificial-intelligence/mcp-service/",
+  "support": "https://support.wolfram.com/",
+  "tools": [
+    {
+      "name": "WolframContext",
+      "description": "Semantic search across Wolfram Language documentation and Wolfram|Alpha results"
+    },
+    {
+      "name": "WolframLanguageEvaluator",
+      "description": "Execute Wolfram Language code with time constraints"
+    },
+    {
+      "name": "WolframAlpha",
+      "description": "Natural language queries to Wolfram|Alpha"
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "productivity",
+    "data analytics",
+    "education",
+    "wolfram",
+    "wolfram alpha",
+    "computation"
+  ],
+  "user_config": {},
+  "readme": null,
+  "category": "Data",
+  "quality_score": null,
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "framework": null,
+  "last_scraped_at": null,
+  "evaluation_model": null,
+  "raw_dependencies": null,
+  "server": {
+    "type": "remote",
+    "url": "https://agenttools.wolfram.com/mcp",
+    "docs_url": "https://www.wolfram.com/artificial-intelligence/mcp-service/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

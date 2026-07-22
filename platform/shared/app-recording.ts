@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseFullToolName } from "./utils";
 
 // =============================================================================
 // App session recording — the strict, shared bundle contract
@@ -626,6 +627,48 @@ export const AppRecordingBundleSchema = z
   })
   .strict();
 export type AppRecordingBundle = z.infer<typeof AppRecordingBundleSchema>;
+
+/**
+ * The distinct MCP servers an app is connected to, derived from its assigned
+ * tools. Each tool's `name` is a fully-qualified `<server>__<tool>`; the server
+ * half is the name — the same convention the captured tool calls use, so a
+ * recording's connected-server list and its observed-server list speak the same
+ * vocabulary. Sorted and de-duplicated.
+ */
+export function connectedMcpServerNames(
+  appTools: { name: string }[] | undefined | null,
+): string[] {
+  const names = new Set<string>();
+  for (const tool of appTools ?? []) {
+    const server = parseFullToolName(tool.name).serverName;
+    if (server) names.add(server);
+  }
+  return [...names].sort();
+}
+
+/**
+ * Self-heal a recording's connected-MCP list: union whatever the bundle already
+ * records with the app's currently-connected servers. A recording captured
+ * before the connected list was part of the bundle — or one whose app has since
+ * been wired to more servers — then lists every server the app is connected to,
+ * not only those the recorded session happened to call. Never shrinks (a server
+ * the session used but the app has since disconnected is kept), and returns the
+ * same bundle instance when nothing new is added, so an already-complete list
+ * is left untouched.
+ */
+export function healBundleMcpServers(
+  bundle: AppRecordingBundle,
+  appTools: { name: string }[] | undefined | null,
+): AppRecordingBundle {
+  const existing = bundle.meta.mcpServers ?? [];
+  const merged = new Set(existing);
+  for (const server of connectedMcpServerNames(appTools)) merged.add(server);
+  if (merged.size === existing.length) return bundle;
+  return {
+    ...bundle,
+    meta: { ...bundle.meta, mcpServers: [...merged].sort() },
+  };
+}
 
 // =============================================================================
 // Validation + redaction — shared by recorder, player, and downloader

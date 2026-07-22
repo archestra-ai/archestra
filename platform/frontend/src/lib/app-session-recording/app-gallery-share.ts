@@ -1,6 +1,7 @@
 import {
   APP_RECORDING_VIEWPORT_ASPECT,
   archestraApiSdk,
+  healBundleMcpServers,
   slugify,
 } from "@archestra/shared";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
@@ -437,6 +438,35 @@ export async function buildGallerySubmissionFiles(
   const thumbnail = await extractViewportThumbnail(bundle);
   if (thumbnail) files.push(thumbnailFile(thumbnail));
   return files;
+}
+
+/**
+ * Self-heal a bundle's connected-MCP list against the app as it stands NOW,
+ * right before it is submitted to the gallery: union the servers the recording
+ * already carries with every server the app is currently connected to (its
+ * assigned tools). A recording made before the connected list was captured —
+ * or one whose app has since gained servers — then advertises the app's full
+ * MCP surface on its gallery card, not only the servers that session happened
+ * to call.
+ *
+ * Deliberately best-effort and non-blocking: a from-scratch recording with no
+ * app, a deleted app, or a failed lookup submits the recording's existing list
+ * unchanged rather than failing the share. Never shrinks the list.
+ */
+export async function healSubmissionMcpServers(
+  bundle: AppRecordingBundle,
+): Promise<AppRecordingBundle> {
+  const appId = bundle.app.id;
+  if (!appId) return bundle;
+  try {
+    const { data, error } = await archestraApiSdk.getAppTools({
+      path: { appId },
+    });
+    if (error || !data) return bundle;
+    return healBundleMcpServers(bundle, data);
+  } catch {
+    return bundle;
+  }
 }
 
 /** The recording JSON — the one submission file, and the only one big enough

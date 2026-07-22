@@ -3,6 +3,7 @@
 import {
   APP_RECORDING_LIMITS,
   archestraApiSdk,
+  connectedMcpServerNames,
   parseFullToolName,
   sanitizeRecordingBundle,
   validateRecordingBundle,
@@ -795,22 +796,6 @@ function mcpServerNames(
     }
   }
   return [...names].sort();
-}
-
-/**
- * The distinct MCP servers an app is connected to, from its assigned tools.
- * Each assigned tool's `name` is `<server>__<tool>`; the server half is the
- * name — the same convention the captured tool calls use.
- */
-function connectedMcpServerNames(
-  appTools: { name: string }[] | undefined | null,
-): string[] {
-  const names = new Set<string>();
-  for (const tool of appTools ?? []) {
-    const server = parseFullToolName(tool.name).serverName;
-    if (server) names.add(server);
-  }
-  return [...names];
 }
 
 /**

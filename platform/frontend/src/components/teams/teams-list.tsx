@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -82,7 +82,19 @@ export function TeamsList() {
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
   });
+  // Identity-provider readers may view a team's external group sync mappings
+  // without being able to manage the team.
+  const { data: canReadIdentityProviders = false } = useHasPermissions({
+    identityProvider: ["read"],
+  });
   const currentUserId = session?.user.id;
+  const isTeamAdminOf = useCallback(
+    (team: Team) =>
+      team.members?.some(
+        (member) => member.userId === currentUserId && member.role === "admin",
+      ) ?? false,
+    [currentUserId],
+  );
 
   const handleRemoveLabel = useCallback(
     (key: string, value: string) => {
@@ -201,16 +213,16 @@ export function TeamsList() {
       enableSorting: false,
       cell: ({ row }) => {
         const team = row.original;
-        const isTeamAdmin = team.members?.some(
-          (member) =>
-            member.userId === currentUserId && member.role === "admin",
-        );
-        const canEditTeam = canUpdateTeams || isTeamAdmin;
+        const canEditTeam = canUpdateTeams || isTeamAdminOf(team);
         const actions: TableRowAction[] = [
           {
-            icon: <Pencil className="h-4 w-4" />,
-            label: "Edit",
-            disabled: !canEditTeam,
+            icon: canEditTeam ? (
+              <Pencil className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            ),
+            label: canEditTeam ? "Edit" : "View group sync",
+            disabled: !canEditTeam && !canReadIdentityProviders,
             disabledTooltip: "You must be a team admin to manage this team",
             testId: `${E2eTestId.ManageMembersButton}-${team.name}`,
             onClick: () => openManagementDialog(team),
@@ -291,6 +303,7 @@ export function TeamsList() {
           initialSection={
             openedFromUrl && sectionParam === "token" ? "token" : undefined
           }
+          readOnly={!canUpdateTeams && !isTeamAdminOf(managedTeam)}
         />
       )}
     </>

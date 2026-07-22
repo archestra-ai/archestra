@@ -39,11 +39,17 @@ type ExternalGroup =
 interface TeamManagementExternalSyncSectionProps {
   open: boolean;
   team: Team;
+  /**
+   * View-only rendering for callers with identity-provider read access but no
+   * team management rights: mappings are listed without add/remove controls.
+   */
+  readOnly?: boolean;
 }
 
 export function TeamManagementExternalSyncSection({
   open,
   team,
+  readOnly = false,
 }: TeamManagementExternalSyncSectionProps) {
   const queryClient = useQueryClient();
   const appName = useAppName();
@@ -237,32 +243,39 @@ export function TeamManagementExternalSyncSection({
 
       <div className="space-y-6">
         <div className="space-y-2 max-w-3xl">
-          <Label>Add External Group Mapping</Label>
-          <div className="flex gap-2">
-            <Input
-              aria-label="Group identifier"
-              placeholder="e.g., archestra-admins, cn=engineering,ou=groups,dc=example,dc=com"
-              value={newGroupIdentifier}
-              onChange={(event) => setNewGroupIdentifier(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  handleAddGroup();
-                }
-              }}
-            />
-            <Button
-              type="button"
-              onClick={handleAddGroup}
-              disabled={addMutation.isPending || !newGroupIdentifier.trim()}
-            >
-              <Plus className="h-4 w-4" />
-              Add
-            </Button>
-          </div>
+          {!readOnly && (
+            <>
+              <Label>Add External Group Mapping</Label>
+              <div className="flex gap-2">
+                <Input
+                  aria-label="Group identifier"
+                  placeholder="e.g., archestra-admins, cn=engineering,ou=groups,dc=example,dc=com"
+                  value={newGroupIdentifier}
+                  onChange={(event) =>
+                    setNewGroupIdentifier(event.target.value)
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleAddGroup();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  onClick={handleAddGroup}
+                  disabled={addMutation.isPending || !newGroupIdentifier.trim()}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add
+                </Button>
+              </div>
+            </>
+          )}
           <p className="text-sm text-muted-foreground">
-            Map extracted SSO group identifiers to "{team.name}". Matching users
-            are added to this team when they sign in.{" "}
+            {readOnly
+              ? `SSO group identifiers mapped to "${team.name}". Matching users are added to this team when they sign in. Team admins manage the mappings.`
+              : `Map extracted SSO group identifiers to "${team.name}". Matching users are added to this team when they sign in.`}{" "}
             <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoTeamSync)}>
               Learn More
             </ExternalDocsLink>
@@ -288,6 +301,7 @@ export function TeamManagementExternalSyncSection({
                 <ExternalGroupRow
                   key={group.id}
                   group={group}
+                  readOnly={readOnly}
                   disabled={removeMutation.isPending}
                   onRemove={() => removeMutation.mutate(group.id)}
                 />
@@ -338,10 +352,12 @@ function LatestIdTokenClaimsPanel({
 
 function ExternalGroupRow({
   group,
+  readOnly,
   disabled,
   onRemove,
 }: {
   group: ExternalGroup;
+  readOnly: boolean;
   disabled: boolean;
   onRemove: () => void;
 }) {
@@ -356,16 +372,18 @@ function ExternalGroupRow({
           Added {new Date(group.createdAt).toLocaleDateString()}
         </p>
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={onRemove}
-        disabled={disabled}
-      >
-        <Trash2 className="h-4 w-4 text-destructive" />
-        <span className="sr-only">Remove external group</span>
-      </Button>
+      {readOnly ? null : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onRemove}
+          disabled={disabled}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+          <span className="sr-only">Remove external group</span>
+        </Button>
+      )}
     </div>
   );
 }

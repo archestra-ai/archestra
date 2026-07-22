@@ -87,6 +87,31 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain("Show-ArchDownSummaryPrompt $DownRemotes");
   });
 
+  test("always offers a reconfigure entry under the rows; the down prompt routes [C] into the same menu", () => {
+    const script = renderClaudeCodeStartupGuardPowerShell(CTX);
+    // the persistent [C] entry, shown on every launch, with a ~1.5s window
+    // for it on the healthy pass
+    expect(script).toContain("function Show-ArchReconfigureOffer");
+    expect(script).toContain(
+      "To reconfigure your ' + $AppName + ' connection press [C]",
+    );
+    expect(script).toContain("AddMilliseconds(1500)");
+    expect(script).toContain("else { Show-ArchReconfigureOffer }");
+    // the down prompt offers the same menu as an alternative to (Y/n)
+    expect(script).toContain(
+      "or press [C] to reconfigure your ' + $AppName + ' connection",
+    );
+    expect(script).toContain("$k.KeyChar -eq 'c' -or $k.KeyChar -eq 'C'");
+    // the menu numbers every remote and disconnects the chosen one in place
+    expect(script).toContain("function Invoke-ArchReconfigureMenu");
+    expect(script).toContain(
+      "' to disconnect a resource from Claude · [Esc] Done'",
+    );
+    expect(script).toContain("Disconnect-ArchMenuRow");
+    // the disconnect actions are shared between the down prompt and the menu
+    expect(script).toContain("function Invoke-ArchDisconnectActions");
+  });
+
   test("remembers disconnected remotes in the skip file and uninstalls itself once nothing is left", () => {
     const script = renderClaudeCodeStartupGuardPowerShell(CTX);
     expect(script).toContain(`'${CLAUDE_CODE_GUARD_SKIP_RELPATH}'`);

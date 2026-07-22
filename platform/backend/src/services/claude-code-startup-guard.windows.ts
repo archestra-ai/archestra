@@ -289,11 +289,9 @@ function Get-ArchClaudeExe {
   Get-Command -Name claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 }
 
-# Reversing a connect step animates the same way the probes do: the dots
-# grow around the commands, and the row lands on a check.
-function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
-  Show-ArchSpinStart ('Disconnecting ' + $Label) ''
-  for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
+# The reverse-of-connect commands for one remote, silenced. Shared by the
+# down-prompt disconnect and the reconfigure menu so the two can't drift.
+function Invoke-ArchDisconnectActions([string]$Kind) {
   $claudeExe = Get-ArchClaudeExe
   switch ($Kind) {${
     ctx.mcp
@@ -321,6 +319,14 @@ function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
       : ""
   }
   }
+}
+
+# Reversing a connect step animates the same way the probes do: the dots
+# grow around the commands, and the row lands on a check.
+function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
+  Show-ArchSpinStart ('Disconnecting ' + $Label) ''
+  for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
+  Invoke-ArchDisconnectActions $Kind
   for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
   Clear-ArchLine
   Write-Arch '✓' Magenta -NoNewline
@@ -344,38 +350,181 @@ function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on late
   }
 }
 
+# ---- Reconfigure menu -------------------------------------------------
+# Opened with [C] from the prompt under the rows. Every remote is already on
+# screen in a stable block, so the menu just re-decorates those rows in place
+# ([n] label) and reads number keys — no redraw, no layout jump. Pressing a
+# number disconnects that remote (reverse-of-connect, then remembered) and
+# lands its row on the purple check; Esc or Enter leaves and lets claude
+# start. Removing the last connected remote takes the guard with it. Rows
+# list every active remote regardless of reachability. VT uses relative
+# cursor moves off the block; legacy consoles use absolute positioning.
+function Move-ArchRowStart([int]$i, [int]$count, [int]$baseTop) {
+  if ($UseVt) { Write-Host -NoNewline ("$Esc[" + ($count - $i) + "A\`r$Esc[2K") }
+  else { try { [Console]::SetCursorPosition(0, $baseTop - $count + $i) } catch { }; Clear-ArchLine }
+}
+function Move-ArchRowEnd([int]$i, [int]$count, [int]$baseTop) {
+  if ($UseVt) { Write-Host -NoNewline ("$Esc[" + ($count - $i) + "B\`r") }
+  else { try { [Console]::SetCursorPosition(0, $baseTop) } catch { } }
+}
+function Show-ArchMenuRow([int]$i, [int]$count, [int]$baseTop, $done) {
+  $r = $ActiveRemotes[$i]
+  Move-ArchRowStart $i $count $baseTop
+  if ($done.ContainsKey($r.Kind)) {
+    Write-Arch '✓' Magenta -NoNewline
+    Write-Host -NoNewline (' Disconnected ' + $r.Label)
+  } else {
+    Write-Arch ('[' + ($i + 1) + ']') Magenta -NoNewline
+    Write-Host -NoNewline (' ' + $r.Label)
+  }
+  Move-ArchRowEnd $i $count $baseTop
+}
+function Disconnect-ArchMenuRow([int]$i, [int]$count, [int]$baseTop) {
+  $r = $ActiveRemotes[$i]
+  Move-ArchRowStart $i $count $baseTop
+  Show-ArchSpinStart ('Disconnecting ' + $r.Label) ''
+  for ($p = 0; $p -lt 2; $p++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
+  Invoke-ArchDisconnectActions $r.Kind
+  for ($p = 0; $p -lt 2; $p++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
+  Clear-ArchLine
+  Write-Arch '✓' Magenta -NoNewline
+  Write-Host -NoNewline (' Disconnected ' + $r.Label)
+  Move-ArchRowEnd $i $count $baseTop
+  Add-ArchDisconnected $r.Kind
+}
+function Show-ArchMenuRowResult([int]$i, [int]$count, [int]$baseTop) {
+  $r = $ActiveRemotes[$i]
+  Move-ArchRowStart $i $count $baseTop
+  if (Test-ArchResourceDown $r) { Write-Arch ('✗ Failed to connect to ' + $r.FailName) Red -NoNewline }
+  else { Write-Arch '✓' Magenta -NoNewline; Write-Host -NoNewline (' ' + $r.Label) }
+  Move-ArchRowEnd $i $count $baseTop
+}
+function Show-ArchMenuFooter([int]$count, [int]$baseTop) {
+  $text = '  Press 1-' + $count + ' to disconnect a resource from Claude · [Esc] Done'
+  if ($UseVt) {
+    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K")
+    Write-Arch $text DarkGray -NoNewline
+    Write-Host -NoNewline ("$Esc" + '8')
+  } else {
+    try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }
+    Clear-ArchLine; Write-Arch $text DarkGray -NoNewline
+    try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
+  }
+}
+function Clear-ArchMenuFooter([int]$baseTop) {
+  if ($UseVt) { Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K$Esc" + '8') }
+  else {
+    try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }
+    Clear-ArchLine
+    try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
+  }
+}
+function Invoke-ArchReconfigureMenu {
+  $Script:Dwell = $true
+  $count = $ActiveRemotes.Count
+  $baseTop = 0; try { $baseTop = [Console]::CursorTop } catch { }
+  $done = @{}
+  for ($i = 0; $i -lt $count; $i++) { Show-ArchMenuRow $i $count $baseTop $done }
+  Show-ArchMenuFooter $count $baseTop
+  while ($true) {
+    $k = $null
+    try { $k = [Console]::ReadKey($true) } catch { break }
+    if ($k.Key -eq 'Enter' -or $k.Key -eq 'Escape' -or $k.KeyChar -eq 'q' -or $k.KeyChar -eq 'Q') { break }
+    $d = 0
+    if ([int]::TryParse([string]$k.KeyChar, [ref]$d) -and $d -ge 1 -and $d -le $count) {
+      $r = $ActiveRemotes[$d - 1]
+      if ($done.ContainsKey($r.Kind)) { continue }
+      Disconnect-ArchMenuRow ($d - 1) $count $baseTop
+      $done[$r.Kind] = $true
+      if ($done.Count -ge $count) { Remove-ArchGuard; break }
+    }
+  }
+  Clear-ArchMenuFooter $baseTop
+  for ($i = 0; $i -lt $count; $i++) {
+    if ($done.ContainsKey($ActiveRemotes[$i].Kind)) { continue }
+    Show-ArchMenuRowResult $i $count $baseTop
+  }
+}
+
+# The persistent entry under the rows, shown on every launch. On the
+# all-healthy pass the guard waits a beat (~1.5s) for [C] before it lets
+# claude start, so the offer is real without holding the launch up.
+function Show-ArchReconfigureOffer {
+  $baseTop = 0; try { $baseTop = [Console]::CursorTop } catch { }
+  $text = '  To reconfigure your ' + $AppName + ' connection press [C]'
+  if ($UseVt) {
+    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K")
+    Write-Arch $text DarkGray -NoNewline
+    Write-Host -NoNewline ("$Esc" + '8')
+  } else {
+    try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }
+    Clear-ArchLine; Write-Arch $text DarkGray -NoNewline
+    try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
+  }
+  $key = ''
+  $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    $key = Read-ArchKey
+    if ($key) { break }
+    Start-Sleep -Milliseconds 40
+  }
+  if ($UseVt) { Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K$Esc" + '8') }
+  else {
+    try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }
+    Clear-ArchLine
+    try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
+  }
+  if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
+}
+
 # Every down remote already got its failure line during the turn; this single
 # prompt then covers them all — disconnect everything that failed in one
 # keypress, or skip them all and go straight to claude. When every remote is
 # down and the user disconnects, nothing is left to check, so the guard
 # silently removes itself too — the Disconnected rows say everything.
 function Show-ArchDownSummaryPrompt($downRemotes) {
-  Write-Host ''
-  Clear-ArchLine
+  $baseTop = 0; try { $baseTop = [Console]::CursorTop } catch { }
   if ($downRemotes.Count -eq 1) {
-    Write-Host -NoNewline ('Disconnect ' + $downRemotes[0].FailName + ' from Claude now? (Y/n) ')
+    $q = 'Disconnect ' + $downRemotes[0].FailName + ' from Claude now? (Y/n) '
   } else {
-    Write-Host -NoNewline ('Disconnect all ' + $downRemotes.Count + ' unreachable resources from Claude now? (Y/n) ')
+    $q = 'Disconnect all ' + $downRemotes.Count + ' unreachable resources from Claude now? (Y/n) '
   }
-  $yes = $false
+  $hint = '  or press [C] to reconfigure your ' + $AppName + ' connection'
+  if ($UseVt) {
+    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K" + $q + "$Esc[1B\`r$Esc[2K")
+    Write-Arch $hint DarkGray -NoNewline
+    Write-Host -NoNewline ("$Esc" + '8')
+  } else {
+    try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }
+    Clear-ArchLine; Write-Host -NoNewline $q
+    try { [Console]::SetCursorPosition(0, $baseTop + 2) } catch { }
+    Clear-ArchLine; Write-Arch $hint DarkGray -NoNewline
+    try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
+  }
+  $choice = 'n'
   try {
     $k = [Console]::ReadKey($true)
-    if ($k.Key -eq 'Enter' -or $k.KeyChar -eq 'y' -or $k.KeyChar -eq 'Y') { $yes = $true }
+    if ($k.Key -eq 'Enter' -or $k.KeyChar -eq 'y' -or $k.KeyChar -eq 'Y') { $choice = 'y' }
+    elseif ($k.KeyChar -eq 'c' -or $k.KeyChar -eq 'C') { $choice = 'c' }
   } catch { }
-  Write-Host ''
-  Write-Host ''
-  if ($yes) {
+  if ($UseVt) {
+    Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K$Esc[1B\`r$Esc[2K$Esc" + '8')
+  } else {
+    try { [Console]::SetCursorPosition(0, $baseTop + 1) } catch { }; Clear-ArchLine
+    try { [Console]::SetCursorPosition(0, $baseTop + 2) } catch { }; Clear-ArchLine
+    try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
+  }
+  if ($choice -eq 'c') { Invoke-ArchReconfigureMenu; return }
+  if ($choice -eq 'y') {
     $Script:Dwell = $true
     Disconnect-ArchRemotes $downRemotes
-    if ($downRemotes.Count -ge $ActiveRemotes.Count) {
-      Remove-ArchGuard
-    }
-  } else {
-    Clear-ArchLine
-    Write-Arch '○' Yellow -NoNewline
-    if ($downRemotes.Count -eq 1) { Write-Arch ' Skipped — still configured; Claude may fail to reach it this session' DarkGray }
-    else { Write-Arch ' Skipped — still configured; Claude may fail to reach them this session' DarkGray }
+    if ($downRemotes.Count -ge $ActiveRemotes.Count) { Remove-ArchGuard }
+    return
   }
+  Clear-ArchLine
+  Write-Arch '○' Yellow -NoNewline
+  if ($downRemotes.Count -eq 1) { Write-Arch ' Skipped — still configured; Claude may fail to reach it this session' DarkGray }
+  else { Write-Arch ' Skipped — still configured; Claude may fail to reach them this session' DarkGray }
 }
 
 # The disconnect offer during the retry ladder is the same classic (Y/n)
@@ -525,6 +674,7 @@ foreach ($r in $ActiveRemotes) {
   else { Show-ArchOk $r.Label }
 }
 if ($DownRemotes.Count -gt 0) { Show-ArchDownSummaryPrompt $DownRemotes }
+else { Show-ArchReconfigureOffer }
 Exit-ArchGuard
 `;
 }

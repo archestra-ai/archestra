@@ -322,11 +322,30 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(script).toContain("'MCP gateway (prod-gateway)'");
     expect(script).toContain("'Skills marketplace (acme-skills)'");
     // a single down remote gets the classic Y/n removal prompt naming it…
-    expect(script).toContain("Disconnect %s from Claude now? (Y/n)");
+    expect(script).toContain(
+      "Disconnect ${GUARD_FAIL_NAMES[$1]} from Claude now? (Y/n)",
+    );
     // …several down remotes get the remove-all-at-once variant
     expect(script).toContain(
-      "Disconnect all %s unreachable resources from Claude now? (Y/n)",
+      "Disconnect all $DOWN_COUNT unreachable resources from Claude now? (Y/n)",
     );
+  });
+
+  test("always offers a reconfigure entry under the rows; the down prompt routes [C] into the same menu", () => {
+    const script = renderClaudeCodeStartupGuardScript(CTX);
+    // the persistent [C] entry, present on every launch
+    expect(script).toContain("To reconfigure your");
+    expect(script).toContain("press [C]");
+    expect(script).toContain("offer_reconfigure");
+    expect(script).toContain("reconfigure_menu");
+    // the healthy pass waits a beat for [C] before launching
+    expect(script).toContain("RECONFIG_WAIT=1.5");
+    expect(script).toContain('read -rs -n 1 -t "$RECONFIG_WAIT" key');
+    // the down prompt offers the same menu as an alternative to (Y/n)
+    expect(script).toContain("or press [C] to reconfigure");
+    // the menu numbers every remote and disconnects the chosen one in place
+    expect(script).toContain("Press 1-");
+    expect(script).toContain("menu_disconnect_row");
   });
 
   test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {
@@ -649,6 +668,60 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     expect(await readClaudeLog(guardHome)).toBe("");
     expect(existsSync(guardHome.skipFile)).toBe(false);
     expect(existsSync(guardHome.guardFile)).toBe(true);
+  });
+
+  test("interactive, all healthy, [C] opens the menu; a number disconnects that (healthy) remote in place", async () => {
+    // everything is reachable, but the user still opens the reconfigure menu
+    // and removes the LLM proxy — row 1 — then leaves with Enter. NOTE: the
+    // forkpty harness re-runs the guard once under node, so assert only what
+    // holds regardless of pass count (skills always stays connected, so the
+    // guard survives either way) — the same immunity the tests above rely on.
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 0,
+      curlBody: '{"mcp":"ok","llm":"ok"}',
+      keys: "c1\r",
+    });
+    expect(output).toContain(
+      "To reconfigure your Archestra connection press [C]",
+    );
+    // the numbered menu opened (the number glyph carries its own color, so
+    // assert the footer that names the range instead of the split "[1] …")
+    expect(output).toContain("Press 1-3 to disconnect a resource from Claude");
+    // the chosen remote's row lands on the disconnected check, in place
+    expect(output).toContain("Disconnected LLM proxy (Anthropic)");
+    // the healthy proxy's settings keys are stripped, the user's own key stays
+    const settings = JSON.parse(await readFile(guardHome.settingsFile, "utf8"));
+    expect(settings.env.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(settings.env.USER_OWNED_KEY).toBe("keep-me");
+    // the proxy is remembered as disconnected, and the guard survives because
+    // the skills marketplace is still connected
+    expect(await readFile(guardHome.skipFile, "utf8")).toContain("proxy");
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+  });
+
+  test("interactive, [C] menu, removing every remote uninstalls the guard entirely", async () => {
+    const { guardHome } = await runGuardInteractive({
+      script: renderClaudeCodeStartupGuardScript(CTX),
+      curlExitCode: 0,
+      curlBody: '{"mcp":"ok","llm":"ok"}',
+      // open the menu, then disconnect rows 1, 2 and 3
+      keys: "c123",
+    });
+    const log = await readClaudeLog(guardHome);
+    expect(log).toContain("mcp remove --scope user prod_gateway");
+    expect(log).toContain("plugin marketplace remove acme-skills");
+    // nothing connected is left, so the guard removes itself entirely
+    expect(existsSync(guardHome.guardFile)).toBe(false);
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+    for (const profile of [".zshrc", ".bashrc"]) {
+      const content = await readFile(
+        path.join(guardHome.home, profile),
+        "utf8",
+      );
+      expect(content).not.toContain(CLAUDE_CODE_GUARD_MARKER_START);
+      expect(content).toContain(PROFILE_SENTINEL);
+    }
   });
 });
 

@@ -317,6 +317,11 @@ fi
 # macOS system bash 3.2 falls back to 1s ticks.
 TICK=1
 if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi
+# The [C] window on the all-healthy pass. Fractional read -t needs bash 4;
+# 3.2 rounds it up to a whole second.
+RECONFIG_WAIT=2
+if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then RECONFIG_WAIT=1.5; fi
+ARCH_ESC=$(printf '\\033')
 
 line_reset() { printf '\\r\\033[2K'; }
 
@@ -426,32 +431,135 @@ disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on
   done
 }
 
-# Every down remote already got its failure line during the turn; this single
-# prompt then covers them all — disconnect everything that failed in one
-# keypress, or skip them all and go straight to claude. When every remote is
-# down and the user disconnects, nothing is left to check, so the guard
-# silently removes itself too — the Disconnected rows say everything.
-prompt_down_all() {
-  printf '\\n'
+# ---- Reconfigure menu -------------------------------------------------
+# Opened with [C] from the prompt under the rows. Every remote is already on
+# screen in a stable block, so the menu just re-decorates those rows in place
+# ([n] label) and reads number keys — no redraw, no layout jump. Pressing a
+# number disconnects that remote (reverse-of-connect, then remembered) and
+# lands its row on the purple check; Esc or Enter leaves and lets claude
+# start. Removing the last connected remote takes the guard with it. Rows
+# list every active remote regardless of reachability.
+MENU_DONE=' '
+menu_at_row()    { printf '\\033[%dA\\r\\033[2K' "$((ACTIVE_TOTAL - $1 + 1))"; }
+menu_leave_row() { printf '\\033[%dB\\r' "$((ACTIVE_TOTAL - $1 + 1))"; }
+menu_paint_row() { # $1 pos, $2 idx — draw its current menu state in place
+  menu_at_row "$1"
+  case "$MENU_DONE" in
+    *" $2 "*) printf '%s✓%s Disconnected %s' "$C_ACCENT" "$C_RESET" "\${GUARD_LABELS[$2]}" ;;
+    *)        printf '%s[%s]%s %s' "$C_ACCENT" "$1" "$C_RESET" "\${GUARD_LABELS[$2]}" ;;
+  esac
+  menu_leave_row "$1"
+}
+menu_disconnect_row() { # $1 pos, $2 idx — animate the reversal on its own row
+  menu_at_row "$1"
+  spin_start "Disconnecting \${GUARD_LABELS[$2]}"
+  disconnect_actions "\${GUARD_KINDS[$2]}" >/dev/null 2>&1 &
+  arch_dp=$!
+  pad=0
+  while kill -0 "$arch_dp" 2>/dev/null || [ "$pad" -lt "$MIN_CHECK_FRAMES" ]; do
+    sleep "$FRAME_SLEEP"
+    spin_tick
+    pad=$((pad + 1))
+  done
+  wait "$arch_dp" 2>/dev/null || true
   line_reset
+  printf '%s✓%s Disconnected %s' "$C_ACCENT" "$C_RESET" "\${GUARD_LABELS[$2]}"
+  menu_leave_row "$1"
+  remember_disconnected "\${GUARD_KINDS[$2]}"
+}
+reconfigure_menu() {
+  GUARD_DWELL=1
+  MENU_DONE=' '
+  menu_pos=0
+  for menu_idx in $ACTIVE_IDXS; do
+    menu_pos=$((menu_pos + 1))
+    menu_paint_row "$menu_pos" "$menu_idx"
+  done
+  printf '\\033[s\\n\\r\\033[2K%s  Press 1-%s to disconnect a resource from Claude · [Esc] Done%s\\033[u' "$C_DIM" "$ACTIVE_TOTAL" "$C_RESET"
+  while :; do
+    key=''
+    read -rs -n 1 key </dev/tty 2>/dev/null || break
+    case "$key" in
+      ''|q|Q|"$ARCH_ESC") break ;;
+      [1-9])
+        menu_pos=0; menu_target=''
+        for menu_idx in $ACTIVE_IDXS; do
+          menu_pos=$((menu_pos + 1))
+          [ "$menu_pos" = "$key" ] && { menu_target=$menu_idx; break; }
+        done
+        [ -z "$menu_target" ] && continue
+        case "$MENU_DONE" in *" $menu_target "*) continue ;; esac
+        menu_disconnect_row "$key" "$menu_target"
+        MENU_DONE="$MENU_DONE$menu_target "
+        menu_left=0
+        for menu_idx in $ACTIVE_IDXS; do
+          case "$MENU_DONE" in *" $menu_idx "*) ;; *) menu_left=$((menu_left + 1)) ;; esac
+        done
+        if [ "$menu_left" -eq 0 ]; then
+          uninstall_guard
+          break
+        fi
+        ;;
+    esac
+  done
+  # clear the footer; repaint any still-connected row back to its check result
+  printf '\\033[s\\n\\r\\033[2K\\033[u'
+  menu_pos=0
+  for menu_idx in $ACTIVE_IDXS; do
+    menu_pos=$((menu_pos + 1))
+    case "$MENU_DONE" in *" $menu_idx "*) continue ;; esac
+    menu_at_row "$menu_pos"
+    if resource_down "$menu_idx"; then
+      printf '%s✗ Failed to connect to %s%s' "$C_ERR" "\${GUARD_FAIL_NAMES[$menu_idx]}" "$C_RESET"
+    else
+      printf '%s✓%s %s' "$C_ACCENT" "$C_RESET" "\${GUARD_LABELS[$menu_idx]}"
+    fi
+    menu_leave_row "$menu_pos"
+  done
+  return 0
+}
+
+# The persistent entry under the rows, shown on every launch. On the
+# all-healthy pass the guard waits a beat (RECONFIG_WAIT) for [C] before it
+# lets claude start, so the offer is real without holding the launch up.
+offer_reconfigure() {
+  printf '\\033[s\\n\\r\\033[2K%s  To reconfigure your %s connection press [C]%s\\033[u' "$C_DIM" "$APP_NAME" "$C_RESET"
+  key=''
+  read -rs -n 1 -t "$RECONFIG_WAIT" key </dev/tty 2>/dev/null || key=''
+  printf '\\033[s\\n\\r\\033[2K\\033[u'
+  case "$key" in
+    c|C) reconfigure_menu ;;
+  esac
+  return 0
+}
+
+# When something is down: the quick (Y/n) reverses everything that failed in
+# one keypress, and [C] opens the full reconfigure menu instead. Anything
+# else keeps them. When every remote is down and the user disconnects them
+# all, nothing is left to check, so the guard silently removes itself too —
+# the Disconnected rows say everything.
+prompt_down_all() {
   if [ "$DOWN_COUNT" -eq 1 ]; then
     set -- $DOWN_IDXS
-    printf 'Disconnect %s from Claude now? (Y/n) ' "\${GUARD_FAIL_NAMES[$1]}"
+    down_prompt="Disconnect \${GUARD_FAIL_NAMES[$1]} from Claude now? (Y/n)"
   else
-    printf 'Disconnect all %s unreachable resources from Claude now? (Y/n) ' "$DOWN_COUNT"
+    down_prompt="Disconnect all $DOWN_COUNT unreachable resources from Claude now? (Y/n)"
   fi
+  printf '\\033[s\\n\\r\\033[2K%s\\n\\r\\033[2K%s  or press [C] to reconfigure your %s connection%s\\033[u' "$down_prompt" "$C_DIM" "$APP_NAME" "$C_RESET"
   key=''
   read -rs -n 1 key </dev/tty 2>/dev/null || key='n'
-  printf '\\n\\n'
+  printf '\\033[s\\n\\r\\033[2K\\n\\r\\033[2K\\033[u'
   case "$key" in
+    c|C)
+      reconfigure_menu
+      ;;
     y|Y|'')
       GUARD_DWELL=1
       disconnect_and_forget $DOWN_IDXS
-      if [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ]; then
-        uninstall_guard
-      fi
+      [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ] && uninstall_guard
       ;;
     *)
+      line_reset
       if [ "$DOWN_COUNT" -eq 1 ]; then
         printf '%s○%s %sSkipped — still configured; Claude may fail to reach it this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
       else
@@ -611,7 +719,11 @@ while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
   fi
   i=$((i+1))
 done
-[ "$DOWN_COUNT" -gt 0 ] && prompt_down_all
+if [ "$DOWN_COUNT" -gt 0 ]; then
+  prompt_down_all
+else
+  offer_reconfigure
+fi
 finish_guard
 `;
 }

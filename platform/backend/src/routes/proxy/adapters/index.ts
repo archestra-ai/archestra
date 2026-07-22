@@ -2,6 +2,7 @@ export { anthropicAdapterFactory } from "./anthropic";
 export { azureAdapterFactory } from "./azure";
 export { azureResponsesAdapterFactory } from "./azure-responses";
 export { bedrockAdapterFactory } from "./bedrock";
+export { bedrockInvokeAdapterFactory } from "./bedrock-invoke";
 export { cerebrasAdapterFactory } from "./cerebras";
 export { cohereAdapterFactory } from "./cohere";
 export { deepseekAdapterFactory } from "./deepseek";

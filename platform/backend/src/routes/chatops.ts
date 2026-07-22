@@ -16,6 +16,7 @@ import {
   isSsoConfigured,
 } from "@/agents/chatops/auto-provision";
 import {
+  invalidateChannelAnswerAll,
   isChannelThreadActive,
   isThreadMuteCommand,
   markChannelThreadActive,
@@ -1146,6 +1147,16 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!updated) {
         throw new ApiError(500, "Failed to update binding");
+      }
+
+      // Drop the cached "answer all messages" flag so the message gate picks up
+      // the change without waiting for the short cache TTL to lapse.
+      if (request.body.answerAllMessages !== undefined) {
+        await invalidateChannelAnswerAll({
+          provider: updated.provider,
+          channelId: updated.channelId,
+          workspaceId: updated.workspaceId,
+        });
       }
 
       return reply.send({

@@ -289,6 +289,9 @@ class ChatOpsChannelBindingModel {
       .update(schema.chatopsChannelBindingsTable)
       .set({
         ...(input.agentId !== undefined && { agentId: input.agentId }),
+        ...(input.answerAllMessages !== undefined && {
+          answerAllMessages: input.answerAllMessages,
+        }),
       })
       .where(eq(schema.chatopsChannelBindingsTable.id, id))
       .returning();

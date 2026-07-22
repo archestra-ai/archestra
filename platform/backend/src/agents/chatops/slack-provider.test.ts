@@ -30,6 +30,7 @@ vi.mock("@/config", async () =>
 
 import { shrinkImageToFit } from "@archestra/image-rs";
 import { CacheKey, cacheManager } from "@/cache-manager";
+import { ChatOpsChannelBindingModel } from "@/models";
 import { markChannelThreadActive } from "./channel-activation";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
@@ -709,6 +710,159 @@ describe("SlackProvider.parseWebhookNotification — sticky thread auto-reply", 
     );
 
     expect(topLevel).toBeNull();
+  });
+});
+
+describe("SlackProvider.parseWebhookNotification — answer-all channels", () => {
+  // Seed a channel binding with "answer all messages" enabled. create() does not
+  // persist the flag (only the toggle route does), so set it with a follow-up
+  // update — the same path the UI takes.
+  async function seedAnswerAllChannel(channelId: string): Promise<void> {
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: "org-answer-all",
+      provider: "slack",
+      channelId,
+      workspaceId: "T12345",
+    });
+    await ChatOpsChannelBindingModel.update(binding.id, {
+      answerAllMessages: true,
+    });
+  }
+
+  test("an un-mentioned message in an answer-all channel is processed", async () => {
+    const provider = createProvider();
+    const channel = "C_ANSWER_ALL";
+    await seedAnswerAllChannel(channel);
+
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "just chatting, no mention",
+          ts: "7777777777.000001",
+        },
+      ),
+      {},
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.text).toBe("just chatting, no mention");
+    expect(result?.metadata).toMatchObject({
+      botMentioned: false,
+      conversationType: "channel",
+    });
+  });
+
+  test("an un-mentioned message in a mentions-only channel is still ignored", async () => {
+    const provider = createProvider();
+
+    // No binding for this channel → the flag defaults to off.
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: "C_MENTIONS_ONLY",
+          text: "just chatting, no mention",
+          ts: "7777777777.000002",
+        },
+      ),
+      {},
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("a mute command silences an answer-all thread until it is re-mentioned", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (provider as any).client = { chat: { postMessage } };
+    const channel = "C_ANSWER_ALL_MUTE";
+    const threadTs = "7777777777.000010";
+    await seedAnswerAllChannel(channel);
+
+    // Un-mentioned message flows because the channel answers all.
+    const first = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "hi",
+          ts: "7777777777.000011",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(first).not.toBeNull();
+
+    // A mute command gates the thread and confirms once.
+    const mute = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "mute",
+          ts: "7777777777.000012",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(mute).toBeNull();
+    expect(postMessage).toHaveBeenCalledTimes(1);
+
+    // Later un-mentioned messages stay quiet despite answer-all.
+    const afterMute = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "still there?",
+          ts: "7777777777.000013",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(afterMute).toBeNull();
+
+    // A fresh mention lifts the mute...
+    const reMention = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          channel,
+          text: "<@UBOT123> back please",
+          ts: "7777777777.000014",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(reMention).not.toBeNull();
+
+    // ...and un-mentioned messages flow again.
+    const afterReMention = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel,
+          text: "more",
+          ts: "7777777777.000015",
+          thread_ts: threadTs,
+        },
+      ),
+      {},
+    );
+    expect(afterReMention).not.toBeNull();
   });
 });
 

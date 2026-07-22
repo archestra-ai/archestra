@@ -18,6 +18,7 @@
 
 import { randomUUID } from "node:crypto";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import type { ChatOpsProviderType } from "@/types/chatops";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
 import { CHATOPS_CHANNEL_AUTO_REPLY } from "./constants";
@@ -89,6 +90,87 @@ export async function muteChannelThread(params: {
   await recordThreadMute(params);
   chatOpsRunRegistry.cancelThread(params);
   return await clearChannelThreadActive(params);
+}
+
+// =============================================================================
+// Per-channel "answer all messages" mode
+// =============================================================================
+
+/**
+ * Whether a channel has the per-channel "answer all messages" setting enabled,
+ * briefly cached so a busy channel doesn't hit the DB for every un-mentioned
+ * message the gate would otherwise ignore. The default — no binding, or the flag
+ * off — is false (mentions-only). The cache is short-lived and also invalidated
+ * on toggle (see invalidateChannelAnswerAll), so a change takes effect promptly.
+ */
+export async function isChannelAnswerAllEnabled(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  workspaceId: string | null;
+}): Promise<boolean> {
+  const key = answerAllKey(params);
+  const cached = await cacheManager.get<boolean>(key);
+  if (cached !== undefined) return cached;
+  const binding = await ChatOpsChannelBindingModel.findByChannel(params);
+  const enabled = binding?.answerAllMessages === true;
+  await cacheManager.set(key, enabled, ANSWER_ALL_CACHE_TTL_MS);
+  return enabled;
+}
+
+/** Drop the cached "answer all messages" flag so a toggle takes effect promptly. */
+export async function invalidateChannelAnswerAll(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  workspaceId: string | null;
+}): Promise<void> {
+  await cacheManager.delete(answerAllKey(params));
+}
+
+/**
+ * Mute a thread in an answer-all channel so the bot stays quiet there until it
+ * is @mentioned again.
+ *
+ * Answer-all channels reply without needing a mention, so the mention-driven
+ * sticky activation the normal gate mutes by clearing (clearChannelThreadActive)
+ * does not apply — a thread has to remember it was muted on its own. This marker
+ * is that memory: the gate consults isChannelThreadMuted for un-mentioned
+ * messages and stays quiet while it is set, and a fresh @mention clears it (see
+ * clearChannelThreadMuted).
+ */
+export async function markChannelThreadMuted(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): Promise<void> {
+  await cacheManager.set(
+    mutedKey(params),
+    true,
+    CHATOPS_CHANNEL_AUTO_REPLY.ACTIVE_TTL_MS,
+  );
+}
+
+/** Whether an answer-all channel thread was muted and not yet re-mentioned. */
+export async function isChannelThreadMuted(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): Promise<boolean> {
+  return (await cacheManager.get<boolean>(mutedKey(params))) === true;
+}
+
+/**
+ * Clear an answer-all thread's mute marker so the bot resumes replying. Called
+ * on a fresh @mention (a re-mention is an explicit "answer here again").
+ *
+ * @public — exercised directly in channel-activation.test.ts (knip --production
+ * can't see the test consumer).
+ */
+export async function clearChannelThreadMuted(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): Promise<boolean> {
+  return await cacheManager.delete(mutedKey(params));
 }
 
 /**
@@ -209,6 +291,13 @@ export function isMuteReaction(reactionId: string): boolean {
  * - "activate": a fresh @mention → start sticky auto-reply, then process
  * - "process": an un-mentioned message in an already-active thread → reply
  * - "ignore": un-mentioned and inactive → stay quiet
+ *
+ * `answerAll` reflects a per-channel "answer all messages" setting: when true the
+ * bot replies to every message in the channel, not only mentions. It only
+ * changes the un-mentioned + inactive case (normally "ignore"): the message is
+ * processed unless the thread has been muted (`isMuted`), and a mute command is
+ * still honored. Mention/active behavior is unchanged, so a mentions-only
+ * channel (answerAll false, the default) keeps its exact prior semantics.
  */
 type ChannelGateAction = "mute" | "activate" | "process" | "ignore";
 
@@ -216,9 +305,15 @@ export function resolveChannelGateAction(params: {
   botMentioned: boolean;
   wantsMute: boolean;
   isActive: boolean;
+  answerAll?: boolean;
+  isMuted?: boolean;
 }): ChannelGateAction {
   if (params.botMentioned) return params.wantsMute ? "mute" : "activate";
   if (params.isActive) return params.wantsMute ? "mute" : "process";
+  if (params.answerAll) {
+    if (params.wantsMute) return "mute";
+    return params.isMuted ? "ignore" : "process";
+  }
   return "ignore";
 }
 
@@ -257,6 +352,33 @@ function muteHintKey(params: {
       : CacheKey.TeamsThreadMuteHint;
   return `${prefix}-${params.channelId}::${params.threadId}`;
 }
+
+function mutedKey(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): AllowedCacheKey {
+  const prefix =
+    params.provider === "slack"
+      ? CacheKey.SlackThreadMuted
+      : CacheKey.TeamsThreadMuted;
+  return `${prefix}-${params.channelId}::${params.threadId}`;
+}
+
+function answerAllKey(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  workspaceId: string | null;
+}): AllowedCacheKey {
+  return `${CacheKey.ChatOpsChannelAnswerAll}-${params.provider}::${params.workspaceId ?? ""}::${params.channelId}`;
+}
+
+/**
+ * How long the per-channel "answer all messages" flag stays cached. Short enough
+ * that a stale read self-heals quickly even if an invalidation is missed, long
+ * enough to spare a busy channel a DB read on every message.
+ */
+const ANSWER_ALL_CACHE_TTL_MS = 60_000;
 
 /** Write a fresh mute token so in-flight runs observe the thread was just muted. */
 async function recordThreadMute(params: {

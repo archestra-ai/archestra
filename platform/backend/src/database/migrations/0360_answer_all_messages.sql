@@ -1,0 +1,1 @@
+ALTER TABLE "chatops_channel_binding" ADD COLUMN "answer_all_messages" boolean DEFAULT false NOT NULL;

@@ -39,6 +39,7 @@ import {
   useDeleteHook,
   useUpdateHook,
 } from "@/lib/hook.query";
+import { generateUuid } from "@/lib/uuid";
 
 export interface AgentHooksEditorRef {
   /**
@@ -336,7 +337,7 @@ const AgentHooksEditorContent = forwardRef<
         setPendingHooks((hooks) => [
           ...hooks,
           {
-            localId: crypto.randomUUID(),
+            localId: generateUuid(),
             event: values.event,
             fileName,
             content: values.content,

@@ -152,6 +152,22 @@ export default function VirtualKeysPage() {
   );
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [createInitialKeyType, setCreateInitialKeyType] =
+    useState<VirtualKeyType>("standard");
+
+  // Deep link from the proxy connect dialog: ?create=true opens the create
+  // dialog, ?create=passthrough opens it preset to a passthrough key. The
+  // param is stripped so refresh/back doesn't re-open it.
+  const createParam = searchParams.get("create");
+  useEffect(() => {
+    if (createParam !== "true" && createParam !== "passthrough") return;
+    setCreateInitialKeyType(
+      createParam === "passthrough" ? "passthrough" : "standard",
+    );
+    setIsCreateDialogOpen(true);
+    updateQueryParams({ create: null });
+  }, [createParam, updateQueryParams]);
+
   const editId = searchParams.get("edit");
   const { data: editKeyFromUrl } = useVirtualKey(editId ?? undefined);
   const {
@@ -409,7 +425,11 @@ export default function VirtualKeysPage() {
 
       <CreateVirtualKeyDialog
         open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
+        onOpenChange={(open) => {
+          setIsCreateDialogOpen(open);
+          if (!open) setCreateInitialKeyType("standard");
+        }}
+        initialKeyType={createInitialKeyType}
         parentableKeys={parentableKeys}
         defaultExpirationSeconds={defaultExpirationSeconds ?? null}
         visibilityOptions={visibilityOptions}
@@ -440,6 +460,7 @@ export default function VirtualKeysPage() {
 function CreateVirtualKeyDialog({
   open,
   onOpenChange,
+  initialKeyType = "standard",
   parentableKeys,
   defaultExpirationSeconds,
   visibilityOptions,
@@ -449,6 +470,8 @@ function CreateVirtualKeyDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Key type preselected when the dialog opens (deep links). */
+  initialKeyType?: VirtualKeyType;
   parentableKeys: LlmProviderApiKeyResponse[];
   defaultExpirationSeconds: number | null;
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
@@ -487,7 +510,7 @@ function CreateVirtualKeyDialog({
         defaultExpirationSeconds,
       );
       const initialScope = getDefaultVirtualKeyScope(visibilityOptions);
-      setKeyType("standard");
+      setKeyType(initialKeyType);
       setNewKeyName("");
       setExpiresAt(initialExpiresAt);
       setScope(initialScope);
@@ -495,7 +518,7 @@ function CreateVirtualKeyDialog({
       setProviderApiKeyIds({});
       setOwnerId("");
       initialSnapshotRef.current = {
-        keyType: "standard",
+        keyType: initialKeyType,
         newKeyName: "",
         ownerId: "",
         expiresAt: initialExpiresAt,
@@ -504,7 +527,7 @@ function CreateVirtualKeyDialog({
         providerApiKeyIds: {},
       };
     }
-  }, [open, defaultExpirationSeconds, visibilityOptions]);
+  }, [open, defaultExpirationSeconds, visibilityOptions, initialKeyType]);
 
   const isPassthrough = keyType === "passthrough";
   // Passthrough keys are always personal. Admins can mint a key on behalf of

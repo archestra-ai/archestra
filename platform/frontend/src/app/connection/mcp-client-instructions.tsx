@@ -388,7 +388,7 @@ const PERSONAL_TOKEN_ID = "__personal__";
  * which token (personal / team / org) to embed, and reveal the real value
  * on demand.
  */
-function GenericAuthRow({
+export function GenericAuthRow({
   gatewayId,
   placeholder,
   bare = false,

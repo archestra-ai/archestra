@@ -678,9 +678,10 @@ function endpointTabClass(active: boolean) {
  * toggler as "Run the setup script". Tabs switch between the Model Router and
  * provider routes (primary providers inline, the rest behind a searchable "…"
  * — a provider picked there joins the tab row so the selection stays visible);
- * the proxy URL for the active tab renders below.
+ * the proxy URL for the active tab renders below. Also used by the admin
+ * connect dialog on the proxies table (with a custom caption).
  */
-function GenericEndpointCard({
+export function GenericEndpointCard({
   baseUrl,
   profileId,
   providers,
@@ -688,6 +689,7 @@ function GenericEndpointCard({
   selectedProvider,
   onSelectRouter,
   onSelectProvider,
+  caption,
 }: {
   baseUrl: string;
   profileId: string;
@@ -696,6 +698,8 @@ function GenericEndpointCard({
   selectedProvider: SupportedProvider | null;
   onSelectRouter: () => void;
   onSelectProvider: (p: SupportedProvider) => void;
+  /** Overrides the default "Replace the … base URL … with:" line. */
+  caption?: React.ReactNode;
 }) {
   const PRIMARY: SupportedProvider[] = [
     "openai",
@@ -750,14 +754,16 @@ function GenericEndpointCard({
 
   return (
     <div className="space-y-2">
-      <div className="text-xs text-muted-foreground">
-        Replace the <span className="font-medium text-foreground">{label}</span>{" "}
-        base URL{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-[11px] line-through opacity-60">
-          {originalUrl}
-        </code>{" "}
-        with:
-      </div>
+      {caption ?? (
+        <div className="text-xs text-muted-foreground">
+          Replace the{" "}
+          <span className="font-medium text-foreground">{label}</span> base URL{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-[11px] line-through opacity-60">
+            {originalUrl}
+          </code>{" "}
+          with:
+        </div>
+      )}
       <TerminalBlock
         code={url}
         rows={rows}

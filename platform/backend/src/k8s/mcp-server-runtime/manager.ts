@@ -409,16 +409,7 @@ export class McpServerRuntimeManager {
       | undefined,
     cache?: NetworkPolicyResolutionCache,
   ): Promise<string> {
-    if (!catalogItem) return this.namespace;
-    if (!catalogItem.environmentId) {
-      // Default-environment catalog (environment_id = NULL): its namespace
-      // lives on the organization row, not in `environments`.
-      const organization = catalogItem.organizationId
-        ? (cache?.organizationsById.get(catalogItem.organizationId) ??
-          (await OrganizationModel.getById(catalogItem.organizationId)))
-        : await OrganizationModel.getFirst();
-      return organization?.defaultEnvironmentNamespace ?? this.namespace;
-    }
+    if (!catalogItem?.environmentId) return this.namespace;
     const env =
       cache?.environmentsById.get(catalogItem.environmentId) ??
       (await EnvironmentModel.findById(catalogItem.environmentId));

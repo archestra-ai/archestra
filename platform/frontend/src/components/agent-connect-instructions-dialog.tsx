@@ -74,9 +74,7 @@ export function LlmProxyConnectInstructionsDialog({
           onSelectRouter={() => setSelected("model-router")}
           onSelectProvider={setSelected}
           caption={
-            <div className="text-xs text-muted-foreground">
-              Endpoint — clients call this proxy at:
-            </div>
+            <div className="text-xs text-muted-foreground">Endpoint</div>
           }
         />
         <LlmProxyAuthSurface
@@ -108,9 +106,7 @@ export function McpGatewayConnectInstructionsDialog({
     <ConnectDialog agent={gateway} open onOpenChange={onOpenChange}>
       <div className="space-y-4">
         <div className="space-y-2">
-          <div className="text-xs text-muted-foreground">
-            Endpoint — MCP clients call this gateway at:
-          </div>
+          <div className="text-xs text-muted-foreground">Endpoint</div>
           <TerminalBlock
             code={`${baseUrl}/mcp/${gateway.slug ?? gateway.id}`}
           />
@@ -173,7 +169,7 @@ function LlmProxyAuthSurface({
   return (
     <div className="space-y-3 rounded-lg border bg-card p-4">
       <div className="text-xs font-medium text-muted-foreground">
-        Authentication — what a client sends, and how it reaches models
+        Authentication
       </div>
       <Tabs value={tab} onValueChange={(v) => setTab(v as ProxyAuthTab)}>
         <TabsList>
@@ -188,13 +184,10 @@ function LlmProxyAuthSurface({
         <div className="space-y-3">
           <AuthFacts
             rows={[
-              [
-                "For",
-                "teammates and services that must not hold provider secrets",
-              ],
+              ["For", "teammates and services without their own provider keys"],
               [
                 "Downstream",
-                "maps to stored provider connections (Model Providers)",
+                "resolves to stored provider keys (Model Providers)",
               ],
               ["Routes", "Model Router + all provider routes"],
             ]}
@@ -239,14 +232,14 @@ function LlmProxyAuthSurface({
         <div className="space-y-3">
           <AuthFacts
             rows={[
-              ["For", "users who already hold a provider key or subscription"],
+              ["For", "users with their own provider key or subscription"],
               [
                 "Downstream",
-                "their key goes straight to the provider; the proxy still applies guardrails, logging, and cost attribution",
+                "the key goes straight to the provider; guardrails, logs, and costs still apply",
               ],
               [
                 "Routes",
-                "provider routes; Model Router when the model prefix matches the key",
+                "provider routes; Model Router if the model prefix matches",
               ],
             ]}
           />
@@ -281,10 +274,10 @@ function LlmProxyAuthSurface({
         <div className="space-y-3">
           <AuthFacts
             rows={[
-              ["For", "machine-to-machine apps that rotate secrets properly"],
+              ["For", "machine-to-machine apps"],
               [
                 "Downstream",
-                "the token resolves stored provider connections, like a virtual key",
+                "resolves to stored provider keys, like a virtual key",
               ],
               ["Routes", "Model Router + provider routes"],
             ]}
@@ -292,7 +285,7 @@ function LlmProxyAuthSurface({
           <TerminalBlock
             rows={[
               {
-                comment: "exchange client credentials for an access token",
+                comment: "get an access token",
                 code: `POST ${tokenEndpoint}\n  grant_type=client_credentials\n  client_id=<client-id>  client_secret=<client-secret>`,
               },
             ]}
@@ -351,7 +344,7 @@ function McpGatewayAuthSurface({
   return (
     <div className="space-y-3 rounded-lg border bg-card p-4">
       <div className="text-xs font-medium text-muted-foreground">
-        Authentication — how MCP clients reach this gateway
+        Authentication
       </div>
       <Tabs value={tab} onValueChange={(v) => setTab(v as GatewayAuthTab)}>
         <TabsList>
@@ -367,7 +360,7 @@ function McpGatewayAuthSurface({
             ["For", "interactive MCP clients (Claude, Cursor, VS Code, …)"],
             [
               "How",
-              "the client registers and signs in automatically (OAuth 2.1 dynamic client registration) the first time it connects — nothing to copy",
+              "the client registers and signs in on first connect — nothing to copy",
             ],
             ["Access", "tools filtered by the signed-in user's permissions"],
           ]}
@@ -379,14 +372,8 @@ function McpGatewayAuthSurface({
           <AuthFacts
             rows={[
               ["For", "headless clients and automations"],
-              [
-                "How",
-                "a personal or team platform token sent as a Bearer header",
-              ],
-              [
-                "Access",
-                "tools filtered by the token owner's (or team's) permissions",
-              ],
+              ["How", "a personal or team token in the Bearer header"],
+              ["Access", "tools filtered by the token owner's permissions"],
             ]}
           />
           <GenericAuthRow
@@ -431,15 +418,9 @@ function IdentityProviderStatus({
     <div className="space-y-3">
       <AuthFacts
         rows={[
-          ["For", "fleets that already mint JWTs from your IdP"],
-          [
-            "How",
-            "the JWT is validated against the IdP's JWKS and the request is attributed to its subject",
-          ],
-          [
-            "Downstream",
-            "models resolve through the organization's provider connections",
-          ],
+          ["For", "clients that already hold JWTs from your IdP"],
+          ["How", "JWT validated via JWKS; request attributed to its subject"],
+          ["Downstream", "org provider keys"],
         ]}
       />
       <AuthActionsRow
@@ -449,10 +430,7 @@ function IdentityProviderStatus({
               ● {idpName ?? "Identity provider"} — configured
             </span>
           ) : (
-            <>
-              ○ Not configured — set an identity provider to accept IdP-issued
-              JWTs
-            </>
+            <>○ Not configured</>
           )
         }
         action={
@@ -506,9 +484,9 @@ function AuthActionsRow({
 function ConnectionGuideFooter({ href }: { href: string }) {
   return (
     <p className="text-xs text-muted-foreground">
-      End-user setup for a specific client (Claude Code, Cursor, n8n, …)?{" "}
+      Setting up a specific client?{" "}
       <Link href={href} className="text-primary hover:underline">
-        Share the Connect page
+        Connect page
       </Link>
     </p>
   );

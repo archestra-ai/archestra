@@ -113,7 +113,15 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete", "admin", "read-all"],
+  project: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "share-org",
+    "admin",
+    "read-all",
+  ],
   file: ["manage"],
   log: ["read"],
 
@@ -231,7 +239,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
   log: ["read"],
 
@@ -306,7 +314,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
   log: [],
 
@@ -519,6 +527,8 @@ export const permissionDescriptions: Record<string, string> = {
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
+  "project:share-org":
+    "Share projects with the entire organization, and change the sharing of or delete a project that is already org-wide. Without it, projects can still be shared with teams. Additive: sharing still requires project:update and deleting still requires project:delete.",
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
   "project:read-all":

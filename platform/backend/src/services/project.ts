@@ -417,6 +417,20 @@ class ProjectService {
     teamIds: string[];
   }): Promise<void> {
     await this.requireManageable(params);
+    // Org-wide visibility is a broadcast to the whole organization, so both
+    // entering and leaving it are gated behind `project:share-org` — otherwise
+    // any owner could publish to (or silently withdraw from) everyone.
+    const share = await ProjectShareModel.findByProjectId(params.id);
+    if (
+      (params.visibility === "organization" ||
+        share?.visibility === "organization") &&
+      !(await this.callerCanShareOrg(params))
+    ) {
+      throw new ApiError(
+        403,
+        "You don't have permission to manage organization-wide project sharing",
+      );
+    }
     if (params.visibility === null) {
       await ProjectShareModel.remove(params.id);
       return;
@@ -441,6 +455,20 @@ class ProjectService {
     userId: string;
   }): Promise<void> {
     await this.requireManageable(params);
+    // An org-wide project is a shared resource: deleting it takes it away from
+    // the whole organization, so it is gated behind `project:share-org` just
+    // like changing the org share (which also blocks the unshare-then-delete
+    // workaround).
+    const share = await ProjectShareModel.findByProjectId(params.id);
+    if (
+      share?.visibility === "organization" &&
+      !(await this.callerCanShareOrg(params))
+    ) {
+      throw new ApiError(
+        403,
+        "You don't have permission to delete an organization-wide project",
+      );
+    }
     await fileStore.purgeProjectBytes({
       organizationId: params.organizationId,
       projectId: params.id,
@@ -687,6 +715,18 @@ class ProjectService {
       params.organizationId,
       "project",
       "admin",
+    );
+  }
+
+  private async callerCanShareOrg(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    return userHasPermission(
+      params.userId,
+      params.organizationId,
+      "project",
+      "share-org",
     );
   }
 

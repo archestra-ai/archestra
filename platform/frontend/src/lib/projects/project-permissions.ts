@@ -17,3 +17,21 @@ export function canManageProject(
 ): boolean {
   return viewerRole === "owner" || viewerRole === "admin" || isProjectAdmin;
 }
+
+/**
+ * Whether the viewer may delete a project. Deleting follows manageability,
+ * but an organization-wide project is a shared resource: taking it away from
+ * the whole org additionally requires `project:share-org`, mirroring the
+ * backend's delete gate.
+ */
+export function canDeleteProject(params: {
+  viewerRole: ProjectViewerRole;
+  visibility: "organization" | "team" | null;
+  isProjectAdmin: boolean;
+  canShareOrg: boolean;
+}): boolean {
+  return (
+    canManageProject(params.viewerRole, params.isProjectAdmin) &&
+    (params.visibility !== "organization" || params.canShareOrg)
+  );
+}

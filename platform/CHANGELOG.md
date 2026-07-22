@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.3.14](https://github.com/archestra-ai/archestra/compare/platform-v1.3.13...platform-v1.3.14) (2026-07-22)
+
+
+### Features
+
+* add Archestra as an LLM provider ([#6780](https://github.com/archestra-ai/archestra/issues/6780)) ([c3314c5](https://github.com/archestra-ai/archestra/commit/c3314c5e263cbba11dd2e31fe502ff70dd004748))
+* add Moonshot (Kimi) LLM provider ([#6778](https://github.com/archestra-ai/archestra/issues/6778)) ([d78925b](https://github.com/archestra-ai/archestra/commit/d78925b2cff20207f94fd01a903feae2df984bdb))
+* **llm-proxy:** support Bedrock InvokeModel API for Anthropic models ([#6745](https://github.com/archestra-ai/archestra/issues/6745)) ([355b192](https://github.com/archestra-ai/archestra/commit/355b1929e9ecc7dc195b4d7088d1353361bb53ba))
+* **skills:** allow 0, 1, or many environments per skill ([#6777](https://github.com/archestra-ai/archestra/issues/6777)) ([3d39307](https://github.com/archestra-ai/archestra/commit/3d393078e2e598e0774c3da8ffddb51bee1890be))
+* **slack:** per-channel option to answer all messages ([#6783](https://github.com/archestra-ai/archestra/issues/6783)) ([796b62b](https://github.com/archestra-ai/archestra/commit/796b62bdff7a4a03f7eea4c99c8a6c67a4a8219b))
+
+
+### Bug Fixes
+
+* **chat:** at-most-once dispatch for approved MCP tool calls ([#6772](https://github.com/archestra-ai/archestra/issues/6772)) ([cf6dc1c](https://github.com/archestra-ai/archestra/commit/cf6dc1c87645a81b3cb3027f3c7e4cb607cc5267))
+* **chat:** keep markdown tables readable in themed message bubbles ([#6774](https://github.com/archestra-ai/archestra/issues/6774)) ([fceb8d9](https://github.com/archestra-ai/archestra/commit/fceb8d9e0833f0bf8f16d4c7a07a0261d10f15cc))
+* **frontend:** accessibility improvements across the app (WCAG 2.1/2.2 AA) ([#6747](https://github.com/archestra-ai/archestra/issues/6747)) ([dc83cfa](https://github.com/archestra-ai/archestra/commit/dc83cfac2c5db082bcdb978554d0323e0c98e7cf))
+* **hackathon:** gracefully degrade audio codecs ([#6768](https://github.com/archestra-ai/archestra/issues/6768)) ([927d8fe](https://github.com/archestra-ai/archestra/commit/927d8fe9048d0a6501fd899884adbff8ca0daeea))
+* **mcp-catalog:** save remote catalog edits directly instead of showing the restart confirm bar ([#6773](https://github.com/archestra-ai/archestra/issues/6773)) ([8b32c49](https://github.com/archestra-ai/archestra/commit/8b32c4911556eaae20aa296b7759ccb04415ae14))
+* **mcp-registry:** stop re-prompting stored credentials on execution-only reinstalls ([#6776](https://github.com/archestra-ai/archestra/issues/6776)) ([ea58b92](https://github.com/archestra-ai/archestra/commit/ea58b92b99bbce0a88a79a9de4d33dafbfd91dbd))
+* **mcp-server:** honor target userId for personal installs ([#6771](https://github.com/archestra-ai/archestra/issues/6771)) ([00153ef](https://github.com/archestra-ai/archestra/commit/00153efe2df819a4fba89c7a4b2740573be78f72))
+* **onboarding:** make first-login survey scroll so Send stays reachable ([#6779](https://github.com/archestra-ai/archestra/issues/6779)) ([9975e99](https://github.com/archestra-ai/archestra/commit/9975e992eeddfb95fd53912da714b007c600f6e9))
+* **orchestrator:** deploy default-environment MCP servers into the org's default environment namespace ([#6756](https://github.com/archestra-ai/archestra/issues/6756)) ([fde3109](https://github.com/archestra-ai/archestra/commit/fde3109b8ecf5d6f51c8160c8e42a33e30f6b3bd))
+* **sidebar:** gate the apps query behind app:read ([#6769](https://github.com/archestra-ai/archestra/issues/6769)) ([2d8c4fe](https://github.com/archestra-ai/archestra/commit/2d8c4fe06aee1b22314ad815f424881cfb3cd4c1))
+
 ## [1.3.13](https://github.com/archestra-ai/archestra/compare/platform-v1.3.12...platform-v1.3.13) (2026-07-22)
 
 

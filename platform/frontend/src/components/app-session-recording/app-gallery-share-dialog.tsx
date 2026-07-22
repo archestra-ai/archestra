@@ -59,8 +59,10 @@ import { useFeature } from "@/lib/config/config.query";
 export function AppGalleryShareButton(props: {
   conversationId: string;
   disabled: boolean;
-  /** Why the button is disabled — shown as the tooltip instead of the pitch. */
-  disabledReason?: string;
+  /** Why the button is disabled — shown as the tooltip instead of the pitch.
+   * A node, not just text: the over-length reason carries its own fix (the
+   * trim-to-limit pill). */
+  disabledReason?: React.ReactNode;
 }) {
   const galleryRepo = useFeature("hackathonGalleryRepo");
   const [open, setOpen] = useState(false);

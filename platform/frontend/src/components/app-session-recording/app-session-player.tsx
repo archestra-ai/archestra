@@ -451,6 +451,34 @@ export function AppSessionPlayer({
   const tooLongToExport = finalCutMs > APP_RECORDING_MAX_EXPORT_MS;
   const exportBlocked = descriptionEditing || surfaceEditing || tooLongToExport;
 
+  // The quick action behind the tooltip pills (and the timeline's limit
+  // mark): one click shortens the current edit — mid cuts, trims and all —
+  // from the END of the edited cut down to exactly the allowed length, as
+  // one undoable step.
+  const trimToExportLimit = useCallback(() => {
+    if (!recording) return;
+    const next = trimCutsToExportLimit(recording, APP_RECORDING_MAX_EXPORT_MS);
+    if (!next) return;
+    editor.applyEdits({ cuts: next, chat: recording.edits?.chat });
+  }, [recording, editor]);
+  // The over-length tooltips end with the fix, not just the diagnosis.
+  const trimPill = (
+    <button
+      type="button"
+      className="mt-1.5 flex w-fit items-center gap-1 rounded-full border border-destructive/50 bg-background px-2 py-0.5 font-medium text-destructive hover:bg-destructive/10"
+      // A tooltip dismisses on pointerdown — its content unmounts before a
+      // click can complete inside it — so the action fires on pointerdown
+      // alone. (Not also on click: the pair double-commits, because the
+      // second call still sees the pre-trim recording and stacks a duplicate
+      // undo step.) Keyboard users have the same action on the timeline's
+      // limit mark, a real button.
+      onPointerDown={trimToExportLimit}
+    >
+      <Scissors className="size-3" />
+      Trim to {MAX_EXPORT_SECONDS}s
+    </button>
+  );
+
   const closeTour = useCallback(() => {
     localStorage.setItem(PLAYER_TOUR_SEEN_KEY, "1");
     localStorage.removeItem(PLAYER_TOUR_STEP_KEY);
@@ -671,13 +699,20 @@ export function AppSessionPlayer({
                       </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[260px] text-xs">
-                      {rendering
-                        ? "Preparing your video — click to cancel."
-                        : tooLongToExport
-                          ? `This cut runs ${formatMs(finalCutMs)}. Trim it to ${MAX_EXPORT_SECONDS} seconds or less to export a video.`
-                          : descriptionEditing || surfaceEditing
-                            ? "Finish editing to export a video."
-                            : "Downloads a video of this session with your edits applied. Takes up to a minute."}
+                      {rendering ? (
+                        "Preparing your video — click to cancel."
+                      ) : tooLongToExport ? (
+                        <>
+                          This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
+                          {MAX_EXPORT_SECONDS} seconds or less to export a
+                          video.
+                          {trimPill}
+                        </>
+                      ) : descriptionEditing || surfaceEditing ? (
+                        "Finish editing to export a video."
+                      ) : (
+                        "Downloads a video of this session with your edits applied. Takes up to a minute."
+                      )}
                     </TooltipContent>
                   </Tooltip>
 
@@ -689,9 +724,15 @@ export function AppSessionPlayer({
                     conversationId={conversationId}
                     disabled={exportBlocked}
                     disabledReason={
-                      tooLongToExport
-                        ? `This cut runs ${formatMs(finalCutMs)}. Trim it to ${MAX_EXPORT_SECONDS} seconds or less to submit.`
-                        : "Finish editing to submit."
+                      tooLongToExport ? (
+                        <>
+                          This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
+                          {MAX_EXPORT_SECONDS} seconds or less to submit.
+                          {trimPill}
+                        </>
+                      ) : (
+                        "Finish editing to submit."
+                      )
                     }
                   />
 
@@ -1042,6 +1083,20 @@ function PlayerSurface({
       applyEdits,
     ],
   );
+  // The timeline's export-limit mark: where played time crosses the allowed
+  // length on the FULL strip, and the one-click trim down to it. Committed
+  // with the same optimistic-cuts bridge every other timeline edit uses.
+  const exportLimitBaseMs =
+    duration > APP_RECORDING_MAX_EXPORT_MS
+      ? basePlayback.toPlaybackMs(playback.toRawMs(APP_RECORDING_MAX_EXPORT_MS))
+      : null;
+  const trimToExportLimit = useCallback(() => {
+    const next = trimCutsToExportLimit(recording, APP_RECORDING_MAX_EXPORT_MS);
+    if (!next) return;
+    setPendingCuts(next);
+    applyEdits({ cuts: next, chat: chatEdits });
+  }, [recording, applyEdits, chatEdits]);
+
   // ── Chat edits: presentation-only operations over the captured transcript
   // (drop a message, override a user message's text, hide the AI-enhanced
   // consolidation), committed through the same undoable history as cuts.
@@ -2242,12 +2297,14 @@ function PlayerSurface({
                     ? "resize"
                     : null
             }
+            exportLimit={exportLimitBaseMs}
             onSeek={seekBase}
             onScrub={scrubBase}
             onCut={cutBaseRange}
             onResize={resizeCutBase}
             onRestore={restoreCut}
             onTrim={trimBase}
+            onTrimToLimit={trimToExportLimit}
           />
         </div>
       </TooltipProvider>
@@ -2622,6 +2679,61 @@ export function classifyCut(
   return "mid";
 }
 
+/**
+ * One-click "trim to the export limit": the cut list that keeps the CURRENT
+ * edit — mid cuts, head trim and all — and shortens it from the END of the
+ * edited playback until it runs exactly `limitMs`. Null when the cut already
+ * fits (nothing to do) or the recording is degenerate.
+ *
+ * The boundary is found by verification, never a single mapping pass: cut
+ * edges land on whole raw milliseconds, and the limit instant can fall
+ * inside an idle-compressed gap, where a mapped-and-rounded edge re-expands
+ * to MORE playback than the limit — and a cut even one millisecond over
+ * still displays as "30s" while the export refuses it. Duration grows
+ * monotonically with the trim boundary, so the largest fitting boundary is
+ * found by bisection, each candidate proven by rebuilding the playback it
+ * would produce.
+ */
+export function trimCutsToExportLimit(
+  recording: PlaybackRecording,
+  limitMs: number,
+): { fromMs: number; toMs: number }[] | null {
+  const playback = buildPlayback(recording);
+  if (playback.duration <= limitMs) return null;
+  const base = buildPlayback(uncutRecording(recording));
+  const rawStart = Math.round(base.toRawMs(0));
+  const rawEnd = Math.round(base.toRawMs(Math.max(base.duration, 1)));
+  const cuts = recording.edits?.cuts ?? [];
+  const trial = (fromMs: number) => {
+    // Existing end trims are replaced by the new one, and mid cuts swallowed
+    // whole by it are dropped — the same rule the end bracket's drag applies,
+    // so the stored list stays clean.
+    const kept = cuts.filter((cut) => {
+      const kind = classifyCut(cut, rawStart, rawEnd);
+      return kind !== "end" && !(kind === "mid" && cut.fromMs >= fromMs);
+    });
+    const next = [...kept, { fromMs, toMs: rawEnd }];
+    const duration = buildPlayback({
+      ...recording,
+      edits: { ...recording.edits, cuts: next },
+    }).duration;
+    return { next, fits: duration <= limitMs };
+  };
+  // The natural candidate: the raw instant currently playing at the limit.
+  let hi = Math.round(playback.toRawMs(limitMs));
+  if (hi - rawStart < 1 || rawEnd - hi < 1) return null;
+  const first = trial(hi);
+  if (first.fits) return first.next;
+  let lo = rawStart + 1; // a whole-session trim always fits
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (trial(mid).fits) lo = mid;
+    else hi = mid;
+  }
+  const best = trial(lo);
+  return best.fits ? best.next : null;
+}
+
 type TimelineDrag =
   | {
       kind: "select";
@@ -2666,6 +2778,7 @@ function ReplayTimeline({
   playheadMs,
   contentStartMs,
   saving,
+  exportLimit,
   onSeek,
   onScrub,
   demo,
@@ -2674,6 +2787,7 @@ function ReplayTimeline({
   onResize,
   onRestore,
   onTrim,
+  onTrimToLimit,
 }: {
   durationMs: number;
   /** Existing cuts in full-timeline ms, in stored order, pre-classified. */
@@ -2687,11 +2801,16 @@ function ReplayTimeline({
   /** Tour demo: illustrate one timeline gesture over the strip. Illustration
    * only — non-interactive, and no edit state is touched. */
   demo?: TimelineTourGesture | null;
+  /** Where played time crosses the export cap on this strip — the clickable
+   * "trim to the limit" mark; null while the cut already fits. */
+  exportLimit: number | null;
   /** Editing anything pauses the replay and locks the play controls. */
   onEditingChange?: (editing: boolean) => void;
   onSeek: (ms: number) => void;
   /** Live scrub while a selection is drawn: the replay follows the cursor. */
   onScrub: (ms: number) => void;
+  /** One click cuts the edit down to exactly the export limit. */
+  onTrimToLimit: () => void;
   onCut: (range: { fromMs: number; toMs: number }) => void;
   onResize: (index: number, range: { fromMs: number; toMs: number }) => void;
   onRestore: (index: number) => void;
@@ -3196,6 +3315,39 @@ function ReplayTimeline({
           <div className="h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent border-t-destructive" />
           <div className="w-0.5 flex-1 rounded-full bg-destructive/90" />
         </div>
+        {/* Export-limit mark: where played time crosses the allowed length —
+            everything right of it is what the video export and the gallery
+            refuse to take. One click trims the edit down to exactly this
+            point (the same end trim the bracket drag makes, one undoable
+            step). The mark's position is played time mapped onto the full
+            strip, so it moves as cuts change. It sits drags out like the
+            hover pin: a live boundary preview would re-time it mid-gesture. */}
+        {exportLimit !== null && !drag && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Trim to the maximum allowed length"
+                className="group absolute inset-y-0 z-30 flex w-5 -translate-x-1/2 cursor-pointer flex-col items-center"
+                style={{ left: leftPct(exportLimit) }}
+                disabled={saving}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={onTrimToLimit}
+              >
+                <span className="flex h-2.5 items-center">
+                  <span className="flex h-4 items-center gap-0.5 rounded-full border border-destructive/50 bg-background px-1 font-semibold text-[10px] text-destructive shadow-sm transition-colors group-hover:bg-destructive/10">
+                    <Scissors className="size-2.5" />
+                    {MAX_EXPORT_SECONDS}s
+                  </span>
+                </span>
+                <span className="w-0.5 flex-1 rounded-full bg-destructive/60 transition-colors group-hover:bg-destructive" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="text-xs">
+              Trim to the max allowed length ({MAX_EXPORT_SECONDS}s)
+            </TooltipContent>
+          </Tooltip>
+        )}
         {demo && <TimelineTourSamples gesture={demo} />}
       </div>
     </>

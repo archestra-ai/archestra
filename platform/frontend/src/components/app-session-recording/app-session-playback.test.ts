@@ -17,6 +17,7 @@ import {
   replayRegionLayout,
   replayStageFit,
   revealSchedule,
+  trimCutsToExportLimit,
   uncutRecording,
 } from "./app-session-player";
 
@@ -564,6 +565,87 @@ describe("classifyCut", () => {
     expect(classifyCut({ fromMs: 2_000, toMs: 8_000 }, rawStart, rawEnd)).toBe(
       "mid",
     );
+  });
+});
+
+describe("trimCutsToExportLimit", () => {
+  /** Steady app input keeps a whole span uncompressed on the timeline. */
+  const activity = (fromMs: number, toMs: number) => {
+    const events: { kind: string; t: number }[] = [];
+    for (let t = fromMs; t <= toMs; t += 400) {
+      events.push({ kind: "pointer", t });
+    }
+    return events;
+  };
+  const withEvents = (
+    durationMs: number,
+    events: { kind: string; t: number }[],
+    cuts?: { fromMs: number; toMs: number }[],
+  ) =>
+    recording({
+      durationMs,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        ...events,
+      ] as Recording["events"],
+      ...(cuts ? { edits: { cuts } } : {}),
+    });
+  const durationWith = (
+    rec: Recording,
+    cuts: { fromMs: number; toMs: number }[],
+  ) => buildPlayback({ ...rec, edits: { ...rec.edits, cuts } }).duration;
+
+  it("returns null when the cut already fits", () => {
+    const rec = withEvents(10_000, activity(0, 10_000));
+    expect(trimCutsToExportLimit(rec, 30_000)).toBeNull();
+  });
+
+  it("trims an uncut session from its end to exactly the limit", () => {
+    const rec = withEvents(45_000, activity(0, 45_000));
+    const next = trimCutsToExportLimit(rec, 30_000);
+    expect(next).not.toBeNull();
+    const after = durationWith(rec, next ?? []);
+    expect(after).toBeLessThanOrEqual(30_000);
+    expect(after).toBeGreaterThan(29_900);
+  });
+
+  it("keeps existing mid cuts and shortens the EDITED cut, not the raw one", () => {
+    const mid = { fromMs: 5_000, toMs: 12_000 };
+    const rec = withEvents(60_000, activity(0, 60_000), [mid]);
+    const next = trimCutsToExportLimit(rec, 30_000);
+    expect(next).not.toBeNull();
+    expect(next).toContainEqual(mid);
+    expect(next).toHaveLength(2);
+    const after = durationWith(rec, next ?? []);
+    expect(after).toBeLessThanOrEqual(30_000);
+    expect(after).toBeGreaterThan(29_900);
+  });
+
+  it("replaces an existing end trim instead of stacking another", () => {
+    const rec = withEvents(60_000, activity(0, 60_000), [
+      { fromMs: 50_000, toMs: 60_000 },
+    ]);
+    const next = trimCutsToExportLimit(rec, 30_000);
+    expect(next).not.toBeNull();
+    expect(next).toHaveLength(1);
+    const after = durationWith(rec, next ?? []);
+    expect(after).toBeLessThanOrEqual(30_000);
+    expect(after).toBeGreaterThan(29_900);
+  });
+
+  it("never lands a hair over the limit when it falls inside an idle-compressed gap", () => {
+    // Activity to 28s, dead air to 120s (compressed to a beat), activity
+    // again: the limit instant maps deep into the raw gap, where a naive
+    // rounded boundary re-expands to MORE than the limit.
+    const rec = withEvents(125_000, [
+      ...activity(0, 28_000),
+      ...activity(120_000, 125_000),
+    ]);
+    const next = trimCutsToExportLimit(rec, 30_000);
+    expect(next).not.toBeNull();
+    const after = durationWith(rec, next ?? []);
+    expect(after).toBeLessThanOrEqual(30_000);
+    expect(after).toBeGreaterThan(29_900);
   });
 });
 

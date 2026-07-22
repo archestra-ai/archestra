@@ -125,6 +125,23 @@ describe("OnboardingSurveyDialog", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
+  it("puts the questions in a scroll region so the Send button never clips on short viewports", () => {
+    // The dialog is non-dismissible and capped at max-h-[90dvh]; without an
+    // internal scroll region the Send button clips off-screen on short
+    // viewports, leaving the admin stuck. jsdom can't measure layout, so we
+    // pin the structural contract: the questions scroll, Send stays pinned.
+    render(<OnboardingSurveyDialog />);
+
+    const scrollRegion = screen
+      .getByRole("button", { name: "Software engineer" })
+      .closest(".overflow-y-auto");
+    expect(scrollRegion).not.toBeNull();
+
+    // The Send button lives in a pinned footer, outside the scroll region.
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(scrollRegion?.contains(send)).toBe(false);
+  });
+
   it("blocks submit on a malformed email", async () => {
     const user = userEvent.setup();
     render(<OnboardingSurveyDialog />);

@@ -82,6 +82,7 @@ const mockCreateDockerRegistrySecrets = vi.fn().mockResolvedValue([]);
 const mockDeleteK8sNetworkPolicy = vi.fn().mockResolvedValue(undefined);
 const mockResolveHttpEndpoint = vi.fn().mockResolvedValue(undefined);
 const mockWaitForDeploymentReady = vi.fn().mockResolvedValue(undefined);
+const mockRemoveDeployment = vi.fn().mockResolvedValue(undefined);
 const mockK8sDeploymentInstances: Array<{
   options: Record<string, unknown>;
   createK8sSecret: ReturnType<typeof vi.fn>;
@@ -143,6 +144,7 @@ vi.mock("./k8s-deployment", () => {
       deleteK8sNetworkPolicy: ReturnType<typeof vi.fn>;
       resolveHttpEndpoint: ReturnType<typeof vi.fn>;
       waitForDeploymentReady: ReturnType<typeof vi.fn>;
+      removeDeployment: ReturnType<typeof vi.fn>;
 
       constructor(options: Record<string, unknown>) {
         this.options = options;
@@ -152,6 +154,7 @@ vi.mock("./k8s-deployment", () => {
         this.deleteK8sNetworkPolicy = mockDeleteK8sNetworkPolicy;
         this.resolveHttpEndpoint = mockResolveHttpEndpoint;
         this.waitForDeploymentReady = mockWaitForDeploymentReady;
+        this.removeDeployment = mockRemoveDeployment;
         mockK8sDeploymentInstances.push({
           options,
           createK8sSecret: this.createK8sSecret,
@@ -1269,7 +1272,9 @@ describe("McpServerRuntimeManager", () => {
         allowedCidrs: [],
       } satisfies NetworkPolicy;
       const OrganizationModel = (await import("@/models/organization")).default;
-      vi.mocked(OrganizationModel.getFirst).mockResolvedValueOnce({
+      // Persistent (not Once): startServer consults the org twice — once for
+      // namespace resolution, once for network-policy resolution.
+      vi.mocked(OrganizationModel.getFirst).mockResolvedValue({
         id: "org-with-network-policy",
         defaultNetworkPolicy,
       } as unknown as Awaited<ReturnType<typeof OrganizationModel.getFirst>>);
@@ -1305,6 +1310,53 @@ describe("McpServerRuntimeManager", () => {
         },
       });
 
+      // Restore the module-mock default so later tests aren't polluted.
+      vi.mocked(OrganizationModel.getFirst).mockResolvedValue({
+        id: "test-org",
+        defaultNetworkPolicy: null,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getFirst>>);
+      cleanup();
+    });
+
+    test("deploys default-environment catalog installs into the organization's default environment namespace", async () => {
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {},
+        catalogEnvironment: [],
+        mcpServerOverrides: { secretId: null },
+      });
+
+      // Default-environment catalog: no environmentId, org-owned.
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "catalog-1",
+        serverType: "local",
+        environmentId: null,
+        organizationId: "org-1",
+        localConfig: { environment: [] },
+        localConfigSecretId: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      const OrganizationModel = (await import("@/models/organization")).default;
+      vi.mocked(OrganizationModel.getById).mockResolvedValue({
+        id: "org-1",
+        defaultEnvironmentNamespace: "org-default-ns",
+        defaultNetworkPolicy: null,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+
+      await manager.startServer(mcpServer);
+
+      expect(mockK8sDeploymentInstances.at(-1)?.options.namespace).toBe(
+        "org-default-ns",
+      );
+
+      // Restore module-mock defaults so later tests aren't polluted.
+      vi.mocked(OrganizationModel.getById).mockResolvedValue({
+        id: "test-org",
+        defaultNetworkPolicy: null,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
       cleanup();
     });
 
@@ -2050,13 +2102,26 @@ describe("McpServerRuntimeManager.backfillRegcredTeamLabels", () => {
 });
 
 describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     // clearAllMocks resets call history but not implementations, so a
     // persistent mockResolvedValue from another suite would otherwise leak in
-    // under a shuffling seed. These tests drive the catalog via localCatalogItems
-    // and expect the frozen-name path, so pin findById back to null.
+    // under a shuffling seed. These tests expect the frozen-name path by
+    // default, so pin findById back to null — and pin the other models the
+    // namespace-resolution path consults, since leaked implementations change
+    // which sweep branch runs.
+    const OrganizationModel = (await import("@/models/organization")).default;
     vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue(null);
+    vi.mocked(McpServerModel.findById).mockReset();
+    vi.mocked(McpServerModel.findById).mockResolvedValue(null);
+    vi.mocked(OrganizationModel.getById).mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+    vi.mocked(OrganizationModel.getFirst).mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getFirst>>);
   });
 
   async function createManagerWithMockK8s(params: {
@@ -2218,6 +2283,112 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     ]);
 
     expect(mockDeleteDeployment).not.toHaveBeenCalled();
+  });
+
+  test("tears down a deployment left in a stale namespace after the catalog resolves elsewhere", async () => {
+    // Upgrade scenario: default-environment installs used to deploy into the
+    // platform namespace; once the resolver honors the org's
+    // defaultEnvironmentNamespace, the old platform-namespace copy must be
+    // reaped on startup.
+    const serverId = "123e4567-e89b-12d3-a456-426614174000";
+    const serverRow = {
+      id: serverId,
+      name: "current-name",
+      catalogId: "cat-default-env",
+      deploymentName: "mcp-current-name",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      scope: "org" as const,
+      reinstallRequired: false,
+      localInstallationStatus: "idle" as const,
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local" as const,
+    };
+    const catalogRow = {
+      id: "cat-default-env",
+      serverType: "local" as const,
+      multitenant: false,
+      environmentId: null,
+      organizationId: "org-1",
+      localConfig: { command: "node", arguments: ["server.js"] },
+    };
+
+    const McpServerModel = (await import("@/models/mcp-server")).default;
+    const InternalMcpCatalogModel = (
+      await import("@/models/internal-mcp-catalog")
+    ).default;
+    const OrganizationModel = (await import("@/models/organization")).default;
+    vi.mocked(McpServerModel.findById).mockResolvedValue(
+      serverRow as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findById>
+      >,
+    );
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue(
+      catalogRow as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >,
+    );
+    vi.mocked(OrganizationModel.getById).mockResolvedValue({
+      id: "org-1",
+      defaultEnvironmentNamespace: "org-default-ns",
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const staleDeploymentItem = {
+      metadata: {
+        name: "mcp-current-name",
+        labels: { app: "mcp-server", "mcp-server-id": serverId },
+      },
+    };
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: mockDeleteService },
+      mockK8sAppsApi: {
+        // Both the platform namespace ("test-namespace") and the resolved
+        // "org-default-ns" hold a same-named deployment for this server: the
+        // former is the stale pre-upgrade copy, the latter is current.
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [staleDeploymentItem],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+    // getOrLoadDeployment (namespaceOverride teardown path) needs the full
+    // client set.
+    const managerAny = manager as unknown as Record<string, unknown>;
+    managerAny.k8sNetworkingApi = {};
+    managerAny.k8sCustomObjectsApi = {
+      getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+    };
+    managerAny.k8sAttach = {};
+    managerAny.k8sLog = {};
+    managerAny.k8sExec = {};
+
+    mockRemoveDeployment.mockClear();
+    mockK8sDeploymentInstances.length = 0;
+
+    await callCleanup(manager, [serverRow]);
+
+    // Exactly one teardown: the platform-namespace ("test-namespace") copy.
+    // The org-default-ns copy matches its resolved namespace + frozen name.
+    expect(mockRemoveDeployment).toHaveBeenCalledTimes(1);
+    const tornDown = mockK8sDeploymentInstances.find(
+      (instance) => instance.options.namespace === "test-namespace",
+    );
+    expect(tornDown).toBeDefined();
+    // Name matches the frozen name, so no additional direct deletes fire.
+    expect(mockDeleteDeployment).not.toHaveBeenCalled();
+
+    // Restore module-mock defaults so later tests aren't polluted.
+    vi.mocked(McpServerModel.findById).mockResolvedValue(null);
+    vi.mocked(InternalMcpCatalogModel.findById).mockReset();
+    vi.mocked(OrganizationModel.getById).mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
   });
 
   test("ignores deployments that do not belong to installed servers", async () => {

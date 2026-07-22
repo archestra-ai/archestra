@@ -11,6 +11,7 @@ import {
 import type {
   InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatus,
+  McpServerReinstallReason,
   ResourceVisibilityScope,
 } from "@/types";
 import mcpCatalogTable from "./internal-mcp-catalog";
@@ -77,6 +78,8 @@ const mcpServerTable = pgTable(
       .notNull()
       .default("personal"),
     reinstallRequired: boolean("reinstall_required").notNull().default(false),
+    // Null iff `reinstallRequired` is false — enforced by McpServerModel.update.
+    reinstallReason: text("reinstall_reason").$type<McpServerReinstallReason>(),
     localInstallationStatus: text("local_installation_status")
       .notNull()
       .default("idle")

@@ -325,8 +325,10 @@ spec:
       .where(eq(schema.mcpServersTable.id, installedServer.id));
     expect(serverRow.name).toBe("yaml-placeholder-renamed");
     // The placeholder is the one way the display name reaches the pod spec —
-    // these installs genuinely need a reinstall.
+    // these installs genuinely need a reinstall. It's a pod respec only:
+    // stored credentials stay valid, so no credential re-prompt.
     expect(serverRow.reinstallRequired).toBe(true);
+    expect(serverRow.reinstallReason).toBe("restart");
   });
 
   test("rename combined with a breaking change composes: renamed AND flagged for manual reinstall", async ({

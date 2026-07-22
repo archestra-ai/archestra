@@ -16,7 +16,7 @@ import organizationsTable from "./organization";
  * Org-level list of deployment environments (e.g. "sandbox", "staging",
  * "production"). A catalog item may be assigned to exactly one environment via
  * internal_mcp_catalog.environment_id (nullable). Each environment carries a
- * Kubernetes namespace (stored only; runtime use deferred). Assignment to a
+ * Kubernetes namespace its MCP server pods are deployed into. Assignment to a
  * `restricted` environment is gated by per-resource `deploy-to-restricted` permissions.
  */
 const environmentsTable = pgTable(
@@ -30,8 +30,8 @@ const environmentsTable = pgTable(
     /** Optional human-readable description, shown in the environment selector. */
     description: text("description"),
     /**
-     * Target Kubernetes namespace for servers in this environment. Stored only;
-     * not yet applied at deployment time. NULL means "unset".
+     * Kubernetes namespace MCP server pods in this environment are deployed
+     * into. NULL falls back to the orchestrator's own namespace.
      */
     namespace: text("namespace"),
     networkPolicy: jsonb("network_policy").$type<NetworkPolicy>(),

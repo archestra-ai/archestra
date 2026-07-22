@@ -5816,7 +5816,7 @@ export const updateConnectionSettings = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.
+ * Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged. When the namespace or network policy changes and the runtime is enabled, all default-environment MCP servers are reconciled.
  *
  * Authentication:
  *

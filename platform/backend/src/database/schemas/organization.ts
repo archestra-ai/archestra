@@ -315,8 +315,10 @@ const organizationsTable = pgTable("organization", {
   defaultEnvironmentName: text("default_environment_name"),
 
   /**
-   * Kubernetes namespace for the implicit "default" environment. Stored only
-   * (not applied at deploy yet). NULL = unset.
+   * Kubernetes namespace MCP server pods of the implicit "default" environment
+   * (internal_mcp_catalog.environment_id = null) are deployed into. NULL falls
+   * back to the orchestrator's own namespace. Mirrors `environment.namespace`
+   * for the default scope.
    */
   defaultEnvironmentNamespace: text("default_environment_namespace"),
 

@@ -19,6 +19,8 @@ vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
     isEnabled: true,
     restartServer: vi.fn().mockResolvedValue(undefined),
     reinstallSharedDeployment: vi.fn().mockResolvedValue(undefined),
+    validateNamespace: vi.fn().mockResolvedValue(undefined),
+    getOrLoadDeployment: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -351,6 +353,125 @@ describe("PATCH /api/organization/default-environment", () => {
     expect(
       mcpServerRuntimeManager.reinstallSharedDeployment,
     ).toHaveBeenCalledWith(sharedCatalog.id);
+  });
+
+  test("reconciles default-environment MCP deployments when the namespace changes", async ({
+    makeUser,
+    makeOrganization,
+    makeMcpServer,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+    const singleTenantCatalog = await InternalMcpCatalogModel.create(
+      {
+        name: "default-ns-single-tenant",
+        serverType: "local",
+        multitenant: false,
+        environmentId: null,
+        localConfig: { command: "node", arguments: ["server.js"] },
+        scope: "org",
+      },
+      { organizationId },
+    );
+    const sharedCatalog = await InternalMcpCatalogModel.create(
+      {
+        name: "default-ns-shared",
+        serverType: "local",
+        multitenant: true,
+        environmentId: null,
+        localConfig: { command: "node", arguments: ["server.js"] },
+        scope: "org",
+      },
+      { organizationId },
+    );
+    const server = await makeMcpServer({ catalogId: singleTenantCatalog.id });
+    await makeMcpServer({ catalogId: sharedCatalog.id });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { namespace: "relocated-ns" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().defaultEnvironmentNamespace).toBe("relocated-ns");
+    expect(mcpServerRuntimeManager.validateNamespace).toHaveBeenCalledWith(
+      "relocated-ns",
+    );
+    // Deployments are pre-loaded while the OLD namespace is still in the DB so
+    // the restart's teardown targets the old namespace.
+    expect(mcpServerRuntimeManager.getOrLoadDeployment).toHaveBeenCalledWith(
+      server.id,
+    );
+    expect(mcpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
+      server.id,
+    );
+    expect(
+      mcpServerRuntimeManager.reinstallSharedDeployment,
+    ).toHaveBeenCalledWith(sharedCatalog.id);
+  });
+
+  test("does not reconcile when the namespace is unchanged", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+
+    const first = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { namespace: "stable-ns" },
+    });
+    expect(first.statusCode).toBe(200);
+    vi.mocked(mcpServerRuntimeManager.restartServer).mockClear();
+    vi.mocked(mcpServerRuntimeManager.reinstallSharedDeployment).mockClear();
+
+    const second = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { namespace: "stable-ns" },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(mcpServerRuntimeManager.restartServer).not.toHaveBeenCalled();
+    expect(
+      mcpServerRuntimeManager.reinstallSharedDeployment,
+    ).not.toHaveBeenCalled();
+  });
+
+  test("rejects a namespace the cluster does not accept with 400", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+    vi.mocked(mcpServerRuntimeManager.validateNamespace).mockRejectedValueOnce(
+      new Error('Namespace "missing-ns" is not accessible'),
+    );
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { namespace: "missing-ns" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("missing-ns");
+    // The rejected namespace must not be persisted.
+    const reloaded = await OrganizationModel.getById(organizationId);
+    expect(reloaded?.defaultEnvironmentNamespace).toBeNull();
   });
 
   test("member without environment:update is forbidden", async ({

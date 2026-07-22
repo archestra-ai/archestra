@@ -22,6 +22,7 @@ import {
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   LlmProviderApiKeyModel,
+  McpServerModel,
   McpToolCallModel,
   MemberModel,
   OrganizationModel,
@@ -385,24 +386,70 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateDefaultEnvironment,
         description:
-          "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.",
+          "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged. When the namespace or network policy changes and the runtime is enabled, all default-environment MCP servers are reconciled.",
         tags: ["Organization"],
         body: UpdateDefaultEnvironmentSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
+      const namespaceChanging = "namespace" in body;
+      const networkPolicyChanging = "networkPolicy" in body;
+
+      // Validate that the new namespace actually exists in the cluster before
+      // touching the DB — mirrors the environment PATCH route, avoiding a
+      // state where the DB names a namespace pods can never start in.
+      if (
+        namespaceChanging &&
+        body.namespace != null &&
+        mcpServerRuntimeManager.isEnabled
+      ) {
+        try {
+          await mcpServerRuntimeManager.validateNamespace(body.namespace);
+        } catch (err) {
+          throw new ApiError(
+            400,
+            err instanceof Error ? err.message : "Namespace validation failed",
+          );
+        }
+      }
+
       const currentOrganization =
-        "networkPolicy" in body
+        namespaceChanging || networkPolicyChanging
           ? await OrganizationModel.getById(organizationId)
           : null;
+      const namespaceActuallyChanging =
+        namespaceChanging &&
+        currentOrganization !== null &&
+        (body.namespace ?? null) !==
+          (currentOrganization?.defaultEnvironmentNamespace ?? null);
       const networkPolicyActuallyChanging =
-        "networkPolicy" in body &&
+        networkPolicyChanging &&
         currentOrganization !== null &&
         !sameNetworkPolicy(
           body.networkPolicy ?? null,
           currentOrganization?.defaultNetworkPolicy ?? null,
         );
+
+      // Pre-load deployments while the OLD namespace is still in the DB, so
+      // the in-memory K8sDeployment objects point at the old namespace and
+      // the restart's teardown targets the right place (mirrors the
+      // environment PATCH route).
+      let catalogsToReconcile: { id: string; multitenant: boolean }[] = [];
+      if (namespaceActuallyChanging && mcpServerRuntimeManager.isEnabled) {
+        catalogsToReconcile =
+          await InternalMcpCatalogModel.findDefaultEnvironmentLocalCatalogs(
+            organizationId,
+          );
+        const servers = await McpServerModel.findByCatalogIds(
+          catalogsToReconcile.map((catalog) => catalog.id),
+        );
+        await Promise.all(
+          servers.map((server) =>
+            mcpServerRuntimeManager.getOrLoadDeployment(server.id),
+          ),
+        );
+      }
 
       // Map the clean API shape to DB columns, including only keys that are
       // present in the body so omitting a field leaves it unchanged (an
@@ -445,14 +492,21 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      if (networkPolicyActuallyChanging && mcpServerRuntimeManager.isEnabled) {
+      if (
+        (namespaceActuallyChanging || networkPolicyActuallyChanging) &&
+        mcpServerRuntimeManager.isEnabled
+      ) {
         const catalogs =
-          await InternalMcpCatalogModel.findDefaultEnvironmentLocalCatalogs(
-            organizationId,
-          );
+          catalogsToReconcile.length > 0
+            ? catalogsToReconcile
+            : await InternalMcpCatalogModel.findDefaultEnvironmentLocalCatalogs(
+                organizationId,
+              );
         await reconcileCatalogDeployments({
           catalogs,
-          reason: "default environment network policy change",
+          reason: namespaceActuallyChanging
+            ? "default environment namespace change"
+            : "default environment network policy change",
         });
       }
 

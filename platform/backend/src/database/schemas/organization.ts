@@ -185,6 +185,15 @@ const organizationsTable = pgTable("organization", {
   ).$type<LimitCleanupInterval>(),
 
   /**
+   * Default role assigned to newly provisioned members who don't get an
+   * explicit role — email/password self-signup and ChatOps auto-provisioning.
+   * NULL falls back to the built-in "member" role. Org-wide mirror of the
+   * per-IdP SSO `roleMapping.defaultRole`. Stores a role slug (a predefined
+   * admin/editor/member role or a custom org role).
+   */
+  defaultMemberRole: text("default_member_role"),
+
+  /**
    * Organization-wide default agent ID (fallback when member has no personal default).
    * FK to agents(id) ON DELETE SET NULL — enforced by migration only
    * (Drizzle .references() causes TS circular inference: organization → agent → ... → organization).

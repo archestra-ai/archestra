@@ -66074,6 +66074,7 @@ export type GetOrganizationResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -66372,6 +66373,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -66544,6 +66546,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -66713,6 +66716,7 @@ export type UpdateLlmSettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -66881,6 +66885,7 @@ export type UpdateMcpSettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -67049,6 +67054,7 @@ export type UpdateSkillsSettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -67219,6 +67225,7 @@ export type UpdateAgentSettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -67400,6 +67407,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -67579,6 +67587,7 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -67640,6 +67649,7 @@ export type UpdateAuthSettingsData = {
     body: {
         oauthAccessTokenLifetimeSeconds?: number;
         showTwoFactor?: boolean;
+        defaultMemberRole?: string | null;
     };
     path?: never;
     query?: never;
@@ -67748,6 +67758,7 @@ export type UpdateAuthSettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -67919,6 +67930,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -68085,6 +68097,7 @@ export type DropEmbeddingConfigResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -68427,6 +68440,7 @@ export type CompleteOnboardingResponses = {
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
         defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        defaultMemberRole: string | null;
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;

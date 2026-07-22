@@ -316,6 +316,7 @@ const extendedFields = {
   defaultUserLimitValue: z.number().int().positive().nullable(),
   defaultUserLimitModel: z.array(z.string()).nullable(),
   defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),
+  defaultMemberRole: z.string().nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
@@ -436,6 +437,9 @@ export const UpdateAuthSettingsSchema = z.object({
   oauthAccessTokenLifetimeSeconds:
     OAuthAccessTokenLifetimeSecondsSchema.optional(),
   showTwoFactor: z.boolean().optional(),
+  // Role slug (predefined or custom) assigned to new self-signup / ChatOps
+  // members. `null` clears it back to the built-in "member" fallback.
+  defaultMemberRole: z.string().min(1).nullable().optional(),
 });
 
 export const UpdateConnectionSettingsSchema = z.object({

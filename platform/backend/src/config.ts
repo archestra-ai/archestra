@@ -1244,6 +1244,20 @@ export function parseHackathonRecorderEnabled(params: {
 }
 
 /**
+ * Defaults for the "Archestra App Gallery" sharing surface — the PUBLIC
+ * device-flow OAuth client id and the public gallery repository. Baked in so
+ * every non-enterprise deployment (local dev and OSS included) offers sharing
+ * to the official gallery out of the box; an env override repoints a fork
+ * elsewhere. Enterprise has the whole hackathon recorder disabled, so these
+ * never surface there.
+ *
+ * @public — exported for testability
+ */
+export const DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID =
+  "Ov23liqkaqAROe7B7ZZ4";
+export const DEFAULT_HACKATHON_GALLERY_REPO = "archestra-ai/apps-gallery";
+
+/**
  * The App Gallery repository a shared recording is submitted to, as
  * `owner/name` on github.com. Unset means sharing is not offered — the
  * recorder itself works without it (record/replay/download stay local).
@@ -1268,6 +1282,29 @@ export function parseHackathonGalleryRepo(
   }
   return { owner: match[1], name: match[2] };
 }
+
+/**
+ * The public App Gallery sharing config: each value is the env override, else
+ * the baked default (see DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise
+ * deployment offers sharing to the official gallery out of the box. The
+ * explicit optional types are load-bearing: the values are never actually
+ * undefined here, but the route's "not configured" guard and its tests still
+ * drive them to undefined, and an object-property annotation (unlike an
+ * annotated const, which CFA narrows to its string initializer) keeps that
+ * assignable.
+ */
+const hackathonGallery: {
+  githubClientId: string | undefined;
+  repo: { owner: string; name: string } | undefined;
+} = {
+  githubClientId:
+    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
+    DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID,
+  repo: parseHackathonGalleryRepo(
+    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO?.trim() ||
+      DEFAULT_HACKATHON_GALLERY_REPO,
+  ),
+};
 
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host: it runs when a host is
@@ -1827,8 +1864,10 @@ const config = {
       process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
     /**
      * Sharing a recording to the public App Gallery (a PR filed on the
-     * participant's own GitHub account). Both values must be set for the
-     * share surface to exist; the recorder works without them.
+     * participant's own GitHub account). Both values default to the official
+     * Archestra gallery + its public device-flow OAuth client (see
+     * DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise deployment offers
+     * sharing out of the box; an env override repoints a fork elsewhere.
      *
      * `githubClientId` is the PUBLIC client id of the "Archestra App Gallery"
      * GitHub OAuth app with the device flow enabled — the device flow needs no
@@ -1840,14 +1879,7 @@ const config = {
      * Undocumented on purpose, like the rest of the recorder — not in
      * .env.example or the deployment docs.
      */
-    gallery: {
-      githubClientId:
-        process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
-        undefined,
-      repo: parseHackathonGalleryRepo(
-        process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO,
-      ),
-    },
+    gallery: hackathonGallery,
     /**
      * Escape hatch, not a requirement: the renderer finds or installs its own
      * Chromium (see app-recording-render-runtime). Set this only to pin a

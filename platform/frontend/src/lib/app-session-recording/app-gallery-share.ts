@@ -1,4 +1,8 @@
-import { archestraApiSdk, slugify } from "@archestra/shared";
+import {
+  APP_RECORDING_MAX_BUNDLE_BYTES,
+  archestraApiSdk,
+  slugify,
+} from "@archestra/shared";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 
 /**
@@ -170,6 +174,19 @@ export async function submitRecordingToAppGallery(params: {
   const appSlug = gallerySubmissionSlug(bundle);
   const branch = gallerySubmissionBranch(appSlug);
 
+  // Built once, checked before anything touches the network: GitHub's
+  // contents API refuses files over 100MB, and refuses them as opaque 5xx
+  // weather rather than anything a person could read. An oversized bundle is
+  // stopped here with the real number and the real remedy instead.
+  const files = buildGallerySubmissionFiles(bundle);
+  for (const file of files) {
+    if (file.bytes.byteLength > APP_RECORDING_MAX_BUNDLE_BYTES) {
+      throw new Error(
+        `This recording is ${mb(file.bytes.byteLength)}MB — over the ${mb(APP_RECORDING_MAX_BUNDLE_BYTES)}MB limit for gallery submissions. Re-record the session and try again.`,
+      );
+    }
+  }
+
   onProgress({
     stage: "check",
     label: `Checking ${galleryName} for an existing submission…`,
@@ -237,7 +254,7 @@ export async function submitRecordingToAppGallery(params: {
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
   const dir = gallerySubmissionFolder(viewer.login, appSlug);
-  for (const file of buildGallerySubmissionFiles(bundle)) {
+  for (const file of files) {
     onProgress({
       stage: "upload",
       label: `Uploading ${file.name} to ${forkName}…`,
@@ -727,6 +744,10 @@ function base64ToBytes(base64: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+function mb(bytes: number): number {
+  return Math.round(bytes / (1024 * 1024));
 }
 
 function toBase64(bytes: Uint8Array): string {

@@ -9,6 +9,8 @@
  * forwards their id, and the service enforces per-render ownership from it.
  */
 
+import { APP_RECORDING_MAX_BUNDLE_BYTES } from "@archestra/shared";
+
 /** Base path of the render service's internal endpoints. */
 export const INTERNAL_RENDER_BASE = "/internal/app-recordings/render";
 
@@ -25,9 +27,15 @@ export const RENDER_FILENAME_HEADER = "x-archestra-render-filename";
  * along as data URIs), routinely far larger than the general API body limit, so
  * the render routes raise it well past that default. One shared value so the
  * two hops cannot disagree — a bundle the web tier accepts must not then bounce
- * off the render service. Bounded, not unlimited: the single render pod buffers
- * the whole body, parses it, and drives a browser with it, so this is coupled
- * to the renderer's memory (see the renderer Deployment's limits) — raise the
- * two together if longer sessions need it.
+ * off the render service.
+ *
+ * Derived from the product's bundle ceiling plus envelope slack, so the friendly
+ * over-limit refusal in the render route (which reads Content-Length and names
+ * the number) always fires before the parser's blunt one. The margin also
+ * matters operationally: the render pod buffers the whole body, parses it, and
+ * drives a browser holding the decoded recording — several times the wire size
+ * in memory — so an unbounded limit is an invitation to fall over mid-job with
+ * nothing to say (see the renderer Deployment's memory limits).
  */
-export const RENDER_BUNDLE_BODY_LIMIT_BYTES = 512 * 1024 * 1024;
+export const RENDER_BUNDLE_BODY_LIMIT_BYTES =
+  APP_RECORDING_MAX_BUNDLE_BYTES + 8 * 1024 * 1024;

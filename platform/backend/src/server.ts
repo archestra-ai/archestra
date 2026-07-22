@@ -425,6 +425,10 @@ function parseContentLength(request: FastifyRequest): number | undefined {
 
 function isBodyTooLargeError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
+  // A thrown ApiError(413) is a route speaking deliberately — its message
+  // already names the limit in that route's own terms. This branch only
+  // rescues Fastify's raw parser error, which arrives without a usable text.
+  if (error instanceof ApiError) return false;
   const e = error as { code?: string; statusCode?: number };
   return e.code === BODY_TOO_LARGE_CODE || e.statusCode === 413;
 }

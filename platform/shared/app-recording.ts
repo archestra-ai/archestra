@@ -416,6 +416,22 @@ export const APP_RECORDING_RENDER_FPS = 24;
  */
 export const APP_RECORDING_MAX_EXPORT_MS = 30_000;
 
+/**
+ * The largest recording bundle (its serialized JSON) the export surfaces
+ * accept, shared by the video renderer and the gallery submission.
+ *
+ * The number is GitHub's: the gallery submits the bundle as one file through
+ * the contents API, which refuses files over 100MB — and refuses them as
+ * opaque 5xx weather, not as a limit anyone can read. The renderer could
+ * technically chew somewhat past this, but a bundle too big to share is
+ * already broken for its purpose, and one ceiling with one honest message
+ * beats two. Capture keeps real bundles far below it: the recording SDK's
+ * byte-rate governor bounds video at ~4 Mbit/s across all streams, so even a
+ * three-minute all-motion raw take stays around 90MB serialized, and a
+ * typical 30s cut is ~20MB.
+ */
+export const APP_RECORDING_MAX_BUNDLE_BYTES = 100 * 1024 * 1024;
+
 export const APP_RECORDING_RENDER_REGION_ATTR =
   "data-app-recording-render-region";
 export const APP_RECORDING_RENDER_REGION_SELECTOR = `[${APP_RECORDING_RENDER_REGION_ATTR}]`;

@@ -1,4 +1,8 @@
-import { RouteId, validateRecordingBundle } from "@archestra/shared";
+import {
+  APP_RECORDING_MAX_BUNDLE_BYTES,
+  RouteId,
+  validateRecordingBundle,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AgentModel, ConversationModel } from "@/models";
@@ -87,6 +91,21 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // A recording bundle carries the whole session (frames as data URIs), so
       // it runs well past the general API body limit; this route accepts it.
       bodyLimit: RENDER_BUNDLE_BODY_LIMIT_BYTES,
+      // Refused from the headers, before megabytes are buffered and parsed:
+      // an oversized bundle gets the real number and the real remedy, not the
+      // parser's blunt 413 — and not the renderer's mid-job collapse.
+      onRequest: async (request) => {
+        const declared = Number(request.headers["content-length"]);
+        if (
+          Number.isFinite(declared) &&
+          declared > APP_RECORDING_MAX_BUNDLE_BYTES
+        ) {
+          throw new ApiError(
+            413,
+            `This recording is ${Math.round(declared / (1024 * 1024))}MB — over the ${Math.round(APP_RECORDING_MAX_BUNDLE_BYTES / (1024 * 1024))}MB limit for video export. Re-record the session and try again.`,
+          );
+        }
+      },
       schema: {
         operationId: RouteId.RenderAppRecordingVideo,
         description:
@@ -99,7 +118,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.object({ jobId: z.string() })),
       },
     },
-    async ({ body, user }, reply) => {
+    async ({ body, user, headers }, reply) => {
       // Hold the posted bundle to the same contract the player enforces before
       // driving a browser with it.
       const validation = validateRecordingBundle(body.bundle);
@@ -118,6 +137,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
         bundle: validation.bundle,
         userId: user.id,
         title: body.title,
+        bundleBytes: Number(headers["content-length"]) || undefined,
       });
       return reply.send({ jobId });
     },

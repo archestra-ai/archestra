@@ -1255,6 +1255,7 @@ export function parseHackathonRecorderEnabled(params: {
  */
 export const DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID =
   "Ov23liqkaqAROe7B7ZZ4";
+/** @public — exported for testability (see the client-id default above) */
 export const DEFAULT_HACKATHON_GALLERY_REPO = "archestra-ai/apps-gallery";
 
 /**

@@ -189,13 +189,15 @@
   /** How long a recorded input event counts as activity (event-driven draws). */
   const INPUT_ACTIVITY_MS = 1_000;
   /**
-   * Captured frames are capped at this many pixels. Encode cost is linear in
-   * pixel count, and a full-viewport canvas on a 2x display is ~6MP — encoding
-   * that every sample is a main-thread stall that dragged a recorded WebGL
-   * app below usability. The player scales the replayed app to fit anyway, so
-   * pixels past roughly 720p never reach a viewer's eye.
+   * Captured frames are capped at this many pixels (~1080p-class). Encode cost
+   * is linear in pixel count but runs off the main thread, and the queue-depth
+   * guard below sheds load on machines that can't keep up — the cap only
+   * exists for the truly huge sources (a full-viewport canvas on a 2x display
+   * approaches ~6MP). It sits high enough that a HiDPI canvas keeps most of
+   * its native resolution: the old ~720p cap threw away nearly half of a 2x
+   * backing store's linear detail, which replayed as the "low-res" look.
    */
-  const CANVAS_CAPTURE_MAX_PIXELS = 1280 * 720;
+  const CANVAS_CAPTURE_MAX_PIXELS = 1920 * 1080;
   const canvasLastFrame = new WeakMap();
   /** Canvases with a capture currently encoding — see the backpressure note. */
   const canvasCaptureBusy = new WeakSet();
@@ -223,38 +225,87 @@
   // VP9 hardware encode is common on the machines that record. A browser that
   // can encode neither (or has no WebCodecs) records WebP stills instead.
   const VIDEO_CODEC_CANDIDATES = ["vp09.00.10.08", "vp8"];
-  const VIDEO_BITRATE = 2_500_000;
+  /**
+   * Fallback rate control, only for encoders without per-frame quantizers:
+   * bits scale with the captured area (one fixed rate that suits 720p starves
+   * 1080p), clamped so tiny canvases stay decent and huge ones stay bounded.
+   */
+  const VIDEO_BITRATE_PER_PIXEL = 3.5;
+  const VIDEO_BITRATE_MIN = 3_000_000;
+  const VIDEO_BITRATE_MAX = 8_000_000;
   const VIDEO_KEYFRAME_MS = 1_000;
   /** How deep the encoder's input queue may grow before frames are skipped. */
   const VIDEO_MAX_QUEUE = 2;
-  /** canvas → { encoder, sel, width, height, lastKeyMs, errored } */
+  // ── Constant quality (per-frame quantizer), where the encoder supports it.
+  // Quality stays fixed and bytes follow content: an unchanged scene encodes
+  // to skip-block deltas of a few hundred bytes, motion costs what it costs.
+  // Two feedback loops keep it safe: queue pressure raises the quantizer —
+  // cheaper frames also encode FASTER, so a slow machine softens briefly
+  // instead of dropping frames — and a byte-rate governor nudges it up when
+  // the rolling output rate crosses its ceiling, so a worst-case all-motion
+  // recording stays bounded instead of growing without limit.
+  const VIDEO_BASE_QP = 30; // VP9 0..63 — visually clean for UI/3D content
+  /** Keys are what seeks land on and posters paint — spend more on them. */
+  const VIDEO_KEY_QP_BONUS = 4;
+  const VIDEO_MIN_QP = 12;
+  const VIDEO_MAX_QP = 56;
+  const VIDEO_QP_BOOST_STEP = 3;
+  const VIDEO_QP_BOOST_MAX = 18;
+  const VIDEO_GOVERNOR_MAX_BPS = 8_000_000;
+  const VIDEO_GOVERNOR_WINDOW_MS = 2_000;
+  const VIDEO_GOVERNOR_QP_MAX = 12;
+  /** canvas → { encoder, sel, width, height, lastKeyMs, errored, ... } */
   const videoStreams = new WeakMap();
-  /** undefined = not probed yet; null = unsupported; string = chosen codec. */
-  let videoCodec;
+  /** undefined = not probed yet; null = unsupported; else the chosen mode
+   *  { codec, quantizer } — quantizer true = constant-quality encoding. */
+  let videoMode;
   let videoCodecProbe = null;
   let videoDraining = false;
+
+  const videoBitrateFor = (pixels) =>
+    Math.max(
+      VIDEO_BITRATE_MIN,
+      Math.min(VIDEO_BITRATE_MAX, Math.round(pixels * VIDEO_BITRATE_PER_PIXEL)),
+    );
 
   const probeVideoCodec = () => {
     if (videoCodecProbe) return videoCodecProbe;
     videoCodecProbe = (async () => {
       if (typeof VideoEncoder !== "function") return null;
+      // Constant quality first — VP9 only, VP8 has no per-frame quantizer in
+      // WebCodecs. A browser without quantizer mode falls back to bitrate.
+      try {
+        const support = await VideoEncoder.isConfigSupported({
+          codec: VIDEO_CODEC_CANDIDATES[0],
+          width: 1280,
+          height: 720,
+          bitrateMode: "quantizer",
+          latencyMode: "realtime",
+        });
+        if (support && support.supported) {
+          return { codec: VIDEO_CODEC_CANDIDATES[0], quantizer: true };
+        }
+      } catch {
+        // fall through to the bitrate candidates
+      }
       for (const codec of VIDEO_CODEC_CANDIDATES) {
         try {
           const support = await VideoEncoder.isConfigSupported({
             codec,
             width: 1280,
             height: 720,
-            bitrate: VIDEO_BITRATE,
+            bitrate: videoBitrateFor(1280 * 720),
+            latencyMode: "realtime",
           });
-          if (support && support.supported) return codec;
+          if (support && support.supported) return { codec, quantizer: false };
         } catch {
           // an unparseable candidate just means "not this one"
         }
       }
       return null;
-    })().then((codec) => {
-      videoCodec = codec;
-      return codec;
+    })().then((mode) => {
+      videoMode = mode;
+      return mode;
     });
     return videoCodecProbe;
   };
@@ -263,7 +314,7 @@
     const event = {
       kind: "video-config",
       sel,
-      codec: videoCodec,
+      codec: videoMode.codec,
       codedWidth: width,
       codedHeight: height,
     };
@@ -290,6 +341,11 @@
       errored: false,
       encoder: null,
       descriptionSent: false,
+      // Constant-quality state: the two quantizer feedback terms and the
+      // rolling output window the governor measures.
+      qpBoost: 0,
+      governorQp: 0,
+      rateWindow: [],
     };
     try {
       stream.encoder = new VideoEncoder({
@@ -314,6 +370,9 @@
               tsUs: Math.max(0, Math.round(chunk.timestamp || 0)),
               bytes,
             });
+            if (videoMode && videoMode.quantizer) {
+              governVideoRate(stream, bytes.byteLength);
+            }
           } catch {
             // a dropped chunk must never break the app
           }
@@ -322,13 +381,28 @@
           stream.errored = true;
         },
       });
-      stream.encoder.configure({
-        codec: videoCodec,
+      const config = {
+        codec: videoMode.codec,
         width,
         height,
-        bitrate: VIDEO_BITRATE,
+        // Realtime, deliberately — NOT the quality preset. Quality mode's
+        // lookahead can emit a wall-clock-forced keyframe OUT OF DECODE ORDER
+        // when the input cadence is irregular (capture idles at the keepalive
+        // rate between bursts), and one stale key makes the whole stored tail
+        // undecodable. Realtime has no lookahead, so output order is strict —
+        // and under a per-frame quantizer the quality preset measured zero
+        // size or quality benefit anyway (its wins live in rate control,
+        // which quantizer mode replaces). The hint keeps edges (wireframes,
+        // text) ahead of motion smoothness.
         latencyMode: "realtime",
-      });
+        contentHint: "detail",
+      };
+      if (videoMode.quantizer) {
+        config.bitrateMode = "quantizer";
+      } else {
+        config.bitrate = videoBitrateFor(width * height);
+      }
+      stream.encoder.configure(config);
     } catch {
       return null;
     }
@@ -383,7 +457,20 @@
       if (!stream) return;
       videoStreams.set(canvas, stream);
     }
-    if (stream.encoder.encodeQueueSize > VIDEO_MAX_QUEUE) return;
+    // Queue pressure: in quantizer mode the first response is a cheaper —
+    // and therefore faster-to-encode — frame, so a machine that falls behind
+    // softens briefly instead of stuttering; only a queue past the hard cap
+    // still skips the frame outright.
+    const queue = stream.encoder.encodeQueueSize;
+    if (queue >= 1) {
+      stream.qpBoost = Math.min(
+        stream.qpBoost + VIDEO_QP_BOOST_STEP,
+        VIDEO_QP_BOOST_MAX,
+      );
+    } else if (stream.qpBoost > 0) {
+      stream.qpBoost -= 1;
+    }
+    if (queue > VIDEO_MAX_QUEUE) return;
 
     let source = canvas;
     if (width !== canvas.width || height !== canvas.height) {
@@ -392,6 +479,9 @@
       if (scratchCanvas.height !== height) scratchCanvas.height = height;
       const ctx = scratchCanvas.getContext("2d");
       if (!ctx) return;
+      // The one place capture resamples — use the good filter for it.
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       try {
         ctx.drawImage(canvas, 0, 0, width, height);
       } catch {
@@ -408,12 +498,53 @@
       return;
     }
     try {
-      stream.encoder.encode(frame, { keyFrame });
+      const options = { keyFrame };
+      if (videoMode.quantizer) {
+        const qp = Math.min(
+          VIDEO_MAX_QP,
+          Math.max(
+            VIDEO_MIN_QP,
+            VIDEO_BASE_QP + stream.qpBoost + stream.governorQp,
+          ),
+        );
+        options.vp9 = {
+          quantizer: keyFrame
+            ? Math.max(VIDEO_MIN_QP, qp - VIDEO_KEY_QP_BONUS)
+            : qp,
+        };
+      }
+      stream.encoder.encode(frame, options);
       if (keyFrame) stream.lastKeyMs = atMs;
     } catch {
       stream.errored = true;
     } finally {
       frame.close();
+    }
+  };
+
+  /**
+   * The byte-rate governor: constant quality has no ceiling of its own, so
+   * when the rolling output rate crosses the cap, quality gives way one
+   * quantizer step per chunk (and comes back the same way once safely under).
+   * Bounds a worst-case all-motion recording without touching typical ones.
+   */
+  const governVideoRate = (stream, chunkBytes) => {
+    const now = nowMs();
+    const window = stream.rateWindow;
+    window.push({ t: now, bytes: chunkBytes });
+    while (window.length && window[0].t < now - VIDEO_GOVERNOR_WINDOW_MS) {
+      window.shift();
+    }
+    let bytes = 0;
+    for (const entry of window) bytes += entry.bytes;
+    const bps = (bytes * 8 * 1000) / VIDEO_GOVERNOR_WINDOW_MS;
+    if (bps > VIDEO_GOVERNOR_MAX_BPS) {
+      stream.governorQp = Math.min(
+        stream.governorQp + 1,
+        VIDEO_GOVERNOR_QP_MAX,
+      );
+    } else if (bps < VIDEO_GOVERNOR_MAX_BPS * 0.85 && stream.governorQp > 0) {
+      stream.governorQp -= 1;
     }
   };
 
@@ -483,6 +614,8 @@
         scratchCanvas.height = Math.max(1, Math.round(canvas.height * scale));
         const ctx = scratchCanvas.getContext("2d");
         if (!ctx) return done(null);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
         ctx.drawImage(canvas, 0, 0, scratchCanvas.width, scratchCanvas.height);
         source = scratchCanvas;
       }
@@ -564,9 +697,9 @@
       // stills for the whole recording. A canvas whose encoder errored falls
       // through to stills for good. The stop-time sync capture is stills-only:
       // video canvases are closed out by the encoder drain instead.
-      if (videoCodec === undefined && videoCodecProbe) continue;
+      if (videoMode === undefined && videoCodecProbe) continue;
       const stream = videoStreams.get(canvas);
-      if (videoCodec && !(stream && stream.errored)) {
+      if (videoMode && !(stream && stream.errored)) {
         if (sync) continue;
         canvasLastAttemptAt.set(canvas, now);
         feedVideoFrame(canvas);

@@ -2,7 +2,6 @@ import {
   BufferTarget,
   Mp4OutputFormat,
   Output,
-  QUALITY_HIGH,
   VideoSample,
   VideoSampleSource,
 } from "mediabunny";
@@ -57,7 +56,7 @@ class VideoEncoderSession {
     });
     const source = new VideoSampleSource({
       codec: "avc",
-      bitrate: QUALITY_HIGH,
+      bitrate: exportBitrate(params),
     });
     output.addVideoTrack(source, { frameRate: params.fps });
     await output.start();
@@ -200,6 +199,31 @@ export const finishEncoder = (): Promise<string> => encoder.finish();
 
 /** Where a legacy renderer's never-drained queue is absorbed instead. */
 const LEGACY_SELF_DRAIN_DEPTH = 24;
+
+/**
+ * Export bits scale with the region. mediabunny's QUALITY_HIGH preset
+ * resolved to ~1.3 Mbps for a ~1.5MP frame — fine for the mostly-static chat
+ * pane, visibly soft on the animating app pane. ~0.14 bits per pixel per
+ * frame keeps motion crisp (~5 Mbps for the typical region at 24fps, a 30s
+ * file around 20MB); the clamp bounds tiny and huge regions.
+ */
+const EXPORT_BITS_PER_PIXEL_FRAME = 0.14;
+
+function exportBitrate(params: {
+  width: number;
+  height: number;
+  fps: number;
+}): number {
+  return Math.min(
+    10_000_000,
+    Math.max(
+      2_000_000,
+      Math.round(
+        params.width * params.height * params.fps * EXPORT_BITS_PER_PIXEL_FRAME,
+      ),
+    ),
+  );
+}
 
 interface EncoderSession {
   output: Output;

@@ -1,4 +1,5 @@
 export { anthropicAdapterFactory } from "./anthropic";
+export { archestraAdapterFactory } from "./archestra";
 export { azureAdapterFactory } from "./azure";
 export { azureResponsesAdapterFactory } from "./azure-responses";
 export { bedrockAdapterFactory } from "./bedrock";

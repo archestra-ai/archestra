@@ -23,6 +23,7 @@ export const SupportedProvidersSchema = z.enum([
   "azure",
   "github-copilot",
   "microsoft-365-copilot",
+  "archestra",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -50,6 +51,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:responses",
   "github-copilot:chatCompletions",
   "microsoft-365-copilot:chatCompletions",
+  "archestra:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -88,6 +90,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
   "microsoft-365-copilot": "Microsoft 365 Copilot",
+  archestra: "Archestra",
 };
 
 /**
@@ -111,6 +114,10 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
   "azure",
   "vllm",
+  // Archestra-as-provider points at another Archestra instance's OpenAI-compatible
+  // proxy endpoint (e.g. https://other/v1/proxy/openai/<agentId>); there is no
+  // default, so a key without a base URL would silently route to api.openai.com.
+  "archestra",
 ]);
 
 /**
@@ -239,6 +246,9 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   azure: "https://<resource>.openai.azure.com/openai",
   "github-copilot": "https://api.githubcopilot.com",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta",
+  // No default: the upstream is another Archestra instance's proxy endpoint,
+  // supplied per key (e.g. https://your-archestra/v1/proxy/openai/<agentId>).
+  archestra: "",
 };
 
 /**
@@ -346,6 +356,9 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4o",
   ],
   "microsoft-365-copilot": [MICROSOFT_365_COPILOT_MODELS[0].id],
+  // The upstream Archestra can front any provider, so match common flagship
+  // families across vendors (most- to least-preferred).
+  archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
 };
 
 /**
@@ -372,6 +385,8 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   azure: "gpt-5.5",
   "github-copilot": "gpt-4o",
   "microsoft-365-copilot": MICROSOFT_365_COPILOT_MODELS[0].id,
+  // Fallback only; users pick from the upstream's fetched model list.
+  archestra: "gpt-4o",
 };
 
 /**

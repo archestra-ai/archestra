@@ -99,6 +99,8 @@ export const EMBEDDING_ADAPTERS: Record<
   minimax: null,
   "github-copilot": null,
   "microsoft-365-copilot": null,
+  // Chat-only integration; embeddings are not wired for the Archestra provider.
+  archestra: null,
 };
 
 // ===== Internal helpers =====

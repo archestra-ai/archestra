@@ -1020,6 +1020,11 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.deepseek.com`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_ARCHESTRA_BASE_URL`** - Global upstream base URL for the Archestra provider (another Archestra instance's LLM proxy).
+  - No default; normally set per key in the UI
+  - A global value only enables raw passthrough at the `/v1/archestra` proxy prefix
+  - See: [Archestra provider setup](/docs/platform-supported-llm-providers#archestra)
+
 - **`ARCHESTRA_MINIMAX_BASE_URL`** - Override the MiniMax API base URL.
   - Default: `https://api.minimax.io/v1`
   - Use this to point to your own proxy or other custom endpoints
@@ -1135,7 +1140,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
-  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
+  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `ARCHESTRA`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
   - Note: `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY` holds a GitHub OAuth token (`gho_...`) of an account with a Copilot subscription, not a static API key

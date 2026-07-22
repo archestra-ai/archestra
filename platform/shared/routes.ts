@@ -266,6 +266,11 @@ export const RouteId = {
     "deepseekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
 
+  // Proxy Routes - Archestra
+  ArchestraChatCompletionsWithDefaultAgent:
+    "archestraChatCompletionsWithDefaultAgent",
+  ArchestraChatCompletionsWithAgent: "archestraChatCompletionsWithAgent",
+
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
   BedrockConverseWithAgent: "bedrockConverseWithAgent",

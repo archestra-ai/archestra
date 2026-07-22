@@ -61,6 +61,7 @@ const PROVIDER_ICONS: Record<
   zhipuai: { bg: "#dc2626", fg: "#fff", glyph: "Z" },
   "github-copilot": { bg: "#24292f", fg: "#fff", glyph: "gh" },
   "microsoft-365-copilot": { bg: "#0078d4", fg: "#fff", glyph: "ms" },
+  archestra: { bg: "#000", fg: "#fff", glyph: "A" },
 };
 
 /** Original upstream base URLs — shown struck through next to the proxy URL. */
@@ -84,6 +85,7 @@ const PROVIDER_ORIGINAL_URLS: Record<SupportedProvider, string> = {
   zhipuai: "https://open.bigmodel.cn/api/",
   "github-copilot": "https://api.githubcopilot.com/",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta/",
+  archestra: "https://<archestra-host>/v1/model-router/<llm-proxy-id>/",
 };
 
 interface ProxyClientInstructionsProps {

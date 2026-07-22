@@ -697,6 +697,7 @@ async function syncModelsForApiKey(
 function getProviderDisplayName(provider: SupportedProvider): string {
   const displayNames: Record<SupportedProvider, string> = {
     anthropic: "Anthropic",
+    archestra: "Archestra",
     openai: "OpenAI",
     openrouter: "OpenRouter",
     gemini: "Google",

@@ -203,6 +203,15 @@ const VideoConfigEventSchema = z
  * order of magnitude smaller than per-frame stills. `tsUs` is the encoder's
  * microsecond timestamp (monotonic within the stream); `data` is the chunk's
  * bytes, base64 in this stored form only.
+ *
+ * The `data` cap (~1.5MB of chunk before base64) is a corruption backstop,
+ * not a rate control — the recorder's byte-rate governor and frame shed
+ * bound throughput at record time. It is sized to admit the largest single
+ * chunk the recorder can legitimately emit: typical deltas are kilobytes and
+ * keyframes hundreds of kilobytes, but the SDK's worst case — a
+ * max-quantizer keyframe of incompressible content (noise, particles) — runs
+ * to megabytes, and a real keyframe refused here reads as a broken
+ * recording.
  */
 const VideoChunkEventSchema = z
   .object({

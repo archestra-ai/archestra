@@ -1046,15 +1046,18 @@ const registerSandboxRoute = (
   }
 
   // The Archestra Apps SDK (window.archestra), loaded by the <script src>
-  // injected into every owned app at serve time. Revalidate on every load
-  // (no-cache still allows conditional requests): the session-recording half
-  // of this file evolves with the player it talks to, and a browser replaying
-  // yesterday's cached SDK against today's player drops replay messages on
-  // the floor in ways that read as a broken recording.
+  // injected into every owned app at serve time. Cached only briefly: the
+  // session-recording half of this file evolves with the player it talks to,
+  // and a browser replaying yesterday's cached SDK against today's player
+  // drops replay messages on the floor in ways that read as a broken
+  // recording. Sixty seconds bounds that skew to the minute after a deploy
+  // while sparing every ordinary app load a re-fetch. Deliberately no
+  // stale-while-revalidate — it would serve the hour-stale copy exactly
+  // once, on the load where the skew bites.
   if (archestraAppSdk) {
     fastify.get(APP_SDK_PATH, async (_request, reply) => {
       void reply.header("Access-Control-Allow-Origin", "*");
-      void reply.header("Cache-Control", "no-cache");
+      void reply.header("Cache-Control", "public, max-age=60");
       void reply.type("text/javascript");
       return reply.send(archestraAppSdk);
     });

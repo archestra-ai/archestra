@@ -9,8 +9,9 @@ import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recordi
  * refuse browser CORS); everything else here talks straight to api.github.com,
  * which allows it. The recording bundle therefore never transits our server on
  * its way to the gallery, and the token GitHub hands back stays in the
- * browser (localStorage — one sign-in covers the hackathon); our server
- * never sees it.
+ * browser (localStorage, expiring after 24 hours — one sign-in covers a
+ * hackathon working day, without leaving a live token behind forever); our
+ * server never sees it.
  *
  * The submission is the standard fork workflow, so it needs nothing but the
  * `public_repo` scope the device flow asked for: fork the gallery repository,
@@ -55,27 +56,34 @@ export class DuplicateSubmissionError extends Error {
 
 /**
  * The participant's GitHub token — persisted in browser storage so ONE
- * sign-in covers the whole hackathon, not just one page load (re-auth on
- * every visit read as "why am I signing in again?"). Scope is public_repo
- * only; GitHub can revoke any time, and a 401 drops it so the dialog
- * re-runs the sign-in.
+ * sign-in covers a hackathon working day, not just one page load (re-auth on
+ * every visit read as "why am I signing in again?"). Not forever, though:
+ * the stored entry carries an expiry, and a token past it is dropped on
+ * read, so a finished participant isn't left with a live public_repo token
+ * sitting in localStorage indefinitely. Scope is public_repo only; GitHub
+ * can also revoke any time, and a 401 drops it so the dialog re-runs the
+ * sign-in.
  */
 const GITHUB_TOKEN_STORAGE_KEY = "archestra.appGalleryGithubToken";
+const GITHUB_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
-let cachedToken: string | null = null;
+let cachedEntry: { token: string; expiresAt: number } | null = null;
 
 export function takeCachedGithubToken(): string | null {
-  if (cachedToken) return cachedToken;
-  try {
-    cachedToken = localStorage.getItem(GITHUB_TOKEN_STORAGE_KEY);
-  } catch {
-    // Storage blocked — in-memory only, sign-in returns each page load.
+  const entry = cachedEntry ?? readStoredTokenEntry();
+  if (!entry) return null;
+  // Checked on every read, not just page load — a tab left open past the
+  // expiry must not keep using the token from memory.
+  if (Date.now() >= entry.expiresAt) {
+    dropCachedGithubToken();
+    return null;
   }
-  return cachedToken;
+  cachedEntry = entry;
+  return entry.token;
 }
 
 export function dropCachedGithubToken(): void {
-  cachedToken = null;
+  cachedEntry = null;
   try {
     localStorage.removeItem(GITHUB_TOKEN_STORAGE_KEY);
   } catch {
@@ -528,6 +536,13 @@ type GithubCall = <T = unknown>(
   body?: unknown,
 ) => Promise<T>;
 
+/**
+ * Success bodies are cast to the caller's type without runtime validation —
+ * GitHub's documented response shapes are trusted as-is. Deliberate: the
+ * handful of fields read here (login, sha, html_url…) have been stable for a
+ * decade, and a drift would surface as the dialog's error card on the next
+ * step rather than corrupt anything.
+ */
 function makeGithubClient(token: string, signal: AbortSignal): GithubCall {
   return async <T>(method: string, path: string, body?: unknown) => {
     let response: Response;
@@ -745,12 +760,43 @@ function githubPublicHeaders(): Record<string, string> {
 }
 
 function storeGithubToken(token: string): void {
-  cachedToken = token;
+  const entry = { token, expiresAt: Date.now() + GITHUB_TOKEN_TTL_MS };
+  cachedEntry = entry;
   try {
-    localStorage.setItem(GITHUB_TOKEN_STORAGE_KEY, token);
+    localStorage.setItem(GITHUB_TOKEN_STORAGE_KEY, JSON.stringify(entry));
   } catch {
     // Storage blocked — the tab keeps it in memory.
   }
+}
+
+/**
+ * The stored `{ token, expiresAt }` entry, or null. Anything unreadable — a
+ * plain-string token from before entries carried an expiry, or corruption —
+ * is cleared on sight: with no expiry to honor, the only safe treatment is
+ * a fresh sign-in.
+ */
+function readStoredTokenEntry(): { token: string; expiresAt: number } | null {
+  try {
+    const raw = localStorage.getItem(GITHUB_TOKEN_STORAGE_KEY);
+    if (!raw) return null;
+    let parsed: { token?: unknown; expiresAt?: unknown } | null = null;
+    try {
+      parsed = JSON.parse(raw) as { token?: unknown; expiresAt?: unknown };
+    } catch {
+      // fall through to the cleanup below
+    }
+    if (
+      parsed &&
+      typeof parsed.token === "string" &&
+      typeof parsed.expiresAt === "number"
+    ) {
+      return { token: parsed.token, expiresAt: parsed.expiresAt };
+    }
+    localStorage.removeItem(GITHUB_TOKEN_STORAGE_KEY);
+  } catch {
+    // Storage blocked — in-memory only, sign-in returns each page load.
+  }
+  return null;
 }
 
 function submissionStorageKey(repo: AppGalleryRepo, slug: string): string {

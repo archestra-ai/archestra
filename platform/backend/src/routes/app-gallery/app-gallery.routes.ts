@@ -19,7 +19,7 @@ import { ApiError, constructResponseSchema } from "@/types";
  * submission itself — fork the gallery repository, commit the recording
  * bundle, open the pull request — runs entirely in the browser against
  * api.github.com (which does allow CORS), so the recording never transits
- * this server and the token is returned once to its owner and never stored.
+ * this server and the token is returned once to its owner, never stored here.
  */
 const appGalleryRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Same availability gate as the recorder routes, plus: sharing only exists
@@ -235,9 +235,9 @@ const DevicePollResponseSchema = z.discriminatedUnion("status", [
     status: z.literal("complete"),
     /**
      * The caller's own GitHub OAuth token, scoped to public repositories. The
-     * frontend holds it in memory for the submission calls it makes directly
-     * against api.github.com and drops it with the page — it is never sent
-     * back to this server.
+     * frontend uses it for the submission calls it makes directly against
+     * api.github.com and keeps it in browser storage under a 24-hour expiry —
+     * it is never sent back to this server.
      */
     accessToken: z.string(),
   }),

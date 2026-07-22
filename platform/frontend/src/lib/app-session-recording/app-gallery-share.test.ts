@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 import {
   buildGallerySubmissionFiles,
@@ -10,6 +10,7 @@ import {
   recallGallerySubmission,
   rememberGallerySubmission,
   submitRecordingToAppGallery,
+  takeCachedGithubToken,
 } from "./app-gallery-share";
 
 /**
@@ -19,6 +20,12 @@ import {
  * thumbnail when the recording has canvas frames), open the PR. These tests
  * stub fetch and pin that wire sequence, including the duplicate guards.
  */
+
+afterEach(() => {
+  // vitest is not configured to auto-unstub globals, so put the real fetch
+  // back explicitly instead of leaning on every later test re-stubbing it.
+  vi.unstubAllGlobals();
+});
 
 function makeBundle(
   events: AppRecordingBundle["recording"]["events"] = [],
@@ -592,6 +599,54 @@ describe("gallery submission memory", () => {
     expect(
       recallGallerySubmission({ repo, slug: "pr_review_queue" }),
     ).toBeNull();
+  });
+});
+
+describe("github token storage", () => {
+  const KEY = "archestra.appGalleryGithubToken";
+
+  beforeEach(() => {
+    dropCachedGithubToken();
+    localStorage.clear();
+  });
+
+  test("a stored token is usable until its expiry, then dropped from storage", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ token: "gho_live", expiresAt: Date.now() + 60_000 }),
+    );
+    expect(takeCachedGithubToken()).toBe("gho_live");
+
+    dropCachedGithubToken();
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ token: "gho_stale", expiresAt: Date.now() - 1 }),
+    );
+    expect(takeCachedGithubToken()).toBeNull();
+    // The expired entry is gone, not just ignored — no live-scoped token
+    // left sitting in localStorage after the hackathon.
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  test("a tab held open past the expiry stops using the in-memory copy too", () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(
+        KEY,
+        JSON.stringify({ token: "gho_live", expiresAt: Date.now() + 1_000 }),
+      );
+      expect(takeCachedGithubToken()).toBe("gho_live");
+      vi.advanceTimersByTime(1_001);
+      expect(takeCachedGithubToken()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("an entry without an expiry (pre-TTL token, corruption) is cleared on sight", () => {
+    localStorage.setItem(KEY, "gho_bare_legacy_token");
+    expect(takeCachedGithubToken()).toBeNull();
+    expect(localStorage.getItem(KEY)).toBeNull();
   });
 });
 

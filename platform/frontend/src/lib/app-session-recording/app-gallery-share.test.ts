@@ -148,6 +148,9 @@ describe("submitRecordingToAppGallery", () => {
     expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
       "GET /user",
       "GET /repos/archestra-ai/app-gallery/pulls",
+      // The in-the-gallery-already probe: the submission's file on the
+      // gallery's default branch.
+      "GET /repos/archestra-ai/app-gallery/contents/submissions/sam/pr_review_queue/recording.json",
       "POST /repos/archestra-ai/app-gallery/forks",
       "GET /repos/sam/app-gallery/git/ref/heads/main",
       "POST /repos/sam/app-gallery/git/refs",
@@ -285,7 +288,40 @@ describe("submitRecordingToAppGallery", () => {
     expect(calls.every((c) => c.method === "GET")).toBe(true);
   });
 
-  test("a merged pull request blocks too — the app is already in the gallery", async () => {
+  test("a merged pull request blocks while its files are still in the gallery", async () => {
+    stubGithub({
+      respond: (method, url) => {
+        if (method === "GET" && url.includes("/pulls?")) {
+          return Response.json([
+            {
+              state: "closed",
+              merged_at: "2026-07-20T00:00:00Z",
+              html_url: "https://github.com/archestra-ai/app-gallery/pull/4",
+            },
+          ]);
+        }
+        if (
+          method === "GET" &&
+          url.includes("/repos/archestra-ai/app-gallery/contents/")
+        ) {
+          return Response.json({ sha: "in-gallery" });
+        }
+        return null;
+      },
+    });
+
+    const failure = await submit().catch((error) => error);
+    expect(failure).toBeInstanceOf(DuplicateSubmissionError);
+    expect(failure).toMatchObject({
+      merged: true,
+      prUrl: "https://github.com/archestra-ai/app-gallery/pull/4",
+    });
+  });
+
+  test("a merged pull request whose files were since removed does NOT block", async () => {
+    // GitHub keeps merged_at forever — but the gallery's default branch was
+    // rewritten (or the submission reverted), so the app is NOT in the
+    // gallery and a fresh submission must go through.
     stubGithub({
       respond: (method, url) =>
         method === "GET" && url.includes("/pulls?")
@@ -299,9 +335,30 @@ describe("submitRecordingToAppGallery", () => {
           : null,
     });
 
+    const result = await submit();
+    expect(result.prUrl).toBe(
+      "https://github.com/archestra-ai/app-gallery/pull/7",
+    );
+  });
+
+  test("files sitting in the gallery block even with no pull request on record", async () => {
+    // A hand-made (manual) submission has no PR from this head — the files
+    // themselves are the signal, and the folder is what gets linked.
+    stubGithub({
+      respond: (method, url) =>
+        method === "GET" &&
+        url.includes("/repos/archestra-ai/app-gallery/contents/")
+          ? Response.json({ sha: "in-gallery" })
+          : null,
+    });
+
     const failure = await submit().catch((error) => error);
     expect(failure).toBeInstanceOf(DuplicateSubmissionError);
-    expect(failure).toMatchObject({ merged: true });
+    expect(failure).toMatchObject({
+      merged: true,
+      prUrl:
+        "https://github.com/archestra-ai/app-gallery/tree/HEAD/submissions/sam/pr_review_queue",
+    });
   });
 
   test("a closed-unmerged (rejected) pull request does not block a resubmission", async () => {
@@ -333,7 +390,12 @@ describe("submitRecordingToAppGallery", () => {
             { status: 422 },
           );
         }
-        if (method === "GET" && url.includes("/contents/")) {
+        // Only the FORK's file lookup — the upstream gallery-presence probe
+        // must keep 404ing, or it would read as "already in the gallery".
+        if (
+          method === "GET" &&
+          url.includes("/repos/sam/app-gallery/contents/")
+        ) {
           return Response.json({ sha: "stale-blob-sha" });
         }
         return null;
@@ -538,7 +600,6 @@ describe("fetchSubmittedPrState", () => {
 
   test.each([
     ["open", { state: "open", merged_at: null }],
-    ["merged", { state: "closed", merged_at: "2026-07-20T00:00:00Z" }],
     ["closed", { state: "closed", merged_at: null }],
   ] as const)("reports %s", async (expected, payload) => {
     vi.stubGlobal(
@@ -546,6 +607,38 @@ describe("fetchSubmittedPrState", () => {
       vi.fn(async () => Response.json(payload)),
     );
     await expect(fetchSubmittedPrState(prUrl)).resolves.toBe(expected);
+  });
+
+  test("merged counts only while the submission is still in the gallery", async () => {
+    const stubMergedPr = (contents: () => Response) =>
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.includes("/files")) {
+            return Response.json([
+              { filename: "submissions/sam/pr_review_queue/recording.json" },
+            ]);
+          }
+          if (url.includes("/contents/")) return contents();
+          return Response.json({
+            state: "closed",
+            merged_at: "2026-07-20T00:00:00Z",
+          });
+        }),
+      );
+
+    stubMergedPr(() => Response.json({ sha: "still-there" }));
+    await expect(fetchSubmittedPrState(prUrl)).resolves.toBe("merged");
+
+    // Files gone (revert / history rewrite) — behaves like a closed PR, so
+    // the remembered submission clears and the button re-enables.
+    stubMergedPr(() => new Response("", { status: 404 }));
+    await expect(fetchSubmittedPrState(prUrl)).resolves.toBe("closed");
+
+    // Can't tell → never a false verdict.
+    stubMergedPr(() => new Response("", { status: 500 }));
+    await expect(fetchSubmittedPrState(prUrl)).resolves.toBe("unknown");
   });
 
   test("anything unverifiable is unknown, never a false verdict", async () => {

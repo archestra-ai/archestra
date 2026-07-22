@@ -17,10 +17,11 @@ import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recordi
  * branch the fork, commit the bundle (and a thumbnail when the recording
  * carries canvas frames), then open the pull request on the gallery.
  *
- * One app, one submission: the branch name is stable per participant+app, and
- * an open or merged pull request from it blocks a duplicate — checked up
- * front and re-checked at each step that could mint one, so even racing runs
- * end up pointed at the one existing PR instead of filing another.
+ * One app, one submission: the branch name is stable per participant+app,
+ * and a duplicate is blocked while an open pull request from it exists or
+ * the submission's files sit in the gallery — checked up front and
+ * re-checked at each step that could mint one, so even racing runs end up
+ * pointed at the one existing submission instead of filing another.
  */
 
 interface AppGalleryRepo {
@@ -184,9 +185,9 @@ export async function submitRecordingToAppGallery(params: {
 
   // The branch name is deliberately STABLE per participant+app — no
   // timestamp. That is what makes a duplicate recognizable at all: the
-  // pre-flight below finds any open/merged PR from it, and GitHub itself
-  // refuses a second branch or second PR under the same name if two runs
-  // race past the check.
+  // pre-flight below finds an open PR from it or the app already in the
+  // gallery, and GitHub itself refuses a second branch or second PR under
+  // the same name if two runs race past the check.
   const appSlug = gallerySubmissionSlug(bundle);
   const branch = gallerySubmissionBranch(appSlug);
 
@@ -201,11 +202,12 @@ export async function submitRecordingToAppGallery(params: {
     label: `Checking ${galleryName} for an existing submission…`,
   });
   const viewer = await gh<{ login: string }>("GET", "/user");
-  const existing = await findBlockingPullRequest({
+  const existing = await findBlockingSubmission({
     gh,
     repo,
     login: viewer.login,
     branch,
+    slug: appSlug,
   });
   if (existing) throw new DuplicateSubmissionError(existing);
 
@@ -251,11 +253,12 @@ export async function submitRecordingToAppGallery(params: {
     // in since the pre-flight (stop and point at it), or a rejected
     // submission left the branch behind (reuse it — the uploads below put
     // the fresh files on top).
-    const raced = await findBlockingPullRequest({
+    const raced = await findBlockingSubmission({
       gh,
       repo,
       login: viewer.login,
       branch,
+      slug: appSlug,
     });
     if (raced) throw new DuplicateSubmissionError(raced);
   }
@@ -301,11 +304,12 @@ export async function submitRecordingToAppGallery(params: {
     // Even the last-instant race loses cleanly: GitHub refuses a second PR
     // for the same head, and the winner — whose diff now shows the files
     // this run just committed — is what the participant gets pointed at.
-    const raced = await findBlockingPullRequest({
+    const raced = await findBlockingSubmission({
       gh,
       repo,
       login: viewer.login,
       branch,
+      slug: appSlug,
     });
     if (!raced) throw error;
     throw new DuplicateSubmissionError(raced);
@@ -467,10 +471,10 @@ export function forgetGallerySubmission(params: {
 
 /**
  * Where a previously-submitted pull request stands now. Lets a remembered
- * submission expire: "closed" (rejected, unmerged) clears the way for a
- * resubmission, while "unknown" (network trouble, rate limit, a private
- * gallery without a token) leaves the button alone and defers to the
- * submission's own pre-flight check.
+ * submission expire: "closed" (rejected — or merged but no longer in the
+ * gallery) clears the way for a resubmission, while "unknown" (network
+ * trouble, rate limit, a private gallery without a token) leaves the button
+ * alone and defers to the submission's own pre-flight check.
  */
 export async function fetchSubmittedPrState(
   prUrl: string,
@@ -486,13 +490,7 @@ export async function fetchSubmittedPrState(
         // GitHub's API answers are cacheable for a minute — a PR closed
         // seconds ago must not come back as still open.
         cache: "no-store",
-        headers: {
-          accept: "application/vnd.github+json",
-          "x-github-api-version": "2022-11-28",
-          ...(takeCachedGithubToken()
-            ? { authorization: `Bearer ${takeCachedGithubToken()}` }
-            : {}),
-        },
+        headers: githubPublicHeaders(),
       },
     );
     if (!response.ok) return "unknown";
@@ -500,7 +498,15 @@ export async function fetchSubmittedPrState(
       state?: string;
       merged_at?: string | null;
     };
-    if (pr.merged_at) return "merged";
+    if (pr.merged_at) {
+      // Merged is only the truth while the files are still in the gallery —
+      // GitHub keeps merged_at forever, even after a revert or a history
+      // rewrite removed the submission. Gone files behave like "closed".
+      return await mergedSubmissionStillPresent(
+        { owner: match[1], name: match[2], number: match[3] },
+        signal,
+      );
+    }
     return pr.state === "open" ? "open" : "closed";
   } catch {
     return "unknown";
@@ -625,39 +631,65 @@ function isAlreadyExistsRefusal(error: unknown): boolean {
 }
 
 /**
- * The open-or-merged pull request already submitted from `login:branch`, if
- * any. Merged blocks like open does; a closed-unmerged (rejected) PR frees
- * the app for resubmission. The `head` filter makes this one exact lookup.
+ * The submission that blocks a new one, if any: an OPEN pull request from
+ * `login:branch` (waiting for review), or the submission's files sitting on
+ * the gallery's default branch right now (in the gallery). Presence of the
+ * FILES is the truthful "merged" signal — GitHub keeps a PR's `merged_at`
+ * forever, so a merged submission that was since reverted, removed, or
+ * erased by a history rewrite must not keep blocking on the PR's say-so.
  */
-async function findBlockingPullRequest(params: {
+async function findBlockingSubmission(params: {
   gh: GithubCall;
   repo: AppGalleryRepo;
   login: string;
   branch: string;
+  slug: string;
 }): Promise<{ prUrl: string; merged: boolean } | null> {
-  const { gh, repo, login, branch } = params;
+  const { gh, repo, login, branch, slug } = params;
   const pulls = await gh<
     { state: string; merged_at: string | null; html_url: string }[]
   >(
     "GET",
     `/repos/${repo.owner}/${repo.name}/pulls?head=${encodeURIComponent(`${login}:${branch}`)}&state=all&per_page=100`,
   );
-  const blocking = pulls.find((pr) => pr.state === "open" || pr.merged_at);
-  return blocking
-    ? { prUrl: blocking.html_url, merged: Boolean(blocking.merged_at) }
-    : null;
+  const open = pulls.find((pr) => pr.state === "open");
+  if (open) return { prUrl: open.html_url, merged: false };
+
+  const folder = gallerySubmissionFolder(login, slug);
+  const inGallery = await fetchExistingFileSha({
+    gh,
+    path: `/repos/${repo.owner}/${repo.name}/contents/${folder}/recording.json`,
+  });
+  if (inGallery) {
+    // Link the PR that carried it in when one exists; a hand-made submission
+    // (no PR from this head) links the folder itself.
+    const merged = pulls.find((pr) => pr.merged_at);
+    return {
+      prUrl:
+        merged?.html_url ??
+        `https://github.com/${repo.owner}/${repo.name}/tree/HEAD/${folder}`,
+      merged: true,
+    };
+  }
+  return null;
 }
 
-/** The blob sha at `path` on `branch`, or null when the file isn't there. */
+/**
+ * The blob sha at `path` on `branch` (the repository's default branch when
+ * omitted), or null when the file isn't there.
+ */
 async function fetchExistingFileSha(params: {
   gh: GithubCall;
   path: string;
-  branch: string;
+  branch?: string;
 }): Promise<string | null> {
   try {
+    const ref = params.branch
+      ? `?ref=${encodeURIComponent(params.branch)}`
+      : "";
     const file = await params.gh<{ sha: string }>(
       "GET",
-      `${params.path}?ref=${encodeURIComponent(params.branch)}`,
+      `${params.path}${ref}`,
     );
     return file.sha;
   } catch (error) {
@@ -666,6 +698,45 @@ async function fetchExistingFileSha(params: {
     }
     throw error;
   }
+}
+
+/**
+ * Whether a merged submission's files still sit in the target repository:
+ * the PR's first changed file, looked up on the default branch. "merged"
+ * when present, "closed" when definitively gone, "unknown" when it can't
+ * be told.
+ */
+async function mergedSubmissionStillPresent(
+  pr: { owner: string; name: string; number: string },
+  signal?: AbortSignal,
+): Promise<"merged" | "closed" | "unknown"> {
+  try {
+    const filesResponse = await fetch(
+      `https://api.github.com/repos/${pr.owner}/${pr.name}/pulls/${pr.number}/files?per_page=1`,
+      { signal, cache: "no-store", headers: githubPublicHeaders() },
+    );
+    if (!filesResponse.ok) return "unknown";
+    const [first] = (await filesResponse.json()) as { filename?: string }[];
+    if (!first?.filename) return "unknown";
+    const contentsResponse = await fetch(
+      `https://api.github.com/repos/${pr.owner}/${pr.name}/contents/${first.filename}`,
+      { signal, cache: "no-store", headers: githubPublicHeaders() },
+    );
+    if (contentsResponse.ok) return "merged";
+    return contentsResponse.status === 404 ? "closed" : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Headers for direct api.github.com lookups (token attached when present). */
+function githubPublicHeaders(): Record<string, string> {
+  const token = takeCachedGithubToken();
+  return {
+    accept: "application/vnd.github+json",
+    "x-github-api-version": "2022-11-28",
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+  };
 }
 
 function storeGithubToken(token: string): void {

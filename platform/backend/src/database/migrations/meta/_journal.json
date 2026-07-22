@@ -2507,6 +2507,13 @@
       "when": 1784651487839,
       "tag": "0357_curvy_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 358,
+      "version": "7",
+      "when": 1784717911739,
+      "tag": "0358_curved_rumiko_fujikawa",
+      "breakpoints": true
     }
   ]
 }

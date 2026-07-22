@@ -608,6 +608,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "chat active run event stream; child of chatActiveRunsTable",
   },
+  chatToolExecutionClaimsTable: {
+    audited: false,
+    reason:
+      "per-tool-call idempotency ledger; runtime dedup state, mcp_tool_calls audits the execution",
+  },
 
   // =========================================================================
   // Site notifications

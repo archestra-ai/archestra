@@ -572,7 +572,10 @@ describe("renderClaudeCodeStartupGuardScript", () => {
       expect(content).not.toContain(CLAUDE_CODE_GUARD_MARKER_START);
       expect(content).toContain(PROFILE_SENTINEL);
     }
-    expect(output).toContain("Nothing connected is left to check");
+    // the self-removal is silent — no trailing explainer after the
+    // Disconnected rows
+    expect(output).toContain("Disconnected Skills marketplace (acme-skills)");
+    expect(output).not.toContain("Nothing connected is left to check");
   });
 
   test("interactive, one remote down, d at the prompt: disconnects only it and keeps the guard for the rest", async () => {

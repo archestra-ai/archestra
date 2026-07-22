@@ -338,17 +338,11 @@ function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on late
   }
 }
 
-function Show-ArchRemovedNote {
-  Clear-ArchLine
-  Write-Arch '✓' Magenta -NoNewline
-  Write-Arch (' Nothing connected is left to check — removed the ' + $AppName + ' startup check. Reconnect any time from the ' + $AppName + ' /connection page.') DarkGray
-}
-
 # Every down remote already got its failure line during the turn; this single
 # prompt then covers them all — disconnect everything that failed in one
 # keypress, or skip them all and go straight to claude. When every remote is
 # down and the user disconnects, nothing is left to check, so the guard
-# removes itself too.
+# silently removes itself too — the Disconnected rows say everything.
 function Show-ArchDownSummaryPrompt($downRemotes) {
   Write-Host ''
   if ($downRemotes.Count -eq 1) {
@@ -368,7 +362,6 @@ function Show-ArchDownSummaryPrompt($downRemotes) {
     Disconnect-ArchRemotes $downRemotes
     if ($downRemotes.Count -ge $ActiveRemotes.Count) {
       Remove-ArchGuard
-      Show-ArchRemovedNote
     }
   } else {
     Clear-ArchLine
@@ -495,7 +488,6 @@ if ($Script:DiscAll) {
   $Script:Dwell = $true
   Disconnect-ArchRemotes $ActiveRemotes
   Remove-ArchGuard
-  Show-ArchRemovedNote
   Exit-ArchGuard
 }
 if ($Script:SkipAll) {

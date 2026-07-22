@@ -104,8 +104,9 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
     expect(script).toContain(
       "if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; exit 0 }",
     );
-    // the all-down disconnect ends with the removal note
-    expect(script).toContain("Nothing connected is left to check");
+    // the self-removal is silent — no trailing explainer after the
+    // Disconnected rows
+    expect(script).not.toContain("Nothing connected is left to check");
   });
 
   test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {

@@ -421,15 +421,11 @@ disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on
   done
 }
 
-removed_check_note() {
-  printf '%s✓%s %sNothing connected is left to check — removed the %s startup check. Reconnect any time from the %s /connection page.%s\\n' "$C_ACCENT" "$C_RESET" "$C_DIM" "$APP_NAME" "$APP_NAME" "$C_RESET"
-}
-
 # Every down remote already got its failure line during the turn; this single
 # prompt then covers them all — disconnect everything that failed in one
 # keypress, or skip them all and go straight to claude. When every remote is
 # down and the user disconnects, nothing is left to check, so the guard
-# removes itself too.
+# silently removes itself too — the Disconnected rows say everything.
 prompt_down_all() {
   printf '\\n'
   if [ "$DOWN_COUNT" -eq 1 ]; then
@@ -447,7 +443,6 @@ prompt_down_all() {
       disconnect_and_forget $DOWN_IDXS
       if [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ]; then
         uninstall_guard
-        removed_check_note
       fi
       ;;
     *)
@@ -570,7 +565,6 @@ if [ "$DISC_ALL" = "1" ]; then
   GUARD_DWELL=1
   disconnect_and_forget $ACTIVE_IDXS
   uninstall_guard
-  removed_check_note
   finish_guard
 fi
 if [ "$SKIP_ALL" = "1" ]; then

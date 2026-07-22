@@ -310,6 +310,17 @@ export function AppGalleryShareButton(props: {
           Try again
         </Button>
       </>
+    ) : state.step === "done" || state.step === "already" ? (
+      // The click-backed opener that always works: an automatic open at
+      // completion is popup-blocked whenever the submission ran longer than
+      // the browser's ~5s user-activation window and no session GitHub tab
+      // was left to navigate.
+      <Button
+        type="button"
+        onClick={() => window.open(state.prUrl, GITHUB_TAB_NAME)}
+      >
+        Open Pull Request
+      </Button>
     ) : null;
 
   return (
@@ -940,9 +951,13 @@ function showPrInGithubTab(ref: GithubTabRef, prUrl: string): void {
       // fall through to a fresh open
     }
   }
-  // No claimed tab (or the participant closed it). This far from a click a
-  // popup blocker usually eats the open — the dialog links the PR regardless.
-  window.open(prUrl, "_blank", "noopener");
+  // No live handle. Opening by NAME: if this session's GitHub tab is still
+  // around (sign-in leaves one), browsers treat this as navigating that
+  // existing tab — allowed even without a fresh click. Only when the name
+  // resolves to nothing does this become a new-popup request, which this
+  // far from a click a blocker refuses — the Open Pull Request button on
+  // the done screen covers that case with a real click.
+  window.open(prUrl, GITHUB_TAB_NAME);
 }
 
 /** Forget the claimed tab — the participant's GitHub page is left to them. */

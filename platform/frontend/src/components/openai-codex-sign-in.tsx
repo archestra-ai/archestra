@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, Copy, Info, Loader2 } from "lucide-react";
+import { Check, Info, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
-import { copyToClipboard } from "@/lib/clipboard";
 import {
   type OpenaiCodexDeviceStart,
   usePollOpenaiCodexDeviceFlow,
@@ -40,15 +40,11 @@ export function OpenaiCodexSignIn({
   const [flow, setFlow] = useState<OpenaiCodexDeviceStart | null>(null);
   const [completed, setCompleted] = useState(false);
   const [expired, setExpired] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
   // Mutation fns in a ref so the polling effect doesn't restart per render.
   const pollRef = useRef(poll.mutateAsync);
   pollRef.current = poll.mutateAsync;
   const onCredentialRef = useRef(onCredential);
   onCredentialRef.current = onCredential;
-  const copyResetTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => () => clearTimeout(copyResetTimeout.current), []);
 
   useEffect(() => {
     if (!flow || completed) return;
@@ -102,39 +98,30 @@ export function OpenaiCodexSignIn({
     };
   }, [flow, completed]);
 
-  // Step 1: fetch the device code and show it. We deliberately do NOT open the
-  // OpenAI tab here — opening a tab steals focus, and the Clipboard API refuses
-  // to write while the document is unfocused, so an auto-copy would silently
-  // fail. The copy + open happen together in copyCodeAndOpen (a fresh gesture).
+  // Start the device flow and open the ChatGPT login tab in the same click. The
+  // tab is opened synchronously as a blank page (so a popup blocker can't stop
+  // it across the async start), then pointed at the verification URL. The code +
+  // link fields below are the fallback when the popup is blocked; polling
+  // finishes the sign-in automatically — still one button.
   const begin = async () => {
     setExpired(false);
     setCompleted(false);
+    const authWindow = window.open("about:blank", "_blank");
     try {
       const result = await start.mutateAsync();
-      if (result) setFlow(result);
+      if (result) {
+        setFlow(result);
+        if (authWindow) {
+          authWindow.opener = null; // reverse-tabnabbing guard
+          authWindow.location.href = result.verificationUri;
+        }
+      } else {
+        authWindow?.close();
+      }
     } catch {
       // network-level failure — leave the button enabled for another attempt
+      authWindow?.close();
     }
-  };
-
-  const markCopied = () => {
-    setCodeCopied(true);
-    clearTimeout(copyResetTimeout.current);
-    copyResetTimeout.current = setTimeout(() => setCodeCopied(false), 2000);
-  };
-
-  // Step 2: copy the code WHILE the page is still focused, then open the OpenAI
-  // device-login page. Ordering matters — copying before window.open keeps the
-  // document focused for the clipboard write.
-  const copyCodeAndOpen = async (deviceFlow: OpenaiCodexDeviceStart) => {
-    try {
-      await copyToClipboard(deviceFlow.userCode);
-      markCopied();
-    } catch {
-      // clipboard blocked (permissions/focus) — the visible code + copy button
-      // remain as a fallback
-    }
-    window.open(deviceFlow.verificationUri, "_blank", "noopener,noreferrer");
   };
 
   if (completed) {
@@ -164,43 +151,28 @@ export function OpenaiCodexSignIn({
             Open settings
           </a>
         </li>
-        <li>
-          <span className="font-medium text-foreground">
-            2. Copy this code and open ChatGPT's device sign-in.
-          </span>{" "}
-          Paste it, then approve with the account that has your Codex/ChatGPT
-          subscription.
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => copyCodeAndOpen(flow)}
+        <li className="space-y-2">
+          <p>
+            <span className="font-medium text-foreground">
+              2. Open the sign-in page and enter this code.
+            </span>{" "}
+            Approve with the account that has your Codex/ChatGPT subscription.
+          </p>
+          <CopyableCode value={flow.verificationUri} toastMessage="Link copied">
+            <a
+              href={flow.verificationUri}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="break-all text-xs underline underline-offset-2 hover:text-foreground"
             >
-              <OpenAiLogo className="mr-2 h-4 w-4" />
-              Copy code &amp; open ChatGPT
-            </Button>
-            <button
-              type="button"
-              className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest hover:bg-muted/70"
-              aria-label="Copy code"
-              onClick={async () => {
-                try {
-                  await copyToClipboard(flow.userCode);
-                  markCopied();
-                } catch {
-                  // clipboard blocked — code stays visible to copy manually
-                }
-              }}
-            >
+              {flow.verificationUri}
+            </a>
+          </CopyableCode>
+          <CopyableCode value={flow.userCode} toastMessage="Code copied">
+            <code className="font-mono text-sm tracking-widest text-foreground">
               {flow.userCode}
-              {codeCopied ? (
-                <Check className="h-4 w-4 text-green-500" />
-              ) : (
-                <Copy className="h-4 w-4 text-muted-foreground" />
-              )}
-            </button>
-          </div>
+            </code>
+          </CopyableCode>
         </li>
         <li className="flex items-center gap-1">
           <Loader2 className="h-3 w-3 animate-spin" />

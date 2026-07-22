@@ -106,6 +106,14 @@ export const E2eTestId = {
   ChatApiKeyDefaultBadge: "chat-api-key-default-badge",
   BulkAssignChatApiKeysButton: "bulk-assign-chat-api-keys-button",
   BulkAssignChatApiKeysDialog: "bulk-assign-chat-api-keys-dialog",
+  // Add API key dialog (simplified paste-a-key onboarding flow)
+  AddApiKeyProviderSelect: "add-api-key-provider-select",
+  AddApiKeyAdvancedToggle: "add-api-key-advanced-toggle",
+  AddApiKeyConnectedModels: "add-api-key-connected-models",
+  AddApiKeyDoneButton: "add-api-key-done-button",
+  // Use a subscription (connect ChatGPT / Copilot / M365 without a key)
+  UseSubscriptionButton: "use-subscription-button",
+  UseSubscriptionDialog: "use-subscription-dialog",
   VirtualKeysPage: "virtual-keys-page",
   VirtualKeysTable: "virtual-keys-table",
   AddVirtualKeyButton: "add-virtual-key-button",
@@ -157,6 +165,11 @@ export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];
 
 export function getIdpRoleMappingRuleRowTestId(index: number): string {
   return `role-mapping-rule-${index}`;
+}
+
+/** Per-provider row in the "Use a subscription" dialog (openai / github-copilot / microsoft-365-copilot). */
+export function getSubscriptionSignInRowTestId(provider: string): string {
+  return `subscription-sign-in-row-${provider}`;
 }
 
 export function getIdentityProviderDialogNavButtonTestId(

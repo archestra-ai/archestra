@@ -30516,6 +30516,7 @@ export type GetConfigResponses = {
             anthropicWifEnabled: boolean;
             bedrockIamAuthEnabled: boolean;
             geminiVertexAiEnabled: boolean;
+            microsoft365CopilotSignInConfigured: boolean;
             incomingEmail: {
                 enabled: boolean;
                 provider?: 'outlook';

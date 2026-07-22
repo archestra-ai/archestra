@@ -64,7 +64,7 @@ Model Router translation forwards inline non-text content where the provider's n
 
 ### ChatGPT Subscription (Codex)
 
-Reuse a ChatGPT/Codex subscription for chat instead of a metered API key. Add an OpenAI provider key, pick the **ChatGPT Subscription** tab, and use **Sign in with ChatGPT** to connect the account that holds your subscription.
+Reuse a ChatGPT/Codex subscription for chat instead of a metered API key. On **Model Providers**, choose **Use a subscription**, then **Sign in with ChatGPT** to connect the account that holds your subscription.
 
 First turn on device code authorization for the account, in ChatGPT → Settings → Security → **Enable device code authorization for Codex**. It is off by default, and ChatGPT blocks the approval step until you enable it.
 
@@ -585,7 +585,7 @@ A GitHub Copilot provider key stores a **long-lived GitHub OAuth token** (`gho_`
 
 Obtain the token in either way:
 
-- **Sign in with GitHub**: when adding a GitHub Copilot key, use the "Sign in with GitHub" button. It runs GitHub's OAuth device flow — you approve a one-time code at `github.com/login/device`, and Archestra stores the resulting token.
+- **Sign in with GitHub**: on **Model Providers**, choose **Use a subscription**, then use the **Sign in with GitHub** button. It runs GitHub's OAuth device flow — you approve a one-time code at `github.com/login/device`, and Archestra stores the resulting token.
 - **Reuse an existing token**: the official Copilot CLI / VS Code store one in `~/.config/github-copilot/apps.json` (the `oauth_token` value); paste it into the API key field. The `/connection` setup script for the Copilot CLI reuses or obtains this token automatically.
 
 ### Environment Variables
@@ -637,7 +637,7 @@ With a multi-tenant registration, users from another organization can sign in on
 
 A Microsoft 365 Copilot provider key stores a **long-lived Entra refresh token** for an account with a Microsoft 365 Copilot license. Archestra redeems it for a short-lived Graph access token on every request (cached and refreshed automatically). Entra rotates refresh tokens; Archestra persists the rotated token back to the key.
 
-To connect, use the **Sign in with Microsoft** button when adding a Microsoft 365 Copilot key. It runs Entra's OAuth device flow — you approve a one-time code on Microsoft's device sign-in page, and Archestra stores the resulting refresh token.
+To connect, on **Model Providers** choose **Use a subscription**, then use the **Sign in with Microsoft** button. It runs Entra's OAuth device flow — you approve a one-time code on Microsoft's device sign-in page, and Archestra stores the resulting refresh token.
 
 ### Environment Variables
 

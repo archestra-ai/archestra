@@ -1,11 +1,11 @@
 "use client";
 
 import { E2eTestId } from "@archestra/shared";
-import { Plus } from "lucide-react";
 import { useState } from "react";
+import { ConnectProviderCards } from "@/components/connect-provider-cards";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
-import { Button } from "@/components/ui/button";
+import { UseSubscriptionDialog } from "@/components/use-subscription-dialog";
 
 const DEFAULT_FORM_VALUES: Partial<LlmProviderApiKeyFormValues> = {
   isPrimary: true,
@@ -13,39 +13,34 @@ const DEFAULT_FORM_VALUES: Partial<LlmProviderApiKeyFormValues> = {
 
 /**
  * Empty state shown when the user has no usable LLM provider key — on the new
- * chat screen and the projects page. Lets them add a key inline; the create
- * mutation invalidates the keys query, so the calling screen reactively shows
- * its real content once a key exists.
+ * chat screen and the projects page. Presents the two ways to connect a model
+ * (paste an API key, or use a subscription) as the shared two-door chooser. Both
+ * create mutations invalidate the keys query, so the calling screen reactively
+ * shows its real content once a credential exists.
  *
- * @param description subtitle under the heading; defaults to the chat copy so
- * each surface can phrase the "why" for its own context.
- * @param onKeyAdded extra work after a key is created (e.g. the chat screen
- * resets its URL). Optional — most callers just rely on the query refetch.
+ * @param description subtitle under the heading; omit to use the default chooser
+ * copy, or pass a surface-specific "why".
+ * @param onKeyAdded extra work after a credential is created (e.g. the chat
+ * screen resets its URL). Optional — most callers just rely on the query refetch.
  */
 export function NoApiKeySetup({
-  description = "Connect an LLM provider to start chatting",
+  description,
   onKeyAdded,
 }: {
   description?: string;
   onKeyAdded?: () => void;
 }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubscriptionOpen, setIsSubscriptionOpen] = useState(false);
 
   return (
     <div className="flex h-full w-full items-center justify-center p-8">
-      <div className="text-center space-y-4">
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold">Add an LLM Provider Key</h2>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
-        <Button
-          data-testid={E2eTestId.QuickstartAddApiKeyButton}
-          onClick={() => setIsDialogOpen(true)}
-        >
-          <Plus className="h-4 w-4" />
-          Add API Key
-        </Button>
-      </div>
+      <ConnectProviderCards
+        description={description}
+        addKeyTestId={E2eTestId.QuickstartAddApiKeyButton}
+        onAddKey={() => setIsDialogOpen(true)}
+        onUseSubscription={() => setIsSubscriptionOpen(true)}
+      />
       <CreateLlmProviderApiKeyDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
@@ -54,6 +49,12 @@ export function NoApiKeySetup({
         defaultValues={DEFAULT_FORM_VALUES}
         showConsoleLink
         onSuccess={onKeyAdded}
+        onUseSubscription={() => setIsSubscriptionOpen(true)}
+      />
+      <UseSubscriptionDialog
+        open={isSubscriptionOpen}
+        onOpenChange={setIsSubscriptionOpen}
+        onConnected={onKeyAdded}
       />
     </div>
   );

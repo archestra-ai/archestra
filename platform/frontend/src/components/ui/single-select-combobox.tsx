@@ -33,6 +33,14 @@ interface SingleSelectComboboxProps {
   emptyMessage?: string;
   className?: string;
   disabled?: boolean;
+  /**
+   * Render as a modal popover. Set this when the combobox lives inside a modal
+   * dialog: Radix Dialog's scroll-lock otherwise freezes wheel-scrolling of the
+   * body-portaled list. `modal` gives the popover its own scroll-lock so the list
+   * scrolls, while the default body portal keeps it floating above the dialog
+   * (an inline list would be clipped by the dialog's `overflow-hidden`).
+   */
+  modal?: boolean;
 }
 
 /**
@@ -50,12 +58,17 @@ export function SingleSelectCombobox({
   emptyMessage = "No matches.",
   className,
   disabled = false,
+  modal = false,
 }: SingleSelectComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const selected = options.find((option) => option.value === value);
 
   return (
-    <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={disabled ? undefined : setOpen}
+      modal={modal}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"

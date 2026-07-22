@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, Copy, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
-import { copyToClipboard } from "@/lib/clipboard";
 import {
   type Microsoft365CopilotDeviceStart,
   usePollMicrosoft365CopilotDeviceFlow,
@@ -30,15 +30,11 @@ export function Microsoft365CopilotSignIn({
   const [flow, setFlow] = useState<Microsoft365CopilotDeviceStart | null>(null);
   const [completed, setCompleted] = useState(false);
   const [expired, setExpired] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
   // Mutation fns in a ref so the polling effect doesn't restart per render.
   const pollRef = useRef(poll.mutateAsync);
   pollRef.current = poll.mutateAsync;
   const onTokenRef = useRef(onToken);
   onTokenRef.current = onToken;
-  const copyResetTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => () => clearTimeout(copyResetTimeout.current), []);
 
   useEffect(() => {
     if (!flow || completed) return;
@@ -89,44 +85,30 @@ export function Microsoft365CopilotSignIn({
     };
   }, [flow, completed]);
 
-  // Step 1: fetch the device code and show it. We deliberately do NOT open the
-  // Microsoft tab here — opening a tab steals focus, and the Clipboard API
-  // refuses to write while the document is unfocused, so an auto-copy would
-  // silently fail. The copy + open happen together in copyCodeAndOpen (a fresh
-  // gesture).
+  // Start the device flow and open the Microsoft login tab in the same click.
+  // The tab is opened synchronously as a blank page (so a popup blocker can't
+  // stop it across the async start), then pointed at the verification URL. The
+  // code + link fields below are the fallback when the popup is blocked; polling
+  // finishes the sign-in automatically — still one button.
   const begin = async () => {
     setExpired(false);
     setCompleted(false);
+    const authWindow = window.open("about:blank", "_blank");
     try {
       const result = await start.mutateAsync();
-      if (result) setFlow(result);
+      if (result) {
+        setFlow(result);
+        if (authWindow) {
+          authWindow.opener = null; // reverse-tabnabbing guard
+          authWindow.location.href = result.verificationUri;
+        }
+      } else {
+        authWindow?.close();
+      }
     } catch {
       // network-level failure — leave the button enabled for another attempt
+      authWindow?.close();
     }
-  };
-
-  const markCopied = () => {
-    setCodeCopied(true);
-    clearTimeout(copyResetTimeout.current);
-    copyResetTimeout.current = setTimeout(() => setCodeCopied(false), 2000);
-  };
-
-  // Step 2: copy the code WHILE the page is still focused, then open the
-  // Microsoft device-login page. Ordering matters — copying before window.open
-  // keeps the document focused for the clipboard write; Entra omits the RFC
-  // 8628 verification_uri_complete field, so the copy is the fastest path to a
-  // paste.
-  const copyCodeAndOpen = async (
-    deviceFlow: Microsoft365CopilotDeviceStart,
-  ) => {
-    try {
-      await copyToClipboard(deviceFlow.userCode);
-      markCopied();
-    } catch {
-      // clipboard blocked (permissions/focus) — the visible code + copy button
-      // remain as a fallback
-    }
-    window.open(deviceFlow.verificationUri, "_blank", "noopener,noreferrer");
   };
 
   if (completed) {
@@ -140,46 +122,30 @@ export function Microsoft365CopilotSignIn({
 
   if (flow) {
     return (
-      <div className="space-y-2 rounded-md border p-3">
-        <p className="text-xs text-muted-foreground">
-          Click below to copy the code and open Microsoft's device sign-in, then
-          paste it and approve with your work account.
+      <div className="space-y-2 rounded-md border p-3 text-xs text-muted-foreground">
+        <p>
+          Open Microsoft's device sign-in, enter this code, and approve with
+          your work account.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => copyCodeAndOpen(flow)}
+        <CopyableCode value={flow.verificationUri} toastMessage="Link copied">
+          <a
+            href={flow.verificationUri}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-all text-xs underline underline-offset-2 hover:text-foreground"
           >
-            <MicrosoftLogo className="mr-2 h-4 w-4" />
-            Copy code &amp; open Microsoft
-          </Button>
-          <button
-            type="button"
-            className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest hover:bg-muted/70"
-            aria-label="Copy code"
-            onClick={async () => {
-              try {
-                await copyToClipboard(flow.userCode);
-                markCopied();
-              } catch {
-                // clipboard blocked — code stays visible to copy manually
-              }
-            }}
-          >
+            {flow.verificationUri}
+          </a>
+        </CopyableCode>
+        <CopyableCode value={flow.userCode} toastMessage="Code copied">
+          <code className="font-mono text-sm tracking-widest text-foreground">
             {flow.userCode}
-            {codeCopied ? (
-              <Check className="h-4 w-4 text-green-500" />
-            ) : (
-              <Copy className="h-4 w-4 text-muted-foreground" />
-            )}
-          </button>
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Waiting for authorization…
-          </span>
-        </div>
+          </code>
+        </CopyableCode>
+        <p className="flex items-center gap-1">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Waiting for authorization…
+        </p>
       </div>
     );
   }

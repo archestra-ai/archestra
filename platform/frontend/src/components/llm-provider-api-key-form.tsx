@@ -4,14 +4,31 @@ import {
   type archestraApiTypes,
   CHATGPT_SUBSCRIPTION_LABEL,
   DEFAULT_PROVIDER_BASE_URLS,
+  DocsPage,
   E2eTestId,
+  getDocsUrl,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
-import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
+import {
+  Building2,
+  CheckCircle2,
+  Info,
+  Trash2,
+  User,
+  Users,
+} from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import {
+  lazy,
+  type ReactNode,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
@@ -26,6 +43,12 @@ import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeams } from "@/lib/teams/team.query";
 import { LlmProviderSelectItems } from "./llm-provider-select-items";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./ui/accordion";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -37,6 +60,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import {
+  SingleSelectCombobox,
+  type SingleSelectOption,
+} from "./ui/single-select-combobox";
 import { Switch } from "./ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 
@@ -342,6 +369,19 @@ interface LlmProviderApiKeyFormProps {
   hideScopeAndPrimary?: boolean;
   /** When true, providers without embedding support are disabled in the picker. */
   forEmbedding?: boolean;
+  /**
+   * "onboarding" strips the create flow to the essentials: a searchable provider
+   * catalog, no subscription auth tabs, and scope/primary/base-URL/headers folded
+   * into an "Advanced" accordion. "default" keeps the full field layout (used by
+   * the edit dialog and the embedding/knowledge flows).
+   */
+  variant?: "default" | "onboarding";
+  /**
+   * When set, an inline banner offers to connect a ChatGPT subscription instead
+   * of a pasted key while OpenAI is selected (onboarding only). Invoking it hands
+   * control back to the parent to open the Use Subscription dialog.
+   */
+  onUseSubscription?: () => void;
 }
 
 export function LlmProviderApiKeyForm({
@@ -357,11 +397,17 @@ export function LlmProviderApiKeyForm({
   allowedProviders,
   hideScopeAndPrimary = false,
   forEmbedding = false,
+  variant = "default",
+  onUseSubscription,
 }: LlmProviderApiKeyFormProps) {
+  const isOnboarding = variant === "onboarding";
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicWifEnabled = useFeature("anthropicWifEnabled");
+  const microsoft365CopilotSignInConfigured = useFeature(
+    "microsoft365CopilotSignInConfigured",
+  );
   const { data: providerBaseUrls } = useProviderBaseUrls();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isLlmProviderApiKeyAdmin } = useHasPermissions({
@@ -417,6 +463,44 @@ export function LlmProviderApiKeyForm({
       ),
     [allowedProviders],
   );
+  // Onboarding provider catalog: searchable, logo-tagged options limited to the
+  // allowed + enabled providers. Subscription-only providers are excluded by the
+  // create dialog's allowlist, so they never surface here.
+  const catalogOptions = useMemo<SingleSelectOption[]>(() => {
+    if (!isOnboarding) return [];
+    return Object.entries(PROVIDER_CONFIG)
+      .filter(([key, config]) => {
+        const providerKey = key as CreateLlmProviderApiKeyBody["provider"];
+        if (!allowedProviderSet.has(providerKey) || !config.enabled) {
+          return false;
+        }
+        if (providerKey === "gemini" && geminiVertexAiEnabled) return false;
+        if (providerKey === "bedrock" && bedrockIamAuthEnabled) return false;
+        if (forEmbedding && config.supportsEmbeddings === false) return false;
+        return true;
+      })
+      .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+      .map(([key, config]) => ({
+        value: key,
+        label: config.name,
+        icon: (
+          <Image
+            src={config.icon}
+            alt=""
+            width={16}
+            height={16}
+            className="rounded dark:invert"
+          />
+        ),
+      }));
+  }, [
+    isOnboarding,
+    allowedProviderSet,
+    geminiVertexAiEnabled,
+    bedrockIamAuthEnabled,
+    forEmbedding,
+  ]);
+
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
 
   const existingPrimaryKey = useMemo(() => {
@@ -639,63 +723,92 @@ export function LlmProviderApiKeyForm({
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
-        <div className={mode === "full" ? "grid grid-cols-2 gap-4" : ""}>
-          <div className="space-y-2">
+        <div
+          className={
+            mode === "full" && !isOnboarding ? "grid grid-cols-2 gap-4" : ""
+          }
+        >
+          <div
+            className="space-y-2"
+            data-testid={
+              isOnboarding ? E2eTestId.AddApiKeyProviderSelect : undefined
+            }
+          >
             <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
-            <Select
-              value={provider}
-              onValueChange={(value) =>
-                form.setValue(
-                  "provider",
-                  value as CreateLlmProviderApiKeyBody["provider"],
-                )
-              }
-              disabled={isEditMode || isPending || disableProvider}
-            >
-              <SelectTrigger
-                id="llm-provider-api-key-provider"
-                className="w-full"
+            {isOnboarding ? (
+              <SingleSelectCombobox
+                options={catalogOptions}
+                value={provider}
+                onChange={(value) =>
+                  form.setValue(
+                    "provider",
+                    value as CreateLlmProviderApiKeyBody["provider"],
+                  )
+                }
+                placeholder="Select a provider…"
+                searchPlaceholder="Search providers…"
+                emptyMessage="No providers match."
+                disabled={isEditMode || isPending || disableProvider}
+                // Rendered inside the create dialog — a modal popover floats above
+                // the dialog (unclipped) and keeps the catalog wheel-scrollable.
+                modal
+              />
+            ) : (
+              <Select
+                value={provider}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "provider",
+                    value as CreateLlmProviderApiKeyBody["provider"],
+                  )
+                }
+                disabled={isEditMode || isPending || disableProvider}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <LlmProviderSelectItems
-                  options={Object.entries(PROVIDER_CONFIG)
-                    .sort(([, a], [, b]) => a.name.localeCompare(b.name))
-                    .map(([key, config]) => {
-                      const providerKey =
-                        key as CreateLlmProviderApiKeyBody["provider"];
-                      const isGeminiDisabledByVertexAi =
-                        providerKey === "gemini" && geminiVertexAiEnabled;
-                      const isBedrockDisabledByIamAuth =
-                        providerKey === "bedrock" && bedrockIamAuthEnabled;
-                      const isEmbeddingUnsupported =
-                        forEmbedding && config.supportsEmbeddings === false;
+                <SelectTrigger
+                  id="llm-provider-api-key-provider"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <LlmProviderSelectItems
+                    options={Object.entries(PROVIDER_CONFIG)
+                      .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+                      .map(([key, config]) => {
+                        const providerKey =
+                          key as CreateLlmProviderApiKeyBody["provider"];
+                        const isGeminiDisabledByVertexAi =
+                          providerKey === "gemini" && geminiVertexAiEnabled;
+                        const isBedrockDisabledByIamAuth =
+                          providerKey === "bedrock" && bedrockIamAuthEnabled;
+                        const isEmbeddingUnsupported =
+                          forEmbedding && config.supportsEmbeddings === false;
 
-                      return {
-                        value: providerKey,
-                        icon: config.icon,
-                        name: config.name,
-                        disabled:
-                          !allowedProviderSet.has(providerKey) ||
-                          !config.enabled ||
-                          isGeminiDisabledByVertexAi ||
-                          isBedrockDisabledByIamAuth ||
-                          isEmbeddingUnsupported,
-                        subtext: isEmbeddingUnsupported
-                          ? "Not supported for embeddings"
-                          : undefined,
-                        showComingSoon: !config.enabled,
-                        showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
-                        showBedrockIamBadge: isBedrockDisabledByIamAuth,
-                      };
-                    })}
-                />
-              </SelectContent>
-            </Select>
+                        return {
+                          value: providerKey,
+                          icon: config.icon,
+                          name: config.name,
+                          disabled:
+                            !allowedProviderSet.has(providerKey) ||
+                            !config.enabled ||
+                            isGeminiDisabledByVertexAi ||
+                            isBedrockDisabledByIamAuth ||
+                            isEmbeddingUnsupported,
+                          subtext: isEmbeddingUnsupported
+                            ? "Not supported for embeddings"
+                            : undefined,
+                          showComingSoon: !config.enabled,
+                          showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
+                          showBedrockIamBadge: isBedrockDisabledByIamAuth,
+                        };
+                      })}
+                  />
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
-          {mode === "full" && (
+          {mode === "full" && !isOnboarding && (
             <div className="space-y-2">
               <Label htmlFor="llm-provider-api-key-name">
                 Name{" "}
@@ -802,7 +915,7 @@ export function LlmProviderApiKeyForm({
               </div>
             )}
 
-            {provider === "openai" && (
+            {provider === "openai" && !isOnboarding && (
               <Tabs
                 value={openaiAuthMethod}
                 onValueChange={(value) => {
@@ -891,12 +1004,29 @@ export function LlmProviderApiKeyForm({
                       }
                     />
                   ) : provider === "microsoft-365-copilot" ? (
-                    <Microsoft365CopilotSignIn
-                      disabled={isPending}
-                      onToken={(token) =>
-                        form.setValue("apiKey", token, { shouldDirty: true })
-                      }
-                    />
+                    microsoft365CopilotSignInConfigured === false ? (
+                      <p className="text-sm text-muted-foreground">
+                        Your administrator hasn't enabled Microsoft 365 Copilot
+                        sign-in yet.{" "}
+                        <a
+                          href={getDocsUrl(
+                            DocsPage.PlatformSupportedLlmProviders,
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium underline underline-offset-2 hover:text-foreground"
+                        >
+                          Learn more
+                        </a>
+                      </p>
+                    ) : (
+                      <Microsoft365CopilotSignIn
+                        disabled={isPending}
+                        onToken={(token) =>
+                          form.setValue("apiKey", token, { shouldDirty: true })
+                        }
+                      />
+                    )
                   ) : (
                     <OpenaiCodexSignIn
                       disabled={isPending}
@@ -1026,164 +1156,150 @@ export function LlmProviderApiKeyForm({
           </div>
         )}
 
-        {!hideScopeAndPrimary && (
-          <>
-            <VisibilitySelector
-              label="Scope"
-              value={scope}
-              options={visibilityOptions}
-              onValueChange={(nextScope) => {
-                form.setValue("scope", nextScope, { shouldDirty: true });
-                if (nextScope !== "team") {
-                  form.setValue("teamId", null, { shouldDirty: true });
-                }
-              }}
-            >
-              <p className="text-xs text-muted-foreground">
-                Controls who can use this key.
-                {authDocsUrl && (
-                  <>
-                    {" "}
-                    <ExternalDocsLink
-                      href={`${authDocsUrl}#api-key-scoping`}
-                      className="text-inherit underline hover:text-foreground"
-                      showIcon={false}
-                    >
-                      Learn more
-                    </ExternalDocsLink>
-                  </>
-                )}
+        {isOnboarding && provider === "openai" && (
+          <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div className="space-y-1">
+              <p>
+                Have a ChatGPT Plus or Pro plan? Connect it as a subscription
+                instead of pasting a metered API key.
               </p>
-
-              {scope === "team" && (
-                <div className="space-y-2">
-                  <Label htmlFor="llm-provider-api-key-team">Team</Label>
-                  <Select
-                    value={teamId ?? undefined}
-                    onValueChange={(value) =>
-                      form.setValue("teamId", value, { shouldDirty: true })
-                    }
-                    disabled={isPending || !canReadTeams || teams.length === 0}
-                  >
-                    <SelectTrigger
-                      id="llm-provider-api-key-team"
-                      className="w-full"
-                    >
-                      <SelectValue placeholder="Select a team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {onUseSubscription ? (
+                <button
+                  type="button"
+                  onClick={onUseSubscription}
+                  className="font-medium text-foreground underline underline-offset-2 hover:no-underline"
+                >
+                  Use a subscription instead
+                </button>
+              ) : (
+                <p>Open Model Providers → Use a subscription.</p>
               )}
-            </VisibilitySelector>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="llm-provider-api-key-is-primary">
-                  Primary key
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {existingPrimaryKey
-                    ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope`
-                    : "When multiple keys exist for the same provider and scope, the primary key is preferred"}
-                </p>
-              </div>
-              <Switch
-                id="llm-provider-api-key-is-primary"
-                checked={form.watch("isPrimary")}
-                onCheckedChange={(checked) =>
-                  form.setValue("isPrimary", checked, { shouldDirty: true })
-                }
-                disabled={isPending || Boolean(existingPrimaryKey)}
-              />
             </div>
-          </>
+          </div>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="llm-provider-api-key-base-url">
-            Base URL{" "}
-            {!isBaseUrlRequired && (
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            )}
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Override the default API endpoint. Useful for self-hosted or proxy
-            setups.
-          </p>
-          {isSelfHostedProvider(provider) && (
-            <p className="text-xs text-muted-foreground">
-              If this app runs in Docker, <code>localhost</code> points at the
-              container, not your host machine. Use{" "}
-              <code>host.docker.internal</code> instead (e.g.{" "}
-              <code>http://host.docker.internal:11434/v1</code>).
-            </p>
-          )}
-          <Input
-            id="llm-provider-api-key-base-url"
-            type="url"
-            placeholder={
-              providerBaseUrls?.[provider] ||
-              DEFAULT_PROVIDER_BASE_URLS[provider] ||
-              "https://..."
-            }
-            disabled={isPending}
-            {...form.register("baseUrl", {
-              validate: (value) => {
-                if (!value) {
-                  if (isBaseUrlRequired) {
-                    return "Base URL is required for this provider";
+        <AdvancedFieldsWrapper collapsed={isOnboarding}>
+          {!hideScopeAndPrimary && (
+            <>
+              <VisibilitySelector
+                label="Scope"
+                value={scope}
+                options={visibilityOptions}
+                onValueChange={(nextScope) => {
+                  form.setValue("scope", nextScope, { shouldDirty: true });
+                  if (nextScope !== "team") {
+                    form.setValue("teamId", null, { shouldDirty: true });
                   }
-                  return true;
-                }
+                }}
+              >
+                <p className="text-xs text-muted-foreground">
+                  Controls who can use this key.
+                  {authDocsUrl && (
+                    <>
+                      {" "}
+                      <ExternalDocsLink
+                        href={`${authDocsUrl}#api-key-scoping`}
+                        className="text-inherit underline hover:text-foreground"
+                        showIcon={false}
+                      >
+                        Learn more
+                      </ExternalDocsLink>
+                    </>
+                  )}
+                </p>
 
-                try {
-                  const url = new URL(value);
-                  if (!["http:", "https:"].includes(url.protocol)) {
-                    return "URL must use http or https protocol";
+                {scope === "team" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="llm-provider-api-key-team">Team</Label>
+                    <Select
+                      value={teamId ?? undefined}
+                      onValueChange={(value) =>
+                        form.setValue("teamId", value, { shouldDirty: true })
+                      }
+                      disabled={
+                        isPending || !canReadTeams || teams.length === 0
+                      }
+                    >
+                      <SelectTrigger
+                        id="llm-provider-api-key-team"
+                        className="w-full"
+                      >
+                        <SelectValue placeholder="Select a team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </VisibilitySelector>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="llm-provider-api-key-is-primary">
+                    Primary key
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {existingPrimaryKey
+                      ? `"${existingPrimaryKey.name}" is already the primary key for this provider and scope`
+                      : "When multiple keys exist for the same provider and scope, the primary key is preferred"}
+                  </p>
+                </div>
+                <Switch
+                  id="llm-provider-api-key-is-primary"
+                  checked={form.watch("isPrimary")}
+                  onCheckedChange={(checked) =>
+                    form.setValue("isPrimary", checked, { shouldDirty: true })
                   }
-                  return true;
-                } catch {
-                  return "Please enter a valid URL (e.g. https://api.example.com)";
-                }
-              },
-            })}
-          />
-          {form.formState.errors.baseUrl && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.baseUrl.message}
-            </p>
+                  disabled={isPending || Boolean(existingPrimaryKey)}
+                />
+              </div>
+            </>
           )}
-        </div>
 
-        {provider === "azure" && (
           <div className="space-y-2">
-            <Label htmlFor="llm-provider-api-key-inference-base-url">
-              Inference URL{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
+            <Label htmlFor="llm-provider-api-key-base-url">
+              Base URL{" "}
+              {!isBaseUrlRequired && (
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              )}
             </Label>
             <p className="text-xs text-muted-foreground">
-              Runtime endpoint for chat and embeddings when it differs from the
-              Base URL used for Azure deployment discovery.
+              Override the default API endpoint. Useful for self-hosted or proxy
+              setups.
             </p>
+            {isSelfHostedProvider(provider) && (
+              <p className="text-xs text-muted-foreground">
+                If this app runs in Docker, <code>localhost</code> points at the
+                container, not your host machine. Use{" "}
+                <code>host.docker.internal</code> instead (e.g.{" "}
+                <code>http://host.docker.internal:11434/v1</code>).
+              </p>
+            )}
             <Input
-              id="llm-provider-api-key-inference-base-url"
+              id="llm-provider-api-key-base-url"
               type="url"
-              placeholder="https://<resource>.openai.azure.com/openai"
+              placeholder={
+                providerBaseUrls?.[provider] ||
+                DEFAULT_PROVIDER_BASE_URLS[provider] ||
+                "https://..."
+              }
               disabled={isPending}
-              {...form.register("inferenceBaseUrl", {
+              {...form.register("baseUrl", {
                 validate: (value) => {
-                  if (!value) return true;
+                  if (!value) {
+                    if (isBaseUrlRequired) {
+                      return "Base URL is required for this provider";
+                    }
+                    return true;
+                  }
 
                   try {
                     const url = new URL(value);
@@ -1197,70 +1313,142 @@ export function LlmProviderApiKeyForm({
                 },
               })}
             />
-            {form.formState.errors.inferenceBaseUrl && (
+            {form.formState.errors.baseUrl && (
               <p className="text-xs text-destructive">
-                {form.formState.errors.inferenceBaseUrl.message}
+                {form.formState.errors.baseUrl.message}
               </p>
             )}
           </div>
-        )}
 
-        <div className="space-y-2">
-          <Label>
-            Extra HTTP headers{" "}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Sent on every request to the provider. Useful for gateways that
-            require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
-          </p>
-          {extraHeadersFieldArray.fields.length > 0 && (
+          {provider === "azure" && (
             <div className="space-y-2">
-              {extraHeadersFieldArray.fields.map((field, index) => (
-                <div key={field.id} className="flex items-start gap-2">
-                  <Input
-                    aria-label="Header name"
-                    placeholder="Header name"
-                    disabled={isPending}
-                    className="flex-1"
-                    {...form.register(`extraHeaders.${index}.name` as const)}
-                  />
-                  <Input
-                    aria-label="Header value"
-                    placeholder="Header value"
-                    disabled={isPending}
-                    className="flex-1"
-                    {...form.register(`extraHeaders.${index}.value` as const)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={isPending}
-                    onClick={() => extraHeadersFieldArray.remove(index)}
-                    aria-label={`Remove header ${index + 1}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+              <Label htmlFor="llm-provider-api-key-inference-base-url">
+                Inference URL{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Runtime endpoint for chat and embeddings when it differs from
+                the Base URL used for Azure deployment discovery.
+              </p>
+              <Input
+                id="llm-provider-api-key-inference-base-url"
+                type="url"
+                placeholder="https://<resource>.openai.azure.com/openai"
+                disabled={isPending}
+                {...form.register("inferenceBaseUrl", {
+                  validate: (value) => {
+                    if (!value) return true;
+
+                    try {
+                      const url = new URL(value);
+                      if (!["http:", "https:"].includes(url.protocol)) {
+                        return "URL must use http or https protocol";
+                      }
+                      return true;
+                    } catch {
+                      return "Please enter a valid URL (e.g. https://api.example.com)";
+                    }
+                  },
+                })}
+              />
+              {form.formState.errors.inferenceBaseUrl && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.inferenceBaseUrl.message}
+                </p>
+              )}
             </div>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isPending}
-            onClick={() =>
-              extraHeadersFieldArray.append({ name: "", value: "" })
-            }
-          >
-            Add header
-          </Button>
-        </div>
+
+          <div className="space-y-2">
+            <Label>
+              Extra HTTP headers{" "}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Sent on every request to the provider. Useful for gateways that
+              require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
+            </p>
+            {extraHeadersFieldArray.fields.length > 0 && (
+              <div className="space-y-2">
+                {extraHeadersFieldArray.fields.map((field, index) => (
+                  <div key={field.id} className="flex items-start gap-2">
+                    <Input
+                      aria-label="Header name"
+                      placeholder="Header name"
+                      disabled={isPending}
+                      className="flex-1"
+                      {...form.register(`extraHeaders.${index}.name` as const)}
+                    />
+                    <Input
+                      aria-label="Header value"
+                      placeholder="Header value"
+                      disabled={isPending}
+                      className="flex-1"
+                      {...form.register(`extraHeaders.${index}.value` as const)}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={isPending}
+                      onClick={() => extraHeadersFieldArray.remove(index)}
+                      aria-label={`Remove header ${index + 1}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={() =>
+                extraHeadersFieldArray.append({ name: "", value: "" })
+              }
+            >
+              Add header
+            </Button>
+          </div>
+        </AdvancedFieldsWrapper>
       </div>
     </div>
+  );
+}
+
+/**
+ * Wraps the advanced provider fields (scope, primary, base URL, extra headers).
+ * Default flows render them inline; the onboarding create flow folds them into a
+ * collapsed "Advanced settings" accordion so the first-run view is provider + key
+ * only. A fragment (not a wrapping element) preserves the parent's `space-y-4`.
+ */
+function AdvancedFieldsWrapper({
+  collapsed,
+  children,
+}: {
+  collapsed: boolean;
+  children: ReactNode;
+}) {
+  if (!collapsed) {
+    return <>{children}</>;
+  }
+  return (
+    <Accordion type="single" collapsible>
+      <AccordionItem value="advanced" className="border-none">
+        <AccordionTrigger
+          data-testid={E2eTestId.AddApiKeyAdvancedToggle}
+          className="py-2 text-muted-foreground"
+        >
+          Advanced settings
+        </AccordionTrigger>
+        <AccordionContent className="space-y-4">{children}</AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }

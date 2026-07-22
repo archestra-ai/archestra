@@ -1,6 +1,7 @@
 "use client";
 
-import { render } from "@testing-library/react";
+import { E2eTestId } from "@archestra/shared";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseLlmProviderApiKeys = vi.fn();
@@ -15,8 +16,17 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/components/page-layout", () => ({
-  PageLayout: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  PageLayout: ({
+    children,
+    actionButton,
+  }: {
+    children: React.ReactNode;
+    actionButton?: React.ReactNode;
+  }) => (
+    <div>
+      {actionButton}
+      {children}
+    </div>
   ),
 }));
 
@@ -76,6 +86,10 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: () => null,
 }));
 
+vi.mock("@/components/use-subscription-dialog", () => ({
+  UseSubscriptionDialog: () => null,
+}));
+
 vi.mock("@/components/delete-confirm-dialog", () => ({
   DeleteConfirmDialog: () => null,
 }));
@@ -99,6 +113,14 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
     anthropic: { icon: "/anthropic.svg", name: "Anthropic" },
     gemini: { icon: "/gemini.svg", name: "Gemini" },
     openai: { icon: "/openai.svg", name: "OpenAI" },
+    "github-copilot": {
+      icon: "/github-copilot.svg",
+      name: "GitHub Copilot",
+    },
+    "microsoft-365-copilot": {
+      icon: "/microsoft-365-copilot.svg",
+      name: "Microsoft 365 Copilot",
+    },
   },
 }));
 
@@ -163,7 +185,7 @@ vi.mock("@/components/ui/select", () => ({
 }));
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import ApiKeysPage from "./page";
@@ -184,6 +206,9 @@ describe("ApiKeysPage", () => {
     vi.mocked(useFeature).mockReturnValue(
       false as unknown as ReturnType<typeof useFeature>,
     );
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1" } },
+    } as unknown as ReturnType<typeof useSession>);
     mockUseLlmProviderApiKeys.mockReturnValue({
       data: [],
       isPending: false,
@@ -224,5 +249,34 @@ describe("ApiKeysPage", () => {
       provider: undefined,
       search: undefined,
     });
+  });
+
+  it("renders enabled add actions with no create-permission gate", () => {
+    // Read permission resolved + at least one key => the header actions render
+    // (not the empty state). Adding a personal key is self-service, so both
+    // buttons are plain and enabled regardless of role permissions.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "k1",
+          name: "Personal",
+          provider: "openai",
+          scope: "personal",
+          userId: "user-1",
+          isSystem: false,
+          secretStorageType: "database",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getByTestId(E2eTestId.AddChatApiKeyButton)).toBeEnabled();
+    expect(screen.getByTestId(E2eTestId.UseSubscriptionButton)).toBeEnabled();
   });
 });

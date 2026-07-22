@@ -109753,6 +109753,9 @@
                         "geminiVertexAiEnabled": {
                           "type": "boolean"
                         },
+                        "microsoft365CopilotSignInConfigured": {
+                          "type": "boolean"
+                        },
                         "incomingEmail": {
                           "type": "object",
                           "properties": {
@@ -109853,6 +109856,7 @@
                         "anthropicWifEnabled",
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
+                        "microsoft365CopilotSignInConfigured",
                         "incomingEmail",
                         "mcpServerBaseImage",
                         "orchestratorK8sNamespace",

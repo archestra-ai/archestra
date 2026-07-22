@@ -1236,6 +1236,99 @@ describe("LLM Provider API Keys — personal scope is self-service", () => {
     expect(response.statusCode, response.body).toBe(403);
     expect(response.json().error.message).toContain("create");
   });
+
+  test("a basic user can update their own personal key", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "My OpenAI",
+        provider: "openai",
+        apiKey: "sk-my-openai-key",
+        scope: "personal",
+      },
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${created.json().id}`,
+      payload: { name: "My OpenAI (renamed)" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().name).toBe("My OpenAI (renamed)");
+  });
+
+  test("a basic user can delete their own personal key", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "My OpenAI",
+        provider: "openai",
+        apiKey: "sk-my-openai-key",
+        scope: "personal",
+      },
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${created.json().id}`,
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().success).toBe(true);
+  });
+
+  test("a basic user cannot delete an org-scoped key", async () => {
+    // Create the org key with elevated rights, then attempt delete as the member.
+    setupAdminApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Org Key",
+        provider: "anthropic",
+        apiKey: "sk-ant-org-key",
+        scope: "org",
+      },
+    });
+    setupMemberApp();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${created.json().id}`,
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("a basic user cannot delete another user's personal key", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const otherApp = await createApp(organizationId, otherUser);
+    const created = await otherApp.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "Their Key",
+        provider: "openai",
+        apiKey: "sk-their-key",
+        scope: "personal",
+      },
+    });
+    await otherApp.close();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/llm-provider-api-keys/${created.json().id}`,
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
 });
 
 describe("LLM Provider API Keys Available Endpoint", () => {

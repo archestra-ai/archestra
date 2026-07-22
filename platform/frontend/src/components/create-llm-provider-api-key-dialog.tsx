@@ -2,10 +2,13 @@
 
 import {
   CHATGPT_SUBSCRIPTION_LABEL,
+  E2eTestId,
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
+  SupportedProviders,
 } from "@archestra/shared";
-import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { CheckCircle2, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import {
@@ -24,10 +27,20 @@ import {
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useLlmModels } from "@/lib/llm-models.query";
 import {
   useCreateLlmProviderApiKey,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+
+/**
+ * Providers offered in the paste-a-key create flow: everything except the
+ * per-user subscription providers (GitHub Copilot, Microsoft 365 Copilot), which
+ * have no key to paste and live in the "Use a subscription" dialog instead.
+ */
+const CREATE_ALLOWED_PROVIDERS = SupportedProviders.filter(
+  (provider) => !providerRequiresPerUserCredential(provider),
+);
 
 export type CreateLlmProviderApiKeyDialogProps = {
   open: boolean;
@@ -40,6 +53,12 @@ export type CreateLlmProviderApiKeyDialogProps = {
   allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
   showConsoleLink?: boolean;
   onSuccess?: () => void;
+  /**
+   * When provided, selecting OpenAI shows a "use a subscription instead" action.
+   * Invoking it closes this dialog and calls back so the parent can open the Use
+   * Subscription dialog.
+   */
+  onUseSubscription?: () => void;
 };
 
 export function CreateLlmProviderApiKeyDialog({
@@ -51,6 +70,7 @@ export function CreateLlmProviderApiKeyDialog({
   allowedProviders,
   showConsoleLink = false,
   onSuccess,
+  onUseSubscription,
 }: CreateLlmProviderApiKeyDialogProps) {
   const createMutation = useCreateLlmProviderApiKey();
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
@@ -63,6 +83,11 @@ export function CreateLlmProviderApiKeyDialog({
     llmProviderApiKey: ["admin"],
   });
 
+  // After a successful create, the dialog stays open on a confirmation view that
+  // fetches the just-added provider's models — proof the key works, not just that
+  // it saved. Cleared whenever the dialog closes.
+  const [createdKey, setCreatedKey] = useState<{ id: string } | null>(null);
+
   const form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: getDefaultFormValues({
       defaultValues,
@@ -72,6 +97,7 @@ export function CreateLlmProviderApiKeyDialog({
 
   useEffect(() => {
     if (!open) return;
+    setCreatedKey(null);
     form.reset(
       getDefaultFormValues({
         defaultValues,
@@ -88,11 +114,29 @@ export function CreateLlmProviderApiKeyDialog({
     values: formValues,
   });
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setCreatedKey(null);
+    onOpenChange(nextOpen);
+  };
+
+  const handleDone = () => {
+    handleOpenChange(false);
+    onSuccess?.();
+  };
+
+  // Close this dialog, then let the parent open the Use Subscription dialog.
+  const handleSwitchToSubscription = onUseSubscription
+    ? () => {
+        handleOpenChange(false);
+        onUseSubscription();
+      }
+    : undefined;
+
   const handleCreate = form.handleSubmit(async (values) => {
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
-      await createMutation.mutateAsync({
+      const created = await createMutation.mutateAsync({
         name:
           values.name?.trim() ||
           (values.provider === "openai" &&
@@ -126,8 +170,8 @@ export function CreateLlmProviderApiKeyDialog({
           ? values.awsSessionToken || undefined
           : undefined,
       });
-      onOpenChange(false);
-      onSuccess?.();
+      // Show the model-list confirmation instead of closing immediately.
+      if (created) setCreatedKey({ id: created.id });
     } catch {
       // Error handled by mutation
     }
@@ -136,40 +180,123 @@ export function CreateLlmProviderApiKeyDialog({
   return (
     <FormDialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title={title}
       description={description}
       size="small"
       className="sm:max-w-xl"
-      isDirty={form.formState.isDirty}
+      // Once the key is created, dropping the (now-saved) form data is harmless,
+      // so don't guard the confirmation view behind a discard prompt.
+      isDirty={form.formState.isDirty && !createdKey}
     >
-      <DialogForm
-        onSubmit={handleCreate}
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <DialogBody>
-          <LlmProviderApiKeyForm
-            mode="full"
-            showConsoleLink={showConsoleLink}
-            form={form}
-            existingKeys={existingKeys}
-            isPending={createMutation.isPending}
-            allowedProviders={allowedProviders}
-            bedrockIamAuthEnabled={bedrockIamAuthEnabled}
-            geminiVertexAiEnabled={geminiVertexAiEnabled}
-          />
-        </DialogBody>
-        <DialogStickyFooter className="mt-0">
-          <DialogCancelButton>Cancel</DialogCancelButton>
-          <Button type="submit" disabled={!isValid || createMutation.isPending}>
-            {createMutation.isPending && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
-            Test & Create
-          </Button>
-        </DialogStickyFooter>
-      </DialogForm>
+      {createdKey ? (
+        <>
+          <DialogBody
+            data-testid={E2eTestId.AddApiKeyConnectedModels}
+            className="space-y-3"
+          >
+            <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
+              <CheckCircle2 className="h-5 w-5" />
+              Connected — key verified
+            </div>
+            <ConnectedModelsSummary apiKeyId={createdKey.id} />
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
+            <Button
+              type="button"
+              onClick={handleDone}
+              data-testid={E2eTestId.AddApiKeyDoneButton}
+            >
+              Done
+            </Button>
+          </DialogStickyFooter>
+        </>
+      ) : (
+        <DialogForm
+          onSubmit={handleCreate}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody>
+            <LlmProviderApiKeyForm
+              mode="full"
+              variant="onboarding"
+              showConsoleLink={showConsoleLink}
+              form={form}
+              existingKeys={existingKeys}
+              isPending={createMutation.isPending}
+              allowedProviders={allowedProviders ?? CREATE_ALLOWED_PROVIDERS}
+              bedrockIamAuthEnabled={bedrockIamAuthEnabled}
+              geminiVertexAiEnabled={geminiVertexAiEnabled}
+              onUseSubscription={handleSwitchToSubscription}
+            />
+          </DialogBody>
+          <DialogStickyFooter className="mt-0">
+            <DialogCancelButton>Cancel</DialogCancelButton>
+            <Button
+              type="submit"
+              disabled={!isValid || createMutation.isPending}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Test & Create
+            </Button>
+          </DialogStickyFooter>
+        </DialogForm>
+      )}
     </FormDialog>
+  );
+}
+
+/**
+ * Confirmation panel shown after a key is created: fetches the models the new
+ * provider key exposes so the user sees it actually works before landing in chat.
+ */
+function ConnectedModelsSummary({ apiKeyId }: { apiKeyId: string }) {
+  const { data: models = [], isPending } = useLlmModels({
+    apiKeyId,
+    enabled: true,
+  });
+
+  if (isPending) {
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading available models…
+      </p>
+    );
+  }
+
+  if (models.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No models returned yet — they may still be syncing. You can start
+        chatting once they appear.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-sm text-muted-foreground">
+        {models.length} model{models.length === 1 ? "" : "s"} available:
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {models.slice(0, 12).map((model) => (
+          <span
+            key={model.dbId}
+            className="rounded border bg-muted/40 px-2 py-0.5 text-xs"
+          >
+            {model.displayName ?? model.id}
+          </span>
+        ))}
+        {models.length > 12 && (
+          <span className="px-2 py-0.5 text-xs text-muted-foreground">
+            +{models.length - 12} more
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -33,6 +33,11 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   }),
 }));
 
+// The post-create confirmation view fetches the new key's models.
+vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModels: () => ({ data: [], isPending: false }),
+}));
+
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/auth/auth.query");
@@ -40,7 +45,7 @@ vi.mock("@/lib/auth/auth.query");
 describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
-    mutateAsync.mockResolvedValue({});
+    mutateAsync.mockResolvedValue({ id: "new-key-id" });
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useHasPermissions).mockReset();
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -48,7 +53,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     } as ReturnType<typeof useHasPermissions>);
   });
 
-  it("submits the shared create API key flow and closes on success", async () => {
+  it("confirms with the model list, then closes and reports success on Done", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onSuccess = vi.fn();
@@ -79,6 +84,13 @@ describe("CreateLlmProviderApiKeyDialog", () => {
       vaultSecretPath: undefined,
       vaultSecretKey: undefined,
     });
+
+    // The create flow no longer closes on submit — it confirms with the new
+    // key's model list first, and only closes when the user clicks Done.
+    const doneButton = await screen.findByRole("button", { name: /^done$/i });
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    await user.click(doneButton);
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSuccess).toHaveBeenCalledOnce();
   });

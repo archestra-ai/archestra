@@ -73,6 +73,10 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               anthropicWifEnabled: z.boolean(),
               bedrockIamAuthEnabled: z.boolean(),
               geminiVertexAiEnabled: z.boolean(),
+              // Whether Microsoft 365 Copilot device-flow sign-in is available.
+              // It needs an operator-set Entra client id (no community default),
+              // so the UI hides its sign-in until this is true.
+              microsoft365CopilotSignInConfigured: z.boolean(),
               incomingEmail: z.object({
                 enabled: z.boolean(),
                 provider: EmailProviderTypeSchema.optional(),
@@ -141,6 +145,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
           bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
           geminiVertexAiEnabled: isVertexAiEnabled(),
+          microsoft365CopilotSignInConfigured: Boolean(
+            config.llm["microsoft-365-copilot"].clientId,
+          ),
           incomingEmail: getEmailProviderInfo(),
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,

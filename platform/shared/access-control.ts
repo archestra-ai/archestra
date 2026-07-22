@@ -1096,12 +1096,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },
-  [RouteId.UpdateLlmProviderApiKey]: {
-    llmProviderApiKey: ["update"],
-  },
-  [RouteId.DeleteLlmProviderApiKey]: {
-    llmProviderApiKey: ["delete"],
-  },
+  // Update/Delete are self-service for the owner, mirroring the ungated Create
+  // route above: the handler's authorizeApiKeyAccess enforces personal->owner,
+  // team->membership, org->admin (and Update re-validates any new scope), so a
+  // basic user can manage the personal key they created without being able to
+  // touch shared keys. Gating the route on :update/:delete would 403 them at the
+  // middleware before that owner check ever runs.
+  [RouteId.UpdateLlmProviderApiKey]: {},
+  [RouteId.DeleteLlmProviderApiKey]: {},
   [RouteId.GetApiKeys]: {
     apiKey: ["read"],
   },

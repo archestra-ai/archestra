@@ -5,6 +5,7 @@ import {
   E2eTestId,
   formatSecretStorageType,
   isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -12,6 +13,8 @@ import {
   AlertTriangle,
   Building2,
   CheckCircle2,
+  CreditCard,
+  ExternalLink,
   Loader2,
   Pencil,
   Plus,
@@ -24,6 +27,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { ConnectProviderCards } from "@/components/connect-provider-cards";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -51,7 +55,6 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -60,7 +63,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { UseSubscriptionDialog } from "@/components/use-subscription-dialog";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -109,6 +113,10 @@ export default function ApiKeysPage() {
   const providerFilter = searchParams.get("provider") || "all";
   const { data: canReadLlmProviderApiKeys, isPending: permissionsPending } =
     useHasPermissions({ llmProviderApiKey: ["read"] });
+  // Personal keys are self-service: their owner can edit/delete them without a
+  // role permission (the backend enforces the same via authorizeApiKeyAccess).
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const apiKeyQueriesEnabled =
     !permissionsPending && canReadLlmProviderApiKeys === true;
   const { data: allApiKeys = [] } = useLlmProviderApiKeys({
@@ -131,6 +139,8 @@ export default function ApiKeysPage() {
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] =
+    useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedApiKey, setSelectedApiKey] =
     useState<LlmProviderApiKeyResponse | null>(null);
@@ -301,15 +311,24 @@ export default function ApiKeysPage() {
   const editFormValues = editForm.watch();
   const isEditValid = isEditApiKeyFormValid(editFormValues);
 
-  const addApiKeyButton = (
-    <PermissionButton
-      permissions={{ llmProviderApiKey: ["create"] }}
-      onClick={() => setIsCreateDialogOpen(true)}
-      data-testid={E2eTestId.AddChatApiKeyButton}
-    >
-      <Plus className="h-4 w-4" />
-      Add API Key
-    </PermissionButton>
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        onClick={() => setIsSubscriptionDialogOpen(true)}
+        data-testid={E2eTestId.UseSubscriptionButton}
+      >
+        <CreditCard className="h-4 w-4" />
+        Use a subscription
+      </Button>
+      <Button
+        onClick={() => setIsCreateDialogOpen(true)}
+        data-testid={E2eTestId.AddChatApiKeyButton}
+      >
+        <Plus className="h-4 w-4" />
+        Add API Key
+      </Button>
+    </div>
   );
 
   const apiKeys = queriedApiKeys;
@@ -340,13 +359,21 @@ export default function ApiKeysPage() {
         header: "Name",
         cell: ({ row }) => (
           <div
-            className="flex items-center gap-2"
+            className="flex flex-wrap items-center gap-2"
             data-testid={`${E2eTestId.ChatApiKeyRow}-${row.original.name}`}
           >
-            <span className="font-medium break-all">{row.original.name}</span>
+            <span className="font-medium wrap-break-word min-w-0">
+              {row.original.name}
+            </span>
             {row.original.isPrimary && (
               <InlineTag className="text-amber-500 bg-amber-500/15 border border-amber-500/20">
                 Primary
+              </InlineTag>
+            )}
+            {(providerRequiresPerUserCredential(row.original.provider) ||
+              row.original.isChatgptSubscription) && (
+              <InlineTag className="text-sky-500 bg-sky-500/15 border border-sky-500/20">
+                Subscription
               </InlineTag>
             )}
           </div>
@@ -367,6 +394,16 @@ export default function ApiKeysPage() {
                 className="rounded dark:invert"
               />
               <span>{config.name}</span>
+              <Link
+                href={config.consoleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${config.consoleName}`}
+                aria-label={`Open ${config.consoleName}`}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
             </div>
           );
         },
@@ -451,6 +488,11 @@ export default function ApiKeysPage() {
           const isSystem = row.original.isSystem;
           const keyUsage = getKeyUsage(row.original.id);
           const isInUse = !!keyUsage;
+          // The owner of a personal key can manage it without a role permission.
+          const isOwnPersonalKey =
+            row.original.scope === "personal" &&
+            !!currentUserId &&
+            row.original.userId === currentUserId;
           return (
             <TableRowActions
               itemName={row.original.name}
@@ -458,9 +500,9 @@ export default function ApiKeysPage() {
                 {
                   icon: <Pencil className="h-4 w-4" />,
                   label: "Edit",
-                  permissions: {
-                    llmProviderApiKey: ["update"],
-                  },
+                  permissions: isOwnPersonalKey
+                    ? undefined
+                    : { llmProviderApiKey: ["update"] },
                   disabled: isSystem,
                   disabledTooltip: "System keys cannot be edited",
                   onClick: () => openEditDialog(row.original),
@@ -470,9 +512,9 @@ export default function ApiKeysPage() {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete",
                   variant: "destructive",
-                  permissions: {
-                    llmProviderApiKey: ["delete"],
-                  },
+                  permissions: isOwnPersonalKey
+                    ? undefined
+                    : { llmProviderApiKey: ["delete"] },
                   disabled: isSystem || isInUse,
                   disabledTooltip: isInUse
                     ? `${keyUsage}. Remove it from Settings > Knowledge before deleting.`
@@ -493,75 +535,94 @@ export default function ApiKeysPage() {
       getKeyUsage,
       azureOpenAiEntraIdEnabled,
       anthropicWifEnabled,
+      currentUserId,
     ],
   );
+
+  // With zero keys, strip every list affordance (header actions, search, filter,
+  // table) and show only the centered two-door chooser — mirroring the Skills
+  // empty state so first-run reads as a clean choice, not a populated table.
+  const showEmptyState =
+    apiKeyQueriesEnabled && !isPending && allApiKeys.length === 0;
 
   return (
     <PageLayout
       title="Model Providers"
       description="Connect the LLM providers used in Chat and the LLM Proxy by adding their API keys."
       tabs={MODEL_NAV_TABS}
-      actionButton={addApiKeyButton}
+      actionButton={showEmptyState ? undefined : headerActions}
     >
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <SearchInput
-            objectNamePlural="API keys"
-            searchFields={["name"]}
-            paramName="search"
+        {showEmptyState ? (
+          <ConnectProviderCards
+            onAddKey={() => setIsCreateDialogOpen(true)}
+            onUseSubscription={() => setIsSubscriptionDialogOpen(true)}
+            addKeyTestId={E2eTestId.AddChatApiKeyButton}
+            useSubscriptionTestId={E2eTestId.UseSubscriptionButton}
           />
-          <Select
-            value={providerFilter}
-            onValueChange={(value) =>
-              updateQueryParams({
-                provider: value === "all" ? null : value,
-              })
-            }
-          >
-            <SelectTrigger
-              aria-label="Filter by provider"
-              className="w-full sm:w-[240px]"
-            >
-              <SelectValue placeholder="All providers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All providers</SelectItem>
-              <LlmProviderSelectItems options={providerOptions} />
-            </SelectContent>
-          </Select>
-        </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <SearchInput
+                objectNamePlural="API keys"
+                searchFields={["name"]}
+                paramName="search"
+              />
+              <Select
+                value={providerFilter}
+                onValueChange={(value) =>
+                  updateQueryParams({
+                    provider: value === "all" ? null : value,
+                  })
+                }
+              >
+                <SelectTrigger
+                  aria-label="Filter by provider"
+                  className="w-full sm:w-[240px]"
+                >
+                  <SelectValue placeholder="All providers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All providers</SelectItem>
+                  <LlmProviderSelectItems options={providerOptions} />
+                </SelectContent>
+              </Select>
+            </div>
 
-        {byosEnabled &&
-          apiKeys.some((key) => key.secretStorageType === "database") && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Database-stored API keys detected</AlertTitle>
-              <AlertDescription>
-                External Vault storage is enabled, but some of your API keys are
-                still stored in the database. To migrate them to the vault,
-                delete them and create new ones with vault references.
-              </AlertDescription>
-            </Alert>
-          )}
+            {byosEnabled &&
+              apiKeys.some((key) => key.secretStorageType === "database") && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Database-stored API keys detected</AlertTitle>
+                  <AlertDescription>
+                    External Vault storage is enabled, but some of your API keys
+                    are still stored in the database. To migrate them to the
+                    vault, delete them and create new ones with vault
+                    references.
+                  </AlertDescription>
+                </Alert>
+              )}
 
-        <div data-testid={E2eTestId.ChatApiKeysTable}>
-          <DataTable
-            columns={columns}
-            data={apiKeys}
-            getRowId={(row) => row.id}
-            hideSelectedCount
-            isLoading={permissionsPending || isPending}
-            emptyMessage="No API keys configured"
-            hasActiveFilters={Boolean(search || providerFilter !== "all")}
-            filteredEmptyMessage="No LLM provider API keys match your filters. Try adjusting your search."
-            onClearFilters={() =>
-              updateQueryParams({
-                search: null,
-                provider: null,
-              })
-            }
-          />
-        </div>
+            <div data-testid={E2eTestId.ChatApiKeysTable}>
+              <DataTable
+                columns={columns}
+                data={apiKeys}
+                getRowId={(row) => row.id}
+                hideSelectedCount
+                isLoading={permissionsPending || isPending}
+                emptyMessage="No API keys configured"
+                hasActiveFilters={Boolean(search || providerFilter !== "all")}
+                filteredEmptyMessage="No LLM provider API keys match your filters. Try adjusting your search."
+                onClearFilters={() =>
+                  updateQueryParams({
+                    search: null,
+                    provider: null,
+                  })
+                }
+              />
+            </div>
+          </>
+        )}
 
         {/* Create Dialog */}
         <CreateLlmProviderApiKeyDialog
@@ -569,6 +630,13 @@ export default function ApiKeysPage() {
           onOpenChange={setIsCreateDialogOpen}
           title="Add API Key"
           description="Add a new LLM provider API key for use in Chat and LLM Proxy"
+          onUseSubscription={() => setIsSubscriptionDialogOpen(true)}
+        />
+
+        {/* Use a subscription (ChatGPT / GitHub Copilot / Microsoft 365 Copilot) */}
+        <UseSubscriptionDialog
+          open={isSubscriptionDialogOpen}
+          onOpenChange={setIsSubscriptionDialogOpen}
         />
 
         {/* Edit Dialog */}

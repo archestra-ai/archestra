@@ -19,6 +19,8 @@ export async function createLlmProviderApiKey(
 ): Promise<void> {
   const addApiKeyButton = page
     .getByTestId(E2eTestId.AddChatApiKeyButton)
+    // First-run screens front the create dialog with a "Paste an API key" card.
+    .or(page.getByTestId(E2eTestId.QuickstartAddApiKeyButton))
     .or(page.getByRole("button", { name: /^Add API Key$/i }))
     .first();
   await expect(addApiKeyButton).toBeVisible({ timeout: 15_000 });
@@ -28,12 +30,22 @@ export async function createLlmProviderApiKey(
   ).toBeVisible();
 
   if (params.providerOptionName) {
-    await page.getByRole("combobox", { name: "Provider" }).click();
+    // The provider picker is a searchable catalog (a combobox button that opens
+    // a command list), not a plain select. Open it, then pick the option.
+    await page
+      .getByTestId(E2eTestId.AddApiKeyProviderSelect)
+      .getByRole("button")
+      .click();
     await page.getByRole("option", { name: params.providerOptionName }).click();
   }
 
-  await page.getByLabel(/Name/i).fill(params.name);
+  // The create flow has no Name field (the key is auto-named after the provider).
   await page.getByRole("textbox", { name: /API Key/i }).fill(params.apiKey);
+
+  // Scope and base URL now live behind the collapsed "Advanced settings" section.
+  if (params.scope === "org" || params.baseUrl) {
+    await page.getByTestId(E2eTestId.AddApiKeyAdvancedToggle).click();
+  }
 
   if (params.scope === "org") {
     // Scope selector is a collapsible custom control — click the current
@@ -54,6 +66,9 @@ export async function createLlmProviderApiKey(
   await expect(page.getByText("API key created successfully")).toBeVisible({
     timeout: 30_000,
   });
+  // The create flow now confirms with the provider's discovered model list;
+  // click "Done" to close the dialog (and, in the first-run flow, advance).
+  await clickButton({ page, options: { name: "Done" } });
   if (params.waitForRow !== false) {
     await expect(
       page.getByTestId(`${E2eTestId.ChatApiKeyRow}-${params.name}`),

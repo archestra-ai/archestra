@@ -36,6 +36,7 @@ export function makeConfig(
       anthropicWifEnabled: false,
       bedrockIamAuthEnabled: false,
       geminiVertexAiEnabled: false,
+      microsoft365CopilotSignInConfigured: false,
       incomingEmail: { enabled: false },
       mcpServerBaseImage: "",
       orchestratorK8sNamespace: "",

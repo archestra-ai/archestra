@@ -18,6 +18,8 @@ type StoredEvent = AppRecordingBundle["recording"]["events"][number];
 type StoredCanvasFrame = Extract<StoredEvent, { kind: "canvas" }>;
 type StoredVideoConfig = Extract<StoredEvent, { kind: "video-config" }>;
 type StoredVideoChunk = Extract<StoredEvent, { kind: "video-chunk" }>;
+type StoredAudioConfig = Extract<StoredEvent, { kind: "audio-config" }>;
+type StoredAudioChunk = Extract<StoredEvent, { kind: "audio-chunk" }>;
 
 /** A canvas still with its pixels as an encoded-image Blob (WebP fallback). */
 export type RuntimeCanvasFrame = Omit<StoredCanvasFrame, "data"> & {
@@ -31,15 +33,29 @@ export type RuntimeVideoConfig = Omit<StoredVideoConfig, "description"> & {
 export type RuntimeVideoChunk = Omit<StoredVideoChunk, "data"> & {
   bytes: Uint8Array;
 };
+/** The audio stream config with its codec extradata as raw bytes. */
+export type RuntimeAudioConfig = Omit<StoredAudioConfig, "description"> & {
+  description?: Uint8Array;
+};
+/** An encoded audio chunk with its payload as raw bytes. */
+export type RuntimeAudioChunk = Omit<StoredAudioChunk, "data"> & {
+  bytes: Uint8Array;
+};
 
 export type RuntimeRecordingEvent =
   | Exclude<
       StoredEvent,
-      StoredCanvasFrame | StoredVideoConfig | StoredVideoChunk
+      | StoredCanvasFrame
+      | StoredVideoConfig
+      | StoredVideoChunk
+      | StoredAudioConfig
+      | StoredAudioChunk
     >
   | RuntimeCanvasFrame
   | RuntimeVideoConfig
-  | RuntimeVideoChunk;
+  | RuntimeVideoChunk
+  | RuntimeAudioConfig
+  | RuntimeAudioChunk;
 
 /**
  * Stored → runtime, once at bundle-open time. Synchronous: base64 decode is
@@ -59,6 +75,16 @@ export function reviveRecordingEvents(
       return { ...rest, bytes: base64ToBytes(data) };
     }
     if (event.kind === "video-config") {
+      const { description, ...rest } = event;
+      return description === undefined
+        ? rest
+        : { ...rest, description: base64ToBytes(description) };
+    }
+    if (event.kind === "audio-chunk") {
+      const { data, ...rest } = event;
+      return { ...rest, bytes: base64ToBytes(data) };
+    }
+    if (event.kind === "audio-config") {
       const { description, ...rest } = event;
       return description === undefined
         ? rest
@@ -92,6 +118,16 @@ export async function serializeRecordingEvents(
       }
       if (
         event.kind === "video-config" &&
+        event.description instanceof Uint8Array
+      ) {
+        return { ...event, description: bytesToBase64(event.description) };
+      }
+      if (event.kind === "audio-chunk" && event.bytes instanceof Uint8Array) {
+        const { bytes, ...rest } = event;
+        return { ...rest, data: bytesToBase64(bytes) };
+      }
+      if (
+        event.kind === "audio-config" &&
         event.description instanceof Uint8Array
       ) {
         return { ...event, description: bytesToBase64(event.description) };

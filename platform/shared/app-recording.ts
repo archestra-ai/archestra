@@ -225,6 +225,47 @@ const VideoChunkEventSchema = z
   .strict();
 
 /**
+ * Opens (or reopens) the recording's single mixed audio stream: the codec and
+ * sample format a decoder needs before it can take chunks. The recorder mixes
+ * every app audio source — Web Audio graphs and `<audio>`/`<video>` playback —
+ * into one Opus stream, so unlike video there is no per-canvas `sel`; there is
+ * exactly one audio stream per recording. Replayed as the decoder-reset point:
+ * a seek re-feeds this config, then the chunks from the seek point.
+ *
+ * Stored (JSON) form; `description` is base64 codec extradata (Opus carries its
+ * channel/pre-skip config here). In memory the bytes flow raw — base64 exists
+ * only in the bundle at rest.
+ */
+const AudioConfigEventSchema = z
+  .object({
+    kind: z.literal("audio-config"),
+    t: EventTimeSchema,
+    codec: z.string().max(64),
+    sampleRate: z.number().int().positive(),
+    numberOfChannels: z.number().int().positive().max(8),
+    description: z.string().max(65_536).optional(),
+  })
+  .strict();
+
+/**
+ * One encoded audio chunk of the recording's mixed stream. `tsUs` is the
+ * encoder's microsecond timestamp (monotonic within the stream); `data` is the
+ * chunk's bytes, base64 in this stored form only. Opus frames are all
+ * independently decodable, so — unlike video — there is no key/delta split.
+ *
+ * The `data` cap matches the video chunk's: a corruption backstop far above any
+ * real Opus frame (which run to a few kilobytes), not a rate control.
+ */
+const AudioChunkEventSchema = z
+  .object({
+    kind: z.literal("audio-chunk"),
+    t: EventTimeSchema,
+    tsUs: z.number().int().min(0),
+    data: z.string().max(2_000_000),
+  })
+  .strict();
+
+/**
  * One DOM change: an element's markup after it changed, or one attribute.
  *
  * Replay applies these rather than re-running the app, so what the viewer sees
@@ -253,6 +294,8 @@ export const AppRecordingEventSchema = z.discriminatedUnion("kind", [
   CanvasFrameEventSchema,
   VideoConfigEventSchema,
   VideoChunkEventSchema,
+  AudioConfigEventSchema,
+  AudioChunkEventSchema,
   DomMutationEventSchema,
 ]);
 export type AppRecordingEvent = z.infer<typeof AppRecordingEventSchema>;

@@ -57,6 +57,32 @@ describe("recording event binary conversion", () => {
     expect(revived[1]).not.toHaveProperty("data");
   });
 
+  it("round-trips audio chunks and configs as raw bytes", async () => {
+    const bytes = Uint8Array.from({ length: 180 }, (_, i) => (i * 5) % 256);
+    const description = new Uint8Array([1, 1, 56, 1, 0]);
+    const runtime = [
+      {
+        kind: "audio-config",
+        t: 0,
+        codec: "opus",
+        sampleRate: 48_000,
+        numberOfChannels: 2,
+        description,
+      },
+      { kind: "audio-chunk", t: 12, tsUs: 12_000, bytes },
+    ];
+    const stored = await serializeRecordingEvents(runtime);
+    expect(typeof stored[0].description).toBe("string");
+    expect(typeof stored[1].data).toBe("string");
+    expect(stored[1]).not.toHaveProperty("bytes");
+    const revived = reviveRecordingEvents(stored as unknown as StoredEvents);
+    expect((revived[0] as { description: Uint8Array }).description).toEqual(
+      description,
+    );
+    expect((revived[1] as { bytes: Uint8Array }).bytes).toEqual(bytes);
+    expect(revived[1]).not.toHaveProperty("data");
+  });
+
   it("passes non-binary events through and tolerates legacy stored stills", async () => {
     const pointer = { kind: "pointer", t: 1, type: "click", x: 1, y: 2 };
     const legacy = {

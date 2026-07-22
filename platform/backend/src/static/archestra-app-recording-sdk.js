@@ -49,23 +49,30 @@
   // Events carry an absolute epoch `ts`; the host rebases them onto the
   // recording clock (same machine, same clock).
   const push = (event) => {
-    // The recording gate — with one seam: encoded video chunks may land during
-    // the post-stop drain, while the encoder flushes what it already owns.
+    // The recording gate — with one seam per encoder: encoded video/audio
+    // chunks may land during the post-stop drain, while an encoder flushes what
+    // it already owns.
     if (
       !recording &&
-      !(videoDraining && event.kind === "video-chunk")
+      !(videoDraining && event.kind === "video-chunk") &&
+      !(
+        audioDraining &&
+        (event.kind === "audio-chunk" || event.kind === "audio-config")
+      )
     ) {
       return;
     }
     event.ts = Date.now();
     // Recorded input doubles as an activity signal for the canvas sampler: an
     // event-driven draw (a click repainting a chart) follows input, not rAF.
-    // Captured output (stills, video chunks/configs) must not count, or
+    // Captured output (stills, video/audio chunks/configs) must not count, or
     // capture would self-sustain.
     if (
       event.kind !== "canvas" &&
       event.kind !== "video-chunk" &&
-      event.kind !== "video-config"
+      event.kind !== "video-config" &&
+      event.kind !== "audio-chunk" &&
+      event.kind !== "audio-config"
     ) {
       inputActivityUntil = event.ts + INPUT_ACTIVITY_MS;
     }
@@ -684,6 +691,371 @@
     });
   };
 
+  // ── Encoded audio capture (WebCodecs) ──
+  // The app's SOUND, mixed into one Opus stream: Web Audio graphs and
+  // <audio>/<video> playback both. Capture taps the app's OUTPUT — what it
+  // routes to the speakers — never a microphone, so it adds no new input
+  // surface to redact. The stream has no replay counterpart in this file: the
+  // player decodes and plays it host-side (and muxes it into the exported
+  // video) rather than posting it back into the frame. Where AudioEncoder /
+  // MediaStreamTrackProcessor are absent the recording simply carries no audio
+  // and the visuals are unaffected — the same fail-soft as the video→stills
+  // fallback. And a silent app spins up nothing at all: the mixer starts only
+  // once a real source appears (a graph reaches the speakers, a media element
+  // plays), so silence is never encoded.
+  const AUDIO_CODEC = "opus";
+  // 60ms Opus frames (~16 events/s) keep audio an order of magnitude below the
+  // canvas video's event count, well inside the bundle's event cap.
+  const AUDIO_FRAME_DURATION_US = 60_000;
+  const AUDIO_BITRATE = 96_000;
+  // How deep the encoder's queue may grow before frames are dropped, so a slow
+  // machine sheds audio instead of piling backlog (mirrors the video gate).
+  const AUDIO_MAX_QUEUE = 8;
+
+  const OrigAudioContext =
+    typeof window.AudioContext === "function"
+      ? window.AudioContext
+      : typeof window.webkitAudioContext === "function"
+        ? window.webkitAudioContext
+        : null;
+  /** app AudioContext → its silent MediaStreamAudioDestinationNode tap. */
+  const audioTaps = new WeakMap();
+  /** Every app AudioContext we've tapped, so a recording started later can
+   *  adopt contexts already running (a WeakMap can't be enumerated). */
+  const liveAudioContexts = new Set();
+  /** Media elements routed through Web Audio (createMediaElementSource): their
+   *  sound is already in the graph tap, so they must NOT also be captured via
+   *  captureStream, or they'd be recorded twice. */
+  const graphRoutedMediaEls = new WeakSet();
+  /** The single live mix+encode session while recording, else null. */
+  let audioCapture = null;
+  /** Holds the push gate open for the encoder's post-stop flush (see push). */
+  let audioDraining = false;
+
+  // A per-context tap: fan the graph's output into a MediaStreamDestination we
+  // can read without disturbing playback. Created lazily on the first connect
+  // to a context's speakers, and adopted into a live recording at once.
+  const tapForContext = (ctx) => {
+    let tap = audioTaps.get(ctx);
+    if (tap) return tap;
+    try {
+      tap = ctx.createMediaStreamDestination();
+    } catch {
+      return null;
+    }
+    audioTaps.set(ctx, tap);
+    liveAudioContexts.add(ctx);
+    if (recording) {
+      ensureAudioCapture();
+      if (audioCapture) bridgeStream(audioCapture, tap.stream);
+    }
+    return tap;
+  };
+
+  // Installed at SDK load, before any app code runs (the IIFE completes first).
+  // Web Audio has no observer, so every node reaching a context's destination
+  // is ALSO fanned into that context's tap — the original connect runs first,
+  // so the sound still plays; the tap is a silent parallel branch.
+  if (
+    typeof AudioNode !== "undefined" &&
+    AudioNode.prototype &&
+    typeof AudioNode.prototype.connect === "function"
+  ) {
+    const origConnect = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (target) {
+      const result = origConnect.apply(this, arguments);
+      try {
+        if (
+          target &&
+          typeof AudioDestinationNode !== "undefined" &&
+          target instanceof AudioDestinationNode
+        ) {
+          const tap = tapForContext(target.context);
+          if (tap) origConnect.call(this, tap);
+        }
+      } catch {
+        // a tap that can't be wired just means this context isn't captured
+      }
+      return result;
+    };
+  }
+
+  // Mark elements routed through Web Audio so they aren't double-captured.
+  if (
+    OrigAudioContext &&
+    OrigAudioContext.prototype &&
+    typeof OrigAudioContext.prototype.createMediaElementSource === "function"
+  ) {
+    const origCreateMediaElementSource =
+      OrigAudioContext.prototype.createMediaElementSource;
+    OrigAudioContext.prototype.createMediaElementSource = function (el) {
+      try {
+        if (el) graphRoutedMediaEls.add(el);
+      } catch {}
+      return origCreateMediaElementSource.apply(this, arguments);
+    };
+  }
+
+  // A media element played directly (not through Web Audio) reaches the speakers
+  // on its own; captureStream is the only way to tap it. Hooked on play() so
+  // even a `new Audio(url).play()` created mid-session is captured.
+  if (
+    typeof HTMLMediaElement !== "undefined" &&
+    HTMLMediaElement.prototype &&
+    typeof HTMLMediaElement.prototype.play === "function"
+  ) {
+    const origPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      try {
+        if (recording) {
+          ensureAudioCapture();
+          if (audioCapture) bridgeMediaElement(audioCapture, this);
+        }
+      } catch {}
+      return origPlay.apply(this, arguments);
+    };
+  }
+
+  const anyMediaElementActive = () => {
+    try {
+      for (const el of document.querySelectorAll("audio,video")) {
+        if (!el.paused && !el.ended) return true;
+      }
+    } catch {}
+    return false;
+  };
+
+  const pushAudioConfig = (decoderConfig) => {
+    const event = {
+      kind: "audio-config",
+      codec: decoderConfig.codec || AUDIO_CODEC,
+      sampleRate:
+        decoderConfig.sampleRate ||
+        (audioCapture && audioCapture.sampleRate) ||
+        48_000,
+      numberOfChannels:
+        decoderConfig.numberOfChannels ||
+        (audioCapture && audioCapture.numberOfChannels) ||
+        2,
+    };
+    const description = decoderConfig.description;
+    if (description) {
+      // Copy out of the codec-owned buffer; the event outlives the callback.
+      event.description = new Uint8Array(
+        description instanceof ArrayBuffer
+          ? description.slice(0)
+          : description.buffer.slice(
+              description.byteOffset,
+              description.byteOffset + description.byteLength,
+            ),
+      );
+    }
+    push(event);
+  };
+
+  // Source one MediaStream (a context tap, or a media element's captureStream)
+  // into the recording mix, once.
+  const bridgeStream = (session, stream) => {
+    try {
+      if (
+        !stream ||
+        session.bridged.has(stream) ||
+        typeof stream.getAudioTracks !== "function" ||
+        stream.getAudioTracks().length === 0
+      ) {
+        return;
+      }
+      session.ctx.createMediaStreamSource(stream).connect(session.mix);
+      session.bridged.add(stream);
+    } catch {}
+  };
+
+  const bridgeMediaElement = (session, el) => {
+    try {
+      if (graphRoutedMediaEls.has(el)) return; // already tapped via Web Audio
+      const capture = el.captureStream || el.mozCaptureStream;
+      if (typeof capture !== "function") return;
+      bridgeStream(session, capture.call(el));
+    } catch {}
+  };
+
+  // Pull mixed audio off the mix track and feed the encoder, configuring it on
+  // the first frame (whose real sample-rate/channels the config then carries).
+  const runAudioReader = (session) => {
+    let reader;
+    try {
+      const track = session.dest.stream.getAudioTracks()[0];
+      if (!track) return;
+      session.processor = new MediaStreamTrackProcessor({ track });
+      reader = session.processor.readable.getReader();
+      session.reader = reader;
+    } catch {
+      return;
+    }
+    const pump = () => {
+      reader.read().then(({ done, value }) => {
+        if (done || session.stopped) {
+          if (value) {
+            try {
+              value.close();
+            } catch {}
+          }
+          return;
+        }
+        try {
+          const enc = session.encoder;
+          if (recording && enc && enc.state !== "closed" && !session.errored) {
+            if (!session.configured) {
+              session.configured = true;
+              session.sampleRate = value.sampleRate;
+              session.numberOfChannels = value.numberOfChannels;
+              enc.configure({
+                codec: AUDIO_CODEC,
+                sampleRate: value.sampleRate,
+                numberOfChannels: value.numberOfChannels,
+                bitrate: AUDIO_BITRATE,
+                opus: { frameDuration: AUDIO_FRAME_DURATION_US },
+              });
+            }
+            if (enc.encodeQueueSize < AUDIO_MAX_QUEUE) enc.encode(value);
+          }
+        } catch {
+          session.errored = true;
+        }
+        try {
+          value.close();
+        } catch {}
+        pump();
+      }, () => {});
+    };
+    pump();
+  };
+
+  // Start the mix+encode session on first real audio, and adopt every source
+  // that already exists. Idempotent: later sources just bridge into it.
+  const ensureAudioCapture = () => {
+    if (
+      audioCapture ||
+      !recording ||
+      !OrigAudioContext ||
+      typeof AudioEncoder !== "function" ||
+      typeof MediaStreamTrackProcessor !== "function"
+    ) {
+      return;
+    }
+    let session;
+    try {
+      const ctx = new OrigAudioContext();
+      const mix = ctx.createGain();
+      const dest = ctx.createMediaStreamDestination();
+      mix.connect(dest);
+      session = {
+        ctx,
+        mix,
+        dest,
+        encoder: null,
+        bridged: new WeakSet(),
+        configured: false,
+        errored: false,
+        stopped: false,
+        configSent: false,
+        reader: null,
+        processor: null,
+        sampleRate: 0,
+        numberOfChannels: 0,
+      };
+      session.encoder = new AudioEncoder({
+        output: (chunk, metadata) => {
+          try {
+            if (!session.configSent) {
+              session.configSent = true;
+              pushAudioConfig((metadata && metadata.decoderConfig) || {});
+            }
+            const bytes = new Uint8Array(chunk.byteLength);
+            chunk.copyTo(bytes);
+            push({
+              kind: "audio-chunk",
+              tsUs: Math.max(0, Math.round(chunk.timestamp || 0)),
+              bytes,
+            });
+          } catch {
+            // a dropped chunk must never break the app
+          }
+        },
+        error: () => {
+          session.errored = true;
+        },
+      });
+    } catch {
+      if (session && session.ctx) {
+        try {
+          session.ctx.close();
+        } catch {}
+      }
+      return;
+    }
+    audioCapture = session;
+    // A user gesture in the app during recording satisfies autoplay; harmless
+    // if the context is already running.
+    try {
+      session.ctx.resume();
+    } catch {}
+    for (const ctx of liveAudioContexts) {
+      const tap = audioTaps.get(ctx);
+      if (tap) bridgeStream(session, tap.stream);
+    }
+    let els;
+    try {
+      els = document.querySelectorAll("audio,video");
+    } catch {
+      els = [];
+    }
+    for (const el of els) bridgeMediaElement(session, el);
+    runAudioReader(session);
+  };
+
+  /**
+   * Flush the audio encoder after the recording gate closes so its last frames
+   * make the capture — mirrors drainVideoStreams: `audioDraining` holds the
+   * push gate open for exactly those chunks, and the buffer is flushed again
+   * once the encoder settles, inside the host's post-stop grace window.
+   */
+  const drainAudioStreams = () => {
+    const session = audioCapture;
+    audioCapture = null;
+    if (!session) return;
+    session.stopped = true;
+    try {
+      if (session.reader) session.reader.cancel().catch(() => {});
+    } catch {}
+    const finish = () => {
+      audioDraining = false;
+      flush();
+      try {
+        if (session.encoder && session.encoder.state !== "closed") {
+          session.encoder.close();
+        }
+      } catch {}
+      try {
+        session.ctx.close();
+      } catch {}
+    };
+    if (
+      session.encoder &&
+      session.encoder.state === "configured" &&
+      !session.errored
+    ) {
+      audioDraining = true;
+      try {
+        session.encoder.flush().then(finish, finish);
+      } catch {
+        finish();
+      }
+    } else {
+      finish();
+    }
+  };
+
   /**
    * Read one canvas's current pixels into an encoded-image Blob (the stills
    * fallback for browsers without WebCodecs), off the app's critical path: an
@@ -961,6 +1333,12 @@
     startDomCapture();
     sampleCanvases();
     canvasRafId = origRaf(canvasCaptureLoop);
+    // Audio only if the app already has sound — a context routed to the speakers
+    // or a media element playing. The connect/play hooks spin the mixer up later
+    // if sound starts mid-session, so a silent app records no audio stream.
+    if (liveAudioContexts.size > 0 || anyMediaElementActive()) {
+      ensureAudioCapture();
+    }
 
     listen(window, "resize", () => {
       push({
@@ -1115,6 +1493,7 @@
     sampleCanvases(true);
     recording = false;
     drainVideoStreams();
+    drainAudioStreams();
     for (const fn of teardownFns) {
       try {
         fn();

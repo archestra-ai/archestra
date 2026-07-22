@@ -252086,7 +252086,8 @@
                                   "execute",
                                   "deploy-to-restricted",
                                   "manage",
-                                  "read-all"
+                                  "read-all",
+                                  "share-org"
                                 ]
                               }
                             }
@@ -252445,7 +252446,8 @@
                           "execute",
                           "deploy-to-restricted",
                           "manage",
-                          "read-all"
+                          "read-all",
+                          "share-org"
                         ]
                       }
                     }
@@ -252502,7 +252504,8 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
-                            "read-all"
+                            "read-all",
+                            "share-org"
                           ]
                         }
                       }
@@ -252848,7 +252851,8 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
-                            "read-all"
+                            "read-all",
+                            "share-org"
                           ]
                         }
                       }
@@ -253159,7 +253163,8 @@
                           "execute",
                           "deploy-to-restricted",
                           "manage",
-                          "read-all"
+                          "read-all",
+                          "share-org"
                         ]
                       }
                     }
@@ -253237,7 +253242,8 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
-                            "read-all"
+                            "read-all",
+                            "share-org"
                           ]
                         }
                       }
@@ -300134,7 +300140,8 @@
                         "execute",
                         "deploy-to-restricted",
                         "manage",
-                        "read-all"
+                        "read-all",
+                        "share-org"
                       ]
                     }
                   }

@@ -18,6 +18,20 @@ import {
 import { CopyableCode } from "@/components/copyable-code";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -246,7 +260,7 @@ export function ProxyClientInstructions({
 
   return (
     <div id="proxy-instructions" className="space-y-4">
-      <ProviderGrid
+      <ProviderPicker
         providers={gridProviders}
         supported={supportedProviders}
         selected={selectedProvider}
@@ -1139,25 +1153,25 @@ function ProxyNote({ note }: { note: string }) {
   );
 }
 
-interface ProviderGridProps {
+interface ProviderPickerProps {
   providers: SupportedProvider[];
   supported: SupportedProvider[];
   selected: SupportedProvider | null;
   onSelect: (p: SupportedProvider) => void;
   /**
-   * Render the OpenAI-compatible Model Router as the first tile (generic
+   * Render the OpenAI-compatible Model Router as the first segment (generic
    * clients only — custom clients build per-provider instructions).
    */
   modelRouter?: { selected: boolean; onSelect: () => void };
 }
 
-function ProviderGrid({
+function ProviderPicker({
   providers,
   supported,
   selected,
   onSelect,
   modelRouter,
-}: ProviderGridProps) {
+}: ProviderPickerProps) {
   const PRIMARY: SupportedProvider[] = [
     "openai",
     "anthropic",
@@ -1165,112 +1179,174 @@ function ProviderGrid({
     "bedrock",
     "groq",
   ];
-  const [showAll, setShowAll] = useState(false);
-  const compact = providers.filter((p) => PRIMARY.includes(p));
-  // If the admin's allow-list excludes every primary provider, there's
-  // nothing to collapse to — fall through to the full list instead of
-  // rendering an empty grid behind a "Show all" button.
-  const canCollapse = compact.length > 0 && compact.length < providers.length;
-  const visible = showAll || !canCollapse ? providers : compact;
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const primary = providers.filter((p) => PRIMARY.includes(p));
+  const rest = providers.filter((p) => !PRIMARY.includes(p));
+  // A provider picked from the "..." search joins the group so the selection
+  // stays visible.
+  const selectedFromRest =
+    selected && rest.includes(selected) ? selected : null;
+  const searchResults = providers.filter((p) =>
+    providerDisplayNames[p].toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const pickFromSearch = (p: SupportedProvider) => {
+    onSelect(p);
+    setSearchOpen(false);
+    setSearch("");
+  };
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
-        <h4 className="text-sm font-semibold text-foreground">
-          Select a provider
-        </h4>
-        {canCollapse && (
+      <h4 className="pb-3 text-sm font-semibold text-foreground">
+        Select a provider
+      </h4>
+      <ButtonGroup className="flex-wrap">
+        {modelRouter && (
           <Button
             type="button"
-            variant="ghost"
             size="sm"
-            className="h-9 text-xs"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "Show fewer" : `Show all (${providers.length})`}
-          </Button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
-        {modelRouter && (
-          <button
-            type="button"
+            variant={modelRouter.selected ? "secondary" : "outline"}
             onClick={modelRouter.onSelect}
-            className={cn(
-              "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:border-primary/50",
-              modelRouter.selected && "border-primary ring-4 ring-primary/5",
-            )}
+            className={cn("gap-2", modelRouter.selected && "font-semibold")}
           >
-            <div
-              className="flex size-9 shrink-0 items-center justify-center rounded-md font-mono text-[13px] font-bold"
+            <span
+              className="flex size-4 shrink-0 items-center justify-center rounded-sm font-mono text-[10px] font-bold"
               style={{
                 background: "linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)",
                 color: "#fff",
               }}
             >
               ⇄
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold tracking-tight text-foreground">
-                OpenAI compatible Model Router
-              </div>
-              <div className="mt-0.5 text-[11.5px] text-muted-foreground">
-                Every provider, one endpoint
-              </div>
-            </div>
-            {modelRouter.selected && (
-              <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                <Check className="size-2.5" strokeWidth={3} />
-              </div>
-            )}
-          </button>
+            </span>
+            OpenAI compatible Model Router
+          </Button>
         )}
-        {visible.map((p) => {
-          const isSupported = supported.includes(p);
-          const isSel = selected === p;
-          const icon = PROVIDER_ICONS[p];
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => onSelect(p)}
-              className={cn(
-                "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-sm transition-all hover:border-primary/50",
-                isSel && "border-primary ring-4 ring-primary/5",
-                !isSupported && "opacity-50",
-              )}
-            >
-              <div
-                className="flex size-9 shrink-0 items-center justify-center rounded-md font-mono text-[13px] font-bold"
-                style={{ background: icon.bg, color: icon.fg }}
+        {primary.map((p) => (
+          <ProviderPickerButton
+            key={p}
+            provider={p}
+            isSupported={supported.includes(p)}
+            isSelected={selected === p}
+            onSelect={onSelect}
+          />
+        ))}
+        {selectedFromRest && (
+          <ProviderPickerButton
+            provider={selectedFromRest}
+            isSupported={supported.includes(selectedFromRest)}
+            isSelected
+            onSelect={onSelect}
+          />
+        )}
+        {rest.length > 0 && (
+          <Popover
+            open={searchOpen}
+            onOpenChange={(open) => {
+              setSearchOpen(open);
+              if (!open) setSearch("");
+            }}
+          >
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-label="More providers"
+                aria-expanded={searchOpen}
               >
-                {icon.glyph === "aws" ? (
-                  <span className="text-[9px] font-extrabold tracking-tight">
-                    aws
-                  </span>
-                ) : (
-                  icon.glyph
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold tracking-tight text-foreground">
-                  {providerDisplayNames[p]}
-                </div>
-                {!isSupported && (
-                  <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
-                    Not compatible
-                  </div>
-                )}
-              </div>
-              {isSel && (
-                <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                  <Check className="size-2.5" strokeWidth={3} />
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
+                …
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-0" align="start">
+              <Command shouldFilter={false}>
+                <CommandInput
+                  value={search}
+                  onValueChange={setSearch}
+                  placeholder="Search providers..."
+                />
+                <CommandList>
+                  <CommandEmpty>No providers found.</CommandEmpty>
+                  <CommandGroup>
+                    {searchResults.map((p) => (
+                      <CommandItem
+                        key={p}
+                        value={p}
+                        onSelect={() => pickFromSearch(p)}
+                        className="justify-between"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <ProviderGlyph provider={p} />
+                          <span className="truncate">
+                            {providerDisplayNames[p]}
+                          </span>
+                          {!supported.includes(p) && (
+                            <span className="text-[11px] text-muted-foreground">
+                              Not compatible
+                            </span>
+                          )}
+                        </span>
+                        <Check
+                          className={cn(
+                            "h-4 w-4",
+                            selected === p ? "opacity-100" : "opacity-0",
+                          )}
+                        />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        )}
+      </ButtonGroup>
     </div>
+  );
+}
+
+function ProviderPickerButton({
+  provider,
+  isSupported,
+  isSelected,
+  onSelect,
+}: {
+  provider: SupportedProvider;
+  isSupported: boolean;
+  isSelected: boolean;
+  onSelect: (p: SupportedProvider) => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={isSelected ? "secondary" : "outline"}
+      onClick={() => onSelect(provider)}
+      className={cn(
+        "gap-2",
+        isSelected && "font-semibold",
+        !isSupported && "opacity-50",
+      )}
+    >
+      <ProviderGlyph provider={provider} />
+      {providerDisplayNames[provider]}
+    </Button>
+  );
+}
+
+function ProviderGlyph({ provider }: { provider: SupportedProvider }) {
+  const icon = PROVIDER_ICONS[provider];
+  return (
+    <span
+      className="flex size-4 shrink-0 items-center justify-center rounded-sm font-mono text-[9px] font-bold"
+      style={{ background: icon.bg, color: icon.fg }}
+    >
+      {icon.glyph === "aws" ? (
+        <span className="text-[5px] font-extrabold tracking-tight">aws</span>
+      ) : (
+        icon.glyph
+      )}
+    </span>
   );
 }

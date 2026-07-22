@@ -5,6 +5,7 @@ import {
   validateRecordingBundle,
 } from "@archestra/shared";
 import {
+  AlertTriangle,
   Check,
   Copy,
   Github,
@@ -19,6 +20,7 @@ import {
   useState,
 } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -38,6 +40,7 @@ import {
   gallerySubmissionBranch,
   gallerySubmissionFolder,
   gallerySubmissionSlug,
+  oversizedGallerySubmissionFile,
   recallGallerySubmission,
   rememberGallerySubmission,
   submitRecordingToAppGallery,
@@ -138,6 +141,16 @@ export function AppGalleryShareButton(props: {
       // Same size trim the video export ships (renders identically).
       const trimmed = pruneTrailingTrimEvents(validation.bundle);
       slug = gallerySubmissionSlug(trimmed);
+
+      // GitHub's file-size ceiling is checked right here, at the click —
+      // nobody should authorize GitHub only to then learn the recording
+      // can't be uploaded.
+      const oversize = oversizedGallerySubmissionFile(trimmed);
+      if (oversize) {
+        failedTitle = "Recording too large";
+        fail(oversize);
+        return;
+      }
 
       const token = takeCachedGithubToken();
       if (!token) {
@@ -270,6 +283,35 @@ export function AppGalleryShareButton(props: {
 
   const chrome = dialogChrome(state, galleryRepo);
 
+  // Actions live in the standard sticky footer (right-aligned, full-size
+  // buttons), like every other dialog in the app — the body carries content
+  // only.
+  const footer =
+    state.step === "signin" ? (
+      <Button type="button" onClick={() => void run()}>
+        <Github />
+        Sign in with GitHub
+      </Button>
+    ) : state.step === "ready" ? (
+      <Button type="button" onClick={() => void run()}>
+        <GitPullRequestCreateArrow />
+        Create Pull Request
+      </Button>
+    ) : state.step === "error" ? (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setDialogOpen(false)}
+        >
+          Cancel
+        </Button>
+        <Button type="button" onClick={() => void run()}>
+          Try again
+        </Button>
+      </>
+    ) : null;
+
   return (
     <>
       <Tooltip>
@@ -317,14 +359,20 @@ export function AppGalleryShareButton(props: {
         // and the line just chops them in half.
         headerClassName="border-b-0"
         description={chrome.description}
-        // "done" has no body at all — collapse its padding so the dialog ends
-        // cleanly under the description.
-        bodyClassName={state.step === "done" ? "py-0" : undefined}
+        // Screens whose whole content is the header and footer (done, the
+        // sign-in gate, ready) have no body — collapse its padding.
+        bodyClassName={
+          state.step === "done" ||
+          state.step === "signin" ||
+          state.step === "ready"
+            ? "py-0"
+            : undefined
+        }
+        footer={footer}
       >
         <ShareDialogBody
           state={state}
           repo={galleryRepo}
-          onRetry={run}
           onManual={openManual}
           onOpenGithub={(verificationUri) =>
             claimGithubTab(githubTabRef, verificationUri)
@@ -346,7 +394,6 @@ export function AppGalleryShareButton(props: {
               message: "No pull request was opened.",
             });
           }}
-          onClose={() => setDialogOpen(false)}
         />
       </StandardDialog>
     </>
@@ -484,31 +531,17 @@ function GalleryLink(props: { repo: { owner: string; name: string } }) {
 function ShareDialogBody(props: {
   state: ShareState;
   repo: { owner: string; name: string };
-  onRetry: () => void;
   onManual: () => void;
   onOpenGithub: (verificationUri: string) => void;
   onCancelAuth: () => void;
   onCancelWork: () => void;
-  onClose: () => void;
 }) {
   const { state } = props;
 
-  if (state.step === "signin") {
-    // Deliberately inert until clicked — mirrors the Copilot provider form's
-    // resting state; the click is what fires the device-code request.
-    return (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-fit"
-        onClick={props.onRetry}
-      >
-        <Github className="mr-2 h-4 w-4" />
-        Sign in with GitHub
-      </Button>
-    );
-  }
+  // "signin" and "ready" are header+footer screens: the description (or the
+  // title) says it all, and their single action lives in the footer. The
+  // sign-in gate stays deliberately inert — no device-code request leaves
+  // until the footer button is clicked.
   if (state.step === "connect") {
     return (
       <ConnectStep
@@ -516,22 +549,6 @@ function ShareDialogBody(props: {
         onOpenGithub={props.onOpenGithub}
         onCancel={props.onCancelAuth}
       />
-    );
-  }
-  if (state.step === "ready") {
-    // GitHub is authorized; the submission waits for this explicit click so
-    // its errors can never be mistaken for sign-in ones.
-    return (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-fit"
-        onClick={props.onRetry}
-      >
-        <GitPullRequestCreateArrow className="mr-2 h-4 w-4" />
-        Create Pull Request
-      </Button>
     );
   }
   if (state.step === "working") {
@@ -560,19 +577,15 @@ function ShareDialogBody(props: {
     );
   }
   if (state.step === "error") {
-    // The title already blames the step; the body carries only the curated
-    // human message, the two actions, and the quieter manual workaround.
+    // The title already blames the step; the body is the app's standard
+    // destructive Alert plus the quieter manual workaround. Cancel and Try
+    // again live in the footer like every other dialog's actions.
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-sm text-destructive">{state.message}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={props.onClose}>
-            Cancel
-          </Button>
-          <Button variant="outline" size="sm" onClick={props.onRetry}>
-            Try again
-          </Button>
-        </div>
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
         <button
           type="button"
           className="w-fit text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"

@@ -1,8 +1,4 @@
-import {
-  APP_RECORDING_MAX_BUNDLE_BYTES,
-  archestraApiSdk,
-  slugify,
-} from "@archestra/shared";
+import { archestraApiSdk, slugify } from "@archestra/shared";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 
 /**
@@ -174,18 +170,11 @@ export async function submitRecordingToAppGallery(params: {
   const appSlug = gallerySubmissionSlug(bundle);
   const branch = gallerySubmissionBranch(appSlug);
 
-  // Built once, checked before anything touches the network: GitHub's
-  // contents API refuses files over 100MB, and refuses them as opaque 5xx
-  // weather rather than anything a person could read. An oversized bundle is
-  // stopped here with the real number and the real remedy instead.
-  const files = buildGallerySubmissionFiles(bundle);
-  for (const file of files) {
-    if (file.bytes.byteLength > APP_RECORDING_MAX_BUNDLE_BYTES) {
-      throw new Error(
-        `This recording is ${mb(file.bytes.byteLength)}MB — over the ${mb(APP_RECORDING_MAX_BUNDLE_BYTES)}MB limit for gallery submissions. Re-record the session and try again.`,
-      );
-    }
-  }
+  // Backstop only — the dialog runs this same check at the Share click,
+  // before the participant is asked to sign in to anything. GitHub would
+  // refuse an oversized file as opaque 5xx weather mid-flow.
+  const oversize = oversizedGallerySubmissionFile(bundle);
+  if (oversize) throw new Error(oversize);
 
   onProgress({
     stage: "check",
@@ -254,7 +243,7 @@ export async function submitRecordingToAppGallery(params: {
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
   const dir = gallerySubmissionFolder(viewer.login, appSlug);
-  for (const file of files) {
+  for (const file of buildGallerySubmissionFiles(bundle)) {
     onProgress({
       stage: "upload",
       label: `Uploading ${file.name} to ${forkName}…`,
@@ -388,6 +377,24 @@ export function buildGallerySubmissionFiles(
     });
   }
   return files;
+}
+
+/**
+ * The one size rule a submission must meet — GitHub's own per-file limit on
+ * its contents API, NOT a product quota. Returns the refusal message when a
+ * file is over it, null when everything fits. The dialog calls this at the
+ * Share click so nobody signs in to GitHub only to learn the recording
+ * can't be uploaded.
+ */
+export function oversizedGallerySubmissionFile(
+  bundle: AppRecordingBundle,
+): string | null {
+  for (const file of buildGallerySubmissionFiles(bundle)) {
+    if (file.bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
+      return `This recording is ${mb(file.bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Re-record a shorter session.`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -745,6 +752,9 @@ function base64ToBytes(base64: string): Uint8Array {
   }
   return bytes;
 }
+
+/** GitHub's ceiling for a file created through its contents API. */
+const GITHUB_MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 function mb(bytes: number): number {
   return Math.round(bytes / (1024 * 1024));

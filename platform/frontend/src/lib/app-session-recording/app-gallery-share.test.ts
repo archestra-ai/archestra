@@ -254,9 +254,9 @@ describe("submitRecordingToAppGallery", () => {
 
     const failure = await submit({ bundle }).catch((error) => error);
     expect(failure).toBeInstanceOf(Error);
-    expect(String(failure)).toMatch(
-      /over the 100MB limit for gallery submissions/,
-    );
+    // GitHub's real per-file ceiling, phrased as GitHub's — never a
+    // product quota.
+    expect(String(failure)).toMatch(/GitHub refuses files over 100MB/);
     // Not even the duplicate pre-flight ran — no request left the browser.
     expect(calls).toHaveLength(0);
   });

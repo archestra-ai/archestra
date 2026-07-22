@@ -230,10 +230,16 @@
    * bits scale with the captured area (one fixed rate that suits 720p starves
    * 1080p), clamped so tiny canvases stay decent and huge ones stay bounded.
    */
-  const VIDEO_BITRATE_PER_PIXEL = 3.5;
-  const VIDEO_BITRATE_MIN = 3_000_000;
-  const VIDEO_BITRATE_MAX = 8_000_000;
-  const VIDEO_KEYFRAME_MS = 1_000;
+  const VIDEO_BITRATE_PER_PIXEL = 2.0;
+  const VIDEO_BITRATE_MIN = 1_000_000;
+  const VIDEO_BITRATE_MAX = 4_000_000;
+  /**
+   * Keyframe cadence. Keys at ~1080p cost hundreds of kilobytes each, so the
+   * cadence is a real share of the whole byte budget; a seek re-decodes at
+   * most a cadence's worth of deltas, which stays well under a second of
+   * decode work.
+   */
+  const VIDEO_KEYFRAME_MS = 2_000;
   /** How deep the encoder's input queue may grow before frames are skipped. */
   const VIDEO_MAX_QUEUE = 2;
   // ── Constant quality (per-frame quantizer), where the encoder supports it.
@@ -246,14 +252,64 @@
   // recording stays bounded instead of growing without limit.
   const VIDEO_BASE_QP = 30; // VP9 0..63 — visually clean for UI/3D content
   /** Keys are what seeks land on and posters paint — spend more on them. */
-  const VIDEO_KEY_QP_BONUS = 4;
+  const VIDEO_KEY_QP_BONUS = 2;
   const VIDEO_MIN_QP = 12;
   const VIDEO_MAX_QP = 56;
   const VIDEO_QP_BOOST_STEP = 3;
   const VIDEO_QP_BOOST_MAX = 18;
-  const VIDEO_GOVERNOR_MAX_BPS = 8_000_000;
-  const VIDEO_GOVERNOR_WINDOW_MS = 2_000;
-  const VIDEO_GOVERNOR_QP_MAX = 12;
+  /**
+   * The governor's ceiling is a TOTAL across every stream in the recording,
+   * not per canvas — bundles are stored, uploaded and rendered whole, so the
+   * number that matters is the recording's byte rate, and a three-canvas app
+   * must not cost three times a one-canvas app. Content that outruns even the
+   * maximum quantizer settles at the frame shed's line — this ceiling times
+   * its headroom — so the ceiling is sized from there: a worst-case
+   * all-motion 30s cut stays ~14MB of video (~19MB as a shared bundle), and
+   * a minutes-long raw take stays under the ~100MB ceilings of the render
+   * and gallery-upload paths. Content below the ceiling never feels it.
+   */
+  const VIDEO_GOVERNOR_MAX_BPS = 3_000_000;
+  /**
+   * Wide enough for the frame shed to hold the ceiling even when single
+   * frames are enormous: the shed can only space frames out, so its floor is
+   * one worst-case frame per window span — a ~2MB frame (1080p noise at max
+   * quantizer) against 5s is ~3 Mbit/s, inside the ceiling. Against a short
+   * window the same frame busts the cap all by itself and the rate floor
+   * lands far above the ceiling no matter how hard the shed works.
+   */
+  const VIDEO_GOVERNOR_WINDOW_MS = 5_000;
+  /**
+   * Reaches VIDEO_MAX_QP from base: on content VP9 cannot cheapen (noise,
+   * particles), a ceiling short of the maximum quantizer pins there and the
+   * rate runs away anyway — convergence has to be reachable, not hoped for.
+   */
+  const VIDEO_GOVERNOR_QP_MAX = VIDEO_MAX_QP - VIDEO_BASE_QP;
+  /**
+   * One quantizer step per adjustment, at most this often. Chunk arrivals
+   * scale with streams times frame rate, and stepping per chunk would swing
+   * the whole range in a fraction of a second; paced, a full climb takes a
+   * couple of seconds — fast enough to bound a burst, slow enough not to
+   * flicker between quality levels.
+   */
+  const VIDEO_GOVERNOR_STEP_MS = 80;
+  /**
+   * The hard brake behind the quantizer: frames stop being FED once the
+   * rolling rate runs this far past the ceiling. Quality-first is the right
+   * first response, but it cannot be the only one — a quantizer reduces what
+   * redundancy the codec can find, and content with none (noise, particles,
+   * camera grain) encodes at hundreds of megabits even at maximum quantizer.
+   * Measured, not assumed: 1080p noise at QP 56 still emits ~200 Mbit/s.
+   * Bytes, not quality, are the contract, so past this line the frame rate
+   * gives way instead: deltas are skipped until the window drains.
+   */
+  const VIDEO_SHED_HEADROOM = 1.25;
+  /**
+   * Keyframes outrank the shed — a stream without them stops being seekable —
+   * but under sustained over-budget content they stretch to this cadence
+   * instead of their usual one. The floor on what a pathological recording
+   * can cost: keys alone at this spacing stay around half the ceiling.
+   */
+  const VIDEO_KEY_MAX_INTERVAL_MS = 6_000;
   /** canvas → { encoder, sel, width, height, lastKeyMs, errored, ... } */
   const videoStreams = new WeakMap();
   /** undefined = not probed yet; null = unsupported; else the chosen mode
@@ -261,6 +317,11 @@
   let videoMode;
   let videoCodecProbe = null;
   let videoDraining = false;
+  // The governor's shared state: every stream's chunks land in one rolling
+  // window, and the one quantizer surcharge applies to all of them.
+  let videoGovernorQp = 0;
+  let videoGovernorAdjustedAt = 0;
+  const videoRateWindow = [];
 
   const videoBitrateFor = (pixels) =>
     Math.max(
@@ -341,11 +402,12 @@
       errored: false,
       encoder: null,
       descriptionSent: false,
-      // Constant-quality state: the two quantizer feedback terms and the
-      // rolling output window the governor measures.
+      // Queue pressure is a property of this one encoder — the governor's
+      // byte-rate state is shared across streams instead.
       qpBoost: 0,
-      governorQp: 0,
-      rateWindow: [],
+      // What this stream's frames have been costing lately — the frame
+      // shed's estimate for the one it is about to admit.
+      lastChunkBytes: 0,
     };
     try {
       stream.encoder = new VideoEncoder({
@@ -370,9 +432,8 @@
               tsUs: Math.max(0, Math.round(chunk.timestamp || 0)),
               bytes,
             });
-            if (videoMode && videoMode.quantizer) {
-              governVideoRate(stream, bytes.byteLength);
-            }
+            stream.lastChunkBytes = bytes.byteLength;
+            governVideoRate(bytes.byteLength);
           } catch {
             // a dropped chunk must never break the app
           }
@@ -490,7 +551,26 @@
       source = scratchCanvas;
     }
     const atMs = nowMs();
-    const keyFrame = atMs - stream.lastKeyMs >= VIDEO_KEYFRAME_MS;
+    const keyDue = atMs - stream.lastKeyMs >= VIDEO_KEYFRAME_MS;
+    // The byte-hard backstop. Once the recording's rolling rate — including
+    // what THIS frame is about to cost, estimated from the stream's previous
+    // chunk — would run past the ceiling with headroom, the quantizer has
+    // already given what it can: deltas are dropped outright, and even a due
+    // key waits, up to the hard key interval that keeps the stream seekable.
+    // Predicting the frame's cost matters when frames are huge — checking
+    // only what already landed admits every giant frame exactly once, and on
+    // content where one frame busts the whole window that is the difference
+    // between holding the ceiling and doubling it. Feeding nothing drains the
+    // window within seconds, so this self-limits to bursts around the cap:
+    // pathological content records as a slideshow, never as a runaway bundle.
+    const predictedBps =
+      videoWindowBps(atMs) +
+      (stream.lastChunkBytes * 8 * 1000) / VIDEO_GOVERNOR_WINDOW_MS;
+    if (predictedBps > VIDEO_GOVERNOR_MAX_BPS * VIDEO_SHED_HEADROOM) {
+      const keyOverdue = atMs - stream.lastKeyMs >= VIDEO_KEY_MAX_INTERVAL_MS;
+      if (!keyOverdue) return;
+    }
+    const keyFrame = keyDue;
     let frame;
     try {
       frame = new VideoFrame(source, { timestamp: Math.round(atMs * 1000) });
@@ -504,7 +584,7 @@
           VIDEO_MAX_QP,
           Math.max(
             VIDEO_MIN_QP,
-            VIDEO_BASE_QP + stream.qpBoost + stream.governorQp,
+            VIDEO_BASE_QP + stream.qpBoost + videoGovernorQp,
           ),
         );
         options.vp9 = {
@@ -523,28 +603,44 @@
   };
 
   /**
-   * The byte-rate governor: constant quality has no ceiling of its own, so
-   * when the rolling output rate crosses the cap, quality gives way one
-   * quantizer step per chunk (and comes back the same way once safely under).
-   * Bounds a worst-case all-motion recording without touching typical ones.
+   * The recording's rolling video output rate — every stream's chunks in one
+   * window. What the governor steers by and the frame shed cuts on.
    */
-  const governVideoRate = (stream, chunkBytes) => {
-    const now = nowMs();
-    const window = stream.rateWindow;
-    window.push({ t: now, bytes: chunkBytes });
-    while (window.length && window[0].t < now - VIDEO_GOVERNOR_WINDOW_MS) {
-      window.shift();
+  const videoWindowBps = (now) => {
+    while (
+      videoRateWindow.length &&
+      videoRateWindow[0].t < now - VIDEO_GOVERNOR_WINDOW_MS
+    ) {
+      videoRateWindow.shift();
     }
     let bytes = 0;
-    for (const entry of window) bytes += entry.bytes;
-    const bps = (bytes * 8 * 1000) / VIDEO_GOVERNOR_WINDOW_MS;
+    for (const entry of videoRateWindow) bytes += entry.bytes;
+    return (bytes * 8 * 1000) / VIDEO_GOVERNOR_WINDOW_MS;
+  };
+
+  /**
+   * The byte-rate governor: constant quality has no ceiling of its own, so
+   * when the recording's rolling output rate — all streams together — crosses
+   * the cap, quality gives way one quantizer step at a time (and comes back
+   * the same way once safely under). Bounds a worst-case all-motion recording
+   * without touching typical ones. The window is fed in every mode — the
+   * frame shed reads it too — while the quantizer response only exists where
+   * per-frame quantizers do.
+   */
+  const governVideoRate = (chunkBytes) => {
+    const now = nowMs();
+    videoRateWindow.push({ t: now, bytes: chunkBytes });
+    const bps = videoWindowBps(now);
+    if (!videoMode || !videoMode.quantizer) return;
+    if (now - videoGovernorAdjustedAt < VIDEO_GOVERNOR_STEP_MS) return;
     if (bps > VIDEO_GOVERNOR_MAX_BPS) {
-      stream.governorQp = Math.min(
-        stream.governorQp + 1,
-        VIDEO_GOVERNOR_QP_MAX,
-      );
-    } else if (bps < VIDEO_GOVERNOR_MAX_BPS * 0.85 && stream.governorQp > 0) {
-      stream.governorQp -= 1;
+      if (videoGovernorQp < VIDEO_GOVERNOR_QP_MAX) {
+        videoGovernorQp += 1;
+        videoGovernorAdjustedAt = now;
+      }
+    } else if (bps < VIDEO_GOVERNOR_MAX_BPS * 0.85 && videoGovernorQp > 0) {
+      videoGovernorQp -= 1;
+      videoGovernorAdjustedAt = now;
     }
   };
 
@@ -842,6 +938,11 @@
     if (recording) return;
     recording = true;
     buffer = [];
+    // A fresh take starts at base quality: governor pressure earned by the
+    // previous take's content says nothing about this one's.
+    videoGovernorQp = 0;
+    videoGovernorAdjustedAt = 0;
+    videoRateWindow.length = 0;
     push({
       kind: "viewport",
       width: window.innerWidth,

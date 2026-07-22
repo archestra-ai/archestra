@@ -93,7 +93,10 @@ export function AppRecordingControls() {
           "ml-1.5 inline-flex h-8 items-center gap-1 rounded-full border pl-2.5 pr-1 shadow-sm transition-colors",
           isRecording
             ? "border-destructive/50 bg-destructive/10"
-            : "border-primary/30 bg-primary/5",
+            : // A periodic glitter sweep and a shimmer travelling around the
+              // edge draw the eye to the hackathon recorder while it's idle;
+              // during recording the panel stays calm behind the red pulse.
+              "border-primary/30 bg-primary/5 hackathon-glitter hackathon-edge-shimmer",
         )}
       >
         {/* Names the cluster and sets it apart from the neutral composer

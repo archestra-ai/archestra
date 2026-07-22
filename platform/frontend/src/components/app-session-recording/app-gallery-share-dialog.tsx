@@ -445,15 +445,25 @@ export function AppGalleryShareButton(props: {
       </Button>
     ) : null;
 
+  const shareDisabled = props.disabled || existingPr !== null;
   const shareButton = (
     <span className="inline-flex" data-tour="share">
+      {/* Styled to echo the hackathon recorder pill — primary-tinted border,
+          mostly-transparent primary background, and the same periodic glitter
+          sweep + travelling edge shimmer — so the submit action reads as part
+          of the same flow while still standing out from the neutral player
+          toolbar. The animation is dropped while disabled (already submitted /
+          unavailable). */}
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="size-7 text-muted-foreground hover:text-foreground"
+        className={cn(
+          "size-7 border border-primary/30 bg-primary/5 text-primary shadow-sm hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10",
+          !shareDisabled && "hackathon-glitter hackathon-edge-shimmer",
+        )}
         aria-label="Submit this session to Archestra for review"
-        disabled={props.disabled || existingPr !== null}
+        disabled={shareDisabled}
         onClick={() => setDialogOpen(true)}
       >
         {/* The create-a-pull-request glyph, not a generic share icon —

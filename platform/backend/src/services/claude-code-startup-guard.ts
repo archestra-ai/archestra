@@ -5,8 +5,8 @@ import {
   CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
   CLAUDE_CODE_GUARD_SKIP_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
-  DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
+  isDefaultBrandedAppName,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { CONNECTION_HEALTH_PATH } from "@/routes/route-paths";
@@ -835,11 +835,12 @@ function splitResourceUrl(
 
 /**
  * The pre-loader header: the Archestra mark with the title beside it, the way
- * Claude Code draws its own logo — but only for the default brand. White-label
- * deployments get the plain title line.
+ * Claude Code draws its own logo — but only for the default brand or one of
+ * its own variants (e.g. "Archestra Staging"). White-label deployments get
+ * the plain title line.
  */
 function guardHeader(ctx: ClaudeCodeStartupGuardContext): string {
-  if (ctx.appName !== DEFAULT_APP_NAME) {
+  if (!isDefaultBrandedAppName(ctx.appName)) {
     return `printf '%s%s%s\\n\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"`;
   }
   const [m0, m1, m2, m3, m4] = ARCHESTRA_GUARD_MARK_LINES;

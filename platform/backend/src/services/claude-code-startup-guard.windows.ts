@@ -5,8 +5,8 @@ import {
   CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
   CLAUDE_CODE_GUARD_SKIP_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
-  DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
+  isDefaultBrandedAppName,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
@@ -776,11 +776,12 @@ function psq(value: string): string {
 }
 
 /**
- * The pre-loader header: the Archestra mark with the title beside it, only
- * for the default brand (same rule as the bash guard and the setup banner).
+ * The pre-loader header: the Archestra mark with the title beside it, for the
+ * default brand or one of its own variants (same rule as the bash guard and
+ * the setup banner).
  */
 function guardHeader(ctx: ClaudeCodeStartupGuardContext): string {
-  if (ctx.appName !== DEFAULT_APP_NAME) {
+  if (!isDefaultBrandedAppName(ctx.appName)) {
     return `Write-Arch $AppName Cyan
 Write-Host ''`;
   }

@@ -3,6 +3,7 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   getArchestraTokenPrefix,
   hasArchestraTokenPrefix,
+  isDefaultBrandedAppName,
   isEditableTextFile,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 } from "./consts";
@@ -29,6 +30,20 @@ describe("token prefix helpers", () => {
   test("returns null for non-platform prefixes", () => {
     expect(getArchestraTokenPrefix("sk-abc123")).toBeNull();
     expect(hasArchestraTokenPrefix("sk-abc123")).toBe(false);
+  });
+});
+
+describe("isDefaultBrandedAppName", () => {
+  test("matches the default brand and its own variants", () => {
+    for (const name of ["Archestra", "Archestra Staging", "Archestra Dev"]) {
+      expect(isDefaultBrandedAppName(name)).toBe(true);
+    }
+  });
+
+  test("rejects a genuinely different white-labeled name", () => {
+    for (const name of ["Acme AI", "", "archestra", "MyArchestra"]) {
+      expect(isDefaultBrandedAppName(name)).toBe(false);
+    }
   });
 });
 

@@ -996,6 +996,16 @@ describe("banner", () => {
     expect(branded).toContain("Configures:");
     expect(branded).toContain("one-time setup");
 
+    // an org named "Archestra Staging" is still Archestra's own brand — the
+    // mark must not disappear just because the name isn't an exact match
+    const variant = renderSetupScript({
+      ...fullContext("claude-code"),
+      appName: "Archestra Staging",
+    });
+    await expectValidBash(variant);
+    expect(variant).toContain("▟██▙");
+    expect(variant).toContain("Archestra Staging");
+
     const whiteLabel = renderSetupScript({
       ...fullContext("claude-code"),
       appName: "Acme AI",

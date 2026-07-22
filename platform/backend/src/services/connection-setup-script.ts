@@ -3,8 +3,8 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CODEX_CLIENT_ID,
-  DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
+  isDefaultBrandedAppName,
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -296,9 +296,8 @@ function banner(ctx: SetupScriptContext): string {
   // A monospace rendition of the Archestra mark: a white tilted rounded bar
   // and dot on the terminal's dark field, echoing the real logo-icon.svg.
   // Block/quadrant glyphs (UTF-8) render as solid shapes in any modern terminal.
-  const logo =
-    ctx.appName === DEFAULT_APP_NAME
-      ? `   ╭──────────────────╮
+  const logo = isDefaultBrandedAppName(ctx.appName)
+    ? `   ╭──────────────────╮
    │                  │
    │        ▟██▙      │
    │        ████      │     ${ctx.appName}
@@ -307,7 +306,7 @@ function banner(ctx: SetupScriptContext): string {
    │      ▜██▛  ▜▛    │
    │                  │
    ╰──────────────────╯`
-      : `   ${ctx.appName}
+    : `   ${ctx.appName}
    Secure access to your AI tools`;
 
   const details = [

@@ -2,8 +2,8 @@ import {
   CLAUDE_CODE_CLIENT_ID,
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
-  DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
+  isDefaultBrandedAppName,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
@@ -145,9 +145,8 @@ function banner(ctx: SetupScriptContext): string {
   // echoing logo-icon.svg. The built-in Windows PowerShell 5.1 console can
   // render block/quadrant Unicode glyphs as mojibake (legacy codepage), so this
   // mirrors the macOS/Linux block-mark's composition with portable ASCII only.
-  const logo =
-    ctx.appName === DEFAULT_APP_NAME
-      ? `   .------------------.
+  const logo = isDefaultBrandedAppName(ctx.appName)
+    ? `   .------------------.
    |                  |
    |        ,##.      |
    |        ####      |     ${ctx.appName}
@@ -156,7 +155,7 @@ function banner(ctx: SetupScriptContext): string {
    |       \`##' \`'    |
    |                  |
    '------------------'`
-      : `   ${ctx.appName}
+    : `   ${ctx.appName}
    Secure access to your AI tools`;
 
   const details = [

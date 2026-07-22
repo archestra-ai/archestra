@@ -904,7 +904,9 @@ function prBody(bundle: AppRecordingBundle): string {
   if (bundle.meta.model) {
     lines.push(`- Model: ${bundle.meta.model}`);
   }
-  if (bundle.meta.userPromptCount) {
+  // `!= null` so a genuine zero (a fully automated build) still reports "0"
+  // rather than dropping the line — only an absent count is omitted.
+  if (bundle.meta.userPromptCount != null) {
     lines.push(`- Prompts: ${bundle.meta.userPromptCount}`);
   }
   if (bundle.meta.mcpServers?.length) {

@@ -191,16 +191,24 @@ const CATEGORY_SYSTEM_PROMPT =
 const MAX_TRANSCRIPT_CHARS = 24_000;
 const MAX_TURN_CHARS = 2_000;
 
-/** One short label, whatever shape the model answered in. */
-function sanitizeCategory(raw: string): string {
+/**
+ * One short label, whatever shape the model answered in. The word/char caps
+ * are only a backstop against a model that ignores the "a few words"
+ * instruction and returns a sentence — sized to pass every canonical
+ * {@link APP_GALLERY_CATEGORIES} through untouched (three of them are three
+ * words, and the longest, "Games & Experiments", is 19 characters).
+ *
+ * @public — exported for testability
+ */
+export function sanitizeCategory(raw: string): string {
   return raw
     .replace(/\s+/g, " ")
     .replace(/^["'`]+|["'`.]+$/g, "")
     .trim()
     .split(" ")
-    .slice(0, 2)
+    .slice(0, 4)
     .join(" ")
-    .slice(0, 40);
+    .slice(0, 48);
 }
 
 /**

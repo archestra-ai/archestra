@@ -35,6 +35,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -278,6 +279,10 @@ export function ChannelsSection({
     updateMutation.mutate({ id: bindingId, agentId });
   };
 
+  const handleToggleAnswerAll = (bindingId: string, answerAll: boolean) => {
+    updateMutation.mutate({ id: bindingId, answerAllMessages: answerAll });
+  };
+
   const handleDmAssignAgent = (agentId: string | null) => {
     dmMutation.mutate({ provider: providerConfig.provider, agentId });
   };
@@ -509,6 +514,9 @@ export function ChannelsSection({
                     </Button>
                   </TableHead>
                   <TableHead>Default Agent</TableHead>
+                  {providerConfig.supportsAnswerAll && (
+                    <TableHead>Replies to</TableHead>
+                  )}
                   <TableHead>Status</TableHead>
                   <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
@@ -516,7 +524,10 @@ export function ChannelsSection({
               {showFilteredEmptyState ? (
                 <TableBody>
                   <TableRow>
-                    <TableCell colSpan={5} className="h-48">
+                    <TableCell
+                      colSpan={providerConfig.supportsAnswerAll ? 6 : 5}
+                      className="h-48"
+                    >
                       <div className="flex flex-col items-center justify-center gap-4 text-center">
                         <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
                           <Search className="text-muted-foreground h-5 w-5" />
@@ -549,6 +560,7 @@ export function ChannelsSection({
                     providerConfig={providerConfig}
                     providerStatus={providerStatus}
                     onAssignAgent={handleAssignAgent}
+                    onToggleAnswerAll={handleToggleAnswerAll}
                     isUpdating={updateMutation.isPending}
                     selectedIds={selectedIds}
                     onToggleSelected={toggleSelected}
@@ -601,6 +613,7 @@ function ChannelRows({
   providerConfig,
   providerStatus,
   onAssignAgent,
+  onToggleAnswerAll,
   isUpdating,
   selectedIds,
   onToggleSelected,
@@ -617,6 +630,7 @@ function ChannelRows({
     workspaceName?: string | null;
     isDm?: boolean;
     agentId?: string | null;
+    answerAllMessages?: boolean;
   }>;
   channelAgentList: Agent[];
   dmAgentList: Agent[];
@@ -625,6 +639,7 @@ function ChannelRows({
     dmInfo?: { botUserId?: string; teamId?: string; appId?: string } | null;
   } | null;
   onAssignAgent: (bindingId: string, agentId: string | null) => void;
+  onToggleAnswerAll: (bindingId: string, answerAll: boolean) => void;
   isUpdating: boolean;
   selectedIds: Set<string>;
   onToggleSelected: (id: string) => void;
@@ -635,6 +650,7 @@ function ChannelRows({
 }) {
   const { data: session } = useSession();
   const user = session?.user;
+  const showAnswerAll = providerConfig.supportsAnswerAll;
 
   return (
     <>
@@ -661,6 +677,11 @@ function ChannelRows({
               isDm
             />
           </TableCell>
+          {showAnswerAll && (
+            <TableCell>
+              <AnswerAllCell isDm />
+            </TableCell>
+          )}
           <TableCell>
             <StatusBadge assigned={false} />
           </TableCell>
@@ -694,7 +715,7 @@ function ChannelRows({
       {bindings.length === 0 && !showVirtualDmRow && (
         <TableRow>
           <TableCell
-            colSpan={5}
+            colSpan={showAnswerAll ? 6 : 5}
             className="h-16 text-center text-sm text-muted-foreground"
           >
             No matching channels
@@ -746,6 +767,16 @@ function ChannelRows({
                 isDm={binding.isDm}
               />
             </TableCell>
+            {showAnswerAll && (
+              <TableCell>
+                <AnswerAllCell
+                  isDm={binding.isDm}
+                  checked={!!binding.answerAllMessages}
+                  disabled={isUpdating}
+                  onToggle={(value) => onToggleAnswerAll(binding.id, value)}
+                />
+              </TableCell>
+            )}
             <TableCell>
               <StatusBadge assigned={!!binding.agentId} />
             </TableCell>
@@ -904,6 +935,40 @@ function StatusBadge({ assigned }: { assigned: boolean }) {
       />
       {assigned ? "Active" : "Inactive"}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Per-channel "answer all messages" toggle
+// ---------------------------------------------------------------------------
+
+function AnswerAllCell({
+  isDm,
+  checked = false,
+  disabled = false,
+  onToggle,
+}: {
+  isDm?: boolean;
+  checked?: boolean;
+  disabled?: boolean;
+  onToggle?: (value: boolean) => void;
+}) {
+  // DMs always reply to every message, so the per-channel toggle doesn't apply.
+  if (isDm) {
+    return <span className="text-xs text-muted-foreground">All messages</span>;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Switch
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(value) => onToggle?.(value)}
+        aria-label="Answer all messages in this channel"
+      />
+      <span className="text-xs text-muted-foreground">
+        {checked ? "All messages" : "Mentions only"}
+      </span>
+    </div>
   );
 }
 

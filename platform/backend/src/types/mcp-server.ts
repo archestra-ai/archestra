@@ -22,11 +22,26 @@ export const SecretStorageTypeSchema = z.enum([
 
 export type SecretStorageType = z.infer<typeof SecretStorageTypeSchema>;
 
+/**
+ * Why a pending reinstall was flagged, persisted alongside
+ * `reinstallRequired`. "new-input": the catalog's prompted schema changed —
+ * the user owes values the install doesn't have, so the UI must collect
+ * them. "restart": stored values are still valid (execution-config change,
+ * retry after a failed sync) — an empty-body reinstall reusing the stored
+ * bag suffices. Null whenever `reinstallRequired` is false.
+ */
+export const McpServerReinstallReasonSchema = z.enum(["new-input", "restart"]);
+
+export type McpServerReinstallReason = z.infer<
+  typeof McpServerReinstallReasonSchema
+>;
+
 export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
 ).extend({
   serverType: InternalMcpCatalogServerTypeSchema,
   scope: ResourceVisibilityScopeSchema,
+  reinstallReason: McpServerReinstallReasonSchema.nullable(),
   ownerEmail: z.string().nullable().optional(),
   catalogName: z.string().nullable().optional(),
   users: z.array(z.string()).optional(),
@@ -102,6 +117,8 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     oauthRefreshErrorMessage: true,
     oauthRefreshErrorDescription: true,
     oauthRefreshFailedAt: true,
+    // Server-owned reinstall bookkeeping — a fresh install is never flagged.
+    reinstallReason: true,
   });
 
 export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
@@ -113,6 +130,7 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   })
   .extend({
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
+    reinstallReason: McpServerReinstallReasonSchema.nullable().optional(),
   });
 
 export type LocalMcpServerInstallationStatus = z.infer<

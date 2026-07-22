@@ -1,9 +1,9 @@
 ---
-title: Using Claude Code Max Subscription
+title: Using Claude Code with a Pro or Max Subscription
 category: Examples
 order: 10
 description: Route Claude Code through Archestra while your Claude subscription keeps paying for inference
-lastUpdated: 2026-07-07
+lastUpdated: 2026-07-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

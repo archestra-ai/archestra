@@ -365,11 +365,6 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       if (ctx.mcp) {
         steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
       }
-      if (ctx.proxy?.provider === "bedrock" && ctx.proxy.virtualKey) {
-        steps.push(
-          "Paste the AWS_BEARER_TOKEN_BEDROCK export printed above into your shell profile.",
-        );
-      }
       if (ctx.skills) {
         steps.push(
           "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
@@ -543,8 +538,12 @@ fi`);
 // exactly the same lists.
 const [ANTHROPIC_BASE_URL_KEY, ANTHROPIC_AUTH_TOKEN_KEY] =
   CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
-const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
-  CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
+const [
+  CLAUDE_USE_BEDROCK_KEY,
+  AWS_REGION_KEY,
+  BEDROCK_BASE_URL_KEY,
+  AWS_BEARER_TOKEN_KEY,
+] = CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
 const CLAUDE_SETTINGS_MERGE_PY = `import json, os, pathlib
 path = pathlib.Path(os.path.expanduser("~/.claude/settings.json"))
@@ -627,41 +626,41 @@ ${mergeJsonFileSnippet({
 
 function claudeBedrockProxySection(proxy: SetupScriptProxySection): string {
   const customHeaders = claudeCustomHeaders(proxy);
-  return `say ${sh("Routing Claude Code through the Bedrock proxy")}
-${mergeJsonFileSnippet({
-  file: "$HOME/.claude/settings.json",
-  env: {
+  const env: Record<string, string> = {
     [`ARCHESTRA_SET_ENV_${CLAUDE_USE_BEDROCK_KEY}`]: "1",
     [`ARCHESTRA_SET_ENV_${AWS_REGION_KEY}`]: "us-east-1",
     [`ARCHESTRA_SET_ENV_${BEDROCK_BASE_URL_KEY}`]: proxy.url,
-    [`ARCHESTRA_APPEND_${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}`]: customHeaders,
-  },
+  };
+  const manualEnv: Record<string, string> = {
+    [CLAUDE_USE_BEDROCK_KEY]: "1",
+    [AWS_REGION_KEY]: "us-east-1",
+    [BEDROCK_BASE_URL_KEY]: proxy.url,
+  };
+  if (proxy.virtualKey) {
+    // The virtual key authenticates against the proxy as a Bedrock bearer
+    // token. Merged into settings.json env exactly like ANTHROPIC_AUTH_TOKEN
+    // on the Anthropic path, so the setup needs no manual paste step.
+    env[`ARCHESTRA_SET_ENV_${AWS_BEARER_TOKEN_KEY}`] = proxy.virtualKey;
+    manualEnv[AWS_BEARER_TOKEN_KEY] = proxy.virtualKey;
+  }
+  env[`ARCHESTRA_APPEND_${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}`] = customHeaders;
+  manualEnv[CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY] = customHeaders;
+
+  return `say ${sh("Routing Claude Code through the Bedrock proxy")}
+${mergeJsonFileSnippet({
+  file: "$HOME/.claude/settings.json",
+  env,
   python: CLAUDE_SETTINGS_MERGE_PY,
   fallbackMessage:
     "python3 not found — merge this into ~/.claude/settings.json manually:",
-  fallbackSnippet: JSON.stringify(
-    {
-      env: {
-        [CLAUDE_USE_BEDROCK_KEY]: "1",
-        [AWS_REGION_KEY]: "us-east-1",
-        [BEDROCK_BASE_URL_KEY]: proxy.url,
-        [CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY]: customHeaders,
-      },
-    },
-    null,
-    2,
-  ),
+  fallbackSnippet: JSON.stringify({ env: manualEnv }, null, 2),
 })}
-echo "Update AWS_REGION in ~/.claude/settings.json if you use a different region."
-${
-  proxy.virtualKey
-    ? `cat <<'ARCHESTRA_BEDROCK'
-
-Add this to your shell profile (kept out of files claude reads):
-  export AWS_BEARER_TOKEN_BEDROCK=${sh(proxy.virtualKey)}
-ARCHESTRA_BEDROCK`
-    : `echo "Your existing AWS credentials keep working — only the base URL changed."`
-}`;
+echo "Update AWS_REGION in ~/.claude/settings.json if you use a different region."${
+    proxy.virtualKey
+      ? ""
+      : `
+echo "Your existing AWS credentials keep working — only the base URL changed."`
+  }`;
 }
 
 // ===================================================================

@@ -50,6 +50,7 @@ import {
 import {
   autoReinstallServer,
   localExecutionConfigChanged,
+  manualReinstallReason,
   onlyForwardCompatibleEnvDiff,
   reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
@@ -1992,14 +1993,28 @@ async function cascadeReinstallForCatalog(
 
   // Manual path is authoritative: a re-prompt edit blocks both the
   // gate-decided auto path AND the forced auto path. Run it before any
-  // override branching.
-  if (requiresNewUserInputForReinstall(originalCatalogItem, catalogItem)) {
+  // override branching. The persisted reason tells the UI whether to
+  // collect new values ("new-input") or offer a plain restart that reuses
+  // the stored secret bag ("restart"); a restart-only edit never downgrades
+  // an install still owing input from an earlier edit.
+  const manualReason = manualReinstallReason(originalCatalogItem, catalogItem);
+  if (manualReason !== null) {
     logger.info(
-      { catalogId: catalogItem.id, serverCount: installedServers.length },
-      "Catalog edit requires new user input - marking servers for manual reinstall",
+      {
+        catalogId: catalogItem.id,
+        serverCount: installedServers.length,
+        manualReason,
+      },
+      "Catalog edit requires manual reinstall - marking servers",
     );
     for (const server of installedServers) {
-      await McpServerModel.update(server.id, { reinstallRequired: true });
+      await McpServerModel.update(server.id, {
+        reinstallRequired: true,
+        reinstallReason:
+          server.reinstallRequired && server.reinstallReason === "new-input"
+            ? "new-input"
+            : manualReason,
+      });
     }
     return;
   }
@@ -2105,8 +2120,14 @@ function autoReinstallInstallsInBackground(
             { err: error, serverId: server.id, serverName: server.name },
             "Failed to auto-reinstall MCP server - marking for manual reinstall",
           );
+          // Retry of a failed auto-restart — stored credentials are valid,
+          // unless the install already owed input from an earlier edit.
           await McpServerModel.update(server.id, {
             reinstallRequired: true,
+            reinstallReason:
+              server.reinstallRequired && server.reinstallReason === "new-input"
+                ? "new-input"
+                : "restart",
             localInstallationStatus: "error",
             localInstallationError: errorMessage,
           });

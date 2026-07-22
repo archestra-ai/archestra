@@ -294,7 +294,12 @@ class InteractionDeltaManager {
     if (!isClaudeSessionSource(data.sessionSource ?? null)) {
       return false;
     }
-    if (data.type !== "anthropic:messages") return false;
+    // bedrock:invoke shares the Anthropic Messages request shape (it is what
+    // Claude Code sends when routed through Bedrock), so delta storage applies
+    // to both.
+    if (data.type !== "anthropic:messages" && data.type !== "bedrock:invoke") {
+      return false;
+    }
     const messages = getMessages(data.request);
     return messages !== null && messages.length >= 1;
   }

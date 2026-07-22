@@ -664,7 +664,7 @@ Archestra fetches the model list from the upstream's `{base-url}/models` endpoin
 
 - **Converse API** (`/converse`) ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
 - **Converse Stream API** (`/converse-stream`) ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
-- **InvokeModel API** (`/invoke`) - ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html))
+- **InvokeModel API** (`/model/{model-id}/invoke` and `/model/{model-id}/invoke-with-response-stream`) for Anthropic models ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)). This is the API the Anthropic SDK's Bedrock client uses — point Claude Code at Archestra with `CLAUDE_CODE_USE_BEDROCK=1` and `ANTHROPIC_BEDROCK_BASE_URL=http://localhost:9000/v1/bedrock/{profile-id}`.
 - **OpenAI-compatible API (Mantle)** - ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
 
 ### Bedrock Connection Details
@@ -714,7 +714,7 @@ To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/lat
 
 #### Minimum IAM Policy
 
-Archestra uses the Bedrock **Converse API** (not InvokeModel). The IAM role needs these actions:
+Archestra calls the Bedrock **Converse API**, and the **InvokeModel API** for clients that use it (Claude Code, for example). The IAM role needs these actions:
 
 ```json
 {
@@ -722,7 +722,12 @@ Archestra uses the Bedrock **Converse API** (not InvokeModel). The IAM role need
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["bedrock:Converse", "bedrock:ConverseStream"],
+      "Action": [
+        "bedrock:Converse",
+        "bedrock:ConverseStream",
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
       "Resource": [
         "arn:aws:bedrock:*:<ACCOUNT_ID>:inference-profile/us.anthropic.*",
         "arn:aws:bedrock:*::foundation-model/anthropic.*"

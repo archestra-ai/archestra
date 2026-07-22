@@ -409,7 +409,16 @@ export class McpServerRuntimeManager {
       | undefined,
     cache?: NetworkPolicyResolutionCache,
   ): Promise<string> {
-    if (!catalogItem?.environmentId) return this.namespace;
+    if (!catalogItem) return this.namespace;
+    if (!catalogItem.environmentId) {
+      // Default-environment catalog (environment_id = NULL): its namespace
+      // lives on the organization row, not in `environments`.
+      const organization = catalogItem.organizationId
+        ? (cache?.organizationsById.get(catalogItem.organizationId) ??
+          (await OrganizationModel.getById(catalogItem.organizationId)))
+        : await OrganizationModel.getFirst();
+      return organization?.defaultEnvironmentNamespace ?? this.namespace;
+    }
     const env =
       cache?.environmentsById.get(catalogItem.environmentId) ??
       (await EnvironmentModel.findById(catalogItem.environmentId));
@@ -1643,13 +1652,69 @@ export class McpServerRuntimeManager {
           const server = serverById.get(serverId);
           if (!server) continue;
 
+          const catalog = await getCatalog(server.catalogId);
+
+          // Relocation sweep: the deployment lives in a namespace the catalog
+          // no longer resolves to (e.g. an upgrade taught the resolver about
+          // the default environment's namespace, or a namespace change landed
+          // while the platform was down). The startup startServer pass has
+          // already (re)created the deployment in the resolved namespace, so
+          // this copy is a stale duplicate — tear it down fully (deployment,
+          // service, secrets, network policy) in its own namespace.
+          const expectedNamespace =
+            await this.resolveNamespaceForCatalog(catalog);
+          if (deploymentNamespace !== expectedNamespace) {
+            logger.info(
+              {
+                deploymentName,
+                serverId,
+                deploymentNamespace,
+                expectedNamespace,
+              },
+              "Removing MCP deployment left behind in a stale namespace",
+            );
+            try {
+              // Full teardown (deployment, service, secrets, network policy)
+              // of the row's constructed-name resources in the stale namespace.
+              const staleDeployment = await this.getOrLoadDeployment(
+                server.id,
+                { namespaceOverride: deploymentNamespace },
+              );
+              await staleDeployment?.removeDeployment();
+              // The live object can carry a diverged (legacy) name the
+              // constructed-name teardown above missed. In a non-resolved
+              // namespace ANY deployment labeled with this server id is stale
+              // by definition, so deleting by its live name is safe.
+              if (
+                deploymentName !==
+                K8sDeployment.constructDeploymentName(server, catalog)
+              ) {
+                await this.k8sAppsApi.deleteNamespacedDeployment({
+                  name: deploymentName,
+                  namespace: deploymentNamespace,
+                });
+                await this.k8sApi
+                  .deleteNamespacedService({
+                    name: `${deploymentName}-service`,
+                    namespace: deploymentNamespace,
+                  })
+                  .catch(() => {});
+              }
+            } catch (err) {
+              logger.warn(
+                { err, deploymentName, deploymentNamespace },
+                "Failed to remove MCP deployment from stale namespace",
+              );
+            }
+            continue;
+          }
+
           // Only ever compare against a FROZEN name. The adopt pass runs
           // before this sweep and freezes every local single-tenant row, so
           // NULL here means the expected name can't be proven — never delete
           // on a recomputed guess.
           if (!server.deploymentName) continue;
 
-          const catalog = await getCatalog(server.catalogId);
           const expectedName = K8sDeployment.constructDeploymentName(
             server,
             catalog,

@@ -89,7 +89,7 @@ export function OnboardingSurveyDialog() {
         className="gap-0 overflow-hidden p-0 sm:max-w-xl"
       >
         {/* Header with a soft radial wash in the org's primary color */}
-        <DialogHeader className="relative space-y-2 px-8 pt-8 pb-6 text-left">
+        <DialogHeader className="relative shrink-0 space-y-2 px-8 pt-8 pb-6 text-left">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"
@@ -116,7 +116,11 @@ export function OnboardingSurveyDialog() {
           </div>
         </DialogHeader>
 
-        <div className="divide-y divide-border/70 border-t border-border/70">
+        {/* The questions/email section is the scroll region: on short
+            viewports the dialog is capped at max-h-[90dvh] and the header and
+            footer stay pinned, so this scrolls instead of clipping the
+            (non-dismissible) Send button off-screen. */}
+        <div className="min-h-0 flex-1 divide-y divide-border/70 overflow-y-auto border-t border-border/70">
           <SurveyQuestion
             index={1}
             label="What do you do?"
@@ -168,7 +172,7 @@ export function OnboardingSurveyDialog() {
           </div>
         </div>
 
-        <div className="border-t border-border/70 bg-muted/40 px-8 py-5">
+        <div className="shrink-0 border-t border-border/70 bg-muted/40 px-8 py-5">
           <Button
             size="lg"
             className="w-full transition-all"

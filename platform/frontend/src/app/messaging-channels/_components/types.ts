@@ -14,6 +14,12 @@ export interface ProviderConfig {
    * not by assigning an agent first.
    */
   showVirtualDmRow?: boolean;
+  /**
+   * Show the per-channel "answer all messages" toggle. Only Slack honors it in
+   * the message gate today, so other providers leave it off and the column is
+   * hidden for them.
+   */
+  supportsAnswerAll?: boolean;
   docsUrl: string | null;
   slashCommand: string;
   /**

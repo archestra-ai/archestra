@@ -24052,6 +24052,1186 @@ export type BedrockConverseStreamWithAgentAndModelResponses = {
     200: unknown;
 };
 
+export type BedrockInvokeWithDefaultAgentAndModelData = {
+    body: {
+        model?: string;
+        messages: Array<{
+            content: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | null;
+                context?: string | null;
+                citations?: {
+                    enabled: boolean;
+                } | null;
+                cache_control?: unknown;
+            } | {
+                type: 'thinking';
+                thinking: string;
+                signature: string;
+            } | {
+                type: 'redacted_thinking';
+                data: string;
+            } | {
+                id: string;
+                input: unknown;
+                name: string;
+                type: 'tool_use';
+                cache_control?: unknown;
+            } | {
+                tool_use_id: string;
+                type: 'tool_result';
+                cache_control?: unknown;
+                content?: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                }>;
+                is_error?: boolean;
+            } | {
+                type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            role: 'user' | 'assistant' | 'system';
+        }>;
+        max_tokens: number;
+        container?: string | null;
+        context_management?: {
+            [key: string]: unknown;
+        } | null;
+        mcp_servers?: Array<unknown>;
+        metadata?: {
+            user_id: string | null;
+        };
+        output_config?: {
+            effort?: string | null;
+            format?: {
+                type: 'json_schema';
+                schema: {
+                    [key: string]: unknown;
+                };
+            } | null;
+        };
+        service_tier?: unknown;
+        speed?: 'fast' | 'standard';
+        stop_sequences?: Array<string>;
+        stream?: boolean;
+        system?: string | {
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+        } | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+        }>;
+        temperature?: number;
+        thinking?: {
+            type: 'enabled';
+            budget_tokens: number;
+        } | {
+            type: 'disabled';
+        } | {
+            type: 'adaptive';
+        };
+        tool_choice?: {
+            type: 'auto';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'any';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'tool';
+            name: string;
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'none';
+        };
+        tools?: Array<{
+            name: string;
+            type?: 'custom';
+            cache_control?: unknown;
+            input_schema: {
+                [key: string]: unknown;
+            };
+            description?: string;
+        } | {
+            name: 'bash';
+            type: 'bash_20250124';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_editor';
+            type: 'text_editor_20250124';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250429';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250728';
+            cache_control?: unknown;
+            max_characters?: number | null;
+        } | {
+            name: 'web_search';
+            type: 'web_search_20250305';
+            allowed_domains?: Array<string> | null;
+            blocked_domains?: Array<string> | null;
+            cache_control?: unknown;
+            max_uses?: number | null;
+            user_location?: unknown;
+        }>;
+        top_k?: number;
+        top_p?: number;
+        anthropic_version?: string;
+        anthropic_beta?: Array<string>;
+        _isStreaming?: boolean;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Authorization header with Bearer token
+         */
+        authorization?: string;
+    };
+    path: {
+        modelId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/model/{modelId}/invoke';
+};
+
+export type BedrockInvokeWithDefaultAgentAndModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BedrockInvokeWithDefaultAgentAndModelError = BedrockInvokeWithDefaultAgentAndModelErrors[keyof BedrockInvokeWithDefaultAgentAndModelErrors];
+
+export type BedrockInvokeWithDefaultAgentAndModelResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type BedrockInvokeWithDefaultAgentAndModelResponse = BedrockInvokeWithDefaultAgentAndModelResponses[keyof BedrockInvokeWithDefaultAgentAndModelResponses];
+
+export type BedrockInvokeWithAgentAndModelData = {
+    body: {
+        model?: string;
+        messages: Array<{
+            content: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | null;
+                context?: string | null;
+                citations?: {
+                    enabled: boolean;
+                } | null;
+                cache_control?: unknown;
+            } | {
+                type: 'thinking';
+                thinking: string;
+                signature: string;
+            } | {
+                type: 'redacted_thinking';
+                data: string;
+            } | {
+                id: string;
+                input: unknown;
+                name: string;
+                type: 'tool_use';
+                cache_control?: unknown;
+            } | {
+                tool_use_id: string;
+                type: 'tool_result';
+                cache_control?: unknown;
+                content?: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                }>;
+                is_error?: boolean;
+            } | {
+                type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            role: 'user' | 'assistant' | 'system';
+        }>;
+        max_tokens: number;
+        container?: string | null;
+        context_management?: {
+            [key: string]: unknown;
+        } | null;
+        mcp_servers?: Array<unknown>;
+        metadata?: {
+            user_id: string | null;
+        };
+        output_config?: {
+            effort?: string | null;
+            format?: {
+                type: 'json_schema';
+                schema: {
+                    [key: string]: unknown;
+                };
+            } | null;
+        };
+        service_tier?: unknown;
+        speed?: 'fast' | 'standard';
+        stop_sequences?: Array<string>;
+        stream?: boolean;
+        system?: string | {
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+        } | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+        }>;
+        temperature?: number;
+        thinking?: {
+            type: 'enabled';
+            budget_tokens: number;
+        } | {
+            type: 'disabled';
+        } | {
+            type: 'adaptive';
+        };
+        tool_choice?: {
+            type: 'auto';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'any';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'tool';
+            name: string;
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'none';
+        };
+        tools?: Array<{
+            name: string;
+            type?: 'custom';
+            cache_control?: unknown;
+            input_schema: {
+                [key: string]: unknown;
+            };
+            description?: string;
+        } | {
+            name: 'bash';
+            type: 'bash_20250124';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_editor';
+            type: 'text_editor_20250124';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250429';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250728';
+            cache_control?: unknown;
+            max_characters?: number | null;
+        } | {
+            name: 'web_search';
+            type: 'web_search_20250305';
+            allowed_domains?: Array<string> | null;
+            blocked_domains?: Array<string> | null;
+            cache_control?: unknown;
+            max_uses?: number | null;
+            user_location?: unknown;
+        }>;
+        top_k?: number;
+        top_p?: number;
+        anthropic_version?: string;
+        anthropic_beta?: Array<string>;
+        _isStreaming?: boolean;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Authorization header with Bearer token
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+        modelId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/{agentId}/model/{modelId}/invoke';
+};
+
+export type BedrockInvokeWithAgentAndModelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type BedrockInvokeWithAgentAndModelError = BedrockInvokeWithAgentAndModelErrors[keyof BedrockInvokeWithAgentAndModelErrors];
+
+export type BedrockInvokeWithAgentAndModelResponses = {
+    /**
+     * Default Response
+     */
+    200: AnthropicMessagesResponse;
+};
+
+export type BedrockInvokeWithAgentAndModelResponse = BedrockInvokeWithAgentAndModelResponses[keyof BedrockInvokeWithAgentAndModelResponses];
+
+export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
+    body: {
+        model?: string;
+        messages: Array<{
+            content: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | null;
+                context?: string | null;
+                citations?: {
+                    enabled: boolean;
+                } | null;
+                cache_control?: unknown;
+            } | {
+                type: 'thinking';
+                thinking: string;
+                signature: string;
+            } | {
+                type: 'redacted_thinking';
+                data: string;
+            } | {
+                id: string;
+                input: unknown;
+                name: string;
+                type: 'tool_use';
+                cache_control?: unknown;
+            } | {
+                tool_use_id: string;
+                type: 'tool_result';
+                cache_control?: unknown;
+                content?: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                }>;
+                is_error?: boolean;
+            } | {
+                type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            role: 'user' | 'assistant' | 'system';
+        }>;
+        max_tokens: number;
+        container?: string | null;
+        context_management?: {
+            [key: string]: unknown;
+        } | null;
+        mcp_servers?: Array<unknown>;
+        metadata?: {
+            user_id: string | null;
+        };
+        output_config?: {
+            effort?: string | null;
+            format?: {
+                type: 'json_schema';
+                schema: {
+                    [key: string]: unknown;
+                };
+            } | null;
+        };
+        service_tier?: unknown;
+        speed?: 'fast' | 'standard';
+        stop_sequences?: Array<string>;
+        stream?: boolean;
+        system?: string | {
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+        } | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+        }>;
+        temperature?: number;
+        thinking?: {
+            type: 'enabled';
+            budget_tokens: number;
+        } | {
+            type: 'disabled';
+        } | {
+            type: 'adaptive';
+        };
+        tool_choice?: {
+            type: 'auto';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'any';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'tool';
+            name: string;
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'none';
+        };
+        tools?: Array<{
+            name: string;
+            type?: 'custom';
+            cache_control?: unknown;
+            input_schema: {
+                [key: string]: unknown;
+            };
+            description?: string;
+        } | {
+            name: 'bash';
+            type: 'bash_20250124';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_editor';
+            type: 'text_editor_20250124';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250429';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250728';
+            cache_control?: unknown;
+            max_characters?: number | null;
+        } | {
+            name: 'web_search';
+            type: 'web_search_20250305';
+            allowed_domains?: Array<string> | null;
+            blocked_domains?: Array<string> | null;
+            cache_control?: unknown;
+            max_uses?: number | null;
+            user_location?: unknown;
+        }>;
+        top_k?: number;
+        top_p?: number;
+        anthropic_version?: string;
+        anthropic_beta?: Array<string>;
+        _isStreaming?: boolean;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Authorization header with Bearer token
+         */
+        authorization?: string;
+    };
+    path: {
+        modelId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/model/{modelId}/invoke-with-response-stream';
+};
+
+export type BedrockInvokeStreamWithDefaultAgentAndModelResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type BedrockInvokeStreamWithAgentAndModelData = {
+    body: {
+        model?: string;
+        messages: Array<{
+            content: string | Array<{
+                text: string;
+                type: 'text';
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+            } | {
+                type: 'image';
+                source: {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                };
+                cache_control?: unknown;
+            } | {
+                type: 'document';
+                source: {
+                    type: 'base64';
+                    media_type: 'application/pdf';
+                    data: string;
+                } | {
+                    type: 'text';
+                    media_type: 'text/plain';
+                    data: string;
+                } | {
+                    type: 'url';
+                    url: string;
+                } | {
+                    type: 'content';
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    }>;
+                };
+                title?: string | null;
+                context?: string | null;
+                citations?: {
+                    enabled: boolean;
+                } | null;
+                cache_control?: unknown;
+            } | {
+                type: 'thinking';
+                thinking: string;
+                signature: string;
+            } | {
+                type: 'redacted_thinking';
+                data: string;
+            } | {
+                id: string;
+                input: unknown;
+                name: string;
+                type: 'tool_use';
+                cache_control?: unknown;
+            } | {
+                tool_use_id: string;
+                type: 'tool_result';
+                cache_control?: unknown;
+                content?: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                }>;
+                is_error?: boolean;
+            } | {
+                type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            role: 'user' | 'assistant' | 'system';
+        }>;
+        max_tokens: number;
+        container?: string | null;
+        context_management?: {
+            [key: string]: unknown;
+        } | null;
+        mcp_servers?: Array<unknown>;
+        metadata?: {
+            user_id: string | null;
+        };
+        output_config?: {
+            effort?: string | null;
+            format?: {
+                type: 'json_schema';
+                schema: {
+                    [key: string]: unknown;
+                };
+            } | null;
+        };
+        service_tier?: unknown;
+        speed?: 'fast' | 'standard';
+        stop_sequences?: Array<string>;
+        stream?: boolean;
+        system?: string | {
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+        } | Array<{
+            type: 'text';
+            text: string;
+            cache_control?: unknown;
+            citations?: Array<unknown> | null;
+        }>;
+        temperature?: number;
+        thinking?: {
+            type: 'enabled';
+            budget_tokens: number;
+        } | {
+            type: 'disabled';
+        } | {
+            type: 'adaptive';
+        };
+        tool_choice?: {
+            type: 'auto';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'any';
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'tool';
+            name: string;
+            disable_parallel_tool_use?: boolean;
+        } | {
+            type: 'none';
+        };
+        tools?: Array<{
+            name: string;
+            type?: 'custom';
+            cache_control?: unknown;
+            input_schema: {
+                [key: string]: unknown;
+            };
+            description?: string;
+        } | {
+            name: 'bash';
+            type: 'bash_20250124';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_editor';
+            type: 'text_editor_20250124';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250429';
+            cache_control?: unknown;
+        } | {
+            name: 'str_replace_based_edit_tool';
+            type: 'text_editor_20250728';
+            cache_control?: unknown;
+            max_characters?: number | null;
+        } | {
+            name: 'web_search';
+            type: 'web_search_20250305';
+            allowed_domains?: Array<string> | null;
+            blocked_domains?: Array<string> | null;
+            cache_control?: unknown;
+            max_uses?: number | null;
+            user_location?: unknown;
+        }>;
+        top_k?: number;
+        top_p?: number;
+        anthropic_version?: string;
+        anthropic_beta?: Array<string>;
+        _isStreaming?: boolean;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Authorization header with Bearer token
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+        modelId: string;
+    };
+    query?: never;
+    url: '/v1/bedrock/{agentId}/model/{modelId}/invoke-with-response-stream';
+};
+
+export type BedrockInvokeStreamWithAgentAndModelResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type CerebrasChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {
@@ -27904,6 +29084,7 @@ export type ListChatOpsBindingsResponses = {
             channelName: string | null;
             workspaceName: string | null;
             isDm: boolean;
+            answerAllMessages: boolean;
             dmOwnerEmail: string | null;
             agentId: string | null;
             createdAt: string;
@@ -28019,6 +29200,7 @@ export type BulkUpdateChatOpsBindingsResponses = {
         channelName: string | null;
         workspaceName: string | null;
         isDm: boolean;
+        answerAllMessages: boolean;
         dmOwnerEmail: string | null;
         agentId: string | null;
         createdAt: string;
@@ -28116,6 +29298,7 @@ export type DeleteChatOpsBindingResponse = DeleteChatOpsBindingResponses[keyof D
 export type UpdateChatOpsBindingData = {
     body: {
         agentId?: string | null;
+        answerAllMessages?: boolean;
     };
     path: {
         id: string;
@@ -28202,6 +29385,7 @@ export type UpdateChatOpsBindingResponses = {
         channelName: string | null;
         workspaceName: string | null;
         isDm: boolean;
+        answerAllMessages: boolean;
         dmOwnerEmail: string | null;
         agentId: string | null;
         createdAt: string;
@@ -28299,6 +29483,7 @@ export type CreateChatOpsDmBindingResponses = {
         channelName: string | null;
         workspaceName: string | null;
         isDm: boolean;
+        answerAllMessages: boolean;
         dmOwnerEmail: string | null;
         agentId: string | null;
         createdAt: string;
@@ -35896,6 +37081,564 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            request: {
+                model?: string;
+                messages: Array<{
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    } | {
+                        type: 'document';
+                        source: {
+                            type: 'base64';
+                            media_type: 'application/pdf';
+                            data: string;
+                        } | {
+                            type: 'text';
+                            media_type: 'text/plain';
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        } | {
+                            type: 'content';
+                            content: string | Array<{
+                                text: string;
+                                type: 'text';
+                                cache_control?: unknown;
+                                citations?: Array<unknown> | null;
+                            } | {
+                                type: 'image';
+                                source: {
+                                    type: 'base64';
+                                    media_type: string;
+                                    data: string;
+                                } | {
+                                    type: 'url';
+                                    url: string;
+                                };
+                                cache_control?: unknown;
+                            }>;
+                        };
+                        title?: string | null;
+                        context?: string | null;
+                        citations?: {
+                            enabled: boolean;
+                        } | null;
+                        cache_control?: unknown;
+                    } | {
+                        type: 'thinking';
+                        thinking: string;
+                        signature: string;
+                    } | {
+                        type: 'redacted_thinking';
+                        data: string;
+                    } | {
+                        id: string;
+                        input: unknown;
+                        name: string;
+                        type: 'tool_use';
+                        cache_control?: unknown;
+                    } | {
+                        tool_use_id: string;
+                        type: 'tool_result';
+                        cache_control?: unknown;
+                        content?: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        } | {
+                            type: 'document';
+                            source: {
+                                type: 'base64';
+                                media_type: 'application/pdf';
+                                data: string;
+                            } | {
+                                type: 'text';
+                                media_type: 'text/plain';
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            } | {
+                                type: 'content';
+                                content: string | Array<{
+                                    text: string;
+                                    type: 'text';
+                                    cache_control?: unknown;
+                                    citations?: Array<unknown> | null;
+                                } | {
+                                    type: 'image';
+                                    source: {
+                                        type: 'base64';
+                                        media_type: string;
+                                        data: string;
+                                    } | {
+                                        type: 'url';
+                                        url: string;
+                                    };
+                                    cache_control?: unknown;
+                                }>;
+                            };
+                            title?: string | null;
+                            context?: string | null;
+                            citations?: {
+                                enabled: boolean;
+                            } | null;
+                            cache_control?: unknown;
+                        }>;
+                        is_error?: boolean;
+                    } | {
+                        type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                        [key: string]: unknown;
+                    } | {
+                        type: string;
+                        [key: string]: unknown;
+                    }>;
+                    role: 'user' | 'assistant' | 'system';
+                }>;
+                max_tokens: number;
+                container?: string | null;
+                context_management?: {
+                    [key: string]: never;
+                } | null;
+                mcp_servers?: Array<unknown>;
+                metadata?: {
+                    user_id: string | null;
+                };
+                output_config?: {
+                    effort?: string | null;
+                    format?: {
+                        type: 'json_schema';
+                        schema: {
+                            [key: string]: unknown;
+                        };
+                    } | null;
+                };
+                service_tier?: unknown;
+                speed?: 'fast' | 'standard';
+                stop_sequences?: Array<string>;
+                stream?: boolean;
+                system?: string | {
+                    type: 'text';
+                    text: string;
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                } | Array<{
+                    type: 'text';
+                    text: string;
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                }>;
+                temperature?: number;
+                thinking?: {
+                    type: 'enabled';
+                    budget_tokens: number;
+                } | {
+                    type: 'disabled';
+                } | {
+                    type: 'adaptive';
+                };
+                tool_choice?: {
+                    type: 'auto';
+                    disable_parallel_tool_use?: boolean;
+                } | {
+                    type: 'any';
+                    disable_parallel_tool_use?: boolean;
+                } | {
+                    type: 'tool';
+                    name: string;
+                    disable_parallel_tool_use?: boolean;
+                } | {
+                    type: 'none';
+                };
+                tools?: Array<{
+                    name: string;
+                    type?: 'custom';
+                    cache_control?: unknown;
+                    input_schema: {
+                        [key: string]: unknown;
+                    };
+                    description?: string;
+                } | {
+                    name: 'bash';
+                    type: 'bash_20250124';
+                    cache_control?: unknown;
+                } | {
+                    name: 'str_replace_editor';
+                    type: 'text_editor_20250124';
+                    cache_control?: unknown;
+                } | {
+                    name: 'str_replace_based_edit_tool';
+                    type: 'text_editor_20250429';
+                    cache_control?: unknown;
+                } | {
+                    name: 'str_replace_based_edit_tool';
+                    type: 'text_editor_20250728';
+                    cache_control?: unknown;
+                    max_characters?: number | null;
+                } | {
+                    name: 'web_search';
+                    type: 'web_search_20250305';
+                    allowed_domains?: Array<string> | null;
+                    blocked_domains?: Array<string> | null;
+                    cache_control?: unknown;
+                    max_uses?: number | null;
+                    user_location?: unknown;
+                }>;
+                top_k?: number;
+                top_p?: number;
+                anthropic_version?: string;
+                anthropic_beta?: Array<string>;
+                _isStreaming?: boolean;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model?: string;
+                messages: Array<{
+                    content: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    } | {
+                        type: 'document';
+                        source: {
+                            type: 'base64';
+                            media_type: 'application/pdf';
+                            data: string;
+                        } | {
+                            type: 'text';
+                            media_type: 'text/plain';
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        } | {
+                            type: 'content';
+                            content: string | Array<{
+                                text: string;
+                                type: 'text';
+                                cache_control?: unknown;
+                                citations?: Array<unknown> | null;
+                            } | {
+                                type: 'image';
+                                source: {
+                                    type: 'base64';
+                                    media_type: string;
+                                    data: string;
+                                } | {
+                                    type: 'url';
+                                    url: string;
+                                };
+                                cache_control?: unknown;
+                            }>;
+                        };
+                        title?: string | null;
+                        context?: string | null;
+                        citations?: {
+                            enabled: boolean;
+                        } | null;
+                        cache_control?: unknown;
+                    } | {
+                        type: 'thinking';
+                        thinking: string;
+                        signature: string;
+                    } | {
+                        type: 'redacted_thinking';
+                        data: string;
+                    } | {
+                        id: string;
+                        input: unknown;
+                        name: string;
+                        type: 'tool_use';
+                        cache_control?: unknown;
+                    } | {
+                        tool_use_id: string;
+                        type: 'tool_result';
+                        cache_control?: unknown;
+                        content?: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        } | {
+                            type: 'document';
+                            source: {
+                                type: 'base64';
+                                media_type: 'application/pdf';
+                                data: string;
+                            } | {
+                                type: 'text';
+                                media_type: 'text/plain';
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            } | {
+                                type: 'content';
+                                content: string | Array<{
+                                    text: string;
+                                    type: 'text';
+                                    cache_control?: unknown;
+                                    citations?: Array<unknown> | null;
+                                } | {
+                                    type: 'image';
+                                    source: {
+                                        type: 'base64';
+                                        media_type: string;
+                                        data: string;
+                                    } | {
+                                        type: 'url';
+                                        url: string;
+                                    };
+                                    cache_control?: unknown;
+                                }>;
+                            };
+                            title?: string | null;
+                            context?: string | null;
+                            citations?: {
+                                enabled: boolean;
+                            } | null;
+                            cache_control?: unknown;
+                        }>;
+                        is_error?: boolean;
+                    } | {
+                        type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                        [key: string]: unknown;
+                    } | {
+                        type: string;
+                        [key: string]: unknown;
+                    }>;
+                    role: 'user' | 'assistant' | 'system';
+                }>;
+                max_tokens: number;
+                container?: string | null;
+                context_management?: {
+                    [key: string]: never;
+                } | null;
+                mcp_servers?: Array<unknown>;
+                metadata?: {
+                    user_id: string | null;
+                };
+                output_config?: {
+                    effort?: string | null;
+                    format?: {
+                        type: 'json_schema';
+                        schema: {
+                            [key: string]: unknown;
+                        };
+                    } | null;
+                };
+                service_tier?: unknown;
+                speed?: 'fast' | 'standard';
+                stop_sequences?: Array<string>;
+                stream?: boolean;
+                system?: string | {
+                    type: 'text';
+                    text: string;
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                } | Array<{
+                    type: 'text';
+                    text: string;
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                }>;
+                temperature?: number;
+                thinking?: {
+                    type: 'enabled';
+                    budget_tokens: number;
+                } | {
+                    type: 'disabled';
+                } | {
+                    type: 'adaptive';
+                };
+                tool_choice?: {
+                    type: 'auto';
+                    disable_parallel_tool_use?: boolean;
+                } | {
+                    type: 'any';
+                    disable_parallel_tool_use?: boolean;
+                } | {
+                    type: 'tool';
+                    name: string;
+                    disable_parallel_tool_use?: boolean;
+                } | {
+                    type: 'none';
+                };
+                tools?: Array<{
+                    name: string;
+                    type?: 'custom';
+                    cache_control?: unknown;
+                    input_schema: {
+                        [key: string]: unknown;
+                    };
+                    description?: string;
+                } | {
+                    name: 'bash';
+                    type: 'bash_20250124';
+                    cache_control?: unknown;
+                } | {
+                    name: 'str_replace_editor';
+                    type: 'text_editor_20250124';
+                    cache_control?: unknown;
+                } | {
+                    name: 'str_replace_based_edit_tool';
+                    type: 'text_editor_20250429';
+                    cache_control?: unknown;
+                } | {
+                    name: 'str_replace_based_edit_tool';
+                    type: 'text_editor_20250728';
+                    cache_control?: unknown;
+                    max_characters?: number | null;
+                } | {
+                    name: 'web_search';
+                    type: 'web_search_20250305';
+                    allowed_domains?: Array<string> | null;
+                    blocked_domains?: Array<string> | null;
+                    cache_control?: unknown;
+                    max_uses?: number | null;
+                    user_location?: unknown;
+                }>;
+                top_k?: number;
+                top_p?: number;
+                anthropic_version?: string;
+                anthropic_beta?: Array<string>;
+                _isStreaming?: boolean;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: AnthropicMessagesResponse | {
+                error: string;
+            };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
+            type: 'bedrock:invoke';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot' | 'microsoft-365-copilot';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot' | 'microsoft-365-copilot';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            executionId: string | null;
+            userId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -40447,6 +42190,564 @@ export type GetInteractionResponses = {
                 };
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        executionId: string | null;
+        userId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        request: {
+            model?: string;
+            messages: Array<{
+                content: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                } | {
+                    type: 'thinking';
+                    thinking: string;
+                    signature: string;
+                } | {
+                    type: 'redacted_thinking';
+                    data: string;
+                } | {
+                    id: string;
+                    input: unknown;
+                    name: string;
+                    type: 'tool_use';
+                    cache_control?: unknown;
+                } | {
+                    tool_use_id: string;
+                    type: 'tool_result';
+                    cache_control?: unknown;
+                    content?: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    } | {
+                        type: 'document';
+                        source: {
+                            type: 'base64';
+                            media_type: 'application/pdf';
+                            data: string;
+                        } | {
+                            type: 'text';
+                            media_type: 'text/plain';
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        } | {
+                            type: 'content';
+                            content: string | Array<{
+                                text: string;
+                                type: 'text';
+                                cache_control?: unknown;
+                                citations?: Array<unknown> | null;
+                            } | {
+                                type: 'image';
+                                source: {
+                                    type: 'base64';
+                                    media_type: string;
+                                    data: string;
+                                } | {
+                                    type: 'url';
+                                    url: string;
+                                };
+                                cache_control?: unknown;
+                            }>;
+                        };
+                        title?: string | null;
+                        context?: string | null;
+                        citations?: {
+                            enabled: boolean;
+                        } | null;
+                        cache_control?: unknown;
+                    }>;
+                    is_error?: boolean;
+                } | {
+                    type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                role: 'user' | 'assistant' | 'system';
+            }>;
+            max_tokens: number;
+            container?: string | null;
+            context_management?: {
+                [key: string]: never;
+            } | null;
+            mcp_servers?: Array<unknown>;
+            metadata?: {
+                user_id: string | null;
+            };
+            output_config?: {
+                effort?: string | null;
+                format?: {
+                    type: 'json_schema';
+                    schema: {
+                        [key: string]: unknown;
+                    };
+                } | null;
+            };
+            service_tier?: unknown;
+            speed?: 'fast' | 'standard';
+            stop_sequences?: Array<string>;
+            stream?: boolean;
+            system?: string | {
+                type: 'text';
+                text: string;
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+            } | Array<{
+                type: 'text';
+                text: string;
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+            }>;
+            temperature?: number;
+            thinking?: {
+                type: 'enabled';
+                budget_tokens: number;
+            } | {
+                type: 'disabled';
+            } | {
+                type: 'adaptive';
+            };
+            tool_choice?: {
+                type: 'auto';
+                disable_parallel_tool_use?: boolean;
+            } | {
+                type: 'any';
+                disable_parallel_tool_use?: boolean;
+            } | {
+                type: 'tool';
+                name: string;
+                disable_parallel_tool_use?: boolean;
+            } | {
+                type: 'none';
+            };
+            tools?: Array<{
+                name: string;
+                type?: 'custom';
+                cache_control?: unknown;
+                input_schema: {
+                    [key: string]: unknown;
+                };
+                description?: string;
+            } | {
+                name: 'bash';
+                type: 'bash_20250124';
+                cache_control?: unknown;
+            } | {
+                name: 'str_replace_editor';
+                type: 'text_editor_20250124';
+                cache_control?: unknown;
+            } | {
+                name: 'str_replace_based_edit_tool';
+                type: 'text_editor_20250429';
+                cache_control?: unknown;
+            } | {
+                name: 'str_replace_based_edit_tool';
+                type: 'text_editor_20250728';
+                cache_control?: unknown;
+                max_characters?: number | null;
+            } | {
+                name: 'web_search';
+                type: 'web_search_20250305';
+                allowed_domains?: Array<string> | null;
+                blocked_domains?: Array<string> | null;
+                cache_control?: unknown;
+                max_uses?: number | null;
+                user_location?: unknown;
+            }>;
+            top_k?: number;
+            top_p?: number;
+            anthropic_version?: string;
+            anthropic_beta?: Array<string>;
+            _isStreaming?: boolean;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model?: string;
+            messages: Array<{
+                content: string | Array<{
+                    text: string;
+                    type: 'text';
+                    cache_control?: unknown;
+                    citations?: Array<unknown> | null;
+                } | {
+                    type: 'image';
+                    source: {
+                        type: 'base64';
+                        media_type: string;
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    };
+                    cache_control?: unknown;
+                } | {
+                    type: 'document';
+                    source: {
+                        type: 'base64';
+                        media_type: 'application/pdf';
+                        data: string;
+                    } | {
+                        type: 'text';
+                        media_type: 'text/plain';
+                        data: string;
+                    } | {
+                        type: 'url';
+                        url: string;
+                    } | {
+                        type: 'content';
+                        content: string | Array<{
+                            text: string;
+                            type: 'text';
+                            cache_control?: unknown;
+                            citations?: Array<unknown> | null;
+                        } | {
+                            type: 'image';
+                            source: {
+                                type: 'base64';
+                                media_type: string;
+                                data: string;
+                            } | {
+                                type: 'url';
+                                url: string;
+                            };
+                            cache_control?: unknown;
+                        }>;
+                    };
+                    title?: string | null;
+                    context?: string | null;
+                    citations?: {
+                        enabled: boolean;
+                    } | null;
+                    cache_control?: unknown;
+                } | {
+                    type: 'thinking';
+                    thinking: string;
+                    signature: string;
+                } | {
+                    type: 'redacted_thinking';
+                    data: string;
+                } | {
+                    id: string;
+                    input: unknown;
+                    name: string;
+                    type: 'tool_use';
+                    cache_control?: unknown;
+                } | {
+                    tool_use_id: string;
+                    type: 'tool_result';
+                    cache_control?: unknown;
+                    content?: string | Array<{
+                        text: string;
+                        type: 'text';
+                        cache_control?: unknown;
+                        citations?: Array<unknown> | null;
+                    } | {
+                        type: 'image';
+                        source: {
+                            type: 'base64';
+                            media_type: string;
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        };
+                        cache_control?: unknown;
+                    } | {
+                        type: 'document';
+                        source: {
+                            type: 'base64';
+                            media_type: 'application/pdf';
+                            data: string;
+                        } | {
+                            type: 'text';
+                            media_type: 'text/plain';
+                            data: string;
+                        } | {
+                            type: 'url';
+                            url: string;
+                        } | {
+                            type: 'content';
+                            content: string | Array<{
+                                text: string;
+                                type: 'text';
+                                cache_control?: unknown;
+                                citations?: Array<unknown> | null;
+                            } | {
+                                type: 'image';
+                                source: {
+                                    type: 'base64';
+                                    media_type: string;
+                                    data: string;
+                                } | {
+                                    type: 'url';
+                                    url: string;
+                                };
+                                cache_control?: unknown;
+                            }>;
+                        };
+                        title?: string | null;
+                        context?: string | null;
+                        citations?: {
+                            enabled: boolean;
+                        } | null;
+                        cache_control?: unknown;
+                    }>;
+                    is_error?: boolean;
+                } | {
+                    type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                role: 'user' | 'assistant' | 'system';
+            }>;
+            max_tokens: number;
+            container?: string | null;
+            context_management?: {
+                [key: string]: never;
+            } | null;
+            mcp_servers?: Array<unknown>;
+            metadata?: {
+                user_id: string | null;
+            };
+            output_config?: {
+                effort?: string | null;
+                format?: {
+                    type: 'json_schema';
+                    schema: {
+                        [key: string]: unknown;
+                    };
+                } | null;
+            };
+            service_tier?: unknown;
+            speed?: 'fast' | 'standard';
+            stop_sequences?: Array<string>;
+            stream?: boolean;
+            system?: string | {
+                type: 'text';
+                text: string;
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+            } | Array<{
+                type: 'text';
+                text: string;
+                cache_control?: unknown;
+                citations?: Array<unknown> | null;
+            }>;
+            temperature?: number;
+            thinking?: {
+                type: 'enabled';
+                budget_tokens: number;
+            } | {
+                type: 'disabled';
+            } | {
+                type: 'adaptive';
+            };
+            tool_choice?: {
+                type: 'auto';
+                disable_parallel_tool_use?: boolean;
+            } | {
+                type: 'any';
+                disable_parallel_tool_use?: boolean;
+            } | {
+                type: 'tool';
+                name: string;
+                disable_parallel_tool_use?: boolean;
+            } | {
+                type: 'none';
+            };
+            tools?: Array<{
+                name: string;
+                type?: 'custom';
+                cache_control?: unknown;
+                input_schema: {
+                    [key: string]: unknown;
+                };
+                description?: string;
+            } | {
+                name: 'bash';
+                type: 'bash_20250124';
+                cache_control?: unknown;
+            } | {
+                name: 'str_replace_editor';
+                type: 'text_editor_20250124';
+                cache_control?: unknown;
+            } | {
+                name: 'str_replace_based_edit_tool';
+                type: 'text_editor_20250429';
+                cache_control?: unknown;
+            } | {
+                name: 'str_replace_based_edit_tool';
+                type: 'text_editor_20250728';
+                cache_control?: unknown;
+                max_characters?: number | null;
+            } | {
+                name: 'web_search';
+                type: 'web_search_20250305';
+                allowed_domains?: Array<string> | null;
+                blocked_domains?: Array<string> | null;
+                cache_control?: unknown;
+                max_uses?: number | null;
+                user_location?: unknown;
+            }>;
+            top_k?: number;
+            top_p?: number;
+            anthropic_version?: string;
+            anthropic_beta?: Array<string>;
+            _isStreaming?: boolean;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: AnthropicMessagesResponse | {
+            error: string;
+        };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
+        type: 'bedrock:invoke';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot' | 'microsoft-365-copilot';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure' | 'github-copilot' | 'microsoft-365-copilot';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -53844,6 +56145,7 @@ export type GetMcpServersResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
@@ -53990,6 +56292,7 @@ export type InstallMcpServerResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
@@ -54202,6 +56505,7 @@ export type GetMcpServerResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
@@ -54339,6 +56643,7 @@ export type ReauthenticateMcpServerResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';
@@ -54749,6 +57054,7 @@ export type ReinstallMcpServerResponses = {
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
         reinstallRequired: boolean;
+        reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
         localInstallationError: string | null;
         oauthRefreshError: 'refresh_failed' | 'no_refresh_token';

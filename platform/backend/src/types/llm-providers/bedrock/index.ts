@@ -28,6 +28,11 @@ namespace Bedrock {
     >;
     export type Usage = z.infer<typeof BedrockAPI.UsageSchema>;
 
+    export type InvokeRequest = z.infer<typeof BedrockAPI.InvokeRequestSchema>;
+    export type InvokeResponse = z.infer<
+      typeof BedrockAPI.InvokeResponseSchema
+    >;
+
     export type Message = z.infer<typeof BedrockMessages.MessageSchema>;
     export type ContentBlock = z.infer<
       typeof BedrockMessages.ContentBlockSchema

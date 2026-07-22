@@ -153,6 +153,9 @@ export const CLAUDE_CODE_PROXY_ENV_KEYS = {
     "CLAUDE_CODE_USE_BEDROCK",
     "AWS_REGION",
     "ANTHROPIC_BEDROCK_BASE_URL",
+    // Virtual-key mode only: the proxy virtual key, sent as a Bedrock bearer
+    // token (the Anthropic path's ANTHROPIC_AUTH_TOKEN equivalent).
+    "AWS_BEARER_TOKEN_BEDROCK",
   ],
 } as const;
 

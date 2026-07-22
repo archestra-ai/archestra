@@ -48,6 +48,10 @@ const ChoiceSchema = z
           })
           .nullable()
           .optional(),
+        // DeepSeek-style reasoning models return thinking in `reasoning_content`
+        // and require it passed back on tool-call turns; response serialization
+        // must preserve it or clients can never satisfy that contract.
+        reasoning_content: z.string().nullable().optional(),
         tool_calls: z.array(ToolCallSchema).optional(),
       })
       .describe("The assistant message in the response"),

@@ -386,6 +386,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -1035,6 +1039,10 @@
                         "arguments",
                         "name"
                       ]
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "nullable": true,
@@ -4683,6 +4691,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -5331,6 +5343,10 @@
                         "arguments",
                         "name"
                       ]
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "type": "array",
@@ -6353,6 +6369,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -7003,6 +7023,10 @@
                         "name"
                       ]
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -7509,6 +7533,10 @@
                       ]
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -8161,6 +8189,10 @@
                         "name"
                       ]
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -8667,6 +8699,10 @@
                       ]
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -9319,6 +9355,10 @@
                         "name"
                       ]
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -9825,6 +9865,10 @@
                       ]
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -10494,6 +10538,10 @@
                         "name"
                       ]
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -11086,6 +11134,10 @@
                       }
                     },
                     "reasoning": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "reasoning_content": {
                       "nullable": true,
                       "type": "string"
                     }
@@ -11778,6 +11830,10 @@
                     "reasoning": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -12195,6 +12251,10 @@
                       ]
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -12866,6 +12926,10 @@
                         "arguments",
                         "name"
                       ]
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "type": "array",
@@ -13995,6 +14059,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -14646,6 +14714,10 @@
                         "name"
                       ]
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -15152,6 +15224,10 @@
                       ]
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -15805,6 +15881,10 @@
                         "name"
                       ]
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -16311,6 +16391,10 @@
                       ]
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -17497,6 +17581,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -18147,6 +18235,10 @@
                         "name"
                       ]
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -18770,6 +18862,10 @@
                       "additionalProperties": false
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -19451,6 +19547,10 @@
                         "name"
                       ],
                       "additionalProperties": false
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "nullable": true,
@@ -23261,6 +23361,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -23939,6 +24043,10 @@
                         "name"
                       ],
                       "additionalProperties": false
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "type": "array",
@@ -25010,6 +25118,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -25690,6 +25802,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -26219,6 +26335,10 @@
                       "additionalProperties": false
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -26901,6 +27021,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -27430,6 +27554,10 @@
                       "additionalProperties": false
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -28112,6 +28240,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -28641,6 +28773,10 @@
                       "additionalProperties": false
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -29340,6 +29476,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -29959,6 +30099,10 @@
                       }
                     },
                     "reasoning": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "reasoning_content": {
                       "nullable": true,
                       "type": "string"
                     }
@@ -30681,6 +30825,10 @@
                     "reasoning": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -31118,6 +31266,10 @@
                       "additionalProperties": false
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -31819,6 +31971,10 @@
                         "name"
                       ],
                       "additionalProperties": false
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "type": "array",
@@ -32999,6 +33155,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -33679,6 +33839,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -34208,6 +34372,10 @@
                       "additionalProperties": false
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -34890,6 +35058,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "tool_calls": {
                       "nullable": true,
                       "type": "array",
@@ -35419,6 +35591,10 @@
                       "additionalProperties": false
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "refusal": {
@@ -36662,6 +36838,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "refusal": {
                       "nullable": true,
                       "type": "string"
@@ -37341,6 +37521,10 @@
                         "name"
                       ],
                       "additionalProperties": false
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "nullable": true,
@@ -74577,6 +74761,10 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "reasoning_content": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "tool_calls": {
                                 "nullable": true,
                                 "type": "array",
@@ -76273,6 +76461,10 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "reasoning_content": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "tool_calls": {
                                 "nullable": true,
@@ -119156,6 +119348,10 @@
                             "name": {
                               "type": "string"
                             },
+                            "reasoning_content": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "refusal": {
                               "nullable": true,
                               "type": "string"
@@ -119835,6 +120031,10 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "reasoning_content": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "tool_calls": {
                                 "nullable": true,
@@ -120591,6 +120791,10 @@
                             "name": {
                               "type": "string"
                             },
+                            "reasoning_content": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "refusal": {
                               "nullable": true,
                               "type": "string"
@@ -121280,6 +121484,10 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "reasoning_content": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "tool_calls": {
                                 "nullable": true,
@@ -144231,6 +144439,10 @@
                                                 "name": {
                                                   "type": "string"
                                                 },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
+                                                },
                                                 "refusal": {
                                                   "nullable": true,
                                                   "type": "string"
@@ -145214,6 +145426,10 @@
                                                 "name": {
                                                   "type": "string"
                                                 },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
+                                                },
                                                 "refusal": {
                                                   "nullable": true,
                                                   "type": "string"
@@ -145901,6 +146117,10 @@
                                                     "name"
                                                   ],
                                                   "additionalProperties": false
+                                                },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
                                                 },
                                                 "tool_calls": {
                                                   "nullable": true,
@@ -146967,6 +147187,10 @@
                                                 "name": {
                                                   "type": "string"
                                                 },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
+                                                },
                                                 "refusal": {
                                                   "nullable": true,
                                                   "type": "string"
@@ -147950,6 +148174,10 @@
                                                 "name": {
                                                   "type": "string"
                                                 },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
+                                                },
                                                 "refusal": {
                                                   "nullable": true,
                                                   "type": "string"
@@ -148637,6 +148865,10 @@
                                                     "name"
                                                   ],
                                                   "additionalProperties": false
+                                                },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
                                                 },
                                                 "tool_calls": {
                                                   "nullable": true,
@@ -149698,6 +149930,10 @@
                                                 "name": {
                                                   "type": "string"
                                                 },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
+                                                },
                                                 "refusal": {
                                                   "nullable": true,
                                                   "type": "string"
@@ -150681,6 +150917,10 @@
                                                 "name": {
                                                   "type": "string"
                                                 },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
+                                                },
                                                 "refusal": {
                                                   "nullable": true,
                                                   "type": "string"
@@ -151368,6 +151608,10 @@
                                                     "name"
                                                   ],
                                                   "additionalProperties": false
+                                                },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
                                                 },
                                                 "tool_calls": {
                                                   "nullable": true,
@@ -152722,6 +152966,10 @@
                                                     "name"
                                                   ],
                                                   "additionalProperties": false
+                                                },
+                                                "reasoning_content": {
+                                                  "nullable": true,
+                                                  "type": "string"
                                                 },
                                                 "tool_calls": {
                                                   "nullable": true,
@@ -172866,6 +173114,10 @@
                                           "name": {
                                             "type": "string"
                                           },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
+                                          },
                                           "refusal": {
                                             "nullable": true,
                                             "type": "string"
@@ -173849,6 +174101,10 @@
                                           "name": {
                                             "type": "string"
                                           },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
+                                          },
                                           "refusal": {
                                             "nullable": true,
                                             "type": "string"
@@ -174536,6 +174792,10 @@
                                               "name"
                                             ],
                                             "additionalProperties": false
+                                          },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
                                           },
                                           "tool_calls": {
                                             "nullable": true,
@@ -175602,6 +175862,10 @@
                                           "name": {
                                             "type": "string"
                                           },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
+                                          },
                                           "refusal": {
                                             "nullable": true,
                                             "type": "string"
@@ -176585,6 +176849,10 @@
                                           "name": {
                                             "type": "string"
                                           },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
+                                          },
                                           "refusal": {
                                             "nullable": true,
                                             "type": "string"
@@ -177272,6 +177540,10 @@
                                               "name"
                                             ],
                                             "additionalProperties": false
+                                          },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
                                           },
                                           "tool_calls": {
                                             "nullable": true,
@@ -178333,6 +178605,10 @@
                                           "name": {
                                             "type": "string"
                                           },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
+                                          },
                                           "refusal": {
                                             "nullable": true,
                                             "type": "string"
@@ -179316,6 +179592,10 @@
                                           "name": {
                                             "type": "string"
                                           },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
+                                          },
                                           "refusal": {
                                             "nullable": true,
                                             "type": "string"
@@ -180003,6 +180283,10 @@
                                               "name"
                                             ],
                                             "additionalProperties": false
+                                          },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
                                           },
                                           "tool_calls": {
                                             "nullable": true,
@@ -181357,6 +181641,10 @@
                                               "name"
                                             ],
                                             "additionalProperties": false
+                                          },
+                                          "reasoning_content": {
+                                            "nullable": true,
+                                            "type": "string"
                                           },
                                           "tool_calls": {
                                             "nullable": true,
@@ -193897,6 +194185,10 @@
                             "name": {
                               "type": "string"
                             },
+                            "reasoning_content": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "refusal": {
                               "nullable": true,
                               "type": "string"
@@ -194576,6 +194868,10 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "reasoning_content": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "tool_calls": {
                                 "nullable": true,
@@ -195337,6 +195633,10 @@
                             "name": {
                               "type": "string"
                             },
+                            "reasoning_content": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "refusal": {
                               "nullable": true,
                               "type": "string"
@@ -196026,6 +196326,10 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "reasoning_content": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "tool_calls": {
                                 "nullable": true,
@@ -234216,6 +234520,10 @@
                             "name": {
                               "type": "string"
                             },
+                            "reasoning_content": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "refusal": {
                               "nullable": true,
                               "type": "string"
@@ -234895,6 +235203,10 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "reasoning_content": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "tool_calls": {
                                 "nullable": true,
@@ -235656,6 +235968,10 @@
                             "name": {
                               "type": "string"
                             },
+                            "reasoning_content": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "refusal": {
                               "nullable": true,
                               "type": "string"
@@ -236345,6 +236661,10 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              "reasoning_content": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "tool_calls": {
                                 "nullable": true,

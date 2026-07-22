@@ -145,6 +145,11 @@ const AssistantMessageParamSchema = z
       .nullable()
       .optional(),
     name: z.string().optional(),
+    // DeepSeek-style reasoning models served via Ollama require the assistant's
+    // `reasoning_content` to be passed back on tool-call turns; the upstream
+    // rejects the request with a 400 when it is missing, so body validation
+    // must let it through instead of stripping it.
+    reasoning_content: z.string().nullable().optional(),
     refusal: z.string().nullable().optional(),
     tool_calls: z.array(ToolCallSchema).optional(),
   })

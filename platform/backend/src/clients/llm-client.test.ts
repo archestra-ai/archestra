@@ -143,6 +143,19 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
+  it("creates DeepSeek models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "deepseek",
+      apiKey: "test-key",
+      modelName: "deepseek-reasoner",
+      baseUrl: null,
+    });
+    // DeepSeek thinking mode requires `reasoning_content` passed back on
+    // tool-call turns; the strict openai provider ("openai.chat") drops it in
+    // both directions, while the openai-compatible provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("deepseek.chat");
+  });
+
   it("creates a model for zhipuai provider", () => {
     const model = createDirectLLMModel({
       provider: "zhipuai",

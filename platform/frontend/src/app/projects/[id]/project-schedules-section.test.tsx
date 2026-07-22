@@ -131,6 +131,18 @@ describe("ProjectSchedulesSection without scheduledTask:read", () => {
 
     expect(useScheduleTriggers).not.toHaveBeenCalled();
   });
+
+  it("never fetches a deep-linked ?schedule= trigger", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("schedule=trigger-1") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    render(<ProjectSchedulesSection projectId="project-1" />);
+
+    expect(useScheduleTrigger).not.toHaveBeenCalled();
+  });
 });
 
 describe("ProjectSchedulesSection with scheduledTask:read only", () => {

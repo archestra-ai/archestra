@@ -271,6 +271,10 @@ export const RouteId = {
     "archestraChatCompletionsWithDefaultAgent",
   ArchestraChatCompletionsWithAgent: "archestraChatCompletionsWithAgent",
 
+  // Proxy Routes - Kimi (Moonshot AI)
+  KimiChatCompletionsWithDefaultAgent: "kimiChatCompletionsWithDefaultAgent",
+  KimiChatCompletionsWithAgent: "kimiChatCompletionsWithAgent",
+
   // Proxy Routes - AWS Bedrock
   BedrockConverseWithDefaultAgent: "bedrockConverseWithDefaultAgent",
   BedrockConverseWithAgent: "bedrockConverseWithAgent",

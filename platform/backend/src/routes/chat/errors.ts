@@ -1394,6 +1394,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   ollama: providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
+  kimi: openAiCompatibleErrorHandler,
   "github-copilot": openAiCompatibleErrorHandler,
   "microsoft-365-copilot": providerErrorHandler(
     parseOpenAIError,

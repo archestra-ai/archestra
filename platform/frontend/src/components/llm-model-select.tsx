@@ -35,6 +35,7 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   minimax: "minimax",
+  kimi: "moonshotai",
   azure: "azure",
   "github-copilot": "github-copilot",
   "microsoft-365-copilot": "microsoft-365-copilot",

@@ -40,6 +40,7 @@ import { deepseekAdapterFactory } from "../adapters/deepseek";
 import { geminiAdapterFactory } from "../adapters/gemini";
 import { githubCopilotAdapterFactory } from "../adapters/github-copilot";
 import { groqAdapterFactory } from "../adapters/groq";
+import { kimiAdapterFactory } from "../adapters/kimi";
 import { microsoft365CopilotAdapterFactory } from "../adapters/microsoft-365-copilot";
 import { minimaxAdapterFactory } from "../adapters/minimax";
 import { mistralAdapterFactory } from "../adapters/mistral";
@@ -61,6 +62,7 @@ import deepseekProxyRoutes from "./deepseek";
 import geminiProxyRoutes from "./gemini";
 import githubCopilotProxyRoutes from "./github-copilot";
 import groqProxyRoutes from "./groq";
+import kimiProxyRoutes from "./kimi";
 import microsoft365CopilotProxyRoutes from "./microsoft-365-copilot";
 import minimaxProxyRoutes from "./minimax";
 import mistralProxyRoutes from "./mistral";
@@ -1865,6 +1867,25 @@ const providerConfigsByProvider = {
     requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
     model: "gpt-4o",
     optimizedModel: "gpt-4o-mini",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  kimi: makeConfig({
+    providerName: "Kimi",
+    providerSlug: "kimi",
+    provider: "kimi",
+    family: "openai",
+    routePlugin: kimiProxyRoutes,
+    adapterFactory: kimiAdapterFactory,
+    endpoint: (agentId) => `/v1/kimi/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("kimi-k2-0711-preview"),
+    model: "kimi-k2-0711-preview",
+    optimizedModel: "moonshot-v1-8k",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,

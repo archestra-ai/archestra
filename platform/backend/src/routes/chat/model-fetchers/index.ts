@@ -80,6 +80,12 @@ const fetchGroqModels = makeBearerFetcher({
   errorLabel: "Groq models",
 });
 
+const fetchKimiModels = makeBearerFetcher({
+  provider: "kimi",
+  configKey: "kimi",
+  errorLabel: "Kimi models",
+});
+
 const fetchMistralModels = makeBearerFetcher({
   provider: "mistral",
   configKey: "mistral",
@@ -114,6 +120,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   gemini: fetchGeminiModels,
   "github-copilot": fetchGithubCopilotModels,
   groq: fetchGroqModels,
+  kimi: fetchKimiModels,
   "microsoft-365-copilot": fetchMicrosoft365CopilotModels,
   minimax: makeStaticFetcher("minimax", MINIMAX_MODELS),
   mistral: fetchMistralModels,

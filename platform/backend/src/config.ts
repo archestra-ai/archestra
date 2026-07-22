@@ -1603,6 +1603,10 @@ const config = {
       enabled: Boolean(process.env.ARCHESTRA_ARCHESTRA_BASE_URL),
       baseUrl: process.env.ARCHESTRA_ARCHESTRA_BASE_URL,
     },
+    kimi: {
+      baseUrl:
+        process.env.ARCHESTRA_KIMI_BASE_URL || "https://api.moonshot.ai/v1",
+    },
     "github-copilot": {
       baseUrl:
         process.env.ARCHESTRA_GITHUB_COPILOT_BASE_URL ||
@@ -1737,86 +1741,108 @@ const config = {
     archestra: {
       apiKey: process.env.ARCHESTRA_CHAT_ARCHESTRA_API_KEY || "",
     },
-    "github-copilot": {
-      apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",
+    kimi: {
+      apiKey: process.env.ARCHESTRA_CHAT_KIMI_API_KEY || "",
     },
-    "microsoft-365-copilot": {
-      // Per-user provider: every env-key consumer skips it (resolution
-      // fallback, env seeding, system defaults), so no env var is read.
-      apiKey: "",
-    },
-    bedrock: {
-      apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
-    },
-    minimax: {
-      apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
-    },
-    azure: {
-      apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
-    },
+("github-copilot");
+:
+{
+  apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",
+}
+,
+    "microsoft-365-copilot":
+{
+  // Per-user provider: every env-key consumer skips it (resolution
+  // fallback, env seeding, system defaults), so no env var is read.
+  apiKey: "",
+}
+,
+    bedrock:
+{
+  apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
+}
+,
+    minimax:
+{
+  apiKey: process.env.ARCHESTRA_CHAT_MINIMAX_API_KEY || "",
+}
+,
+    azure:
+{
+  apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
+}
+,
     defaultModel:
       process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || DEFAULT_MODELS.anthropic,
-    defaultProvider: ((): SupportedProvider => {
-      const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
-      if (
-        provider &&
-        SupportedProviders.includes(provider as SupportedProvider)
-      ) {
-        return provider as SupportedProvider;
-      }
-      return "anthropic";
-    })(),
-    activeRun: {
-      replayPollIntervalMs: parseActiveChatRunPollIntervalMs({
-        value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS,
-        defaultValue: 500,
-        envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
-      }),
-      stopPollIntervalMs: parseActiveChatRunPollIntervalMs({
-        value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
-        defaultValue:
+    defaultProvider: ((): SupportedProvider =>
+{
+  const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
+  if (provider && SupportedProviders.includes(provider as SupportedProvider)) {
+    return provider as SupportedProvider;
+  }
+  return "anthropic";
+}
+)(),
+    activeRun:
+{
+  replayPollIntervalMs: parseActiveChatRunPollIntervalMs({
+    value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS,
+    defaultValue: 500,
+    envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
+  }),
+    stopPollIntervalMs;
+  : parseActiveChatRunPollIntervalMs(
+  value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
+    defaultValue;
+  :
           process.env
             .ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED === "true"
             ? 500
             : 30_000,
         envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
-      }),
+),
       pollingCompatibilityEnabled:
         process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED ===
         "true",
       notifyDatabaseUrl:
         process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL?.trim() || "",
-    },
+}
+,
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
     maxOutputTokensCeiling: parseChatMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
     ),
   },
-  enterpriseFeatures: {
-    core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
-    knowledgeBase:
+  enterpriseFeatures:
+{
+  core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+    knowledgeBase;
+  :
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED ===
       "true",
     fullWhiteLabeling:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
-  },
-  hackathonRecorder: {
-    enabled: parseHackathonRecorderEnabled({
-      enterpriseLicenseActivated:
-        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
-      // Undocumented on purpose — see parseHackathonRecorderEnabled. Do not
-      // add this to .env.example or the deployment docs.
-      enterpriseOverride:
-        process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
-    }),
+}
+,
+  hackathonRecorder:
+{
+  enabled: parseHackathonRecorderEnabled({
+    enterpriseLicenseActivated:
+      process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
+    // Undocumented on purpose — see parseHackathonRecorderEnabled. Do not
+    // add this to .env.example or the deployment docs.
+    enterpriseOverride:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
+  }),
     /**
      * The staging override is active. It forces the recorder on for Archestra's
      * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
      * hackathon date window, so staging can exercise the feature before it
      * opens and after it closes. Undocumented, same as the override itself.
      */
-    overrideActive:
+    overrideActive;
+  :
       process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
     /**
      * Sharing a recording to the public App Gallery (a PR filed on the
@@ -1833,14 +1859,14 @@ const config = {
      * Undocumented on purpose, like the rest of the recorder — not in
      * .env.example or the deployment docs.
      */
-    gallery: {
-      githubClientId:
-        process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
-        undefined,
-      repo: parseHackathonGalleryRepo(
+    gallery:
+  githubClientId: process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
+    undefined,
+    repo
+  : parseHackathonGalleryRepo(
         process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO,
       ),
-    },
+  ,
     /**
      * Escape hatch, not a requirement: the renderer finds or installs its own
      * Chromium (see app-recording-render-runtime). Set this only to pin a
@@ -1882,22 +1908,25 @@ const config = {
      */
     rendererUrl:
       process.env.ARCHESTRA_APP_RECORDING_RENDERER_URL?.trim() || undefined,
-  },
+}
+,
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
    * This ensures enterprise routes are always included in generated API specs,
    * regardless of whether the enterprise license is activated locally.
    */
   codegenMode: process.env.CODEGEN === "true",
-  orchestrator: {
-    mcpServerBaseImage,
+  orchestrator:
+{
+  mcpServerBaseImage,
     mcpServerResources,
     /**
      * How often (in seconds) to sweep Failed/Evicted MCP server pods.
      * DiskPressure eviction cascades can leave hundreds of Failed pod
      * corpses behind that nothing else cleans up. Set to 0 to disable.
      */
-    failedPodReapIntervalSeconds:
+    failedPodReapIntervalSeconds;
+  :
       process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS?.trim() ===
       "0"
         ? 0
@@ -1905,9 +1934,10 @@ const config = {
             process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
             600,
           ),
-    kubernetes: {
-      namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
-      kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
+    kubernetes:
+  namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
+    kubeconfig;
+  : process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
       loadKubeconfigFromCurrentCluster:
         process.env
           .ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER ===
@@ -1923,17 +1953,19 @@ const config = {
       environmentNamespaces: parseCommaSeparatedList(
         process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
       ),
-    },
-  },
+  ,
+}
+,
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
    * runs commands, holds uploaded files, and materializes activated skills.
    * runs when a Dagger runner host is configured
    * (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`), off otherwise.
    */
-  skillsSandbox: {
-    enabled: skillsSandboxEnabled,
-    cpuLimit: parsePositiveInt(
+  skillsSandbox:
+{
+  enabled: skillsSandboxEnabled, cpuLimit;
+  : parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS,
       30,
     ),
@@ -1953,7 +1985,8 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
       16 * 1024 * 1024,
     ),
-  },
+}
+,
   /**
    * agent lifecycle hooks — user scripts run at chat lifecycle events.
    * Available whenever the agent runtime (the code execution sandbox) is on,
@@ -1961,18 +1994,21 @@ const config = {
    * `enabled` is the fully-resolved flag — the dispatcher, the `/debug` toggle,
    * and the chip read-gate all key off it.
    */
-  hooks: {
-    enabled: skillsSandboxEnabled,
-  },
+  hooks:
+{
+  enabled: skillsSandboxEnabled,
+}
+,
   /**
    * unified Dagger runtime — one shared session with a pre-warmed base
    * container that hosts the code execution sandbox commands. The Rust crate
    * (`@archestra/sandbox-rs`) owns the session; this block only carries
    * enable + connection knobs.
    */
-  daggerRuntime: {
-    enabled: daggerRuntimeEnabled,
-    runnerHost: daggerRuntimeRunnerHost,
+  daggerRuntime:
+{
+  enabled: daggerRuntimeEnabled, runnerHost;
+  : daggerRuntimeRunnerHost,
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
@@ -1985,7 +2021,8 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
-  },
+}
+,
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
    * default) and `filesystem` (a mounted volume / PVC) are co-equal: the active
@@ -1993,40 +2030,50 @@ const config = {
    * deployment can hold a mix. `filesystemRoot` is the absolute mount path,
    * required + validated when `provider === "filesystem"`.
    */
-  fileStorage: {
-    provider: fileStorageProvider,
-    filesystemRoot: fileStorageFilesystemRoot,
+  fileStorage:
+{
+  provider: fileStorageProvider, filesystemRoot;
+  : fileStorageFilesystemRoot,
     s3: fileStorageS3Config,
-  },
-  vault: {
-    token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
-  },
-  mcpSandbox: {
-    /**
-     * Optional wildcard domain for per-server sandbox origins.
-     * When set (e.g. "mcp.example.com"), each MCP server gets a hash-based
-     * subdomain (e.g. "a1b2c3d4e5f6.mcp.example.com") with a real origin,
-     * enabling localStorage, CORS, and OAuth for MCP Apps.
-     * Requires wildcard DNS + TLS for *.{domain}.
-     * When null (default), sandbox uses opaque origin (single-port, zero config).
-     */
-    domain: process.env.ARCHESTRA_MCP_SANDBOX_DOMAIN || null,
+}
+,
+  vault:
+{
+  token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
+}
+,
+  mcpSandbox:
+{
+  /**
+   * Optional wildcard domain for per-server sandbox origins.
+   * When set (e.g. "mcp.example.com"), each MCP server gets a hash-based
+   * subdomain (e.g. "a1b2c3d4e5f6.mcp.example.com") with a real origin,
+   * enabling localStorage, CORS, and OAuth for MCP Apps.
+   * Requires wildcard DNS + TLS for *.{domain}.
+   * When null (default), sandbox uses opaque origin (single-port, zero config).
+   */
+  domain: process.env.ARCHESTRA_MCP_SANDBOX_DOMAIN || null,
     /** Path to the sandbox proxy HTML file (co-located in backend static dir). */
-    filePath: path.resolve(__dirname, "static/mcp-sandbox-proxy.html"),
+    filePath;
+  : path.resolve(__dirname, "static/mcp-sandbox-proxy.html"),
     /**
      * Explicitly configured origins that are allowed to embed the sandbox iframe.
      * Empty array means no restriction (open / dev deployment).
      * Mirrors the CORS/trusted-origin configuration so all three stay in sync.
      */
     allowedOrigins: addLoopbackEquivalents(getConfiguredOrigins()),
-  },
-  logging: {
-    format: parseLogFormat(process.env.ARCHESTRA_LOGGING_FORMAT),
-  },
-  observability: {
-    otel: {
-      captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
-      contentMaxLength: parseContentMaxLength(
+}
+,
+  logging:
+{
+  format: parseLogFormat(process.env.ARCHESTRA_LOGGING_FORMAT),
+}
+,
+  observability:
+{
+  captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
+    contentMaxLength;
+  : parseContentMaxLength(
         process.env.ARCHESTRA_OTEL_CONTENT_MAX_LENGTH,
       ),
       tracesSampleRate: parseSampleRate(
@@ -2034,23 +2081,26 @@ const config = {
         1.0,
       ),
       verboseTracing: process.env.ARCHESTRA_OTEL_VERBOSE_TRACING === "true",
-      traceExporter: {
-        url: getOtelExporterOtlpEndpoint(),
-        headers: getOtlpAuthHeaders(),
-      } satisfies Partial<OTLPExporterNodeConfigBase>,
-      logExporter: {
-        url: getOtelExporterOtlpLogEndpoint(),
-        headers: getOtlpAuthHeaders(),
-      } satisfies Partial<OTLPExporterNodeConfigBase>,
-    },
-    metrics: {
-      endpoint: "/metrics",
-      port: parseMetricsPort(process.env.ARCHESTRA_METRICS_PORT),
+      traceExporter:
+  url: getOtelExporterOtlpEndpoint(), headers
+  : getOtlpAuthHeaders(),
+  satisfies
+  Partial<OTLPExporterNodeConfigBase>, logExporter;
+  :
+  url: getOtelExporterOtlpLogEndpoint(), headers
+  : getOtlpAuthHeaders(),
+  satisfies
+  Partial<OTLPExporterNodeConfigBase>,
+  ,
+    metrics
+  :
+  endpoint: "/metrics", port
+  : parseMetricsPort(process.env.ARCHESTRA_METRICS_PORT),
       secret: process.env.ARCHESTRA_METRICS_SECRET,
-    },
-    sentry: {
-      enabled: sentryDsn !== "",
-      dsn: sentryDsn,
+  ,
+    sentry:
+  enabled: sentryDsn !== "", dsn
+  : sentryDsn,
       environment:
         process.env.ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() || environment,
       tracesSampleRate: parseSampleRate(
@@ -2065,17 +2115,20 @@ const config = {
         process.env.ARCHESTRA_SENTRY_PROFILES_SAMPLE_RATE,
         0.2,
       ),
-    },
-  },
+  ,
+}
+,
   debug: isDevelopment,
   production: isProduction,
   environment,
-  llmProxy: {
-    maxVirtualKeysPerApiKey: parsePositiveInt(
-      process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
-      10,
-    ),
-    virtualKeyDefaultExpirationSeconds: parseVirtualKeyDefaultExpiration(
+  llmProxy:
+{
+  maxVirtualKeysPerApiKey: parsePositiveInt(
+    process.env.ARCHESTRA_LLM_PROXY_MAX_VIRTUAL_KEYS,
+    10,
+  ),
+    virtualKeyDefaultExpirationSeconds;
+  : parseVirtualKeyDefaultExpiration(
       process.env.ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS,
     ),
     upstreamTimeoutMs: process.env.ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS
@@ -2084,16 +2137,19 @@ const config = {
           300000,
         )
       : undefined,
-  },
-  kb: {
-    // BETA gate for the auto-sync-permissions connector visibility: the
-    // permission-sync passes, the connector Permissions tab APIs, and manual
-    // member overrides. Off by default; a blank value falls back to the
-    // ARCHESTRA_BETA master switch (see betaFeatureEnabled).
-    autoSyncPermissionsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
-    ),
-    hybridSearchEnabled:
+}
+,
+  kb:
+{
+  // BETA gate for the auto-sync-permissions connector visibility: the
+  // permission-sync passes, the connector Permissions tab APIs, and manual
+  // member overrides. Off by default; a blank value falls back to the
+  // ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+  autoSyncPermissionsEnabled: betaFeatureEnabled(
+    process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
+  ),
+    hybridSearchEnabled;
+  :
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
@@ -2148,10 +2204,13 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS,
       15 * 60,
     ),
-  },
-  secretsManager: {
-    type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
-    vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
+}
+,
+  secretsManager:
+{
+  type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
+    vaultKvVersion;
+  : process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
     /**
      * One-boot escape hatch for a deliberate ARCHESTRA_AUTH_SECRET rotation:
      * lets startup accept an encryption key that cannot decrypt previously
@@ -2159,12 +2218,16 @@ const config = {
      */
     acceptNewEncryptionKey:
       process.env.ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY === "true",
-  },
-  test: {
-    enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
-    enableTestMcpServer: process.env.ENABLE_TEST_MCP_SERVER === "true",
+}
+,
+  test:
+{
+  enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
+    enableTestMcpServer;
+  : process.env.ENABLE_TEST_MCP_SERVER === "true",
     testValue: process.env.TEST_VALUE ?? null,
-  },
+}
+,
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
@@ -2174,22 +2237,26 @@ const config = {
    * the new connection page the default Connect destination — can key off it.
    */
   beta: process.env.ARCHESTRA_BETA === "true",
-  ngrok: {
-    // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
-    // agent SDK) so the instance is reachable from the Internet for inbound
-    // chatops webhooks (MS Teams, Slack).
-    authToken: process.env.ARCHESTRA_NGROK_AUTH_TOKEN || "",
+  ngrok:
+{
+  // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
+  // agent SDK) so the instance is reachable from the Internet for inbound
+  // chatops webhooks (MS Teams, Slack).
+  authToken: process.env.ARCHESTRA_NGROK_AUTH_TOKEN || "",
     // Optional reserved domain for a stable public URL across restarts. Without
     // it ngrok assigns an ephemeral domain that rotates on each restart.
-    domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
-  },
-  chatops: {
-    // The Telegram integration is generally available: on by default, with
-    // ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false as the operator opt-out.
-    // Off = the provider never starts (even with a token saved in the DB),
-    // the config endpoint rejects updates, and the frontend hides the
-    // Telegram messaging channel.
-    telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED !== "false",
+    domain;
+  : process.env.ARCHESTRA_NGROK_DOMAIN || "",
+}
+,
+  chatops:
+{
+  // The Telegram integration is generally available: on by default, with
+  // ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=false as the operator opt-out.
+  // Off = the provider never starts (even with a token saved in the DB),
+  // the config endpoint rejects updates, and the frontend hides the
+  // Telegram messaging channel.
+  telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED !== "false",
     // Per-process cap on concurrent chatops file downloads + image shrinking.
     // Chatops events are acked to the provider before processing, so an OOM
     // during a burst of attachment-heavy messages means silent message loss —
@@ -2197,23 +2264,27 @@ const config = {
     // alloc) a burst can hold. 4 matches libuv's default threadpool, which
     // already serializes the native image decodes. Currently gates Slack only:
     // MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap.
-    maxConcurrentFileTransfers: parsePositiveInt(
+    maxConcurrentFileTransfers;
+  : parsePositiveInt(
       process.env.ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS,
       4,
     ),
-  },
+}
+,
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
   // Instance-wide banner (markdown) shown at the top of the UI. Unlike
   // maintenanceMode it does not affect request handling.
   siteNotificationMessage:
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
-  auditLog: {
-    retentionDays: parseAuditLogRetentionDays(
+  auditLog:
+{
+  retentionDays: parseAuditLogRetentionDays(
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
     ),
-  },
-};
+}
+,
+}
 
 // "all" runs the web server and the worker in one process; "web"/"worker" run
 // exactly one. "renderer" is neither — it runs only the isolated app-recording

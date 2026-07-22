@@ -251,6 +251,14 @@ const PROVIDER_CONFIG: Record<
     description:
       "Route through another Archestra instance. On that instance, create an LLM Proxy and a virtual API key. Set the Base URL to the proxy's model router (e.g. https://your-archestra/v1/model-router/<llm-proxy-id>) and paste the virtual API key below.",
   },
+  kimi: {
+    name: "Moonshot (Kimi)",
+    icon: "/icons/kimi.png",
+    placeholder: "sk-...",
+    enabled: true,
+    consoleUrl: "https://platform.moonshot.ai/console/api-keys",
+    consoleName: "Moonshot AI Platform",
+  },
   bedrock: {
     name: "AWS Bedrock",
     icon: "/icons/bedrock.png",

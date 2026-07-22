@@ -17,6 +17,14 @@ cd "$(dirname "$0")/../backend"
 
 export ARCHESTRA_PROCESS_TYPE=renderer
 
+# Run in dev mode no matter what the shell that launched `tilt up` had exported.
+# The backend dev process never sees an inherited NODE_ENV (its chain goes
+# through turbo, whose strict env mode strips it), but this serve_cmd bypasses
+# turbo — a stray NODE_ENV=production from the launching shell flips the shared
+# bundle into production behavior: analytics defaulting on, 0.0.0.0 binding,
+# and better-auth's default-secret guard rejecting at boot.
+unset NODE_ENV
+
 # Wait for the backend's watch build to produce a COMPLETE bundle before booting,
 # rather than crash-looping until it settles. Two things have to be true, not one:
 #

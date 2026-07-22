@@ -76249,6 +76249,7 @@ export type CreateTeamData = {
     body: {
         name: string;
         description?: string;
+        convertToolResultsToToon?: boolean;
         labels?: Array<{
             key: string;
             value: string;

@@ -293528,6 +293528,9 @@
                   "description": {
                     "type": "string"
                   },
+                  "convertToolResultsToToon": {
+                    "type": "boolean"
+                  },
                   "labels": {
                     "type": "array",
                     "items": {

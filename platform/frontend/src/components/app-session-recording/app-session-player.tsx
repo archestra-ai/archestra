@@ -3321,13 +3321,14 @@ function ReplayTimeline({
             refuse to take. One click trims the edit down to exactly this
             point (the same end trim the bracket drag makes, one undoable
             step). The mark's position is played time mapped onto the full
-            strip, so it moves as cuts change. It sits drags out like the
-            hover pin: a live boundary preview would re-time it mid-gesture.
+            strip, so it moves as cuts change — on COMMITTED cuts only, so it
+            holds still through a drag (blinking out mid-gesture uncovered
+            the ruler's own 0:30 label underneath and read as a glitch).
             Deliberately QUIET: a badge in the ruler band only — muted until
             hovered, no line through the strip (that would read as a second
             playhead), and no hit area over the strip itself, where an end
             bracket dragged to ~30s must stay grabbable. */}
-        {exportLimit !== null && !drag && (
+        {exportLimit !== null && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button

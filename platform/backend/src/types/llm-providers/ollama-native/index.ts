@@ -8,13 +8,10 @@
  */
 import type { z } from "zod";
 import * as OllamaNativeAPI from "./api";
-import * as OllamaNativeMessages from "./messages";
-import * as OllamaNativeTools from "./tools";
+import type * as OllamaNativeMessages from "./messages";
 
 namespace OllamaNative {
   export const API = OllamaNativeAPI;
-  export const Messages = OllamaNativeMessages;
-  export const Tools = OllamaNativeTools;
 
   export namespace Types {
     export type ChatHeaders = z.infer<typeof OllamaNativeAPI.ChatHeadersSchema>;
@@ -30,11 +27,8 @@ namespace OllamaNative {
     export type ChatStreamChunk = z.infer<
       typeof OllamaNativeAPI.ChatResponseSchema
     >;
-    export type Options = z.infer<typeof OllamaNativeAPI.OptionsSchema>;
-    export type Think = z.infer<typeof OllamaNativeAPI.ThinkSchema>;
     export type Message = z.infer<typeof OllamaNativeMessages.MessageSchema>;
     export type Messages = ChatRequest["messages"];
-    export type ToolCall = z.infer<typeof OllamaNativeMessages.ToolCallSchema>;
   }
 }
 

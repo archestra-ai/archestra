@@ -1623,9 +1623,6 @@ const config = {
     // `/v1` suffix stripped. Lets Archestra send/display num_ctx, num_predict,
     // top_k, think, etc. that the OpenAI-compatible `/v1` endpoint discards.
     "ollama-native": {
-      // Always on, for the same reason as `ollama` above — it defaults to the
-      // same localhost server.
-      enabled: true,
       baseUrl: deriveOllamaNativeBaseUrl({
         nativeBaseUrl: process.env.ARCHESTRA_OLLAMA_NATIVE_BASE_URL,
         ollamaBaseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,

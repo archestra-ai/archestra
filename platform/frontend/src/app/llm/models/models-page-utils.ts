@@ -30,7 +30,7 @@ export interface ConfiguredParametersFormValues {
 }
 
 /** The subset of a model row these helpers read. */
-export type ConfiguredParametersModel = {
+type ConfiguredParametersModel = {
   contextLength?: number | null;
   configuredParameters?: ConfiguredParametersBody;
 };
@@ -201,7 +201,7 @@ export function buildConfiguredParameters(
 }
 
 /** The subset of a model row {@link resolveDisplayContextLength} reads. */
-export type DisplayContextLengthModel = {
+type DisplayContextLengthModel = {
   contextLength?: number | null;
   effectiveContextLength?: number | null;
 };

@@ -339,7 +339,8 @@ export function AppGalleryShareButton(props: {
         className="w-full"
         onClick={() => window.open(state.prUrl, GITHUB_TAB_NAME)}
       >
-        Open Pull Request
+        {/* "Go to", not "Open" — opening has its own meaning for a PR. */}
+        Go to Pull Request
       </Button>
     ) : null;
 
@@ -546,19 +547,12 @@ function dialogChrome(
           Done.
         </span>
       ),
+      // No link on "Pull Request" here — the full-width button right below
+      // is the way to it, and a second link would just duplicate it.
       description: (
         <>
           Your App demo will be showcased in the <GalleryLink repo={repo} />{" "}
-          once Archestra team approves your{" "}
-          <a
-            className={LINK_CLASS}
-            href={state.prUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Pull Request
-          </a>
-          .
+          once Archestra team approves your Pull Request.
         </>
       ),
     };
@@ -1003,7 +997,7 @@ function showPrInGithubTab(ref: GithubTabRef, prUrl: string): void {
   // around (sign-in leaves one), browsers treat this as navigating that
   // existing tab — allowed even without a fresh click. Only when the name
   // resolves to nothing does this become a new-popup request, which this
-  // far from a click a blocker refuses — the Open Pull Request button on
+  // far from a click a blocker refuses — the Go to Pull Request button on
   // the done screen covers that case with a real click.
   window.open(prUrl, GITHUB_TAB_NAME);
 }

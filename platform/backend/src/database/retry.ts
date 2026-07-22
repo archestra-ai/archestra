@@ -76,6 +76,19 @@ const TRANSIENT_ERROR_PATTERNS: ReadonlyArray<{
   { pattern: "timeout expired", code: "timeout_expired" },
 ];
 
+/**
+ * Transient network syscall codes, matched against `error.code` directly.
+ * Message matching alone misses Node's multi-address connection failure: when
+ * a database host resolves to several addresses (e.g. IPv6 + IPv4) and all
+ * fail, net.connect throws an AggregateError whose message is EMPTY — the
+ * syscall code lives on `error.code` and the per-address errors in `errors`.
+ */
+const TRANSIENT_NETWORK_CODES = new Set(
+  TRANSIENT_ERROR_PATTERNS.filter(({ pattern, code }) => pattern === code).map(
+    ({ code }) => code,
+  ),
+);
+
 /** Maximum depth for cause-chain traversal to guard against circular references */
 const MAX_CAUSE_DEPTH = 5;
 
@@ -106,9 +119,11 @@ export function getTransientDbErrorCode(
   if (!(error instanceof Error)) return null;
   if (depth > MAX_CAUSE_DEPTH) return null;
 
-  // Check PostgreSQL error code (set by node-postgres on query errors)
-  const pgCode = (error as Error & { code?: string }).code;
-  if (pgCode && TRANSIENT_PG_CODES.has(pgCode)) return pgCode;
+  // Check PostgreSQL error code (set by node-postgres on query errors) and
+  // Node network syscall codes (the only signal on empty-message errors)
+  const errorCode = (error as Error & { code?: string }).code;
+  if (errorCode && TRANSIENT_PG_CODES.has(errorCode)) return errorCode;
+  if (errorCode && TRANSIENT_NETWORK_CODES.has(errorCode)) return errorCode;
 
   // Check error message for known transient patterns
   const message = error.message;
@@ -116,6 +131,15 @@ export function getTransientDbErrorCode(
     message.includes(pattern),
   );
   if (matched) return matched.code;
+
+  // A multi-address connection failure is an AggregateError holding one error
+  // per attempted address in `errors` (not `cause`) — check each of them.
+  if (error instanceof AggregateError) {
+    for (const subError of error.errors) {
+      const code = getTransientDbErrorCode(subError, depth + 1);
+      if (code) return code;
+    }
+  }
 
   // DrizzleQueryError wraps the underlying pg error as `cause`
   const cause = (error as Error & { cause?: unknown }).cause;

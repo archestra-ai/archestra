@@ -306,14 +306,13 @@ const contentNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: "LLM Proxy",
+    label: "LLM Proxies",
     items: [
       {
-        title: "LLM Proxy",
+        title: "LLM Proxies",
         url: "/llm/proxies",
         icon: Network,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/llm/proxies"),
+        customIsActive: (pathname: string) => pathname === "/llm/proxies",
       },
       {
         title: "Model Providers",

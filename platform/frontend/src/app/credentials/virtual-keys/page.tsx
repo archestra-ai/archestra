@@ -152,17 +152,6 @@ export default function VirtualKeysPage() {
   );
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-
-  // Deep link from the LLM Proxy workspace ("Create key") straight into the
-  // create dialog; the param is stripped so refresh/back doesn't re-open it.
-  const createParam = searchParams.get("create");
-  useEffect(() => {
-    if (createParam === "true") {
-      setIsCreateDialogOpen(true);
-      updateQueryParams({ create: null });
-    }
-  }, [createParam, updateQueryParams]);
-
   const editId = searchParams.get("edit");
   const { data: editKeyFromUrl } = useVirtualKey(editId ?? undefined);
   const {

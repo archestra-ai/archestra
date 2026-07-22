@@ -105,8 +105,8 @@ const navigationItems = [
   },
   {
     icon: Network,
-    label: "LLM Proxy",
-    value: "llm-proxy",
+    label: "LLM Proxies",
+    value: "llm-proxies",
     keywords: "proxies llm network",
     href: "/llm/proxies",
   },
